@@ -86,6 +86,10 @@ func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 				sig["uptime"] = humanDuration(time.Since(ps.StartedAt))
 			}
 		}
+		if cpu, mem, err := s.k8s.PodMetrics(ctx); err == nil {
+			sig["cpu"] = fmt.Sprintf("%dm", cpu)
+			sig["mem"] = fmt.Sprintf("%d Mi", mem)
+		}
 	}
 	return sig
 }

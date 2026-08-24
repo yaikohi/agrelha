@@ -17,6 +17,16 @@ templ Layout(title string) {
 			<main class="mx-auto max-w-5xl px-6 py-8">
 				{ children... }
 			</main>
+			<script>
+				(function () {
+					var el = document.getElementById("logs");
+					if (!el) return;
+					new MutationObserver(function () {
+						while (el.childElementCount > 500) el.removeChild(el.firstElementChild);
+						el.scrollTop = el.scrollHeight;
+					}).observe(el, { childList: true });
+				})();
+			</script>
 		</body>
 	</html>
 }

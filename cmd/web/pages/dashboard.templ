@@ -8,9 +8,9 @@ templ Dashboard(grafanaURL string) {
 		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown'}" data-on-load="@get('/sse')">
 			<section class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 				@tile("Players", "players")
-				@tile("State", "state")
-				@tile("Uptime", "uptime")
+				@tile("CPU", "cpu")
 				@tile("Memory", "mem")
+				@tile("Uptime", "uptime")
 			</section>
 			<section class="mt-8 flex flex-wrap gap-3">
 				<button data-on-click="@post('/server/restart')" class="rounded bg-amber-600 px-4 py-2 text-sm font-medium hover:bg-amber-500">Restart</button>

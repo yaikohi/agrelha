@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,7 +18,13 @@ type Client struct {
 	v1URL  string // community list, e.g. https://thunderstore.io/c/valheim/api/v1
 	expURL string // https://thunderstore.io/api/experimental
 	http   *http.Client
+
+	mu       sync.Mutex // guards the package-list cache
+	list     []SearchResult
+	listedAt time.Time
 }
+
+const listTTL = 15 * time.Minute
 
 func New(v1URL string) *Client {
 	return &Client{
@@ -114,6 +121,26 @@ func (c *Client) ResolveTree(ctx context.Context, ns, name string) ([]string, er
 	return out, nil
 }
 
+// packageList returns the community package list, cached in-memory for listTTL
+// (the raw list is several MB — don't refetch it on every keystroke).
+func (c *Client) packageList(ctx context.Context) ([]SearchResult, error) {
+	c.mu.Lock()
+	if time.Since(c.listedAt) < listTTL && c.list != nil {
+		defer c.mu.Unlock()
+		return c.list, nil
+	}
+	c.mu.Unlock()
+
+	var all []SearchResult
+	if err := c.getJSON(ctx, c.v1URL+"/package/", &all); err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	c.list, c.listedAt = all, time.Now()
+	c.mu.Unlock()
+	return all, nil
+}
+
 // SearchResult is a trimmed community-list package for the browse UI.
 type SearchResult struct {
 	Owner   string `json:"owner"`
@@ -124,8 +151,8 @@ type SearchResult struct {
 // Search filters the community package list by a case-insensitive substring.
 // (The list is a few MB; a real impl would cache it — TODO in mod_cache.)
 func (c *Client) Search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
-	var all []SearchResult
-	if err := c.getJSON(ctx, c.v1URL+"/package/", &all); err != nil {
+	all, err := c.packageList(ctx)
+	if err != nil {
 		return nil, err
 	}
 	q := strings.ToLower(query)

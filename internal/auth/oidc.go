@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ const sessionCookie = "agrelha_session"
 
 type Authenticator struct {
 	cfg      *config.Config
+	provider *oidc.Provider
 	verifier *oidc.IDTokenVerifier
 	oauth    oauth2.Config
 
@@ -35,6 +37,7 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 	}
 	return &Authenticator{
 		cfg:      cfg,
+		provider: provider,
 		verifier: provider.Verifier(&oidc.Config{ClientID: cfg.OIDCClientID}),
 		oauth: oauth2.Config{
 			ClientID:     cfg.OIDCClientID,
@@ -79,7 +82,15 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	if err := idToken.Claims(&claims); err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "claims parse failed")
 	}
+	// Fall back to the UserInfo endpoint if the ID token carries no email
+	// (i.e. "User Info inside ID Token" is disabled on the Zitadel app).
+	if claims.Email == "" {
+		if ui, err := a.provider.UserInfo(ctx, oauth2.StaticTokenSource(oauth2Token)); err == nil {
+			claims.Email = ui.Email
+		}
+	}
 	if claims.Email == "" || claims.Email != a.cfg.AllowedEmail {
+		log.Printf("auth: rejected sign-in for email %q (allowed %q)", claims.Email, a.cfg.AllowedEmail)
 		return fiber.NewError(fiber.StatusForbidden, "not authorized")
 	}
 
@@ -87,6 +98,7 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	a.mu.Lock()
 	a.sessions[t] = claims.Email
 	a.mu.Unlock()
+	log.Printf("auth: %s signed in", claims.Email)
 
 	c.Cookie(&fiber.Cookie{
 		Name: sessionCookie, Value: t, HTTPOnly: true, Secure: true,

@@ -36,10 +36,25 @@ func (s *FiberServer) modsInstall(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadGateway, "resolve deps: "+err.Error())
 	}
-	if _, err := s.mods.Install(ctx, entries); err != nil {
+	changed, err := s.mods.Install(ctx, entries)
+	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 	_ = s.store.RecordAudit(s.actor(c), "mod-install", ns+"/"+name)
+	if changed {
+		s.applyAfterSync("valheim-mods", "mods.txt", func(txt string) bool {
+			present := map[string]bool{}
+			for _, e := range mods.Parse(txt) {
+				present[e] = true
+			}
+			for _, e := range entries {
+				if !present[e] {
+					return false
+				}
+			}
+			return true
+		})
+	}
 	return c.Redirect("/mods", fiber.StatusSeeOther)
 }
 
@@ -51,9 +66,20 @@ func (s *FiberServer) modsRemove(c *fiber.Ctx) error {
 	if nsName == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "mod required")
 	}
-	if _, err := s.mods.Remove(c.UserContext(), nsName); err != nil {
+	changed, err := s.mods.Remove(c.UserContext(), nsName)
+	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 	_ = s.store.RecordAudit(s.actor(c), "mod-remove", nsName)
+	if changed {
+		s.applyAfterSync("valheim-mods", "mods.txt", func(txt string) bool {
+			for _, e := range mods.Parse(txt) {
+				if pages.ModKey(e) == nsName {
+					return false
+				}
+			}
+			return true
+		})
+	}
 	return c.Redirect("/mods", fiber.StatusSeeOther)
 }

@@ -27,10 +27,16 @@ func (s *FiberServer) adminsGrant(c *fiber.Ctx) error {
 	if id == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "steam_id required")
 	}
-	if _, err := s.admins.Grant(c.UserContext(), id); err != nil {
+	changed, err := s.admins.Grant(c.UserContext(), id)
+	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 	_ = s.store.RecordAudit(s.actor(c), "admin-grant", id)
+	if changed {
+		s.applyAfterSync("valheim-admins", "ADMINLIST_IDS", func(v string) bool {
+			return strings.Contains(" "+v+" ", " "+id+" ")
+		})
+	}
 	return c.Redirect("/admins", fiber.StatusSeeOther)
 }
 
@@ -42,9 +48,15 @@ func (s *FiberServer) adminsRevoke(c *fiber.Ctx) error {
 	if id == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "steam_id required")
 	}
-	if _, err := s.admins.Revoke(c.UserContext(), id); err != nil {
+	changed, err := s.admins.Revoke(c.UserContext(), id)
+	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 	_ = s.store.RecordAudit(s.actor(c), "admin-revoke", id)
+	if changed {
+		s.applyAfterSync("valheim-admins", "ADMINLIST_IDS", func(v string) bool {
+			return !strings.Contains(" "+v+" ", " "+id+" ")
+		})
+	}
 	return c.Redirect("/admins", fiber.StatusSeeOther)
 }
