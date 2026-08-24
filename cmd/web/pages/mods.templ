@@ -6,17 +6,28 @@ import (
 	"agrelha/internal/thunderstore"
 )
 
-templ Mods(current []string, q string, results []thunderstore.SearchResult, enabled bool) {
+templ Mods(current []string, q string, results []thunderstore.SearchResult, enabled bool, indexing bool) {
 	@Layout("Mods") {
 		@nav()
 		<h1 class="mb-6 text-2xl font-semibold">Mods</h1>
 		if !enabled {
 			<p class="mb-4 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to install/remove mods.</p>
 		}
-		<form method="get" action="/mods" class="mb-6 flex gap-2">
+		<form method="get" action="/mods" class="mb-3 flex gap-2">
 			<input name="q" value={ q } placeholder="search Thunderstore…" class="w-64 rounded bg-zinc-900 px-3 py-2 text-sm"/>
 			<button class="rounded bg-zinc-700 px-4 py-2 text-sm hover:bg-zinc-600">Search</button>
 		</form>
+		<!-- direct install by identifier (works even before the search index is built) -->
+		<form method="post" action="/mods/install" class="mb-6 flex flex-wrap items-center gap-2 text-sm">
+			<span class="text-zinc-500">or install by identifier:</span>
+			<input name="namespace" placeholder="namespace" class="w-32 rounded bg-zinc-900 px-3 py-2"/>
+			<span class="text-zinc-600">/</span>
+			<input name="name" placeholder="name" class="w-40 rounded bg-zinc-900 px-3 py-2"/>
+			<button class="rounded bg-emerald-700 px-3 py-2 hover:bg-emerald-600">Install +deps</button>
+		</form>
+		if indexing {
+			<p class="mb-6 rounded bg-zinc-800 p-3 text-sm text-zinc-300">Mod catalog is still indexing (first load pulls a large list) — try the search again in a moment, or install by identifier above.</p>
+		}
 		if len(results) > 0 {
 			<ul class="mb-8 divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900">
 				for _, r := range results {

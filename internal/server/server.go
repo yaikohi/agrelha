@@ -35,6 +35,7 @@ func New(cfg *config.Config) *FiberServer {
 		AppName:      "agrelha",
 	})
 	s := &FiberServer{App: app, cfg: cfg, ts: thunderstore.New(cfg.ThunderstoreAPI)}
+	go s.ts.WarmLoop(context.Background()) // build the mod search index in the background
 
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {

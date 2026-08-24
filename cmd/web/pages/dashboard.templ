@@ -3,7 +3,7 @@ package pages
 // Dashboard: on load it opens the SSE stream (@get('/sse')) which patches the
 // tile signals every 5s and appends log lines into #logs.
 templ Dashboard(grafanaURL string) {
-	@Layout("Valheim") {
+	@Layout("Agrelha") {
 		@nav()
 		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown'}" data-effect="@get('/sse')">
 			<section class="grid grid-cols-2 gap-4 sm:grid-cols-4">

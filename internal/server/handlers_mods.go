@@ -17,10 +17,11 @@ func (s *FiberServer) modsPage(c *fiber.Ctx) error {
 	}
 	q := c.Query("q")
 	var results []thunderstore.SearchResult
-	if q != "" && s.ts != nil {
+	if q != "" {
 		results, _ = s.ts.Search(c.UserContext(), q, 25)
 	}
-	return render(c, pages.Mods(current, q, results, s.mods != nil))
+	indexing := q != "" && !s.ts.Ready()
+	return render(c, pages.Mods(current, q, results, s.mods != nil, indexing))
 }
 
 func (s *FiberServer) modsInstall(c *fiber.Ctx) error {
