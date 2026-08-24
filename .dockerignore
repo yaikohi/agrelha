@@ -1,0 +1,9 @@
+.git
+node_modules
+tmp
+main
+build-errors.log
+.env
+*.db
+*.db-wal
+*.db-shm

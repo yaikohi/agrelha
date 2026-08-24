@@ -1,0 +1,16 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  bin = "./main"
+  cmd = "task build"
+  delay = 1000
+  exclude_dir = ["assets", "tmp", "vendor", "node_modules"]
+  exclude_regex = ["_test.go", ".*_templ.go"]
+  include_ext = ["go", "templ", "html", "css"]
+  log = "build-errors.log"
+  stop_on_error = false
+
+[log]
+  main_only = false
+  time = false

@@ -1,0 +1,101 @@
+version: "3"
+
+vars:
+  CSS_IN: cmd/web/assets/css/input.css
+  CSS_OUT: cmd/web/assets/css/output.css
+  DATASTAR_JS: cmd/web/assets/js/datastar.js
+  DATASTAR_VERSION: 1.0.0-beta.11
+  GO_MAIN: cmd/api/main.go
+  GO_BINARY: main
+  IMAGE: registry.ykhi.xyz/agrelha
+
+tasks:
+  default:
+    desc: "Build the app and run tests"
+    cmds:
+      - task: build
+      - task: test
+
+  setup:
+    desc: "Install missing mise tools (go, bun, templ, air)"
+    cmds:
+      - mise install
+    status:
+      - mise status --missing
+    sources:
+      - mise.toml
+
+  # --- Build ---
+  build:
+    desc: "Generate assets + templ and compile the Go binary"
+    deps: [setup, go:build]
+
+  go:build:
+    desc: "templ generate + go build"
+    deps: [tailwind:build, assets:datastar]
+    cmds:
+      - templ generate
+      - go build -o {{.GO_BINARY}} {{.GO_MAIN}}
+    sources:
+      - "**/*.go"
+      - "**/*.templ"
+      - "{{.CSS_IN}}"
+    generates:
+      - "{{.GO_BINARY}}"
+
+  tailwind:build:
+    desc: "Build Tailwind CSS (v4 CLI)"
+    deps: [setup, tailwind:deps]
+    cmds:
+      - bunx @tailwindcss/cli -i {{.CSS_IN}} -o {{.CSS_OUT}} --minify
+
+  tailwind:deps:
+    desc: "Install node modules with bun"
+    deps: [setup]
+    cmds:
+      - bun install
+    sources:
+      - "package.json"
+    generates:
+      - "bun.lock"
+
+  assets:datastar:
+    desc: "Vendor the pinned Datastar browser bundle (no CDN at runtime)"
+    cmds:
+      - curl -fsSL "https://cdn.jsdelivr.net/gh/starfederation/datastar@v{{.DATASTAR_VERSION}}/bundles/datastar.js" -o {{.DATASTAR_JS}}
+    status:
+      - test -s {{.DATASTAR_JS}} && ! grep -q Placeholder {{.DATASTAR_JS}}
+
+  # --- Run ---
+  run:
+    desc: "Run the compiled binary"
+    deps: [build]
+    cmds:
+      - ./{{.GO_BINARY}}
+
+  watch:
+    desc: "Live-reload dev loop (air)"
+    deps: [setup]
+    cmds:
+      - air
+
+  test:
+    desc: "Run Go tests"
+    deps: [setup]
+    cmds:
+      - go test ./...
+
+  # --- Image ---
+  build:image:
+    desc: "Build + push the container image to Zot. Usage: task build:image TAG=0.1.0"
+    vars:
+      TAG: '{{.TAG | default "dev"}}'
+    cmds:
+      - docker build -t {{.IMAGE}}:{{.TAG}} .
+      - docker push {{.IMAGE}}:{{.TAG}}
+
+  clean:
+    desc: "Remove build artifacts"
+    cmds:
+      - rm -f {{.GO_BINARY}} {{.CSS_OUT}}
+      - rm -rf node_modules bun.lock tmp

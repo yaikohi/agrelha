@@ -1,0 +1,20 @@
+# build artifacts
+/main
+tmp/
+build-errors.log
+
+# generated
+*_templ.go
+cmd/web/assets/css/output.css
+cmd/web/assets/js/datastar.js
+
+# node / bun
+node_modules/
+bun.lock
+bun.lockb
+
+# local env / db
+.env
+*.db
+*.db-wal
+*.db-shm

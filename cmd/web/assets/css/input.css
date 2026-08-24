@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+/* Tailwind v4 scans sources automatically; add templ + generated Go explicitly
+   so class strings inside them are detected. */
+@source "../../**/*.templ";
+@source "../../**/*_templ.go";

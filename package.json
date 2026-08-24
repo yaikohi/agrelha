@@ -1,0 +1,9 @@
+{
+  "name": "agrelha",
+  "private": true,
+  "dependencies": {},
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.16",
+    "tailwindcss": "^4.1.16"
+  }
+}
