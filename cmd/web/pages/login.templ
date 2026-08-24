@@ -1,0 +1,13 @@
+package pages
+
+// Login is the unauthenticated landing page. The middleware sends signed-out
+// users here (rather than bouncing straight to the IdP), and logout returns here.
+templ Login() {
+	@Layout("Sign in") {
+		<div class="mx-auto mt-24 max-w-sm text-center">
+			<h1 class="mb-2 text-2xl font-semibold">agrelha</h1>
+			<p class="mb-8 text-sm text-zinc-400">Valheim server control panel</p>
+			<a href="/auth/login" class="inline-block rounded bg-emerald-600 px-6 py-3 text-sm font-medium hover:bg-emerald-500">Sign in with Zitadel</a>
+		</div>
+	}
+}

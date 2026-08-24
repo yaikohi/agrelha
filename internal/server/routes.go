@@ -20,6 +20,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	}))
 
 	if s.auth != nil {
+		s.App.Get("/login", func(c *fiber.Ctx) error { return render(c, pages.Login()) })
 		s.App.Get("/auth/login", s.auth.Login)
 		s.App.Get("/auth/callback", s.auth.Callback)
 		s.App.Get("/auth/logout", s.auth.Logout)

@@ -5,7 +5,7 @@ package pages
 templ Dashboard(grafanaURL string) {
 	@Layout("Valheim") {
 		@nav()
-		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown'}" data-on-load="@get('/sse')">
+		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown'}" data-effect="@get('/sse')">
 			<section class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 				@tile("Players", "players")
 				@tile("CPU", "cpu")

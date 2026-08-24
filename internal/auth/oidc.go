@@ -1,6 +1,7 @@
 // Package auth gates agrelha behind Zitadel OIDC (authorization-code flow).
-// Single permitted identity: cfg.AllowedEmail. Everything except /healthz and the
-// /auth/* endpoints requires a valid session.
+// Single permitted identity: cfg.AllowedEmail. Everything except /healthz, /login
+// and the /auth/* endpoints requires a valid session. Logout is RP-initiated
+// (redirects to the IdP's end_session_endpoint) so the Zitadel session ends too.
 package auth
 
 import (
@@ -8,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log"
+	"net/url"
 	"sync"
 	"time"
 
@@ -20,14 +22,22 @@ import (
 
 const sessionCookie = "agrelha_session"
 
+type session struct {
+	email   string
+	idToken string // raw ID token, used as id_token_hint on logout
+}
+
 type Authenticator struct {
 	cfg      *config.Config
 	provider *oidc.Provider
 	verifier *oidc.IDTokenVerifier
 	oauth    oauth2.Config
 
+	endSession string // IdP end_session_endpoint ("" if not advertised)
+	postLogout string // where the IdP returns after logout
+
 	mu       sync.Mutex
-	sessions map[string]string // token -> email
+	sessions map[string]session // token -> session
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
@@ -35,10 +45,24 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 	if err != nil {
 		return nil, err
 	}
+	// end_session_endpoint isn't on oidc.Provider directly — pull it from discovery.
+	var disco struct {
+		EndSession string `json:"end_session_endpoint"`
+	}
+	_ = provider.Claims(&disco)
+
+	// Return the user to /login (same origin as the redirect URL) after IdP logout.
+	postLogout := "/login"
+	if u, err := url.Parse(cfg.OIDCRedirectURL); err == nil && u.Host != "" {
+		postLogout = u.Scheme + "://" + u.Host + "/login"
+	}
+
 	return &Authenticator{
-		cfg:      cfg,
-		provider: provider,
-		verifier: provider.Verifier(&oidc.Config{ClientID: cfg.OIDCClientID}),
+		cfg:        cfg,
+		provider:   provider,
+		verifier:   provider.Verifier(&oidc.Config{ClientID: cfg.OIDCClientID}),
+		endSession: disco.EndSession,
+		postLogout: postLogout,
 		oauth: oauth2.Config{
 			ClientID:     cfg.OIDCClientID,
 			ClientSecret: cfg.OIDCClientSecret,
@@ -46,7 +70,7 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 			Endpoint:     provider.Endpoint(),
 			Scopes:       []string{oidc.ScopeOpenID, "email", "profile"},
 		},
-		sessions: map[string]string{},
+		sessions: map[string]session{},
 	}, nil
 }
 
@@ -56,7 +80,7 @@ func token() string {
 	return hex.EncodeToString(b)
 }
 
-// Login redirects to Zitadel. (TODO(step③): sign/verify `state` instead of a fixed value.)
+// Login redirects to Zitadel. (TODO: sign/verify `state` instead of a fixed value.)
 func (a *Authenticator) Login(c *fiber.Ctx) error {
 	return c.Redirect(a.oauth.AuthCodeURL("state-todo"), fiber.StatusFound)
 }
@@ -96,7 +120,7 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 
 	t := token()
 	a.mu.Lock()
-	a.sessions[t] = claims.Email
+	a.sessions[t] = session{email: claims.Email, idToken: rawID}
 	a.mu.Unlock()
 	log.Printf("auth: %s signed in", claims.Email)
 
@@ -107,14 +131,36 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	return c.Redirect("/", fiber.StatusFound)
 }
 
+// Logout clears the local session and, when the IdP advertises an
+// end_session_endpoint, redirects there to end the Zitadel session too
+// (RP-initiated logout). Zitadel returns to postLogout afterwards.
 func (a *Authenticator) Logout(c *fiber.Ctx) error {
+	var idHint string
 	if t := c.Cookies(sessionCookie); t != "" {
 		a.mu.Lock()
+		if s, ok := a.sessions[t]; ok {
+			idHint = s.idToken
+		}
 		delete(a.sessions, t)
 		a.mu.Unlock()
 	}
 	c.ClearCookie(sessionCookie)
-	return c.Redirect("/auth/login", fiber.StatusFound)
+
+	if a.endSession == "" {
+		return c.Redirect("/login", fiber.StatusFound)
+	}
+	u, err := url.Parse(a.endSession)
+	if err != nil {
+		return c.Redirect("/login", fiber.StatusFound)
+	}
+	q := u.Query()
+	q.Set("post_logout_redirect_uri", a.postLogout)
+	q.Set("client_id", a.cfg.OIDCClientID)
+	if idHint != "" {
+		q.Set("id_token_hint", idHint)
+	}
+	u.RawQuery = q.Encode()
+	return c.Redirect(u.String(), fiber.StatusFound)
 }
 
 // Middleware requires a valid session; stashes the actor email in locals.
@@ -122,12 +168,12 @@ func (a *Authenticator) Middleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		t := c.Cookies(sessionCookie)
 		a.mu.Lock()
-		email, ok := a.sessions[t]
+		s, ok := a.sessions[t]
 		a.mu.Unlock()
 		if !ok {
-			return c.Redirect("/auth/login", fiber.StatusFound)
+			return c.Redirect("/login", fiber.StatusFound)
 		}
-		c.Locals("actor", email)
+		c.Locals("actor", s.email)
 		return c.Next()
 	}
 }
