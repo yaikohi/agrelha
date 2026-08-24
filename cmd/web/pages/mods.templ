@@ -1,0 +1,47 @@
+package pages
+
+import (
+	"strconv"
+
+	"agrelha/internal/thunderstore"
+)
+
+templ Mods(current []string, q string, results []thunderstore.SearchResult, enabled bool) {
+	@Layout("Mods") {
+		@nav()
+		<h1 class="mb-6 text-2xl font-semibold">Mods</h1>
+		if !enabled {
+			<p class="mb-4 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to install/remove mods.</p>
+		}
+		<form method="get" action="/mods" class="mb-6 flex gap-2">
+			<input name="q" value={ q } placeholder="search Thunderstore…" class="w-64 rounded bg-zinc-900 px-3 py-2 text-sm"/>
+			<button class="rounded bg-zinc-700 px-4 py-2 text-sm hover:bg-zinc-600">Search</button>
+		</form>
+		if len(results) > 0 {
+			<ul class="mb-8 divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900">
+				for _, r := range results {
+					<li class="flex items-center justify-between px-4 py-2 text-sm">
+						<span>{ r.Owner }/{ r.Name }</span>
+						<form method="post" action="/mods/install">
+							<input type="hidden" name="namespace" value={ r.Owner }/>
+							<input type="hidden" name="name" value={ r.Name }/>
+							<button class="rounded bg-emerald-700 px-3 py-1 text-xs hover:bg-emerald-600">Install +deps</button>
+						</form>
+					</li>
+				}
+			</ul>
+		}
+		<h2 class="mb-2 text-sm font-medium text-zinc-400">Installed ({ strconv.Itoa(len(current)) })</h2>
+		<ul class="divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900">
+			for _, e := range current {
+				<li class="flex items-center justify-between px-4 py-2 text-sm">
+					<span class="font-mono text-xs">{ e }</span>
+					<form method="post" action="/mods/remove">
+						<input type="hidden" name="mod" value={ ModKey(e) }/>
+						<button class="rounded bg-red-800 px-3 py-1 text-xs hover:bg-red-700">Remove</button>
+					</form>
+				</li>
+			}
+		</ul>
+	}
+}

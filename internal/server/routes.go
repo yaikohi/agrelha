@@ -13,10 +13,7 @@ import (
 )
 
 func (s *FiberServer) RegisterFiberRoutes() {
-	// Unauthenticated: health + static assets + auth handshake.
-	s.App.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.SendString("ok")
-	})
+	s.App.Get("/healthz", func(c *fiber.Ctx) error { return c.SendString("ok") })
 	s.App.Use("/assets", filesystem.New(filesystem.Config{
 		Root:       http.FS(efs.Files),
 		PathPrefix: "assets",
@@ -28,7 +25,6 @@ func (s *FiberServer) RegisterFiberRoutes() {
 		s.App.Get("/auth/logout", s.auth.Logout)
 	}
 
-	// Everything below requires a session (when auth is configured).
 	app := s.App.Group("/")
 	if s.auth != nil {
 		app.Use(s.auth.Middleware())
@@ -37,22 +33,30 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Get("/", func(c *fiber.Ctx) error {
 		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL))
 	})
+	app.Get("/sse", s.sseDashboard)
 
-	// --- imperative plane (step③ fleshes out the UI + SSE) ---
-	app.Post("/server/restart", s.guard(func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
-	app.Post("/server/stop", s.guard(func(ctx context.Context) error { return s.k8s.Scale(ctx, 0) }))
-	app.Post("/server/start", s.guard(func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
+	app.Post("/server/restart", s.guard("restart", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
+	app.Post("/server/stop", s.guard("stop", func(ctx context.Context) error { return s.k8s.Scale(ctx, 0) }))
+	app.Post("/server/start", s.guard("start", func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
 
-	// TODO(step③):
-	//   GET  /sse           -> Datastar SSE: metrics tiles + live log tail
-	//   GET  /mods          -> Thunderstore search + installed list
-	//   POST /mods/install  -> resolve deps -> commit valheim-mods.yaml -> push
-	//   GET  /admins        -> roster picker
-	//   POST /admins/grant  -> commit valheim-admins.yaml -> push -> restart
+	app.Get("/mods", s.modsPage)
+	app.Post("/mods/install", s.modsInstall)
+	app.Post("/mods/remove", s.modsRemove)
+
+	app.Get("/admins", s.adminsPage)
+	app.Post("/admins/grant", s.adminsGrant)
+	app.Post("/admins/revoke", s.adminsRevoke)
 }
 
-// guard runs a k8s action with a timeout, 503 if the client isn't wired.
-func (s *FiberServer) guard(fn func(context.Context) error) fiber.Handler {
+func (s *FiberServer) actor(c *fiber.Ctx) string {
+	if v, ok := c.Locals("actor").(string); ok && v != "" {
+		return v
+	}
+	return "local"
+}
+
+// guard runs a k8s action with a timeout + audit, 503 if the client isn't wired.
+func (s *FiberServer) guard(action string, fn func(context.Context) error) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if s.k8s == nil {
 			return fiber.NewError(fiber.StatusServiceUnavailable, "k8s client not available")
@@ -62,6 +66,8 @@ func (s *FiberServer) guard(fn func(context.Context) error) fiber.Handler {
 		if err := fn(ctx); err != nil {
 			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 		}
+		_ = s.store.RecordAudit(s.actor(c), action, "")
+		_ = s.store.RecordEvent(action, s.actor(c))
 		return c.SendStatus(fiber.StatusNoContent)
 	}
 }
