@@ -1,7 +1,7 @@
 # --- Build stage: mise provides go, bun, templ ---
 FROM alpine:3.22.2 AS build
 
-RUN apk add --no-cache curl unzip git
+RUN apk add --no-cache curl unzip git libstdc++ libgcc
 RUN curl -fsSL https://mise.jdx.dev/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 # Pure-Go build (modernc sqlite, no cgo) -> fully static binary.
