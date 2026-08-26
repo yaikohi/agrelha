@@ -5,8 +5,13 @@ to the `yaya` Talos cluster via GitOps from `yaya-ops`, image in the self-hosted
 registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
 (WireGuard-only, behind Zitadel OIDC).
 
-**Current version: `0.6.0`** (mod browsing + metadata cache; `0.5.0` is the last
-one actually deployed — build+push `0.6.0` to ship it).
+**Current version: `0.6.1`** (mod browsing + metadata cache; `0.6.1` adds README
+markdown styling). Build+push `0.6.1` to ship it.
+
+> The rendered README had no styling because this Tailwind v4 build has no
+> Typography plugin — the `prose` classes were dead. README now uses a `.md`
+> scope with hand-written markdown CSS in `cmd/web/assets/css/input.css` (rebuild
+> `output.css` via `task tailwind:build` / the CLI when it changes).
 
 ---
 

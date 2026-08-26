@@ -51,7 +51,7 @@ templ ModDetail(ns, name string, e thunderstore.SearchResult, version string, de
 		<section>
 			<h2 class="mb-2 text-sm font-medium text-zinc-400">README</h2>
 			if readmeHTML != "" {
-				<article class="prose prose-invert max-w-none rounded bg-zinc-900 p-5">
+				<article class="md rounded bg-zinc-900 p-5">
 					@templ.Raw(readmeHTML)
 				</article>
 			} else {
