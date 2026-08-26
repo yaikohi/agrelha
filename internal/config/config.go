@@ -25,12 +25,14 @@ type Config struct {
 	GitAuthorEmail  string
 	ModsPath        string
 	AdminsPath      string
+	ModConfigsPath  string
 	ThunderstoreAPI string
 
 	// Imperative plane (k8s)
 	ValheimNamespace  string
 	ValheimDeployment string
 	ValheimStatusURL  string
+	BackupsDir        string
 
 	// Observability
 	InfluxDBURL         string
@@ -63,11 +65,13 @@ func Load() *Config {
 		GitAuthorEmail:  env("GIT_AUTHOR_EMAIL", "agrelha@ykhi.xyz"),
 		ModsPath:        env("MODS_PATH", "manifests/valheim-mods.yaml"),
 		AdminsPath:      env("ADMINS_PATH", "manifests/valheim-admins.yaml"),
+		ModConfigsPath:  env("MOD_CONFIGS_PATH", "manifests/valheim-mod-configs.yaml"),
 		ThunderstoreAPI: env("THUNDERSTORE_API", "https://thunderstore.io/c/valheim/api/v1"),
 
 		ValheimNamespace:  env("VALHEIM_NAMESPACE", "valheim"),
 		ValheimDeployment: env("VALHEIM_DEPLOYMENT", "valheim"),
 		ValheimStatusURL:  env("VALHEIM_STATUS_URL", ""),
+		BackupsDir:        env("BACKUPS_DIR", ""),
 
 		InfluxDBURL:         env("INFLUXDB_URL", ""),
 		GrafanaDashboardURL: env("GRAFANA_DASHBOARD_URL", ""),

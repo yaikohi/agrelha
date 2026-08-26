@@ -5,15 +5,20 @@ package pages
 templ Dashboard(grafanaURL string) {
 	@Layout("Agrelha") {
 		@nav()
-		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown'}" data-effect="@get('/sse')">
+		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',backup:'—',backupinfo:''}" data-effect="@get('/sse')">
 			<section class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 				@tile("Players", "players")
 				@tile("CPU", "cpu")
 				@tile("Memory", "mem")
 				@tile("Uptime", "uptime")
 			</section>
-			<section class="mt-8 flex flex-wrap gap-3">
+			<section class="mt-4 text-sm text-zinc-400">
+				Last backup: <span class="text-zinc-200" data-text="$backup"></span>
+				<span class="ml-2 text-zinc-600" data-text="$backupinfo"></span>
+			</section>
+			<section class="mt-6 flex flex-wrap gap-3">
 				<button data-on-click="@post('/server/restart')" class="rounded bg-amber-600 px-4 py-2 text-sm font-medium hover:bg-amber-500">Restart</button>
+				<button data-on-click="@post('/server/update')" title="Restarts the server — the image installs any Valheim update on boot" class="rounded bg-sky-700 px-4 py-2 text-sm font-medium hover:bg-sky-600">Update</button>
 				<button data-on-click="@post('/server/stop')" class="rounded bg-red-700 px-4 py-2 text-sm font-medium hover:bg-red-600">Stop</button>
 				<button data-on-click="@post('/server/start')" class="rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Start</button>
 				if grafanaURL != "" {

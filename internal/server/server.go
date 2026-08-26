@@ -3,12 +3,14 @@ package server
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/admins"
 	"agrelha/internal/auth"
+	"agrelha/internal/backups"
 	"agrelha/internal/config"
 	"agrelha/internal/gitops"
 	"agrelha/internal/ingest"
@@ -27,7 +29,13 @@ type FiberServer struct {
 	auth   *auth.Authenticator
 	mods   *mods.Manager
 	admins *admins.Manager
+	git    *gitops.Committer
 	ts     *thunderstore.Client
+
+	bkMu   sync.Mutex
+	bkInfo backups.Info
+	bkOK   bool
+	bkAt   time.Time
 }
 
 func New(cfg *config.Config) *FiberServer {
@@ -64,6 +72,7 @@ func New(cfg *config.Config) *FiberServer {
 			Username: cfg.GitUsername, Token: cfg.GitToken,
 			AuthorName: cfg.GitAuthorName, AuthorEmail: cfg.GitAuthorEmail,
 		}
+		s.git = committer
 		s.mods = mods.New(committer, cfg.ModsPath)
 		s.admins = admins.New(committer, cfg.AdminsPath)
 	} else {

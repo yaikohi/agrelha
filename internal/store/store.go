@@ -6,6 +6,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -36,7 +37,9 @@ func (s *Store) migrate() error {
 		character    TEXT,
 		first_seen   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		last_seen    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		sessions     INTEGER NOT NULL DEFAULT 0
+		sessions     INTEGER NOT NULL DEFAULT 0,
+		online       INTEGER NOT NULL DEFAULT 0,
+		online_since TIMESTAMP
 	);
 	CREATE TABLE IF NOT EXISTS audit (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,5 +79,16 @@ func (s *Store) migrate() error {
 		value TEXT
 	);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	for _, stmt := range []string{
+		`ALTER TABLE players ADD COLUMN online INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE players ADD COLUMN online_since TIMESTAMP`,
+	} {
+		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return err
+		}
+	}
+	return nil
 }

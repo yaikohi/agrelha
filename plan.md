@@ -5,9 +5,9 @@ to the `yaya` Talos cluster via GitOps from `yaya-ops`, image in the self-hosted
 registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
 (WireGuard-only, behind Zitadel OIDC).
 
-**Current version: `0.7.1`** (P1 batch in `0.7.0`: stateless signed-cookie sessions,
-OIDC state/nonce CSRF, inline flash feedback; `0.7.1` adds the History page).
-Build+push `0.7.1` to ship it.
+**Current version: `0.7.4`** (P1 in `0.7.0`; `0.7.1` History; `0.7.2` presence;
+`0.7.3` mod `.cfg` editing; `0.7.4` "Update now" + backup tiles — **P2 complete**).
+Build+push `0.7.4` to ship it.
 
 > README styling: this Tailwind v4 build has no Typography plugin, so the `prose`
 > classes were dead. README now uses a `.md` scope with hand-written markdown CSS
@@ -101,16 +101,32 @@ live cluster edits get reverted):
       `store.ListHistory` UNIONs both and excludes `restart/stop/start` events (they'd
       duplicate the audit rows). Labels/badges via `pages.HistoryLabel`/`HistoryBadge`.
       Nav gained a History link.
-- [ ] **Mod config (.cfg) editing.** `valheim-mod-configs` ConfigMap — edit per-mod
-      `.cfg` from the UI via the same git-commit path. (Deferred v2 in the design.)
-- [ ] **Player presence.** Roster tracks `last_seen`/`sessions` but not online/offline.
-      Track connect/disconnect pairs from the ingester so "online now" is shown, and the
-      admin-grant picker can highlight currently-connected players.
-- [ ] **"Update now" action.** Only restart/stop/start today. Add a server-update trigger
-      (the lloesche image updates on `UPDATE_CRON`; a manual path may just be a restart).
-- [ ] **World / backup size + last-backup tiles.** Dropped in step ③ because we removed
-      `pods/exec`. Options: read the NFS backups PVC from a tiny read-only sidecar, or
-      parse backup log lines in the ingester into `events` and surface "last backup".
+- [x] **Mod config (.cfg) editing (0.7.3).** `/configs` lists the `.cfg` keys in the
+      `valheim-mod-configs` ConfigMap; edit/new/delete each commit via new
+      `gitops.Committer.SetData`/`DeleteData` (upsert-or-create a data key, literal block
+      scalar for multiline, into an empty `data: {}` too) → `applyAfterSync` restarts so
+      the mod-reconciler re-copies the file. Textarea editor, CRLF→LF normalized, filename
+      validated `^[A-Za-z0-9][A-Za-z0-9._-]*\.cfg$`, flash feedback, nav link. New config
+      env `MOD_CONFIGS_PATH`.
+- [x] **Player presence (0.7.2).** `players.online`/`online_since` columns (idempotent
+      ALTER migration). Ingester `SetOnline` on connect/disconnect; `ClearPresence` on
+      startup (live state unknown across restarts — rebuilds from the 200-line tail, so a
+      player connected >200 log-lines ago shows offline until they reconnect). Dashboard
+      **Players tile now reads `store.CountOnline`** (replaces the broken A2S `status.json`
+      that always `TimeoutError`'d). Admin roster sorts online-first with a green dot.
+- [x] **"Update now" action (0.7.4).** `POST /server/update` = restart recorded as an
+      `update` action/event (the lloesche image installs any Valheim update on boot).
+      Dashboard "Update" button (sky, with a tooltip that it restarts).
+- [x] **Last-backup / backup-size tiles (0.7.4).** agrelha NFS-mounts the NAS
+      `valheim-backups` export **read-only** at `/backups` (direct `nfs:` volume, not a
+      PVC — avoids cross-ns + RWO-accessMode). `internal/backups.Stat` → newest mtime,
+      count, total + latest size. Dashboard shows "Last backup: 3h ago · N backups · X
+      total · latest Y". Cached 60s + 3s-timeout-bounded (`s.backupInfo`) so a hung NAS
+      can't block the SSE tick. (Live world-save size not shown — it's node-local RWO on
+      game-01, unreadable without exec; the latest backup size is the proxy.)
+      **Resilience caveat:** a raw `nfs:` volume mount blocks pod start, so if the NAS is
+      down agrelha won't start. If that matters, switch to a decoupled collector
+      (separate deployment writing a summary agrelha reads) or drop `BACKUPS_DIR`.
 
 ### P3 — polish / infra
 
@@ -129,9 +145,9 @@ live cluster edits get reverted):
 - [ ] **Tests.** None yet. Unit-test the pure logic: `mods.Parse`/Install/Remove,
       `admins` grant/revoke transforms, `thunderstore.entry`/`ResolveTree` parsing,
       `gitops` YAML round-trip.
-- [ ] **Fix the Players tile at the source.** `status.json` returns
-      `TimeoutError` (the server's A2S self-query fails) — pre-existing lloesche/Valheim
-      issue, independent of agrelha. Until fixed, Players reads `—`.
+- [x] **Players tile fixed (0.7.2).** No longer depends on `status.json` A2S (which still
+      `TimeoutError`s) — the tile now shows `store.CountOnline` from the log ingester.
+      (`VALHEIM_STATUS_URL`/`valheim.FetchStatus` are now unused; drop later if desired.)
 - [ ] **InfluxDB sparklines (optional).** CPU/Mem are instantaneous from metrics-server;
       historical mini-charts would need an InfluxDB read token.
 

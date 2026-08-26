@@ -38,6 +38,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Get("/img", s.imageProxy)
 
 	app.Post("/server/restart", s.guard("restart", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
+	app.Post("/server/update", s.guard("update", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
 	app.Post("/server/stop", s.guard("stop", func(ctx context.Context) error { return s.k8s.Scale(ctx, 0) }))
 	app.Post("/server/start", s.guard("start", func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
 
@@ -45,6 +46,12 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Get("/mods/:namespace/:name", s.modDetail)
 	app.Post("/mods/install", s.modsInstall)
 	app.Post("/mods/remove", s.modsRemove)
+
+	app.Get("/configs", s.configsPage)
+	app.Get("/configs/new", s.configNew)
+	app.Get("/configs/edit", s.configEdit)
+	app.Post("/configs/save", s.configSave)
+	app.Post("/configs/delete", s.configDelete)
 
 	app.Get("/history", s.historyPage)
 

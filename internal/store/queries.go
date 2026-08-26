@@ -1,13 +1,18 @@
 package store
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 type Player struct {
-	SteamID   string
-	Character string
-	FirstSeen time.Time
-	LastSeen  time.Time
-	Sessions  int
+	SteamID     string
+	Character   string
+	FirstSeen   time.Time
+	LastSeen    time.Time
+	Sessions    int
+	Online      bool
+	OnlineSince time.Time
 }
 
 // UpsertSeen records/refreshes a player from a parsed join event. bumpSession
@@ -28,11 +33,11 @@ func (s *Store) UpsertSeen(steamID, character string, bumpSession bool) error {
 	return err
 }
 
-// ListPlayers returns the roster, most-recently-seen first.
+// ListPlayers returns the roster, online players first then most-recently-seen.
 func (s *Store) ListPlayers() ([]Player, error) {
 	rows, err := s.db.Query(`
-		SELECT steam_id, COALESCE(character,''), first_seen, last_seen, sessions
-		FROM players ORDER BY last_seen DESC`)
+		SELECT steam_id, COALESCE(character,''), first_seen, last_seen, sessions, online, online_since
+		FROM players ORDER BY online DESC, last_seen DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -40,8 +45,14 @@ func (s *Store) ListPlayers() ([]Player, error) {
 	var out []Player
 	for rows.Next() {
 		var p Player
-		if err := rows.Scan(&p.SteamID, &p.Character, &p.FirstSeen, &p.LastSeen, &p.Sessions); err != nil {
+		var online int
+		var since sql.NullTime
+		if err := rows.Scan(&p.SteamID, &p.Character, &p.FirstSeen, &p.LastSeen, &p.Sessions, &online, &since); err != nil {
 			return nil, err
+		}
+		p.Online = online != 0
+		if since.Valid {
+			p.OnlineSince = since.Time
 		}
 		out = append(out, p)
 	}

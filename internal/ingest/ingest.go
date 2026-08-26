@@ -27,6 +27,7 @@ var (
 )
 
 func Run(ctx context.Context, k logStreamer, st *store.Store) {
+	_ = st.ClearPresence()
 	for {
 		if ctx.Err() != nil {
 			return
@@ -58,13 +59,16 @@ func consume(ctx context.Context, k logStreamer, st *store.Store) error {
 		case steamRe.MatchString(line):
 			lastSteam = steamRe.FindStringSubmatch(line)[1]
 			_ = st.UpsertSeen(lastSteam, "", true)
+			_ = st.SetOnline(lastSteam, true)
 			_ = st.RecordEvent("join", lastSteam)
 		case charRe.MatchString(line):
 			if lastSteam != "" {
 				_ = st.UpsertSeen(lastSteam, charRe.FindStringSubmatch(line)[1], false)
 			}
 		case dcRe.MatchString(line):
-			_ = st.RecordEvent("leave", dcRe.FindStringSubmatch(line)[1])
+			id := dcRe.FindStringSubmatch(line)[1]
+			_ = st.SetOnline(id, false)
+			_ = st.RecordEvent("leave", id)
 		}
 	}
 	return sc.Err()

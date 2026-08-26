@@ -1,0 +1,36 @@
+package pages
+
+templ Configs(files []string, enabled bool, flashKind, flashMsg string) {
+	@Layout("Configs") {
+		@nav()
+		<div class="mb-4 flex items-center justify-between">
+			<h1 class="text-2xl font-semibold">Mod configs</h1>
+			if enabled {
+				<a href="/configs/new" class="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600">New file</a>
+			}
+		</div>
+		@flashBanner(flashKind, flashMsg)
+		if !enabled {
+			<p class="mb-4 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to edit mod configs.</p>
+		}
+		<p class="mb-6 text-xs text-zinc-500">BepInEx <code class="rounded bg-zinc-800 px-1">.cfg</code> files in the <code class="rounded bg-zinc-800 px-1">valheim-mod-configs</code> ConfigMap. Git is the source of truth; an edit commits and applies on the next server restart.</p>
+		if len(files) == 0 {
+			<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No config files yet. Mods use their defaults until you add tuned <code>.cfg</code> files.</p>
+		} else {
+			<ul class="divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900">
+				for _, f := range files {
+					<li class="flex items-center justify-between px-4 py-2.5 text-sm">
+						<a href={ templ.SafeURL("/configs/edit?f=" + f) } class="font-mono text-xs hover:underline">{ f }</a>
+						<div class="flex items-center gap-2">
+							<a href={ templ.SafeURL("/configs/edit?f=" + f) } class="rounded bg-zinc-700 px-3 py-1 text-xs hover:bg-zinc-600">Edit</a>
+							<form method="post" action="/configs/delete" onsubmit="return confirm('Delete this config file?')">
+								<input type="hidden" name="file" value={ f }/>
+								<button class="rounded bg-red-800 px-3 py-1 text-xs hover:bg-red-700">Delete</button>
+							</form>
+						</div>
+					</li>
+				}
+			</ul>
+		}
+	}
+}

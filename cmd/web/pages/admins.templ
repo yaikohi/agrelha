@@ -41,6 +41,9 @@ templ Admins(players []store.Player, adminIDs []string, enabled bool, flashKind,
 					for _, p := range players {
 						<tr>
 							<td class="py-2">
+								if p.Online {
+									<span class="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-500 align-middle" title="online now"></span>
+								}
 								if p.Character != "" {
 									{ p.Character }
 								} else {

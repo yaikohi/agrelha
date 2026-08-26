@@ -9,8 +9,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"agrelha/internal/backups"
 	"agrelha/internal/sse"
-	"agrelha/internal/valheim"
 )
 
 // sseDashboard streams tile signals (every 5s) + a live log tail over one SSE
@@ -68,11 +68,18 @@ func (s *FiberServer) sseDashboard(c *fiber.Ctx) error {
 }
 
 func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
-	sig := map[string]any{"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown"}
+	sig := map[string]any{"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "backup": "—", "backupinfo": ""}
 
-	if s.cfg.ValheimStatusURL != "" {
-		if st, err := valheim.FetchStatus(ctx, s.cfg.ValheimStatusURL); err == nil && st.Err == "" {
-			sig["players"] = st.PlayerCount
+	if s.store != nil {
+		if n, err := s.store.CountOnline(); err == nil {
+			sig["players"] = n
+		}
+	}
+	if s.cfg.BackupsDir != "" {
+		if bi, ok := s.backupInfo(); ok && bi.Count > 0 {
+			sig["backup"] = humanAgo(bi.LatestAt)
+			sig["backupinfo"] = fmt.Sprintf("%d backups · %s total · latest %s",
+				bi.Count, humanSize(bi.TotalSize), humanSize(bi.LatestSize))
 		}
 	}
 	if s.k8s != nil {
@@ -92,6 +99,61 @@ func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 		}
 	}
 	return sig
+}
+
+func (s *FiberServer) backupInfo() (backups.Info, bool) {
+	s.bkMu.Lock()
+	if !s.bkAt.IsZero() && time.Since(s.bkAt) < time.Minute {
+		i, ok := s.bkInfo, s.bkOK
+		s.bkMu.Unlock()
+		return i, ok
+	}
+	s.bkAt = time.Now()
+	s.bkMu.Unlock()
+
+	type res struct {
+		i  backups.Info
+		ok bool
+	}
+	ch := make(chan res, 1)
+	go func() {
+		i, err := backups.Stat(s.cfg.BackupsDir)
+		ch <- res{i, err == nil}
+	}()
+	var out res
+	select {
+	case out = <-ch:
+	case <-time.After(3 * time.Second):
+	}
+
+	s.bkMu.Lock()
+	s.bkInfo, s.bkOK = out.i, out.ok
+	s.bkMu.Unlock()
+	return out.i, out.ok
+}
+
+func humanAgo(t time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	d := time.Since(t)
+	if d < time.Minute {
+		return "just now"
+	}
+	return humanDuration(d) + " ago"
+}
+
+func humanSize(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 func humanDuration(d time.Duration) string {
