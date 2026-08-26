@@ -2,14 +2,18 @@ package mdrender
 
 import (
 	"bytes"
+	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
-var gcdn = regexp.MustCompile(`^https://gcdn\.thunderstore\.io/`)
+var httpsImg = regexp.MustCompile(`^https://`)
 
 var (
 	md = goldmark.New(
@@ -38,8 +42,8 @@ func buildPolicy() *bluemonday.Policy {
 	p.RequireNoFollowOnLinks(true)
 	p.AddTargetBlankToFullyQualifiedLinks(true)
 
-	p.AllowAttrs("src").Matching(gcdn).OnElements("img")
-	p.AllowAttrs("alt").OnElements("img")
+	p.AllowAttrs("src").Matching(httpsImg).OnElements("img")
+	p.AllowAttrs("alt", "title").OnElements("img")
 
 	return p
 }
@@ -49,5 +53,34 @@ func Render(src string) string {
 	if err := md.Convert([]byte(src), &buf); err != nil {
 		return ""
 	}
-	return policy.Sanitize(buf.String())
+	return proxyImages(policy.Sanitize(buf.String()))
+}
+
+func proxyImages(fragment string) string {
+	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
+	nodes, err := html.ParseFragment(strings.NewReader(fragment), body)
+	if err != nil {
+		return fragment
+	}
+	var buf bytes.Buffer
+	for _, n := range nodes {
+		rewriteImg(n)
+		if err := html.Render(&buf, n); err != nil {
+			return fragment
+		}
+	}
+	return buf.String()
+}
+
+func rewriteImg(n *html.Node) {
+	if n.Type == html.ElementNode && n.Data == "img" {
+		for i, a := range n.Attr {
+			if a.Key == "src" && strings.HasPrefix(a.Val, "https://") {
+				n.Attr[i].Val = "/img?u=" + url.QueryEscape(a.Val)
+			}
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		rewriteImg(c)
+	}
 }

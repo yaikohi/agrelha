@@ -35,6 +35,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL))
 	})
 	app.Get("/sse", s.sseDashboard)
+	app.Get("/img", s.imageProxy)
 
 	app.Post("/server/restart", s.guard("restart", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
 	app.Post("/server/stop", s.guard("stop", func(ctx context.Context) error { return s.k8s.Scale(ctx, 0) }))

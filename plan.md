@@ -5,13 +5,28 @@ to the `yaya` Talos cluster via GitOps from `yaya-ops`, image in the self-hosted
 registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
 (WireGuard-only, behind Zitadel OIDC).
 
-**Current version: `0.6.1`** (mod browsing + metadata cache; `0.6.1` adds README
-markdown styling). Build+push `0.6.1` to ship it.
+**Current version: `0.6.3`** (mod browsing + metadata cache; `0.6.1` added README
+markdown styling; `0.6.2` fixed README images + horizontal overflow; `0.6.3` added
+a server-side image proxy). Build+push `0.6.3` to ship it.
 
-> The rendered README had no styling because this Tailwind v4 build has no
-> Typography plugin — the `prose` classes were dead. README now uses a `.md`
-> scope with hand-written markdown CSS in `cmd/web/assets/css/input.css` (rebuild
-> `output.css` via `task tailwind:build` / the CLI when it changes).
+> README styling: this Tailwind v4 build has no Typography plugin, so the `prose`
+> classes were dead. README now uses a `.md` scope with hand-written markdown CSS
+> in `cmd/web/assets/css/input.css` (rebuild `output.css` via `task tailwind:build`
+> / the CLI when it changes).
+>
+> README images: the grilled "CDN-only images" rule stripped every body image
+> (mods host them on GitHub/imgur, not gcdn — only the package icon is on gcdn),
+> so READMEs showed bare alt text. `internal/mdrender` now allows any `https://`
+> image src (still blocks `http`/`data:`/`javascript:`).
+>
+> Image proxy (0.6.3): the browser never contacts external image hosts.
+> `mdrender` rewrites every sanitized `https://` `<img src>` to `/img?u=<escaped>`
+> (post-sanitize HTML pass via `x/net/html`); `GET /img` (auth-gated) fetches the
+> image server-side and re-serves it. Guards: https-only (+ on redirects), host
+> must resolve to a public IP (blocks SSRF to loopback/private/link-local), 15s
+> timeout, 12 MB cap, `Content-Type` must be `image/*`, 7-day cache. The package
+> icons on the list/detail pages are gcdn direct (not proxied) — only README-body
+> images go through the proxy.
 
 ---
 
@@ -243,6 +258,7 @@ internal/gitops          go-git commit-a-ConfigMap-data-key
 internal/mods            install/remove -> mods.txt
 internal/admins          grant/revoke -> ADMINLIST_IDS
 internal/thunderstore    search index (streamed, persisted) + deps + readme fetch
-internal/mdrender        goldmark + bluemonday README sanitizer (CDN-only images)
+internal/mdrender        goldmark + bluemonday README sanitizer; rewrites imgs to /img proxy
+internal/server          also hosts GET /img (auth-gated SSRF-guarded image proxy)
 internal/sse             Datastar v1.0 SSE frame writers
 ```
