@@ -51,15 +51,30 @@ func (s *Store) migrate() error {
 		kind       TEXT NOT NULL,          -- join|leave|restart|update|backup|crash
 		detail     TEXT
 	);
-	CREATE TABLE IF NOT EXISTS mod_cache (
-		full_name  TEXT PRIMARY KEY,       -- namespace/name
-		latest     TEXT,
-		deps_json  TEXT,
-		icon_url   TEXT,
-		updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	CREATE TABLE IF NOT EXISTS mod_index (
+		full_name     TEXT PRIMARY KEY,
+		namespace     TEXT,
+		name          TEXT,
+		owner         TEXT,
+		version       TEXT,
+		description   TEXT,
+		icon          TEXT,
+		package_url   TEXT,
+		downloads     INTEGER NOT NULL DEFAULT 0,
+		is_deprecated INTEGER NOT NULL DEFAULT 0,
+		updated_at    TIMESTAMP
+	);
+	CREATE TABLE IF NOT EXISTS mod_readme (
+		full_name  TEXT NOT NULL,
+		version    TEXT NOT NULL,
+		markdown   TEXT,
+		fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (full_name, version)
+	);
+	CREATE TABLE IF NOT EXISTS meta (
+		key   TEXT PRIMARY KEY,
+		value TEXT
 	);
 	`)
 	return err
 }
-
-// TODO(step③): UpsertPlayer, RecordAudit, RecordEvent, mod-cache upserts/reads.

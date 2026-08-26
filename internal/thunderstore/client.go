@@ -1,7 +1,3 @@
-// Package thunderstore queries the Thunderstore API to search Valheim mods and
-// resolve a package's full dependency tree into mods.txt entries
-// (namespace/name/version). BepInExPack is skipped — the server image provides
-// it via BEPINEX=true (see valheim-mods.yaml).
 package thunderstore
 
 import (
@@ -10,24 +6,28 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
 type Client struct {
-	v1URL  string       // community list, e.g. https://thunderstore.io/c/valheim/api/v1
-	expURL string       // https://thunderstore.io/api/experimental
-	http   *http.Client // short timeout, for small package/version lookups
+	v1URL  string
+	expURL string
+	http   *http.Client
 
-	mu        sync.Mutex // guards the search index
+	OnRefresh func([]SearchResult)
+
+	mu        sync.Mutex
 	index     []SearchResult
+	byName    map[string]SearchResult
 	indexedAt time.Time
 }
 
 const (
-	indexTTL     = 6 * time.Hour   // how often to rebuild the search index
-	indexTimeout = 3 * time.Minute // the community list is ~160MB; give the stream room
+	indexTTL     = 6 * time.Hour
+	indexTimeout = 3 * time.Minute
 )
 
 func New(v1URL string) *Client {
@@ -45,7 +45,7 @@ type expPackage struct {
 }
 type expVersion struct {
 	VersionNumber string   `json:"version_number"`
-	Dependencies  []string `json:"dependencies"` // "Namespace-Name-Version"
+	Dependencies  []string `json:"dependencies"`
 }
 
 func (c *Client) getJSON(ctx context.Context, url string, v any) error {
@@ -61,8 +61,6 @@ func (c *Client) getJSON(ctx context.Context, url string, v any) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
-// entry converts a "Namespace-Name-Version" dependency string to a mods.txt
-// "namespace/name/version" entry. Returns skip=true for BepInExPack.
 func entry(dep string) (line string, skip bool) {
 	parts := strings.Split(dep, "-")
 	if len(parts) < 3 {
@@ -76,14 +74,10 @@ func entry(dep string) (line string, skip bool) {
 	return fmt.Sprintf("%s/%s/%s", ns, name, ver), false
 }
 
-// ResolveTree returns the target package plus its full transitive dependency set
-// as deduped mods.txt entries. visited is keyed by namespace/name (first version
-// wins on conflict).
 func (c *Client) ResolveTree(ctx context.Context, ns, name string) ([]string, error) {
 	var out []string
 	visited := map[string]bool{}
 
-	// seed with the target's latest version
 	var root expPackage
 	if err := c.getJSON(ctx, fmt.Sprintf("%s/package/%s/%s/", c.expURL, ns, name), &root); err != nil {
 		return nil, err
@@ -125,43 +119,112 @@ func (c *Client) ResolveTree(ctx context.Context, ns, name string) ([]string, er
 	return out, nil
 }
 
-// SearchResult is a trimmed community-list package for the browse UI.
-type SearchResult struct {
-	Owner   string `json:"owner"`
-	Name    string `json:"name"`
-	FullURL string `json:"package_url"`
+func (c *Client) LatestVersion(ctx context.Context, ns, name string) (version string, deps []string, err error) {
+	var p expPackage
+	if err := c.getJSON(ctx, fmt.Sprintf("%s/package/%s/%s/", c.expURL, ns, name), &p); err != nil {
+		return "", nil, err
+	}
+	return p.Latest.VersionNumber, p.Latest.Dependencies, nil
 }
 
-// Ready reports whether the search index has been built at least once.
+func (c *Client) Readme(ctx context.Context, ns, name, version string) (string, error) {
+	var r struct {
+		Markdown string `json:"markdown"`
+	}
+	u := fmt.Sprintf("%s/package/%s/%s/%s/readme/", c.expURL, ns, name, version)
+	if err := c.getJSON(ctx, u, &r); err != nil {
+		return "", err
+	}
+	return r.Markdown, nil
+}
+
+type SearchResult struct {
+	Owner        string
+	Name         string
+	FullURL      string
+	Description  string
+	Icon         string
+	Version      string
+	Downloads    int64
+	IsDeprecated bool
+	UpdatedAt    time.Time
+}
+
+func (r SearchResult) FullName() string { return r.Owner + "/" + r.Name }
+
+type rawPackage struct {
+	Name         string `json:"name"`
+	Owner        string `json:"owner"`
+	PackageURL   string `json:"package_url"`
+	IsDeprecated bool   `json:"is_deprecated"`
+	Downloads    int64  `json:"total_downloads"`
+	DateUpdated  string `json:"date_updated"`
+	Versions     []struct {
+		Description   string `json:"description"`
+		Icon          string `json:"icon"`
+		VersionNumber string `json:"version_number"`
+	} `json:"versions"`
+}
+
 func (c *Client) Ready() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.index != nil
 }
 
-// WarmLoop builds the search index immediately and rebuilds it every indexTTL.
-// Run it in a background goroutine at startup.
+func (c *Client) Get(fullName string) (SearchResult, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.byName[fullName]
+	return e, ok
+}
+
+func (c *Client) Preload(idx []SearchResult, at time.Time) {
+	c.setIndex(idx, at)
+}
+
+func (c *Client) setIndex(idx []SearchResult, at time.Time) {
+	byName := make(map[string]SearchResult, len(idx))
+	for _, e := range idx {
+		byName[e.FullName()] = e
+	}
+	c.mu.Lock()
+	c.index, c.byName, c.indexedAt = idx, byName, at
+	c.mu.Unlock()
+}
+
 func (c *Client) WarmLoop(ctx context.Context) {
 	for {
-		if err := c.warm(ctx); err != nil {
-			log.Printf("thunderstore: index build failed: %v", err)
-		} else {
-			c.mu.Lock()
-			n := len(c.index)
-			c.mu.Unlock()
-			log.Printf("thunderstore: search index built (%d packages)", n)
+		c.mu.Lock()
+		have := c.index != nil
+		age := time.Since(c.indexedAt)
+		c.mu.Unlock()
+
+		if !have || age >= indexTTL {
+			if err := c.warm(ctx); err != nil {
+				log.Printf("thunderstore: index build failed: %v", err)
+			} else {
+				c.mu.Lock()
+				n := len(c.index)
+				c.mu.Unlock()
+				log.Printf("thunderstore: search index built (%d packages)", n)
+			}
+		}
+
+		c.mu.Lock()
+		sleep := indexTTL - time.Since(c.indexedAt)
+		c.mu.Unlock()
+		if sleep < time.Minute {
+			sleep = time.Minute
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(indexTTL):
+		case <-time.After(sleep):
 		}
 	}
 }
 
-// warm streams the ~160MB community list and keeps only owner/name/url per
-// package. Streaming (element-by-element) keeps peak memory tiny — we never hold
-// the whole body or all fields.
 func (c *Client) warm(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, indexTimeout)
 	defer cancel()
@@ -176,25 +239,41 @@ func (c *Client) warm(ctx context.Context) error {
 	}
 
 	dec := json.NewDecoder(resp.Body)
-	if _, err := dec.Token(); err != nil { // opening '['
+	if _, err := dec.Token(); err != nil {
 		return err
 	}
 	var idx []SearchResult
 	for dec.More() {
-		var p SearchResult // unknown fields are discarded per element
+		var p rawPackage
 		if err := dec.Decode(&p); err != nil {
 			return err
 		}
-		idx = append(idx, p)
+		r := SearchResult{
+			Owner:        p.Owner,
+			Name:         p.Name,
+			FullURL:      p.PackageURL,
+			Downloads:    p.Downloads,
+			IsDeprecated: p.IsDeprecated,
+		}
+		if len(p.Versions) > 0 {
+			r.Description = p.Versions[0].Description
+			r.Icon = p.Versions[0].Icon
+			r.Version = p.Versions[0].VersionNumber
+		}
+		if t, err := time.Parse(time.RFC3339, p.DateUpdated); err == nil {
+			r.UpdatedAt = t
+		}
+		idx = append(idx, r)
 	}
-	c.mu.Lock()
-	c.index, c.indexedAt = idx, time.Now()
-	c.mu.Unlock()
+	sort.Slice(idx, func(i, j int) bool { return idx[i].Downloads > idx[j].Downloads })
+
+	c.setIndex(idx, time.Now())
+	if c.OnRefresh != nil {
+		c.OnRefresh(idx)
+	}
 	return nil
 }
 
-// Search filters the in-memory index by a case-insensitive substring. Returns
-// nothing until the index is ready (see Ready()).
 func (c *Client) Search(_ context.Context, query string, limit int) ([]SearchResult, error) {
 	c.mu.Lock()
 	idx := c.index

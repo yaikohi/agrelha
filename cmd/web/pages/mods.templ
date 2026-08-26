@@ -6,7 +6,7 @@ import (
 	"agrelha/internal/thunderstore"
 )
 
-templ Mods(current []string, q string, results []thunderstore.SearchResult, enabled bool, indexing bool) {
+templ Mods(current []string, meta map[string]thunderstore.SearchResult, q string, results []thunderstore.SearchResult, enabled bool, indexing bool) {
 	@Layout("Mods") {
 		@nav()
 		<h1 class="mb-6 text-2xl font-semibold">Mods</h1>
@@ -17,7 +17,6 @@ templ Mods(current []string, q string, results []thunderstore.SearchResult, enab
 			<input name="q" value={ q } placeholder="search Thunderstore…" class="w-64 rounded bg-zinc-900 px-3 py-2 text-sm"/>
 			<button class="rounded bg-zinc-700 px-4 py-2 text-sm hover:bg-zinc-600">Search</button>
 		</form>
-		<!-- direct install by identifier (works even before the search index is built) -->
 		<form method="post" action="/mods/install" class="mb-6 flex flex-wrap items-center gap-2 text-sm">
 			<span class="text-zinc-500">or install by identifier:</span>
 			<input name="namespace" placeholder="namespace" class="w-32 rounded bg-zinc-900 px-3 py-2"/>
@@ -29,30 +28,61 @@ templ Mods(current []string, q string, results []thunderstore.SearchResult, enab
 			<p class="mb-6 rounded bg-zinc-800 p-3 text-sm text-zinc-300">Mod catalog is still indexing (first load pulls a large list) — try the search again in a moment, or install by identifier above.</p>
 		}
 		if len(results) > 0 {
-			<ul class="mb-8 divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900">
+			<ul class="mb-8 space-y-2">
 				for _, r := range results {
-					<li class="flex items-center justify-between px-4 py-2 text-sm">
-						<span>{ r.Owner }/{ r.Name }</span>
-						<form method="post" action="/mods/install">
-							<input type="hidden" name="namespace" value={ r.Owner }/>
-							<input type="hidden" name="name" value={ r.Name }/>
-							<button class="rounded bg-emerald-700 px-3 py-1 text-xs hover:bg-emerald-600">Install +deps</button>
-						</form>
-					</li>
+					@modRow(r)
 				}
 			</ul>
 		}
 		<h2 class="mb-2 text-sm font-medium text-zinc-400">Installed ({ strconv.Itoa(len(current)) })</h2>
-		<ul class="divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900">
+		<ul class="space-y-2">
 			for _, e := range current {
-				<li class="flex items-center justify-between px-4 py-2 text-sm">
-					<span class="font-mono text-xs">{ e }</span>
-					<form method="post" action="/mods/remove">
-						<input type="hidden" name="mod" value={ ModKey(e) }/>
-						<button class="rounded bg-red-800 px-3 py-1 text-xs hover:bg-red-700">Remove</button>
-					</form>
-				</li>
+				@installedRow(e, meta[ModKey(e)])
 			}
 		</ul>
+	}
+}
+
+templ modRow(r thunderstore.SearchResult) {
+	<li class="flex items-center gap-3 rounded bg-zinc-900 px-4 py-3">
+		@icon(r.Icon)
+		<div class="min-w-0 flex-1">
+			<a href={ templ.SafeURL("/mods/" + r.Owner + "/" + r.Name) } class="font-medium hover:underline">{ r.Owner }/{ r.Name }</a>
+			if r.IsDeprecated {
+				<span class="ml-2 rounded bg-red-900/60 px-1.5 py-0.5 text-xs text-red-200">deprecated</span>
+			}
+			if r.Description != "" {
+				<p class="truncate text-sm text-zinc-400">{ r.Description }</p>
+			}
+		</div>
+		<form method="post" action="/mods/install">
+			<input type="hidden" name="namespace" value={ r.Owner }/>
+			<input type="hidden" name="name" value={ r.Name }/>
+			<button class="rounded bg-emerald-700 px-3 py-1 text-xs hover:bg-emerald-600">Install +deps</button>
+		</form>
+	</li>
+}
+
+templ installedRow(entry string, m thunderstore.SearchResult) {
+	<li class="flex items-center gap-3 rounded bg-zinc-900 px-4 py-3">
+		@icon(m.Icon)
+		<div class="min-w-0 flex-1">
+			<a href={ templ.SafeURL("/mods/" + ModKey(entry)) } class="font-mono text-xs hover:underline">{ entry }</a>
+			if m.Description != "" {
+				<p class="truncate text-sm text-zinc-400">{ m.Description }</p>
+			}
+		</div>
+		<form method="post" action="/mods/remove">
+			<input type="hidden" name="mod" value={ ModKey(entry) }/>
+			<button class="rounded bg-red-800 px-3 py-1 text-xs hover:bg-red-700">Remove</button>
+		</form>
+	</li>
+}
+
+templ icon(url string) {
+	if url != "" {
+		<img src={ url } alt="" class="h-10 w-10 flex-none rounded bg-zinc-800" loading="lazy"/>
+	} else {
+		<div class="h-10 w-10 flex-none rounded bg-zinc-800"></div>
 	}
 }

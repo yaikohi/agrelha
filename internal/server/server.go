@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -34,14 +35,27 @@ func New(cfg *config.Config) *FiberServer {
 		ServerHeader: "agrelha",
 		AppName:      "agrelha",
 	})
-	s := &FiberServer{App: app, cfg: cfg, ts: thunderstore.New(cfg.ThunderstoreAPI)}
-	go s.ts.WarmLoop(context.Background()) // build the mod search index in the background
+	s := &FiberServer{App: app, cfg: cfg}
 
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("store: %v", err)
 	}
 	s.store = st
+
+	s.ts = thunderstore.New(cfg.ThunderstoreAPI)
+	if rows, fetchedAt, err := st.LoadModIndex(); err != nil {
+		log.Printf("mod index load: %v", err)
+	} else if len(rows) > 0 {
+		s.ts.Preload(rowsToResults(rows), fetchedAt)
+		log.Printf("thunderstore: preloaded %d packages from cache", len(rows))
+	}
+	s.ts.OnRefresh = func(idx []thunderstore.SearchResult) {
+		if err := st.SaveModIndex(resultsToRows(idx), time.Now()); err != nil {
+			log.Printf("mod index save: %v", err)
+		}
+	}
+	go s.ts.WarmLoop(context.Background())
 
 	// Declarative plane: needs a git token.
 	if cfg.GitToken != "" {

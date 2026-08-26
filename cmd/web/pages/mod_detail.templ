@@ -1,0 +1,62 @@
+package pages
+
+import (
+	"strconv"
+
+	"agrelha/internal/thunderstore"
+)
+
+templ ModDetail(ns, name string, e thunderstore.SearchResult, version string, deps []string, readmeHTML, tsURL string, installed, enabled bool) {
+	@Layout(ns + "/" + name) {
+		@nav()
+		<div class="mb-6 flex items-start gap-4">
+			@icon(e.Icon)
+			<div class="min-w-0 flex-1">
+				<h1 class="text-2xl font-semibold">{ ns }/{ name }</h1>
+				<div class="mt-1 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
+					if version != "" {
+						<span>v{ version }</span>
+					}
+					if e.Downloads > 0 {
+						<span>{ strconv.FormatInt(e.Downloads, 10) } downloads</span>
+					}
+					<a href={ templ.SafeURL(tsURL) } target="_blank" rel="noopener" class="text-emerald-400 hover:underline">View on Thunderstore ↗</a>
+				</div>
+				if e.IsDeprecated {
+					<p class="mt-2 rounded bg-red-900/50 px-3 py-2 text-sm text-red-200">⚠ This package is marked deprecated on Thunderstore.</p>
+				}
+			</div>
+			if enabled {
+				<form method="post" action="/mods/install">
+					<input type="hidden" name="namespace" value={ ns }/>
+					<input type="hidden" name="name" value={ name }/>
+					if installed {
+						<button class="rounded bg-zinc-700 px-4 py-2 text-sm hover:bg-zinc-600">Reinstall / update</button>
+					} else {
+						<button class="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600">Install +deps</button>
+					}
+				</form>
+			}
+		</div>
+		if len(deps) > 0 {
+			<section class="mb-6">
+				<h2 class="mb-2 text-sm font-medium text-zinc-400">Dependencies</h2>
+				<ul class="flex flex-wrap gap-2">
+					for _, d := range deps {
+						<li class="rounded bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-300">{ d }</li>
+					}
+				</ul>
+			</section>
+		}
+		<section>
+			<h2 class="mb-2 text-sm font-medium text-zinc-400">README</h2>
+			if readmeHTML != "" {
+				<article class="prose prose-invert max-w-none rounded bg-zinc-900 p-5">
+					@templ.Raw(readmeHTML)
+				</article>
+			} else {
+				<p class="rounded bg-zinc-900 p-5 text-sm text-zinc-500">No README available.</p>
+			}
+		</section>
+	}
+}

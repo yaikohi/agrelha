@@ -5,7 +5,8 @@ to the `yaya` Talos cluster via GitOps from `yaya-ops`, image in the self-hosted
 registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
 (WireGuard-only, behind Zitadel OIDC).
 
-**Current deployed version: `0.5.0`.**
+**Current version: `0.6.0`** (mod browsing + metadata cache; `0.5.0` is the last
+one actually deployed — build+push `0.6.0` to ship it).
 
 ---
 
@@ -37,7 +38,17 @@ live cluster edits get reverted):
   player roster from the log ingester.
 - **Auto-apply:** after a mod/admin commit, `applyAfterSync` waits for ArgoCD to
   reconcile the ConfigMap, then rolls the pod so the change takes effect.
-- **Persistence:** SQLite (`players`, `audit`, `events`, `mod_cache`) at `/data`.
+- **Persistence:** SQLite (`players`, `audit`, `events`, `mod_index`, `mod_readme`,
+  `meta`) at `/data`.
+- **Mod browsing + metadata cache (0.6.0):** the streamed index now keeps
+  icon/description/version/downloads/deprecated per package, is persisted to
+  `mod_index` and preloaded on startup (instant browse, no startup re-pull, bg 6h
+  refresh). Search results + installed list show icon + description and link to a
+  detail page `GET /mods/{namespace}/{name}` (header, deprecated warning, direct
+  dependency list, README, Install button, Thunderstore link). READMEs are lazily
+  fetched and cached forever by immutable version in `mod_readme`, rendered via
+  `internal/mdrender` (goldmark, raw HTML off → bluemonday allowlist; images
+  restricted to `gcdn.thunderstore.io`, links forced `nofollow noopener _blank`).
 
 ---
 
@@ -58,9 +69,8 @@ live cluster edits get reverted):
 
 ### P2 — features from the original design not yet built
 
-- [ ] **Mod browsing + metadata cache.** Enriched search list (icon + description) +
-      per-mod detail page with cached, sanitized README markdown. Fully spec'd below
-      ("Spec: mod browsing & metadata cache"). Folds in the P3 index-persistence item.
+- [x] **Mod browsing + metadata cache.** Done in 0.6.0 (see Done above); spec kept
+      below for reference.
 - [ ] **Audit / event timeline UI.** `store` records audit + events but nothing renders
       them. Add a `/history` page (recent restarts, installs, grants, joins/leaves,
       auto-restarts).
@@ -227,6 +237,7 @@ internal/store           SQLite schema + queries
 internal/gitops          go-git commit-a-ConfigMap-data-key
 internal/mods            install/remove -> mods.txt
 internal/admins          grant/revoke -> ADMINLIST_IDS
-internal/thunderstore    search index (streamed) + dependency resolution
+internal/thunderstore    search index (streamed, persisted) + deps + readme fetch
+internal/mdrender        goldmark + bluemonday README sanitizer (CDN-only images)
 internal/sse             Datastar v1.0 SSE frame writers
 ```
