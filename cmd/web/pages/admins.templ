@@ -6,10 +6,11 @@ import (
 	"agrelha/internal/store"
 )
 
-templ Admins(players []store.Player, adminIDs []string, enabled bool) {
+templ Admins(players []store.Player, adminIDs []string, enabled bool, flashKind, flashMsg string) {
 	@Layout("Admins") {
 		@nav()
 		<h1 class="mb-6 text-2xl font-semibold">Admins</h1>
+		@flashBanner(flashKind, flashMsg)
 		if !enabled {
 			<p class="mb-4 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to grant/revoke admin.</p>
 		}

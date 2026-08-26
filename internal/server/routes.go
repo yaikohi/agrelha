@@ -46,6 +46,8 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/mods/install", s.modsInstall)
 	app.Post("/mods/remove", s.modsRemove)
 
+	app.Get("/history", s.historyPage)
+
 	app.Get("/admins", s.adminsPage)
 	app.Post("/admins/grant", s.adminsGrant)
 	app.Post("/admins/revoke", s.adminsRevoke)

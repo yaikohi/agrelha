@@ -1,16 +1,17 @@
-// Package auth gates agrelha behind Zitadel OIDC (authorization-code flow).
-// Single permitted identity: cfg.AllowedEmail. Everything except /healthz, /login
-// and the /auth/* endpoints requires a valid session. Logout is RP-initiated
-// (redirects to the IdP's end_session_endpoint) so the Zitadel session ends too.
 package auth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"log"
 	"net/url"
-	"sync"
+	"strings"
 	"time"
 
 	"agrelha/internal/config"
@@ -20,24 +21,28 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const sessionCookie = "agrelha_session"
-
-type session struct {
-	email   string
-	idToken string // raw ID token, used as id_token_hint on logout
-}
+const (
+	sessionCookie = "agrelha_session"
+	oidcCookie    = "agrelha_oidc"
+	sessionTTL    = 12 * time.Hour
+	loginTTL      = 10 * time.Minute
+)
 
 type Authenticator struct {
 	cfg      *config.Config
 	provider *oidc.Provider
 	verifier *oidc.IDTokenVerifier
 	oauth    oauth2.Config
+	key      []byte
 
-	endSession string // IdP end_session_endpoint ("" if not advertised)
-	postLogout string // where the IdP returns after logout
+	endSession string
+	postLogout string
+}
 
-	mu       sync.Mutex
-	sessions map[string]session // token -> session
+type sessionData struct {
+	Email   string `json:"email"`
+	IDToken string `json:"idt"`
+	Exp     int64  `json:"exp"`
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
@@ -45,22 +50,23 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 	if err != nil {
 		return nil, err
 	}
-	// end_session_endpoint isn't on oidc.Provider directly — pull it from discovery.
 	var disco struct {
 		EndSession string `json:"end_session_endpoint"`
 	}
 	_ = provider.Claims(&disco)
 
-	// Return the user to /login (same origin as the redirect URL) after IdP logout.
 	postLogout := "/login"
 	if u, err := url.Parse(cfg.OIDCRedirectURL); err == nil && u.Host != "" {
 		postLogout = u.Scheme + "://" + u.Host + "/login"
 	}
 
+	sum := sha256.Sum256([]byte("agrelha-session-v1:" + cfg.OIDCClientSecret))
+
 	return &Authenticator{
 		cfg:        cfg,
 		provider:   provider,
 		verifier:   provider.Verifier(&oidc.Config{ClientID: cfg.OIDCClientID}),
+		key:        sum[:],
 		endSession: disco.EndSession,
 		postLogout: postLogout,
 		oauth: oauth2.Config{
@@ -70,24 +76,81 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 			Endpoint:     provider.Endpoint(),
 			Scopes:       []string{oidc.ScopeOpenID, "email", "profile"},
 		},
-		sessions: map[string]session{},
 	}, nil
 }
 
-func token() string {
-	b := make([]byte, 32)
+func randHex(n int) string {
+	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
-// Login redirects to Zitadel. (TODO: sign/verify `state` instead of a fixed value.)
-func (a *Authenticator) Login(c *fiber.Ctx) error {
-	return c.Redirect(a.oauth.AuthCodeURL("state-todo"), fiber.StatusFound)
+func (a *Authenticator) sign(payload []byte) string {
+	mac := hmac.New(sha256.New, a.key)
+	mac.Write(payload)
+	return base64.RawURLEncoding.EncodeToString(payload) + "." +
+		base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// Callback exchanges the code, verifies the ID token, and enforces AllowedEmail.
+func (a *Authenticator) unsign(v string) ([]byte, bool) {
+	parts := strings.SplitN(v, ".", 2)
+	if len(parts) != 2 {
+		return nil, false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, false
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, false
+	}
+	mac := hmac.New(sha256.New, a.key)
+	mac.Write(payload)
+	if subtle.ConstantTimeCompare(sig, mac.Sum(nil)) != 1 {
+		return nil, false
+	}
+	return payload, true
+}
+
+func (a *Authenticator) readSession(c *fiber.Ctx) (sessionData, bool) {
+	payload, ok := a.unsign(c.Cookies(sessionCookie))
+	if !ok {
+		return sessionData{}, false
+	}
+	var s sessionData
+	if err := json.Unmarshal(payload, &s); err != nil {
+		return sessionData{}, false
+	}
+	if time.Now().Unix() >= s.Exp {
+		return sessionData{}, false
+	}
+	return s, true
+}
+
+func (a *Authenticator) Login(c *fiber.Ctx) error {
+	state, nonce := randHex(16), randHex(16)
+	c.Cookie(&fiber.Cookie{
+		Name: oidcCookie, Value: a.sign([]byte(state + ":" + nonce)),
+		HTTPOnly: true, Secure: true, SameSite: "Lax", Path: "/",
+		Expires: time.Now().Add(loginTTL),
+	})
+	return c.Redirect(a.oauth.AuthCodeURL(state, oidc.Nonce(nonce)), fiber.StatusFound)
+}
+
 func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	ctx := c.UserContext()
+
+	payload, ok := a.unsign(c.Cookies(oidcCookie))
+	c.ClearCookie(oidcCookie)
+	if !ok {
+		return fiber.NewError(fiber.StatusBadRequest, "missing or bad login state")
+	}
+	wantState, wantNonce, _ := strings.Cut(string(payload), ":")
+	if subtle.ConstantTimeCompare([]byte(wantState), []byte(c.Query("state"))) != 1 {
+		return fiber.NewError(fiber.StatusBadRequest, "state mismatch")
+	}
+
 	oauth2Token, err := a.oauth.Exchange(ctx, c.Query("code"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "token exchange failed")
@@ -100,14 +163,16 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "id_token verify failed")
 	}
+	if subtle.ConstantTimeCompare([]byte(idToken.Nonce), []byte(wantNonce)) != 1 {
+		return fiber.NewError(fiber.StatusUnauthorized, "nonce mismatch")
+	}
+
 	var claims struct {
 		Email string `json:"email"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "claims parse failed")
 	}
-	// Fall back to the UserInfo endpoint if the ID token carries no email
-	// (i.e. "User Info inside ID Token" is disabled on the Zitadel app).
 	if claims.Email == "" {
 		if ui, err := a.provider.UserInfo(ctx, oauth2.StaticTokenSource(oauth2Token)); err == nil {
 			claims.Email = ui.Email
@@ -118,32 +183,19 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusForbidden, "not authorized")
 	}
 
-	t := token()
-	a.mu.Lock()
-	a.sessions[t] = session{email: claims.Email, idToken: rawID}
-	a.mu.Unlock()
-	log.Printf("auth: %s signed in", claims.Email)
-
-	c.Cookie(&fiber.Cookie{
-		Name: sessionCookie, Value: t, HTTPOnly: true, Secure: true,
-		SameSite: "Lax", Path: "/", Expires: time.Now().Add(12 * time.Hour),
+	data, _ := json.Marshal(sessionData{
+		Email: claims.Email, IDToken: rawID, Exp: time.Now().Add(sessionTTL).Unix(),
 	})
+	c.Cookie(&fiber.Cookie{
+		Name: sessionCookie, Value: a.sign(data), HTTPOnly: true, Secure: true,
+		SameSite: "Lax", Path: "/", Expires: time.Now().Add(sessionTTL),
+	})
+	log.Printf("auth: %s signed in", claims.Email)
 	return c.Redirect("/", fiber.StatusFound)
 }
 
-// Logout clears the local session and, when the IdP advertises an
-// end_session_endpoint, redirects there to end the Zitadel session too
-// (RP-initiated logout). Zitadel returns to postLogout afterwards.
 func (a *Authenticator) Logout(c *fiber.Ctx) error {
-	var idHint string
-	if t := c.Cookies(sessionCookie); t != "" {
-		a.mu.Lock()
-		if s, ok := a.sessions[t]; ok {
-			idHint = s.idToken
-		}
-		delete(a.sessions, t)
-		a.mu.Unlock()
-	}
+	s, _ := a.readSession(c)
 	c.ClearCookie(sessionCookie)
 
 	if a.endSession == "" {
@@ -156,24 +208,20 @@ func (a *Authenticator) Logout(c *fiber.Ctx) error {
 	q := u.Query()
 	q.Set("post_logout_redirect_uri", a.postLogout)
 	q.Set("client_id", a.cfg.OIDCClientID)
-	if idHint != "" {
-		q.Set("id_token_hint", idHint)
+	if s.IDToken != "" {
+		q.Set("id_token_hint", s.IDToken)
 	}
 	u.RawQuery = q.Encode()
 	return c.Redirect(u.String(), fiber.StatusFound)
 }
 
-// Middleware requires a valid session; stashes the actor email in locals.
 func (a *Authenticator) Middleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		t := c.Cookies(sessionCookie)
-		a.mu.Lock()
-		s, ok := a.sessions[t]
-		a.mu.Unlock()
+		s, ok := a.readSession(c)
 		if !ok {
 			return c.Redirect("/login", fiber.StatusFound)
 		}
-		c.Locals("actor", s.email)
+		c.Locals("actor", s.Email)
 		return c.Next()
 	}
 }

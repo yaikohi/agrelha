@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -32,7 +33,8 @@ func (s *FiberServer) modsPage(c *fiber.Ctx) error {
 		results, _ = s.ts.Search(c.UserContext(), q, 25)
 	}
 	indexing := q != "" && !s.ts.Ready()
-	return render(c, pages.Mods(current, meta, q, results, s.mods != nil, indexing))
+	fk, fm := takeFlash(c)
+	return render(c, pages.Mods(current, meta, q, results, s.mods != nil, indexing, fk, fm))
 }
 
 func (s *FiberServer) modDetail(c *fiber.Ctx) error {
@@ -109,20 +111,24 @@ func prettyDeps(raw []string) []string {
 
 func (s *FiberServer) modsInstall(c *fiber.Ctx) error {
 	if s.mods == nil {
-		return fiber.NewError(fiber.StatusServiceUnavailable, "declarative plane disabled (no git token)")
+		setFlash(c, "err", "Declarative plane disabled — no Codeberg token configured.")
+		return c.Redirect("/mods", fiber.StatusSeeOther)
 	}
 	ns, name := c.FormValue("namespace"), c.FormValue("name")
 	if ns == "" || name == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "namespace and name required")
+		setFlash(c, "err", "Namespace and name are required.")
+		return c.Redirect("/mods", fiber.StatusSeeOther)
 	}
 	ctx := c.UserContext()
 	entries, err := s.ts.ResolveTree(ctx, ns, name)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadGateway, "resolve deps: "+err.Error())
+		setFlash(c, "err", "Couldn't resolve "+ns+"/"+name+": "+err.Error())
+		return c.Redirect("/mods", fiber.StatusSeeOther)
 	}
 	changed, err := s.mods.Install(ctx, entries)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		setFlash(c, "err", "Install commit failed: "+err.Error())
+		return c.Redirect("/mods", fiber.StatusSeeOther)
 	}
 	_ = s.store.RecordAudit(s.actor(c), "mod-install", ns+"/"+name)
 	if changed {
@@ -138,21 +144,38 @@ func (s *FiberServer) modsInstall(c *fiber.Ctx) error {
 			}
 			return true
 		})
+		setFlash(c, "ok", installedMsg(ns, name, len(entries)-1))
+	} else {
+		setFlash(c, "ok", ns+"/"+name+" is already installed and up to date.")
 	}
 	return c.Redirect("/mods", fiber.StatusSeeOther)
 }
 
+func installedMsg(ns, name string, deps int) string {
+	m := "Installed " + ns + "/" + name
+	switch {
+	case deps == 1:
+		m += " (+1 dependency)"
+	case deps > 1:
+		m += " (+" + strconv.Itoa(deps) + " dependencies)"
+	}
+	return m + " — committed; the server will restart to apply."
+}
+
 func (s *FiberServer) modsRemove(c *fiber.Ctx) error {
 	if s.mods == nil {
-		return fiber.NewError(fiber.StatusServiceUnavailable, "declarative plane disabled (no git token)")
+		setFlash(c, "err", "Declarative plane disabled — no Codeberg token configured.")
+		return c.Redirect("/mods", fiber.StatusSeeOther)
 	}
 	nsName := c.FormValue("mod")
 	if nsName == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "mod required")
+		setFlash(c, "err", "No mod specified.")
+		return c.Redirect("/mods", fiber.StatusSeeOther)
 	}
 	changed, err := s.mods.Remove(c.UserContext(), nsName)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		setFlash(c, "err", "Remove commit failed: "+err.Error())
+		return c.Redirect("/mods", fiber.StatusSeeOther)
 	}
 	_ = s.store.RecordAudit(s.actor(c), "mod-remove", nsName)
 	if changed {
@@ -164,6 +187,9 @@ func (s *FiberServer) modsRemove(c *fiber.Ctx) error {
 			}
 			return true
 		})
+		setFlash(c, "ok", "Removed "+nsName+" — committed; the server will restart to apply.")
+	} else {
+		setFlash(c, "ok", nsName+" was not installed.")
 	}
 	return c.Redirect("/mods", fiber.StatusSeeOther)
 }

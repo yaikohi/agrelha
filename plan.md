@@ -5,9 +5,9 @@ to the `yaya` Talos cluster via GitOps from `yaya-ops`, image in the self-hosted
 registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
 (WireGuard-only, behind Zitadel OIDC).
 
-**Current version: `0.6.3`** (mod browsing + metadata cache; `0.6.1` added README
-markdown styling; `0.6.2` fixed README images + horizontal overflow; `0.6.3` added
-a server-side image proxy). Build+push `0.6.3` to ship it.
+**Current version: `0.7.1`** (P1 batch in `0.7.0`: stateless signed-cookie sessions,
+OIDC state/nonce CSRF, inline flash feedback; `0.7.1` adds the History page).
+Build+push `0.7.1` to ship it.
 
 > README styling: this Tailwind v4 build has no Typography plugin, so the `prose`
 > classes were dead. README now uses a `.md` scope with hand-written markdown CSS
@@ -74,26 +74,33 @@ live cluster edits get reverted):
 
 ## Remaining work
 
-### P1 — correctness / it-bugs-me
+### P1 — correctness / it-bugs-me — DONE (0.7.0)
 
-- [ ] **Session persistence.** Sessions are an in-memory map (`internal/auth`), so every
-      deploy/pod-restart forces a re-login. Persist to SQLite (a `sessions` table) or
-      switch to signed/encrypted cookies (no server-side store). Prefer signed cookies.
-- [ ] **OIDC `state` CSRF.** `Login` uses a fixed `"state-todo"`. Generate a random
-      state, store it (cookie), verify in `Callback`. Same for a `nonce`.
-- [ ] **Session eviction.** The in-memory map never evicts expired entries (minor leak).
-      Moot if we move to signed cookies.
-- [ ] **Inline error/success feedback.** Install/grant failures currently return a raw
-      Fiber error page; redirects give no confirmation. Add flash messages (a signal or
-      a small banner) so the user sees "installed X (+3 deps)" / "resolve failed: …".
+- [x] **Session persistence.** Sessions are now stateless HMAC-SHA256-signed cookies
+      (`internal/auth`): payload `{email, idToken, exp}` signed with a key derived
+      `sha256("agrelha-session-v1:"+OIDCClientSecret)` (stable across restarts, no new
+      secret to seed, no server-side store). Survives deploys; no re-login. Verified
+      tamper/garbage/wrong-key all rejected.
+- [x] **OIDC `state` + `nonce` CSRF.** `Login` generates random `state`+`nonce`, stores
+      them in a short-lived signed `agrelha_oidc` cookie, passes `nonce` via
+      `oidc.Nonce`. `Callback` constant-time-compares `state` and the ID token's `nonce`
+      claim, then clears the cookie.
+- [x] **Session eviction.** Moot — stateless cookies, nothing to evict (`exp` in payload).
+- [x] **Inline error/success feedback.** Flash cookie (`internal/server/flash.go`):
+      install/remove/grant/revoke set an ok/err message + redirect; the Mods/Admins pages
+      render a banner (`flashBanner`). e.g. "Installed X (+3 dependencies) — committed;
+      the server will restart to apply." / "Couldn't resolve …". No more raw Fiber error
+      pages for these actions.
 
 ### P2 — features from the original design not yet built
 
 - [x] **Mod browsing + metadata cache.** Done in 0.6.0 (see Done above); spec kept
       below for reference.
-- [ ] **Audit / event timeline UI.** `store` records audit + events but nothing renders
-      them. Add a `/history` page (recent restarts, installs, grants, joins/leaves,
-      auto-restarts).
+- [x] **Audit / event timeline UI (0.7.1).** `GET /history` — merged timeline of `audit`
+      (who did what) + `events` (joins/leaves/backups/crashes), newest first, 200 rows.
+      `store.ListHistory` UNIONs both and excludes `restart/stop/start` events (they'd
+      duplicate the audit rows). Labels/badges via `pages.HistoryLabel`/`HistoryBadge`.
+      Nav gained a History link.
 - [ ] **Mod config (.cfg) editing.** `valheim-mod-configs` ConfigMap — edit per-mod
       `.cfg` from the UI via the same git-commit path. (Deferred v2 in the design.)
 - [ ] **Player presence.** Roster tracks `last_seen`/`sessions` but not online/offline.

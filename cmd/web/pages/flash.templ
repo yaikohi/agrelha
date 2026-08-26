@@ -1,0 +1,11 @@
+package pages
+
+templ flashBanner(kind, msg string) {
+	if msg != "" {
+		if kind == "err" {
+			<div class="mb-4 rounded border border-red-800 bg-red-900/40 px-4 py-3 text-sm text-red-200">{ msg }</div>
+		} else {
+			<div class="mb-4 rounded border border-emerald-800 bg-emerald-900/30 px-4 py-3 text-sm text-emerald-200">{ msg }</div>
+		}
+	}
+}

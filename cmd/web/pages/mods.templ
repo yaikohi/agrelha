@@ -6,10 +6,11 @@ import (
 	"agrelha/internal/thunderstore"
 )
 
-templ Mods(current []string, meta map[string]thunderstore.SearchResult, q string, results []thunderstore.SearchResult, enabled bool, indexing bool) {
+templ Mods(current []string, meta map[string]thunderstore.SearchResult, q string, results []thunderstore.SearchResult, enabled bool, indexing bool, flashKind, flashMsg string) {
 	@Layout("Mods") {
 		@nav()
 		<h1 class="mb-6 text-2xl font-semibold">Mods</h1>
+		@flashBanner(flashKind, flashMsg)
 		if !enabled {
 			<p class="mb-4 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to install/remove mods.</p>
 		}
