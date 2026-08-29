@@ -43,6 +43,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/server/start", s.guard("start", func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
 
 	app.Get("/mods", s.modsPage)
+	app.Get("/mods/export", s.modpackExport)
 	app.Get("/mods/:namespace/:name", s.modDetail)
 	app.Post("/mods/install", s.modsInstall)
 	app.Post("/mods/remove", s.modsRemove)

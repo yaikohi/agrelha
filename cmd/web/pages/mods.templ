@@ -35,7 +35,12 @@ templ Mods(current []string, meta map[string]thunderstore.SearchResult, q string
 				}
 			</ul>
 		}
-		<h2 class="mb-2 text-sm font-medium text-zinc-400">Installed ({ strconv.Itoa(len(current)) })</h2>
+		<div class="mb-2 flex items-center justify-between">
+				<h2 class="text-sm font-medium text-zinc-400">Installed ({ strconv.Itoa(len(current)) })</h2>
+				if len(current) > 0 {
+					<a href="/mods/export" class="rounded bg-zinc-700 px-3 py-1 text-xs hover:bg-zinc-600" title="Download an r2modman / Thunderstore Mod Manager profile (.r2z) of the installed mods and their configs">Export modpack (.r2z)</a>
+				}
+			</div>
 		<ul class="space-y-2">
 			for _, e := range current {
 				@installedRow(e, meta[ModKey(e)])

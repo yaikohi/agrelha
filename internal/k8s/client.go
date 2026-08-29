@@ -16,7 +16,7 @@ import (
 )
 
 type Client struct {
-	cs         *kubernetes.Clientset
+	cs         kubernetes.Interface
 	namespace  string
 	deployment string
 }
@@ -31,6 +31,10 @@ func New(namespace, deployment string) (*Client, error) {
 		return nil, fmt.Errorf("clientset: %w", err)
 	}
 	return &Client{cs: cs, namespace: namespace, deployment: deployment}, nil
+}
+
+func NewWithClientset(cs kubernetes.Interface, namespace, deployment string) *Client {
+	return &Client{cs: cs, namespace: namespace, deployment: deployment}
 }
 
 // Restart triggers a rolling restart by stamping the pod template annotation,
