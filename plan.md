@@ -5,10 +5,23 @@ to the `yaya` Talos cluster via GitOps from `yaya-ops`, image in the self-hosted
 registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
 (WireGuard-only, behind Zitadel OIDC).
 
-**Current version: `0.8.0`** (P1 in `0.7.0`; `0.7.1` History; `0.7.2` presence;
+**Current version: `0.8.1`** (P1 in `0.7.0`; `0.7.1` History; `0.7.2` presence;
 `0.7.3` mod `.cfg` editing; `0.7.4` "Update now" + backup tiles — **P2 complete**;
-`0.8.0` modpack export).
-Build+push `0.8.0` to ship it.
+`0.8.0` modpack export; `0.8.1` dashboard control buttons give feedback — see below).
+Build+push `0.8.1` to ship it.
+
+> Dashboard control buttons (`0.8.1`). `/server/{restart,update,stop,start}`
+> returned a bare `204`, which a Datastar backend action (`@post`) cannot render:
+> the k8s patch fired server-side but the page showed nothing, so the buttons looked
+> dead. They now answer with an `application/json` signals patch (`{"toast": …}`),
+> which Datastar merges into `$toast`; the dashboard renders a dismissible toast
+> (`data-show="$toast != ''"`). `guard` gained a `toast` message arg. The live tiles
+> already reflect state within the 5s SSE tick, so this is the missing immediate
+> feedback. (RBAC confirmed: the agrelha SA can `patch deployments` in `valheim`;
+> Stop/Start patch `.spec.replicas` on the deployment, not the `scale` subresource.)
+> Note: `internal/sse` speaks stable `datastar-patch-*` and the browser bundle must
+> stay pinned to `v1.0.2` (Taskfile `DATASTAR_VERSION`) to match — a beta bundle
+> speaks `datastar-merge-*` and would silently drop every frame.
 
 > Modpack export (`0.8.0`). `GET /mods/export` streams a `valheim-YYYY-MM-DD.r2z`
 > (a zip) built from the live `valheim-mods` ConfigMap + the `valheim-mod-configs`

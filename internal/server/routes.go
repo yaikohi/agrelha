@@ -37,10 +37,10 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Get("/sse", s.sseDashboard)
 	app.Get("/img", s.imageProxy)
 
-	app.Post("/server/restart", s.guard("restart", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
-	app.Post("/server/update", s.guard("update", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
-	app.Post("/server/stop", s.guard("stop", func(ctx context.Context) error { return s.k8s.Scale(ctx, 0) }))
-	app.Post("/server/start", s.guard("start", func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
+	app.Post("/server/restart", s.guard("restart", "Restart triggered — the server is rolling.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
+	app.Post("/server/update", s.guard("update", "Update triggered — restarting; the image installs any Valheim update on boot.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
+	app.Post("/server/stop", s.guard("stop", "Stopping the server…", func(ctx context.Context) error { return s.k8s.Scale(ctx, 0) }))
+	app.Post("/server/start", s.guard("start", "Starting the server…", func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
 
 	app.Get("/mods", s.modsPage)
 	app.Get("/mods/export", s.modpackExport)
@@ -68,19 +68,18 @@ func (s *FiberServer) actor(c *fiber.Ctx) string {
 	return "local"
 }
 
-// guard runs a k8s action with a timeout + audit, 503 if the client isn't wired.
-func (s *FiberServer) guard(action string, fn func(context.Context) error) fiber.Handler {
+func (s *FiberServer) guard(action, toast string, fn func(context.Context) error) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if s.k8s == nil {
-			return fiber.NewError(fiber.StatusServiceUnavailable, "k8s client not available")
+			return c.JSON(fiber.Map{"toast": "Imperative plane disabled — no cluster access."})
 		}
 		ctx, cancel := context.WithTimeout(c.UserContext(), 15*time.Second)
 		defer cancel()
 		if err := fn(ctx); err != nil {
-			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+			return c.JSON(fiber.Map{"toast": "Failed: " + err.Error()})
 		}
 		_ = s.store.RecordAudit(s.actor(c), action, "")
 		_ = s.store.RecordEvent(action, s.actor(c))
-		return c.SendStatus(fiber.StatusNoContent)
+		return c.JSON(fiber.Map{"toast": toast})
 	}
 }

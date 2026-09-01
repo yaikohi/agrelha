@@ -5,7 +5,8 @@ package pages
 templ Dashboard(grafanaURL string) {
 	@Layout("Agrelha") {
 		@nav()
-		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',backup:'—',backupinfo:''}" data-effect="@get('/sse')">
+		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',backup:'—',backupinfo:'',toast:''}" data-effect="@get('/sse')">
+			<div data-show="$toast != ''" data-text="$toast" data-on-click="$toast = ''" class="fixed left-1/2 top-4 z-50 -translate-x-1/2 cursor-pointer rounded bg-zinc-800 px-4 py-2 text-sm text-zinc-100 shadow-lg ring-1 ring-zinc-700" title="click to dismiss"></div>
 			<section class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 				@tile("Players", "players")
 				@tile("CPU", "cpu")
