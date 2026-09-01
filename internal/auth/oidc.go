@@ -9,7 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -179,7 +179,7 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 		}
 	}
 	if claims.Email == "" || claims.Email != a.cfg.AllowedEmail {
-		log.Printf("auth: rejected sign-in for email %q (allowed %q)", claims.Email, a.cfg.AllowedEmail)
+		slog.Warn("auth: sign-in rejected", "email", claims.Email, "allowed", a.cfg.AllowedEmail)
 		return fiber.NewError(fiber.StatusForbidden, "not authorized")
 	}
 
@@ -190,7 +190,7 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 		Name: sessionCookie, Value: a.sign(data), HTTPOnly: true, Secure: true,
 		SameSite: "Lax", Path: "/", Expires: time.Now().Add(sessionTTL),
 	})
-	log.Printf("auth: %s signed in", claims.Email)
+	slog.Info("auth: signed in", "email", claims.Email)
 	return c.Redirect("/", fiber.StatusFound)
 }
 

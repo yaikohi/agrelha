@@ -37,6 +37,8 @@ type Config struct {
 	// Observability
 	InfluxDBURL         string
 	GrafanaDashboardURL string
+	LogLevel            string
+	LogFormat           string
 }
 
 func env(key, def string) string {
@@ -75,5 +77,7 @@ func Load() *Config {
 
 		InfluxDBURL:         env("INFLUXDB_URL", ""),
 		GrafanaDashboardURL: env("GRAFANA_DASHBOARD_URL", ""),
+		LogLevel:            env("LOG_LEVEL", "info"),
+		LogFormat:           env("LOG_FORMAT", "text"),
 	}
 }

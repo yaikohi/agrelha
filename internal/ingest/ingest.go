@@ -8,7 +8,7 @@ import (
 	"bufio"
 	"context"
 	"io"
-	"log"
+	"log/slog"
 	"regexp"
 	"time"
 
@@ -33,7 +33,7 @@ func Run(ctx context.Context, k logStreamer, st *store.Store) {
 			return
 		}
 		if err := consume(ctx, k, st); err != nil && ctx.Err() == nil {
-			log.Printf("ingest: stream ended (%v); retrying", err)
+			slog.Warn("ingest: log stream ended, retrying", "err", err)
 		}
 		select {
 		case <-ctx.Done():

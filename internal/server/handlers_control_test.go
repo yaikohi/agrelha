@@ -1,8 +1,6 @@
 package server
 
 import (
-	"encoding/json"
-	"io"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -18,7 +16,7 @@ import (
 	"agrelha/internal/store"
 )
 
-func TestServerControlReturnsSignalsPatch(t *testing.T) {
+func TestServerControlRedirectsWithFlash(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -40,24 +38,21 @@ func TestServerControlReturnsSignalsPatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	if resp.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
 	}
-	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/json") {
-		t.Fatalf("content-type = %q, want application/json (Datastar signals patch)", ct)
+	if loc := resp.Header.Get("Location"); loc != "/" {
+		t.Fatalf("location = %q, want /", loc)
 	}
-	blob, _ := io.ReadAll(resp.Body)
-	var got map[string]any
-	if err := json.Unmarshal(blob, &got); err != nil {
-		t.Fatalf("body not JSON: %v (%s)", err, blob)
+	if sc := resp.Header.Get("Set-Cookie"); !strings.Contains(sc, flashCookie) {
+		t.Fatalf("no flash cookie set: %q", sc)
 	}
-	msg, ok := got["toast"].(string)
-	if !ok || msg == "" {
-		t.Fatalf("missing toast signal in %s", blob)
+	if n := countAudit(t, st); n != 1 {
+		t.Fatalf("audit rows = %d, want 1", n)
 	}
 }
 
-func TestServerControlNoK8sIsGraceful(t *testing.T) {
+func TestServerControlNoK8sRedirectsWithoutAudit(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -71,11 +66,19 @@ func TestServerControlNoK8sIsGraceful(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	if resp.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
 	}
-	blob, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(blob), "toast") {
-		t.Fatalf("expected a toast signal, got %s", blob)
+	if n := countAudit(t, st); n != 0 {
+		t.Fatalf("audit rows = %d, want 0 (no cluster)", n)
 	}
+}
+
+func countAudit(t *testing.T, st *store.Store) int {
+	t.Helper()
+	rows, err := st.ListHistory(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(rows)
 }

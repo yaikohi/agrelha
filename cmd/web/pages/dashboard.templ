@@ -1,12 +1,10 @@
 package pages
 
-// Dashboard: on load it opens the SSE stream (@get('/sse')) which patches the
-// tile signals every 5s and appends log lines into #logs.
-templ Dashboard(grafanaURL string) {
+templ Dashboard(grafanaURL, flashKind, flashMsg string) {
 	@Layout("Agrelha") {
 		@nav()
-		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',backup:'—',backupinfo:'',toast:''}" data-effect="@get('/sse')">
-			<div data-show="$toast != ''" data-text="$toast" data-on-click="$toast = ''" class="fixed left-1/2 top-4 z-50 -translate-x-1/2 cursor-pointer rounded bg-zinc-800 px-4 py-2 text-sm text-zinc-100 shadow-lg ring-1 ring-zinc-700" title="click to dismiss"></div>
+		@flashBanner(flashKind, flashMsg)
+		<div data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',backup:'—',backupinfo:''}" data-effect="@get('/sse')">
 			<section class="grid grid-cols-2 gap-4 sm:grid-cols-4">
 				@tile("Players", "players")
 				@tile("CPU", "cpu")
@@ -18,10 +16,18 @@ templ Dashboard(grafanaURL string) {
 				<span class="ml-2 text-zinc-600" data-text="$backupinfo"></span>
 			</section>
 			<section class="mt-6 flex flex-wrap gap-3">
-				<button data-on-click="@post('/server/restart')" class="rounded bg-amber-600 px-4 py-2 text-sm font-medium hover:bg-amber-500">Restart</button>
-				<button data-on-click="@post('/server/update')" title="Restarts the server — the image installs any Valheim update on boot" class="rounded bg-sky-700 px-4 py-2 text-sm font-medium hover:bg-sky-600">Update</button>
-				<button data-on-click="@post('/server/stop')" class="rounded bg-red-700 px-4 py-2 text-sm font-medium hover:bg-red-600">Stop</button>
-				<button data-on-click="@post('/server/start')" class="rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Start</button>
+				<form method="post" action="/server/restart">
+					<button class="rounded bg-amber-600 px-4 py-2 text-sm font-medium hover:bg-amber-500">Restart</button>
+				</form>
+				<form method="post" action="/server/update">
+					<button title="Restarts the server — the image installs any Valheim update on boot" class="rounded bg-sky-700 px-4 py-2 text-sm font-medium hover:bg-sky-600">Update</button>
+				</form>
+				<form method="post" action="/server/stop">
+					<button class="rounded bg-red-700 px-4 py-2 text-sm font-medium hover:bg-red-600">Stop</button>
+				</form>
+				<form method="post" action="/server/start">
+					<button class="rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Start</button>
+				</form>
 				if grafanaURL != "" {
 					<a href={ templ.SafeURL(grafanaURL) } target="_blank" class="ml-auto rounded border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-800">Full metrics in Grafana ↗</a>
 				}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -202,12 +202,12 @@ func (c *Client) WarmLoop(ctx context.Context) {
 
 		if !have || age >= indexTTL {
 			if err := c.warm(ctx); err != nil {
-				log.Printf("thunderstore: index build failed: %v", err)
+				slog.Warn("thunderstore: index build failed", "err", err)
 			} else {
 				c.mu.Lock()
 				n := len(c.index)
 				c.mu.Unlock()
-				log.Printf("thunderstore: search index built (%d packages)", n)
+				slog.Info("thunderstore: search index built", "packages", n)
 			}
 		}
 

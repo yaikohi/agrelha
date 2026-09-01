@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"log/slog"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/backups"
+	"agrelha/internal/metrics"
 	"agrelha/internal/sse"
 )
 
@@ -20,15 +22,33 @@ func (s *FiberServer) sseDashboard(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 
+	id := rid(c)
+	actor := s.actor(c)
+	slog.Info("sse open", "rid", id, "actor", actor)
+
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+
+		metrics.SSEActive.Inc()
+		metrics.SSEOpened.Inc()
+		start := time.Now()
+		var tiles, logLines int
+		reason := "loop-exit"
+		defer func() {
+			metrics.SSEActive.Dec()
+			metrics.SSEClosed.WithLabelValues(reason).Inc()
+			slog.Info("sse close", "rid", id, "actor", actor,
+				"reason", reason, "tiles", tiles, "log_lines", logLines,
+				"dur_ms", time.Since(start).Milliseconds())
+		}()
 
 		lines := make(chan string, 128)
 		if s.k8s != nil {
 			go func() {
 				rc, err := s.k8s.StreamLogs(ctx, 50)
 				if err != nil {
+					slog.Warn("sse log stream unavailable", "rid", id, "err", err)
 					return
 				}
 				defer rc.Close()
@@ -48,19 +68,31 @@ func (s *FiberServer) sseDashboard(c *fiber.Ctx) error {
 		defer ticker.Stop()
 
 		if err := sse.PatchSignals(w, s.tileSignals(ctx)); err != nil {
-			return // client gone
+			reason = "client-gone"
+			slog.Debug("sse write failed", "rid", id, "frame", "signals", "err", err)
+			return
 		}
+		tiles++
+		metrics.SSEFrames.WithLabelValues("signals").Inc()
 		for {
 			select {
 			case <-ticker.C:
 				if err := sse.PatchSignals(w, s.tileSignals(ctx)); err != nil {
+					reason = "client-gone"
+					slog.Debug("sse write failed", "rid", id, "frame", "signals", "err", err)
 					return
 				}
+				tiles++
+				metrics.SSEFrames.WithLabelValues("signals").Inc()
 			case ln := <-lines:
 				el := fmt.Sprintf(`<div class="whitespace-pre-wrap">%s</div>`, html.EscapeString(ln))
 				if err := sse.AppendElement(w, "#logs", el); err != nil {
+					reason = "client-gone"
+					slog.Debug("sse write failed", "rid", id, "frame", "log", "err", err)
 					return
 				}
+				logLines++
+				metrics.SSEFrames.WithLabelValues("log").Inc()
 			}
 		}
 	})

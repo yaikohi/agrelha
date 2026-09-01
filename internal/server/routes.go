@@ -5,15 +5,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gofiber/adaptor/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 
 	efs "agrelha/cmd/web"
 	"agrelha/cmd/web/pages"
+	"agrelha/internal/metrics"
 )
 
 func (s *FiberServer) RegisterFiberRoutes() {
+	s.App.Use(requestLogger())
 	s.App.Get("/healthz", func(c *fiber.Ctx) error { return c.SendString("ok") })
+	s.App.Get("/metrics", adaptor.HTTPHandler(metrics.Handler()))
 	s.App.Use("/assets", filesystem.New(filesystem.Config{
 		Root:       http.FS(efs.Files),
 		PathPrefix: "assets",
@@ -32,15 +36,16 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	}
 
 	app.Get("/", func(c *fiber.Ctx) error {
-		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL))
+		fk, fm := takeFlash(c)
+		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL, fk, fm))
 	})
 	app.Get("/sse", s.sseDashboard)
 	app.Get("/img", s.imageProxy)
 
 	app.Post("/server/restart", s.guard("restart", "Restart triggered — the server is rolling.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
 	app.Post("/server/update", s.guard("update", "Update triggered — restarting; the image installs any Valheim update on boot.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
-	app.Post("/server/stop", s.guard("stop", "Stopping the server…", func(ctx context.Context) error { return s.k8s.Scale(ctx, 0) }))
-	app.Post("/server/start", s.guard("start", "Starting the server…", func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
+	app.Post("/server/stop", s.guard("stop", "Stopping the server — scaling to 0.", func(ctx context.Context) error { return s.k8s.Scale(ctx, 0) }))
+	app.Post("/server/start", s.guard("start", "Starting the server — scaling to 1.", func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
 
 	app.Get("/mods", s.modsPage)
 	app.Get("/mods/export", s.modpackExport)
@@ -68,18 +73,24 @@ func (s *FiberServer) actor(c *fiber.Ctx) string {
 	return "local"
 }
 
-func (s *FiberServer) guard(action, toast string, fn func(context.Context) error) fiber.Handler {
+func (s *FiberServer) guard(action, okMsg string, fn func(context.Context) error) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if s.k8s == nil {
-			return c.JSON(fiber.Map{"toast": "Imperative plane disabled — no cluster access."})
+			metrics.ControlActions.WithLabelValues(action, "disabled").Inc()
+			setFlash(c, "err", "Imperative plane disabled — no cluster access.")
+			return c.Redirect("/", fiber.StatusSeeOther)
 		}
 		ctx, cancel := context.WithTimeout(c.UserContext(), 15*time.Second)
 		defer cancel()
 		if err := fn(ctx); err != nil {
-			return c.JSON(fiber.Map{"toast": "Failed: " + err.Error()})
+			metrics.ControlActions.WithLabelValues(action, "error").Inc()
+			setFlash(c, "err", action+" failed: "+err.Error())
+			return c.Redirect("/", fiber.StatusSeeOther)
 		}
+		metrics.ControlActions.WithLabelValues(action, "ok").Inc()
 		_ = s.store.RecordAudit(s.actor(c), action, "")
 		_ = s.store.RecordEvent(action, s.actor(c))
-		return c.JSON(fiber.Map{"toast": toast})
+		setFlash(c, "ok", okMsg)
+		return c.Redirect("/", fiber.StatusSeeOther)
 	}
 }

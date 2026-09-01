@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 )
 
@@ -23,7 +23,7 @@ func (s *FiberServer) applyAfterSync(cmName, key string, want func(string) bool)
 		for {
 			select {
 			case <-ctx.Done():
-				log.Printf("applyAfterSync(%s): timed out waiting for ArgoCD sync", cmName)
+				slog.Warn("applyAfterSync: timed out waiting for ArgoCD sync", "configmap", cmName)
 				return
 			case <-t.C:
 				data, err := s.k8s.ConfigMapData(ctx, cmName)
@@ -32,9 +32,10 @@ func (s *FiberServer) applyAfterSync(cmName, key string, want func(string) bool)
 				}
 				if want(data[key]) {
 					if err := s.k8s.Restart(ctx); err != nil {
-						log.Printf("applyAfterSync(%s): restart failed: %v", cmName, err)
+						slog.Error("applyAfterSync: restart failed", "configmap", cmName, "err", err)
 						return
 					}
+					slog.Info("applyAfterSync: change landed, rolled valheim", "configmap", cmName)
 					_ = s.store.RecordEvent("auto-restart", cmName)
 					return
 				}

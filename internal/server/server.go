@@ -2,7 +2,8 @@ package server
 
 import (
 	"context"
-	"log"
+	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -47,25 +48,25 @@ func New(cfg *config.Config) *FiberServer {
 
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("store: %v", err)
+		slog.Error("store open failed", "path", cfg.DBPath, "err", err)
+		os.Exit(1)
 	}
 	s.store = st
 
 	s.ts = thunderstore.New(cfg.ThunderstoreAPI)
 	if rows, fetchedAt, err := st.LoadModIndex(); err != nil {
-		log.Printf("mod index load: %v", err)
+		slog.Warn("mod index load failed", "err", err)
 	} else if len(rows) > 0 {
 		s.ts.Preload(rowsToResults(rows), fetchedAt)
-		log.Printf("thunderstore: preloaded %d packages from cache", len(rows))
+		slog.Info("thunderstore index preloaded from cache", "packages", len(rows))
 	}
 	s.ts.OnRefresh = func(idx []thunderstore.SearchResult) {
 		if err := st.SaveModIndex(resultsToRows(idx), time.Now()); err != nil {
-			log.Printf("mod index save: %v", err)
+			slog.Warn("mod index save failed", "err", err)
 		}
 	}
 	go s.ts.WarmLoop(context.Background())
 
-	// Declarative plane: needs a git token.
 	if cfg.GitToken != "" {
 		committer := &gitops.Committer{
 			RepoURL: cfg.GitRepoURL, Branch: cfg.GitBranch,
@@ -76,12 +77,11 @@ func New(cfg *config.Config) *FiberServer {
 		s.mods = mods.New(committer, cfg.ModsPath)
 		s.admins = admins.New(committer, cfg.AdminsPath)
 	} else {
-		log.Printf("git token unset: declarative plane (mods/admins) disabled")
+		slog.Warn("git token unset: declarative plane (mods/admins) disabled")
 	}
 
-	// Imperative plane + log ingester (in-cluster only).
 	if c, err := k8s.New(cfg.ValheimNamespace, cfg.ValheimDeployment); err != nil {
-		log.Printf("k8s client unavailable (dev?): %v", err)
+		slog.Warn("k8s client unavailable (dev?)", "err", err)
 	} else {
 		s.k8s = c
 		go ingest.Run(context.Background(), c, st)
@@ -89,7 +89,7 @@ func New(cfg *config.Config) *FiberServer {
 
 	if cfg.OIDCIssuer != "" {
 		if a, err := auth.New(context.Background(), cfg); err != nil {
-			log.Printf("oidc unavailable (dev?): %v", err)
+			slog.Warn("oidc unavailable (dev?)", "err", err)
 		} else {
 			s.auth = a
 		}

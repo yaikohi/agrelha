@@ -5,23 +5,59 @@ to the `yaya` Talos cluster via GitOps from `yaya-ops`, image in the self-hosted
 registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
 (WireGuard-only, behind Zitadel OIDC).
 
-**Current version: `0.8.1`** (P1 in `0.7.0`; `0.7.1` History; `0.7.2` presence;
+**Current version: `0.8.3`** (P1 in `0.7.0`; `0.7.1` History; `0.7.2` presence;
 `0.7.3` mod `.cfg` editing; `0.7.4` "Update now" + backup tiles — **P2 complete**;
-`0.8.0` modpack export; `0.8.1` dashboard control buttons give feedback — see below).
-Build+push `0.8.1` to ship it.
+`0.8.0` modpack export; `0.8.1` toast attempt (superseded); `0.8.2` control buttons
+= plain forms + structured logging; `0.8.3` Prometheus `/metrics` + Grafana dashboard).
+Build+push `0.8.3` to ship it.
 
-> Dashboard control buttons (`0.8.1`). `/server/{restart,update,stop,start}`
-> returned a bare `204`, which a Datastar backend action (`@post`) cannot render:
-> the k8s patch fired server-side but the page showed nothing, so the buttons looked
-> dead. They now answer with an `application/json` signals patch (`{"toast": …}`),
-> which Datastar merges into `$toast`; the dashboard renders a dismissible toast
-> (`data-show="$toast != ''"`). `guard` gained a `toast` message arg. The live tiles
-> already reflect state within the 5s SSE tick, so this is the missing immediate
-> feedback. (RBAC confirmed: the agrelha SA can `patch deployments` in `valheim`;
-> Stop/Start patch `.spec.replicas` on the deployment, not the `scale` subresource.)
-> Note: `internal/sse` speaks stable `datastar-patch-*` and the browser bundle must
-> stay pinned to `v1.0.2` (Taskfile `DATASTAR_VERSION`) to match — a beta bundle
-> speaks `datastar-merge-*` and would silently drop every frame.
+> Self-metrics + Grafana dashboard (`0.8.3`). agrelha exposes an unauthenticated
+> Prometheus `/metrics` (registered outside the auth group, next to `/healthz`) via
+> `prometheus/client_golang` + `gofiber/adaptor`; `internal/metrics` holds the
+> collectors. Custom series: `agrelha_http_requests_total{method,route,status}` +
+> `_duration_seconds` histogram, `agrelha_datastar_requests_total`,
+> `agrelha_sse_active_connections` (gauge), `agrelha_sse_opened_total`,
+> `agrelha_sse_closed_total{reason}`, `agrelha_sse_frames_total{kind}`,
+> `agrelha_control_actions_total{action,result}` — plus stock `go_*`/`process_*`.
+> Recorded in `requestLogger` (route pattern via `c.Route().Path`; **`c.Method()`
+> is copied with `utils.CopyString` — Fiber returns an unsafe buffer-aliased string
+> that Prometheus would retain and later corrupt**), `guard`, and the SSE handler.
+> Pipeline (verified against live InfluxDB): telegraf scrapes
+> `agrelha.agrelha.svc/metrics` → bucket `metrics`, measurement `prometheus`, field
+> = metric name, labels → tags, `url` tag isolates agrelha. Dashboard =
+> `yaya-ops manifests/observability-dashboard-agrelha.yaml` (uid `agrelha`, Flux).
+> After deploy, bump telegraf `config-revision` (done: `4-scrape-agrelha`) so its
+> subPath-mounted config reloads.
+
+> Logging (`0.8.2`, stdlib `log/slog`). Chose slog over zap/zerolog: structured,
+> leveled, zero deps (fits pure-Go/CGO-off), and its global default lets low-level
+> `internal/sse` emit frames without dependency injection. `internal/logging.Setup`
+> reads `LOG_LEVEL` (debug|info|warn|error, default info) + `LOG_FORMAT` (text|json,
+> default text) from the ConfigMap — flip `LOG_LEVEL=debug` (no rebuild) to trace
+> SSE/Datastar. `requestLogger` middleware logs one line per request with the fields
+> that pinpoint client-vs-server issues: `method path status dur_ms ip actor` plus
+> `ds` (the `Datastar-Request` header), `accept`, `resp_ct`, `location` — a missing
+> line for a button click = the client never sent it. The SSE handler logs
+> `sse open`/`sse close` (correlated by `rid`, with frame counts + close reason) and
+> surfaces the previously-swallowed `StreamLogs` error; `internal/sse` logs each
+> frame's event name + size at DEBUG so the `datastar-patch-*` wire is visible. All
+> prior `log.Printf` calls converted to slog.
+
+> Dashboard control buttons (`0.8.2`). The buttons never worked: they used a
+> Datastar backend action (`data-on-click="@post('/server/…')"`) that fired **no
+> request at all** (nothing in the Network panel; the `audit`/`events` tables were
+> empty across all history despite `mod_index` holding 10k+ rows, proving no
+> `/server/*` POST ever reached a handler). The SSE tiles/logs work because
+> `data-effect="@get('/sse')"` runs at load — but the click-driven `@post` action
+> did not. Rather than keep chasing the client action, the four control buttons are
+> now plain `<form method="post" action="/server/…">` doing POST-redirect-GET +
+> flash, exactly like the Mods/Admins/Configs buttons. `guard` sets a flash and
+> `303`s to `/`; the dashboard renders `@flashBanner`. Datastar now only drives the
+> live SSE (tiles/logs), which is the part that actually worked. `0.8.1`'s
+> `application/json` toast approach is reverted. (RBAC confirmed: the agrelha SA can
+> `patch deployments` in `valheim`; Stop/Start patch `.spec.replicas`, not the
+> `scale` subresource. Bundle stays pinned to `v1.0.2` so `internal/sse`'s
+> `datastar-patch-*` frames match.)
 
 > Modpack export (`0.8.0`). `GET /mods/export` streams a `valheim-YYYY-MM-DD.r2z`
 > (a zip) built from the live `valheim-mods` ConfigMap + the `valheim-mod-configs`

@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -19,6 +20,7 @@ func PatchSignals(w *bufio.Writer, signals any) error {
 	if err != nil {
 		return err
 	}
+	slog.Debug("sse frame", "event", "datastar-patch-signals", "bytes", len(b), "signals", string(b))
 	if _, err := fmt.Fprintf(w, "event: datastar-patch-signals\ndata: signals %s\n\n", b); err != nil {
 		return err
 	}
@@ -29,6 +31,7 @@ func PatchSignals(w *bufio.Writer, signals any) error {
 // single line (SSE data lines can't contain raw newlines).
 func AppendElement(w *bufio.Writer, selector, html string) error {
 	html = strings.ReplaceAll(html, "\n", " ")
+	slog.Debug("sse frame", "event", "datastar-patch-elements", "mode", "append", "selector", selector, "bytes", len(html))
 	if _, err := fmt.Fprintf(w,
 		"event: datastar-patch-elements\ndata: mode append\ndata: selector %s\ndata: elements %s\n\n",
 		selector, html,
