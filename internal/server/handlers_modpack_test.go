@@ -92,3 +92,55 @@ func TestModpackExportEndpoint(t *testing.T) {
 	}
 	t.Logf("export.r2x:\n%s", r2x)
 }
+
+func TestModpackExportInjectsBepInEx(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	cm := func(name string, data map[string]string) *corev1.ConfigMap {
+		return &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "valheim"},
+			Data:       data,
+		}
+	}
+	// mods.txt WITHOUT a BepInExPack entry (mirrors the real server, which
+	// installs BepInEx itself) — the export must still inject it for r2modman.
+	cs := fake.NewSimpleClientset(
+		cm("valheim-mods", map[string]string{"mods.txt": "ValheimModding/Jotunn/2.24.3\n"}),
+	)
+	s := &FiberServer{
+		App:   fiber.New(),
+		cfg:   &config.Config{},
+		store: st,
+		k8s:   k8s.NewWithClientset(cs, "valheim", "valheim"),
+	}
+	s.RegisterFiberRoutes()
+
+	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodGet, "/mods/export", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	blob, _ := io.ReadAll(resp.Body)
+	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
+	if err != nil {
+		t.Fatalf("not a zip: %v", err)
+	}
+	var r2x string
+	for _, f := range zr.File {
+		if f.Name == "export.r2x" {
+			rc, _ := f.Open()
+			b, _ := io.ReadAll(rc)
+			rc.Close()
+			r2x = string(b)
+		}
+	}
+	if !strings.Contains(r2x, "name: denikson-BepInExPack_Valheim") {
+		t.Fatalf("export must inject BepInExPack when absent from mods.txt:\n%s", r2x)
+	}
+}

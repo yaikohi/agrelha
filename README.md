@@ -89,7 +89,7 @@ Key env vars (see `.env.example`): `OIDC_*` + `ALLOWED_EMAIL` (auth),
 ## Ship
 
 ```sh
-task build:image TAG=0.8.6      # docker build + push to registry.ykhi.xyz/agrelha
+task build:image TAG=0.8.7      # docker build + push to registry.ykhi.xyz/agrelha
 # then bump the image tag in yaya-ops manifests/agrelha-app.yaml and commit
 ```
 

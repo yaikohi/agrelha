@@ -17,8 +17,12 @@ was the real dead-buttons cause; SSE badge/popover/toast everywhere, full re-res
 `0.8.6` update UX: server-tracked "pending" state (committed set vs live ConfigMap, 6m TTL)
 broadcast as `$updatePending` over SSE → amber "Updating…" badge/popup + disabled Update
 buttons + double-submit guard, so the stale red dot during the ArgoCD-sync gap is now clearly
-"in progress" instead of "still available").
-Build+push `0.8.6` to ship it.
+"in progress" instead of "still available");
+`0.8.7` modpack export now injects `denikson/BepInExPack_Valheim` as mod #1 (server's mods.txt
+omits it since lloesche installs BepInEx itself, but an r2modman profile without the loader is
+unlaunchable — doorstop target undefined → "[object Object]" crash). Version = latest from
+Thunderstore, fallback 5.4.2333).
+Build+push `0.8.7` to ship it.
 
 > Self-metrics + Grafana dashboard (`0.8.3`). agrelha exposes an unauthenticated
 > Prometheus `/metrics` (registered outside the auth group, next to `/healthz`) via
