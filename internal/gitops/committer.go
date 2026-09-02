@@ -28,7 +28,7 @@ type Committer struct {
 // (changed, error). A no-op transform makes no commit.
 func (c *Committer) Patch(ctx context.Context, relPath, dataKey, commitMsg string,
 	transform func(current string) (string, error)) (bool, error) {
-
+	autoCommitMsg := "auto - " + commitMsg
 	dir, err := os.MkdirTemp("", "agrelha-git-")
 	if err != nil {
 		return false, err
@@ -85,7 +85,7 @@ func (c *Committer) Patch(ctx context.Context, relPath, dataKey, commitMsg strin
 		return false, err
 	}
 	sig := &object.Signature{Name: c.AuthorName, Email: c.AuthorEmail, When: time.Now()}
-	if _, err := wt.Commit(commitMsg, &git.CommitOptions{Author: sig, Committer: sig}); err != nil {
+	if _, err := wt.Commit(autoCommitMsg, &git.CommitOptions{Author: sig, Committer: sig}); err != nil {
 		return false, err
 	}
 	if err := repo.PushContext(ctx, &git.PushOptions{Auth: auth}); err != nil {
