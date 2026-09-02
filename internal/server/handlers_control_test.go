@@ -1,6 +1,7 @@
 package server
 
 import (
+	"io"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,7 @@ import (
 	"agrelha/internal/store"
 )
 
-func TestServerControlRedirectsWithFlash(t *testing.T) {
+func TestServerControlSSEToast(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -38,21 +39,25 @@ func TestServerControlRedirectsWithFlash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != fiber.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/" {
-		t.Fatalf("location = %q, want /", loc)
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("content-type = %q, want text/event-stream", ct)
 	}
-	if sc := resp.Header.Get("Set-Cookie"); !strings.Contains(sc, flashCookie) {
-		t.Fatalf("no flash cookie set: %q", sc)
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "datastar-patch-signals") {
+		t.Fatalf("body missing datastar signal frame: %q", body)
+	}
+	if !strings.Contains(string(body), "toast") {
+		t.Fatalf("body missing toast signal: %q", body)
 	}
 	if n := countAudit(t, st); n != 1 {
 		t.Fatalf("audit rows = %d, want 1", n)
 	}
 }
 
-func TestServerControlNoK8sRedirectsWithoutAudit(t *testing.T) {
+func TestServerControlNoK8sNoAudit(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -66,8 +71,8 @@ func TestServerControlNoK8sRedirectsWithoutAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != fiber.StatusSeeOther {
-		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	if n := countAudit(t, st); n != 0 {
 		t.Fatalf("audit rows = %d, want 0 (no cluster)", n)

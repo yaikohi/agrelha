@@ -11,6 +11,25 @@ func ModKey(entry string) string {
 	return entry
 }
 
+type ModUpdate struct {
+	Key     string
+	Current string
+	Latest  string
+	Token   string
+}
+
+func UpdateToken(key string) string {
+	var b strings.Builder
+	for _, r := range key {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
 // Contains reports whether s is in ss.
 func Contains(ss []string, s string) bool {
 	for _, v := range ss {

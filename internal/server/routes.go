@@ -39,7 +39,8 @@ func (s *FiberServer) RegisterFiberRoutes() {
 		fk, fm := takeFlash(c)
 		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL, fk, fm))
 	})
-	app.Get("/sse", s.sseDashboard)
+	app.Get("/sse", s.sseMain)
+	app.Get("/sse/logs", s.sseLogs)
 	app.Get("/img", s.imageProxy)
 
 	app.Post("/server/restart", s.guard("restart", "Restart triggered — the server is rolling.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
@@ -52,6 +53,8 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Get("/mods/:namespace/:name", s.modDetail)
 	app.Post("/mods/install", s.modsInstall)
 	app.Post("/mods/remove", s.modsRemove)
+	app.Post("/mods/update", s.modsUpdateSelected)
+	app.Post("/mods/update-all", s.modsUpdateAll)
 
 	app.Get("/configs", s.configsPage)
 	app.Get("/configs/new", s.configNew)
@@ -77,20 +80,17 @@ func (s *FiberServer) guard(action, okMsg string, fn func(context.Context) error
 	return func(c *fiber.Ctx) error {
 		if s.k8s == nil {
 			metrics.ControlActions.WithLabelValues(action, "disabled").Inc()
-			setFlash(c, "err", "Imperative plane disabled — no cluster access.")
-			return c.Redirect("/", fiber.StatusSeeOther)
+			return sseToast(c, "err", "Imperative plane disabled — no cluster access.", nil)
 		}
 		ctx, cancel := context.WithTimeout(c.UserContext(), 15*time.Second)
 		defer cancel()
 		if err := fn(ctx); err != nil {
 			metrics.ControlActions.WithLabelValues(action, "error").Inc()
-			setFlash(c, "err", action+" failed: "+err.Error())
-			return c.Redirect("/", fiber.StatusSeeOther)
+			return sseToast(c, "err", action+" failed: "+err.Error(), nil)
 		}
 		metrics.ControlActions.WithLabelValues(action, "ok").Inc()
 		_ = s.store.RecordAudit(s.actor(c), action, "")
 		_ = s.store.RecordEvent(action, s.actor(c))
-		setFlash(c, "ok", okMsg)
-		return c.Redirect("/", fiber.StatusSeeOther)
+		return sseToast(c, "ok", okMsg, nil)
 	}
 }

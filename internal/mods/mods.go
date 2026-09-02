@@ -6,6 +6,7 @@ package mods
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"agrelha/internal/gitops"
@@ -58,6 +59,33 @@ func (m *Manager) Install(ctx context.Context, entries []string) (bool, error) {
 			return cur, nil
 		}
 		return body + "\n", nil
+	})
+}
+
+// Replace rewrites mods.txt to exactly the given entries (deduped, sorted),
+// dropping comments. Used by the update flow, which computes a fresh resolved
+// set rather than appending. No-op (returns false) if the set is unchanged.
+func (m *Manager) Replace(ctx context.Context, entries []string) (bool, error) {
+	seen := map[string]bool{}
+	var uniq []string
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		if e == "" || seen[e] {
+			continue
+		}
+		seen[e] = true
+		uniq = append(uniq, e)
+	}
+	sort.Strings(uniq)
+	want := strings.Join(uniq, "\n") + "\n"
+	msg := "mods: update to latest"
+	return m.c.Patch(ctx, m.path, "mods.txt", msg, func(cur string) (string, error) {
+		curEntries := parse(cur)
+		sort.Strings(curEntries)
+		if strings.Join(curEntries, "\n")+"\n" == want {
+			return cur, nil
+		}
+		return want, nil
 	})
 }
 

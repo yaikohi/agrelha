@@ -40,3 +40,20 @@ func AppendElement(w *bufio.Writer, selector, html string) error {
 	}
 	return w.Flush()
 }
+
+func InnerElement(w *bufio.Writer, selector, html string) error {
+	slog.Debug("sse frame", "event", "datastar-patch-elements", "mode", "inner", "selector", selector, "bytes", len(html))
+	if _, err := fmt.Fprintf(w,
+		"event: datastar-patch-elements\ndata: mode inner\ndata: selector %s\n", selector); err != nil {
+		return err
+	}
+	for _, ln := range strings.Split(html, "\n") {
+		if _, err := fmt.Fprintf(w, "data: elements %s\n", ln); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprint(w, "\n"); err != nil {
+		return err
+	}
+	return w.Flush()
+}

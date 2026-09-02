@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"html"
@@ -10,21 +11,24 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"agrelha/cmd/web/pages"
 	"agrelha/internal/backups"
 	"agrelha/internal/metrics"
 	"agrelha/internal/sse"
 )
 
-// sseDashboard streams tile signals (every 5s) + a live log tail over one SSE
-// connection, using Fiber's native stream writer (fasthttp) — see internal/sse.
-func (s *FiberServer) sseDashboard(c *fiber.Ctx) error {
+// sseMain streams tile signals + the available-updates badge/list (every 5s)
+// over one SSE connection. Mounted on the shared layout, so every page gets the
+// live tiles + update indicator. The log tail is a separate stream (sseLogs)
+// opened only by the dashboard. Uses Fiber's native stream writer (fasthttp).
+func (s *FiberServer) sseMain(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 
 	id := rid(c)
 	actor := s.actor(c)
-	slog.Info("sse open", "rid", id, "actor", actor)
+	slog.Info("sse open", "rid", id, "actor", actor, "stream", "main")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -33,67 +37,116 @@ func (s *FiberServer) sseDashboard(c *fiber.Ctx) error {
 		metrics.SSEActive.Inc()
 		metrics.SSEOpened.Inc()
 		start := time.Now()
-		var tiles, logLines int
+		var tiles int
 		reason := "loop-exit"
 		defer func() {
 			metrics.SSEActive.Dec()
 			metrics.SSEClosed.WithLabelValues(reason).Inc()
-			slog.Info("sse close", "rid", id, "actor", actor,
-				"reason", reason, "tiles", tiles, "log_lines", logLines,
-				"dur_ms", time.Since(start).Milliseconds())
+			slog.Info("sse close", "rid", id, "actor", actor, "stream", "main",
+				"reason", reason, "tiles", tiles, "dur_ms", time.Since(start).Milliseconds())
 		}()
-
-		lines := make(chan string, 128)
-		if s.k8s != nil {
-			go func() {
-				rc, err := s.k8s.StreamLogs(ctx, 50)
-				if err != nil {
-					slog.Warn("sse log stream unavailable", "rid", id, "err", err)
-					return
-				}
-				defer rc.Close()
-				sc := bufio.NewScanner(rc)
-				sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-				for sc.Scan() {
-					select {
-					case lines <- sc.Text():
-					case <-ctx.Done():
-						return
-					}
-				}
-			}()
-		}
 
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		if err := sse.PatchSignals(w, s.tileSignals(ctx)); err != nil {
-			reason = "client-gone"
-			slog.Debug("sse write failed", "rid", id, "frame", "signals", "err", err)
+		lastListSig := "\x00"
+		push := func() bool {
+			ups := s.modUpdates(ctx)
+			sig := s.tileSignals(ctx)
+			sig["updates"] = len(ups)
+			if err := sse.PatchSignals(w, sig); err != nil {
+				reason = "client-gone"
+				slog.Debug("sse write failed", "rid", id, "frame", "signals", "err", err)
+				return false
+			}
+			tiles++
+			metrics.SSEFrames.WithLabelValues("signals").Inc()
+
+			if listSig := updatesSignature(ups); listSig != lastListSig {
+				var buf bytes.Buffer
+				if err := pages.UpdateList(ups).Render(ctx, &buf); err == nil {
+					if err := sse.InnerElement(w, "#update-list", buf.String()); err != nil {
+						reason = "client-gone"
+						slog.Debug("sse write failed", "rid", id, "frame", "update-list", "err", err)
+						return false
+					}
+					metrics.SSEFrames.WithLabelValues("update-list").Inc()
+					lastListSig = listSig
+				}
+			}
+			return true
+		}
+
+		if !push() {
 			return
 		}
-		tiles++
-		metrics.SSEFrames.WithLabelValues("signals").Inc()
-		for {
-			select {
-			case <-ticker.C:
-				if err := sse.PatchSignals(w, s.tileSignals(ctx)); err != nil {
-					reason = "client-gone"
-					slog.Debug("sse write failed", "rid", id, "frame", "signals", "err", err)
-					return
-				}
-				tiles++
-				metrics.SSEFrames.WithLabelValues("signals").Inc()
-			case ln := <-lines:
-				el := fmt.Sprintf(`<div class="whitespace-pre-wrap">%s</div>`, html.EscapeString(ln))
-				if err := sse.AppendElement(w, "#logs", el); err != nil {
-					reason = "client-gone"
-					slog.Debug("sse write failed", "rid", id, "frame", "log", "err", err)
-					return
-				}
-				logLines++
-				metrics.SSEFrames.WithLabelValues("log").Inc()
+		for range ticker.C {
+			if !push() {
+				return
 			}
+		}
+	})
+	return nil
+}
+
+func updatesSignature(ups []pages.ModUpdate) string {
+	var b bytes.Buffer
+	for _, u := range ups {
+		b.WriteString(u.Key)
+		b.WriteByte('@')
+		b.WriteString(u.Latest)
+		b.WriteByte(';')
+	}
+	return b.String()
+}
+
+// sseLogs streams only the live log tail into #logs. Dashboard-only, so other
+// pages don't pay for a log stream they don't render.
+func (s *FiberServer) sseLogs(c *fiber.Ctx) error {
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+
+	id := rid(c)
+	actor := s.actor(c)
+	slog.Info("sse open", "rid", id, "actor", actor, "stream", "logs")
+
+	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		metrics.SSEActive.Inc()
+		metrics.SSEOpened.Inc()
+		start := time.Now()
+		var logLines int
+		reason := "loop-exit"
+		defer func() {
+			metrics.SSEActive.Dec()
+			metrics.SSEClosed.WithLabelValues(reason).Inc()
+			slog.Info("sse close", "rid", id, "actor", actor, "stream", "logs",
+				"reason", reason, "log_lines", logLines, "dur_ms", time.Since(start).Milliseconds())
+		}()
+
+		if s.k8s == nil {
+			return
+		}
+		rc, err := s.k8s.StreamLogs(ctx, 50)
+		if err != nil {
+			slog.Warn("sse log stream unavailable", "rid", id, "err", err)
+			return
+		}
+		defer rc.Close()
+		sc := bufio.NewScanner(rc)
+		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for sc.Scan() {
+			el := fmt.Sprintf(`<div class="whitespace-pre-wrap">%s</div>`, html.EscapeString(sc.Text()))
+			if err := sse.AppendElement(w, "#logs", el); err != nil {
+				reason = "client-gone"
+				slog.Debug("sse write failed", "rid", id, "frame", "log", "err", err)
+				return
+			}
+			logLines++
+			metrics.SSEFrames.WithLabelValues("log").Inc()
 		}
 	})
 	return nil

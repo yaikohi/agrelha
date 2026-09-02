@@ -3,10 +3,46 @@ package pages
 templ nav() {
 	<nav class="mb-8 flex items-center gap-4 text-sm">
 		<a href="/" class="font-semibold text-zinc-100 hover:text-white">Agrelha</a>
-		<a href="/mods" class="text-zinc-400 hover:text-zinc-200">Mods</a>
+		<a href="/mods" class="relative text-zinc-400 hover:text-zinc-200">
+			Mods
+			<span data-show="$updates > 0" class="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-zinc-950"></span>
+		</a>
 		<a href="/configs" class="text-zinc-400 hover:text-zinc-200">Configs</a>
 		<a href="/admins" class="text-zinc-400 hover:text-zinc-200">Admins</a>
 		<a href="/history" class="text-zinc-400 hover:text-zinc-200">History</a>
-		<a href="/auth/logout" class="ml-auto text-zinc-500 hover:text-zinc-300">Sign out</a>
+		<div class="relative ml-auto flex items-center gap-4">
+			<button
+				type="button"
+				data-show="$updates > 0"
+				data-on:click="$showUpdates = !$showUpdates"
+				class="flex items-center gap-1.5 rounded bg-emerald-700/80 px-2.5 py-1 text-xs font-medium hover:bg-emerald-600"
+			>
+				Updates
+				<span class="rounded bg-emerald-900/70 px-1.5 py-0.5 text-[10px]" data-text="$updates"></span>
+			</button>
+			<a href="/auth/logout" class="text-zinc-500 hover:text-zinc-300">Sign out</a>
+			<div
+				data-show="$showUpdates"
+				class="absolute right-0 top-8 z-20 w-80 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl"
+			>
+				<div class="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
+					<span class="text-xs font-medium text-zinc-300">Available updates</span>
+					<button type="button" data-on:click="$showUpdates = false" class="text-zinc-500 hover:text-zinc-200">✕</button>
+				</div>
+				<div id="update-list"></div>
+				<div class="flex items-center justify-end gap-2 border-t border-zinc-800 px-3 py-2">
+					<button
+						type="button"
+						data-on:click="@post('/mods/update')"
+						class="rounded border border-zinc-700 px-2.5 py-1 text-xs hover:bg-zinc-800"
+					>Update selected</button>
+					<button
+						type="button"
+						data-on:click="@post('/mods/update-all')"
+						class="rounded bg-emerald-700 px-2.5 py-1 text-xs font-medium hover:bg-emerald-600"
+					>Update all</button>
+				</div>
+			</div>
+		</div>
 	</nav>
 }

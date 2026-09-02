@@ -13,10 +13,30 @@ templ Layout(title string) {
 			<link rel="stylesheet" href="/assets/css/output.css"/>
 			<script type="module" src="/assets/js/datastar.js"></script>
 		</head>
-		<body class="h-full bg-zinc-950 text-zinc-100 antialiased">
+		<body
+			class="h-full bg-zinc-950 text-zinc-100 antialiased"
+			data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',backup:'—',backupinfo:'',updates:0,showUpdates:false,updatesDismissed:false,selected:{},toast:'',toastkind:''}"
+			data-effect="@get('/sse')"
+		>
 			<main class="mx-auto max-w-5xl overflow-x-hidden px-6 py-8">
 				{ children... }
 			</main>
+			<div
+				data-show="$updates > 0 && !$updatesDismissed && !$showUpdates"
+				class="fixed bottom-4 right-4 z-30 flex items-center gap-3 rounded-lg border border-emerald-700 bg-zinc-900 px-4 py-3 text-sm shadow-xl"
+			>
+				<span class="text-emerald-200"><span data-text="$updates"></span> mod update(s) available</span>
+				<button type="button" data-on:click="$showUpdates = true; $updatesDismissed = true" class="rounded bg-emerald-700 px-2.5 py-1 text-xs font-medium hover:bg-emerald-600">View</button>
+				<button type="button" data-on:click="$updatesDismissed = true" class="text-zinc-500 hover:text-zinc-200">✕</button>
+			</div>
+			<div
+				data-show="$toast != ''"
+				data-class="{'border-red-700 text-red-200': $toastkind == 'err', 'border-emerald-700 text-emerald-200': $toastkind != 'err'}"
+				class="fixed bottom-4 left-4 z-30 flex items-center gap-3 rounded-lg border bg-zinc-900 px-4 py-3 text-sm shadow-xl"
+			>
+				<span data-text="$toast"></span>
+				<button type="button" data-on:click="$toast = ''" class="text-zinc-500 hover:text-zinc-200">✕</button>
+			</div>
 			<script>
 				(function () {
 					var el = document.getElementById("logs");
