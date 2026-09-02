@@ -15,19 +15,26 @@ templ Layout(title string) {
 		</head>
 		<body
 			class="h-full bg-zinc-950 text-zinc-100 antialiased"
-			data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',backup:'—',backupinfo:'',updates:0,showUpdates:false,updatesDismissed:false,selected:{},toast:'',toastkind:''}"
+			data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',backup:'—',backupinfo:'',updates:0,showUpdates:false,updatesDismissed:false,updatePending:false,selected:{},toast:'',toastkind:''}"
 			data-effect="@get('/sse')"
 		>
 			<main class="mx-auto max-w-5xl overflow-x-hidden px-6 py-8">
 				{ children... }
 			</main>
 			<div
-				data-show="$updates > 0 && !$updatesDismissed && !$showUpdates"
+				data-show="$updates > 0 && !$updatePending && !$updatesDismissed && !$showUpdates"
 				class="fixed bottom-4 right-4 z-30 flex items-center gap-3 rounded-lg border border-emerald-700 bg-zinc-900 px-4 py-3 text-sm shadow-xl"
 			>
 				<span class="text-emerald-200"><span data-text="$updates"></span> mod update(s) available</span>
 				<button type="button" data-on:click="$showUpdates = true; $updatesDismissed = true" class="rounded bg-emerald-700 px-2.5 py-1 text-xs font-medium hover:bg-emerald-600">View</button>
 				<button type="button" data-on:click="$updatesDismissed = true" class="text-zinc-500 hover:text-zinc-200">✕</button>
+			</div>
+			<div
+				data-show="$updatePending"
+				class="fixed bottom-4 right-4 z-30 flex items-center gap-3 rounded-lg border border-amber-600 bg-zinc-900 px-4 py-3 text-sm shadow-xl"
+			>
+				<span class="h-2.5 w-2.5 animate-pulse rounded-full bg-amber-400"></span>
+				<span class="text-amber-200">Updating mods — the server restarts once ArgoCD syncs…</span>
 			</div>
 			<div
 				data-show="$toast != ''"

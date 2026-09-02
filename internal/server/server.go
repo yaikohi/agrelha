@@ -37,6 +37,10 @@ type FiberServer struct {
 	bkInfo backups.Info
 	bkOK   bool
 	bkAt   time.Time
+
+	pendMu  sync.Mutex
+	pendSet map[string]bool
+	pendAt  time.Time
 }
 
 func New(cfg *config.Config) *FiberServer {

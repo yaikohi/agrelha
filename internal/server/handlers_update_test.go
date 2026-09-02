@@ -35,6 +35,44 @@ func TestVersionNewer(t *testing.T) {
 	}
 }
 
+func TestPendingActive(t *testing.T) {
+	mk := func(modsTxt string) *FiberServer {
+		cs := fake.NewSimpleClientset(&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "valheim-mods", Namespace: "valheim"},
+			Data:       map[string]string{"mods.txt": modsTxt},
+		})
+		return &FiberServer{cfg: &config.Config{}, k8s: k8s.NewWithClientset(cs, "valheim", "valheim")}
+	}
+	committed := []string{"ValheimModding/Jotunn/2.25.0", "denikson/BepInExPack_Valheim/5.4.2202"}
+
+	// CM still holds the old version -> pending.
+	s := mk("denikson/BepInExPack_Valheim/5.4.2202\nValheimModding/Jotunn/2.24.3\n")
+	s.setPending(committed)
+	if !s.pendingActive(context.Background()) {
+		t.Fatal("want pending=true while CM lags")
+	}
+
+	// CM now reflects the committed set -> not pending (and self-clears).
+	s = mk("denikson/BepInExPack_Valheim/5.4.2202\nValheimModding/Jotunn/2.25.0\n")
+	s.setPending(committed)
+	if s.pendingActive(context.Background()) {
+		t.Fatal("want pending=false once CM matches")
+	}
+	if s.pendSet != nil {
+		t.Fatal("pending should self-clear when satisfied")
+	}
+
+	// TTL lapse clears a stuck pending even if the CM never catches up.
+	s = mk("ValheimModding/Jotunn/2.24.3\n")
+	s.setPending(committed)
+	s.pendMu.Lock()
+	s.pendAt = time.Now().Add(-2 * pendingTTL)
+	s.pendMu.Unlock()
+	if s.pendingActive(context.Background()) {
+		t.Fatal("want pending=false after TTL")
+	}
+}
+
 func TestModUpdates(t *testing.T) {
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "valheim-mods", Namespace: "valheim"},

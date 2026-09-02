@@ -57,6 +57,10 @@ func (s *FiberServer) applyUpdates(c *fiber.Ctx, targetKeys []string) error {
 	}
 	ctx := c.UserContext()
 
+	if s.pendingActive(ctx) {
+		return sseToast(c, "ok", "An update is already in progress — the server will restart once ArgoCD syncs.", nil)
+	}
+
 	data, err := s.k8s.ConfigMapData(ctx, "valheim-mods")
 	if err != nil {
 		return sseToast(c, "err", "Couldn't read installed mods: "+err.Error(), nil)
@@ -111,6 +115,7 @@ func (s *FiberServer) applyUpdates(c *fiber.Ctx, targetKeys []string) error {
 		}
 		return true
 	})
+	s.setPending(entries)
 
 	return sseToast(c, "ok",
 		fmt.Sprintf("Updating %d mod(s) — the server will restart once ArgoCD syncs.", len(targetKeys)),

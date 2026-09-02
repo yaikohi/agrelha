@@ -54,6 +54,7 @@ func (s *FiberServer) sseMain(c *fiber.Ctx) error {
 			ups := s.modUpdates(ctx)
 			sig := s.tileSignals(ctx)
 			sig["updates"] = len(ups)
+			sig["updatePending"] = s.pendingActive(ctx)
 			if err := sse.PatchSignals(w, sig); err != nil {
 				reason = "client-gone"
 				slog.Debug("sse write failed", "rid", id, "frame", "signals", "err", err)

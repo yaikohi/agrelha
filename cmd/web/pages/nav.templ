@@ -5,7 +5,8 @@ templ nav() {
 		<a href="/" class="font-semibold text-zinc-100 hover:text-white">Agrelha</a>
 		<a href="/mods" class="relative text-zinc-400 hover:text-zinc-200">
 			Mods
-			<span data-show="$updates > 0" class="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-zinc-950"></span>
+			<span data-show="$updates > 0 && !$updatePending" class="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-zinc-950"></span>
+			<span data-show="$updatePending" class="absolute -right-2 -top-1 h-2 w-2 animate-pulse rounded-full bg-amber-400 ring-2 ring-zinc-950"></span>
 		</a>
 		<a href="/configs" class="text-zinc-400 hover:text-zinc-200">Configs</a>
 		<a href="/admins" class="text-zinc-400 hover:text-zinc-200">Admins</a>
@@ -13,12 +14,14 @@ templ nav() {
 		<div class="relative ml-auto flex items-center gap-4">
 			<button
 				type="button"
-				data-show="$updates > 0"
+				data-show="($updates > 0 || $updatePending) "
 				data-on:click="$showUpdates = !$showUpdates"
-				class="flex items-center gap-1.5 rounded bg-emerald-700/80 px-2.5 py-1 text-xs font-medium hover:bg-emerald-600"
+				data-class="{'bg-emerald-700/80 hover:bg-emerald-600': !$updatePending, 'bg-amber-700/80 hover:bg-amber-600': $updatePending}"
+				class="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium"
 			>
-				Updates
-				<span class="rounded bg-emerald-900/70 px-1.5 py-0.5 text-[10px]" data-text="$updates"></span>
+				<span data-show="!$updatePending">Updates</span>
+				<span data-show="!$updatePending" class="rounded bg-emerald-900/70 px-1.5 py-0.5 text-[10px]" data-text="$updates"></span>
+				<span data-show="$updatePending">Updating…</span>
 			</button>
 			<a href="/auth/logout" class="text-zinc-500 hover:text-zinc-300">Sign out</a>
 			<div
@@ -29,16 +32,24 @@ templ nav() {
 					<span class="text-xs font-medium text-zinc-300">Available updates</span>
 					<button type="button" data-on:click="$showUpdates = false" class="text-zinc-500 hover:text-zinc-200">✕</button>
 				</div>
+				<div data-show="$updatePending" class="flex items-center gap-2 border-b border-amber-800/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+					<span class="h-2 w-2 animate-pulse rounded-full bg-amber-400"></span>
+					Update in progress — the server restarts once ArgoCD syncs.
+				</div>
 				<div id="update-list"></div>
 				<div class="flex items-center justify-end gap-2 border-t border-zinc-800 px-3 py-2">
 					<button
 						type="button"
 						data-on:click="@post('/mods/update')"
+						data-attr="{disabled: $updatePending}"
+						data-class="{'opacity-40 pointer-events-none': $updatePending}"
 						class="rounded border border-zinc-700 px-2.5 py-1 text-xs hover:bg-zinc-800"
 					>Update selected</button>
 					<button
 						type="button"
 						data-on:click="@post('/mods/update-all')"
+						data-attr="{disabled: $updatePending}"
+						data-class="{'opacity-40 pointer-events-none': $updatePending}"
 						class="rounded bg-emerald-700 px-2.5 py-1 text-xs font-medium hover:bg-emerald-600"
 					>Update all</button>
 				</div>

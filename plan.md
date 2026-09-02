@@ -13,8 +13,12 @@ registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
 `0.8.5` mod update detection + "Update all/selected" (Datastar `data-on:click` — colon syntax
 was the real dead-buttons cause; SSE badge/popover/toast everywhere, full re-resolve, auto-restart)
 + retrofitted the dashboard control buttons (Restart/Update/Stop/Start) from forms to
-`data-on:click` @post returning SSE toasts (no reload)).
-Build+push `0.8.5` to ship it.
+`data-on:click` @post returning SSE toasts (no reload);
+`0.8.6` update UX: server-tracked "pending" state (committed set vs live ConfigMap, 6m TTL)
+broadcast as `$updatePending` over SSE → amber "Updating…" badge/popup + disabled Update
+buttons + double-submit guard, so the stale red dot during the ArgoCD-sync gap is now clearly
+"in progress" instead of "still available").
+Build+push `0.8.6` to ship it.
 
 > Self-metrics + Grafana dashboard (`0.8.3`). agrelha exposes an unauthenticated
 > Prometheus `/metrics` (registered outside the auth group, next to `/healthz`) via
