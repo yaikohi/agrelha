@@ -5,11 +5,12 @@ to the `yaya` Talos cluster via GitOps from `yaya-ops`, image in the self-hosted
 registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
 (WireGuard-only, behind Zitadel OIDC).
 
-**Current version: `0.8.3`** (P1 in `0.7.0`; `0.7.1` History; `0.7.2` presence;
+**Current version: `0.8.4`** (P1 in `0.7.0`; `0.7.1` History; `0.7.2` presence;
 `0.7.3` mod `.cfg` editing; `0.7.4` "Update now" + backup tiles — **P2 complete**;
 `0.8.0` modpack export; `0.8.1` toast attempt (superseded); `0.8.2` control buttons
-= plain forms + structured logging; `0.8.3` Prometheus `/metrics` + Grafana dashboard).
-Build+push `0.8.3` to ship it.
+= plain forms + structured logging; `0.8.3` Prometheus `/metrics` + Grafana dashboard;
+`0.8.4` promoted the modpack export to a prominent "Download modpack" button + r2modman hint).
+Build+push `0.8.4` to ship it.
 
 > Self-metrics + Grafana dashboard (`0.8.3`). agrelha exposes an unauthenticated
 > Prometheus `/metrics` (registered outside the auth group, next to `/healthz`) via
