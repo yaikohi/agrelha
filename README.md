@@ -5,6 +5,23 @@ cluster. Go + Fiber + templ + Tailwind + **Datastar** (SSE). Deployed via GitOps
 from [yaya-ops](https://codeberg.org/ykhi/yaya-ops); image hosted in the
 self-hosted Zot registry at `registry.ykhi.xyz/agrelha`.
 
+## Screenshots
+
+### Homepage
+![homepage](images/homepage.png)
+
+### Mod management
+![mod-management](images/mod-management.png)
+
+### Configuration
+![](images/configuration.png)
+
+### Admin management
+![](images/admin-management.png)
+
+### History page
+![](images/history.png)
+
 ## Architecture — two-plane hybrid
 
 The `valheim` ArgoCD app has `selfHeal: true`, so live cluster edits get reverted.
