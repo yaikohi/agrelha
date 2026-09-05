@@ -11,14 +11,22 @@ import (
 
 type ModManager struct {
 	committer *gitops.Committer
-	path      string // relPath of neoforge-mods.yaml in yaya-ops
+	path      string // relPath of mod configmap in yaya-ops
+	loaderKey string // "NEOFORGE_VERSION" or "FABRIC_VERSION"
 }
 
 func NewModManager(c *gitops.Committer, path string) *ModManager {
 	if path == "" {
-		path = "manifests/neoforge-mods.yaml"
+		path = "manifests/minecraft-modded-neoforge-mods.yaml"
 	}
-	return &ModManager{committer: c, path: path}
+	return &ModManager{committer: c, path: path, loaderKey: "NEOFORGE_VERSION"}
+}
+
+func NewFabricModManager(c *gitops.Committer, path string) *ModManager {
+	if path == "" {
+		path = "manifests/minecraft-modded-fabric-mods.yaml"
+	}
+	return &ModManager{committer: c, path: path, loaderKey: "FABRIC_VERSION"}
 }
 
 // ParseMods parses the lines of mods.txt, filtering out comments and blank lines.
@@ -84,12 +92,16 @@ func (m *ModManager) Uninstall(ctx context.Context, slug string) (bool, error) {
 	})
 }
 
-// SetVersion updates MINECRAFT_VERSION and NEOFORGE_VERSION in neoforge-mods.yaml.
-func (m *ModManager) SetVersion(ctx context.Context, mcVersion, neoforgeVersion string) (bool, error) {
-	if neoforgeVersion == "" || neoforgeVersion == "recommended" {
-		neoforgeVersion = "latest"
+// SetVersion updates MINECRAFT_VERSION and the loader version (NEOFORGE_VERSION or FABRIC_VERSION).
+func (m *ModManager) SetVersion(ctx context.Context, mcVersion, loaderVersion string) (bool, error) {
+	if loaderVersion == "" || loaderVersion == "recommended" {
+		loaderVersion = "latest"
 	}
-	msg := fmt.Sprintf("mc-server: set MC=%s NeoForge=%s", mcVersion, neoforgeVersion)
+	loaderKey := m.loaderKey
+	if loaderKey == "" {
+		loaderKey = "NEOFORGE_VERSION"
+	}
+	msg := fmt.Sprintf("mc-server: set MC=%s %s=%s", mcVersion, loaderKey, loaderVersion)
 	changedMC, err := m.committer.Patch(ctx, m.path, "MINECRAFT_VERSION", msg, func(cur string) (string, error) {
 		return strings.TrimSpace(mcVersion), nil
 	})
@@ -97,14 +109,14 @@ func (m *ModManager) SetVersion(ctx context.Context, mcVersion, neoforgeVersion 
 		return false, err
 	}
 
-	if neoforgeVersion != "" {
-		changedNF, err := m.committer.Patch(ctx, m.path, "NEOFORGE_VERSION", msg, func(cur string) (string, error) {
-			return strings.TrimSpace(neoforgeVersion), nil
+	if loaderVersion != "" {
+		changedL, err := m.committer.Patch(ctx, m.path, loaderKey, msg, func(cur string) (string, error) {
+			return strings.TrimSpace(loaderVersion), nil
 		})
 		if err != nil {
 			return changedMC, err
 		}
-		return changedMC || changedNF, nil
+		return changedMC || changedL, nil
 	}
 	return changedMC, nil
 }

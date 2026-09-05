@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -102,34 +103,69 @@ type Version struct {
 
 func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 	reqURL := c.baseURL + endpoint
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", c.userAgent)
-	req.Header.Set("Accept", "application/json")
+	const maxRetries = 4
 
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("User-Agent", c.userAgent)
+		req.Header.Set("Accept", "application/json")
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s returned status %s", reqURL, resp.Status)
+		resp, err := c.http.Do(req)
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if attempt < maxRetries-1 {
+				time.Sleep(time.Duration(attempt+1) * 250 * time.Millisecond)
+				continue
+			}
+			return err
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests {
+			_ = resp.Body.Close()
+			retryAfterSec := 1
+			if val := resp.Header.Get("Retry-After"); val != "" {
+				if s, err := strconv.Atoi(val); err == nil && s > 0 {
+					retryAfterSec = s
+				}
+			}
+			waitDuration := time.Duration(retryAfterSec)*time.Second + time.Duration(attempt*250)*time.Millisecond
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(waitDuration):
+				continue
+			}
+		}
+
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("%s returned status %s", reqURL, resp.Status)
+		}
+
+		return json.NewDecoder(resp.Body).Decode(v)
 	}
 
-	return json.NewDecoder(resp.Body).Decode(v)
+	return fmt.Errorf("%s exceeded retry attempts due to rate limiting", reqURL)
 }
 
-// Search queries Modrinth for NeoForge mods compatible with mcVersion.
-func (c *Client) Search(ctx context.Context, query, mcVersion string, limit, offset int) (*SearchResponse, error) {
+// Search queries Modrinth for mods compatible with mcVersion and the specified loader (default "neoforge").
+func (c *Client) Search(ctx context.Context, query, mcVersion, loader string, limit, offset int) (*SearchResponse, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	facets := `[["categories:neoforge"],["project_type:mod"]]`
+	loader = strings.ToLower(strings.TrimSpace(loader))
+	if loader == "" {
+		loader = "neoforge"
+	}
+	facets := fmt.Sprintf(`[["categories:%s"],["project_type:mod"]]`, loader)
 	if mcVersion != "" {
-		facets = fmt.Sprintf(`[["categories:neoforge"],["project_type:mod"],["versions:%s"]]`, mcVersion)
+		facets = fmt.Sprintf(`[["categories:%s"],["project_type:mod"],["versions:%s"]]`, loader, mcVersion)
 	}
 
 	params := url.Values{}
@@ -155,20 +191,96 @@ func (c *Client) GetProject(ctx context.Context, idOrSlug string) (*Project, err
 	return &p, nil
 }
 
-// GetProjectVersions returns versions for a project filtered by neoforge and optionally mcVersion.
-func (c *Client) GetProjectVersions(ctx context.Context, idOrSlug, mcVersion string) ([]Version, error) {
-	params := url.Values{}
-	params.Set("loaders", `["neoforge"]`)
-	if mcVersion != "" {
-		params.Set("game_versions", fmt.Sprintf(`["%s"]`, mcVersion))
+// GetProjects returns project metadata for multiple slugs or IDs in batch chunks of up to 100.
+func (c *Client) GetProjects(ctx context.Context, idsOrSlugs []string) ([]Project, error) {
+	if len(idsOrSlugs) == 0 {
+		return nil, nil
 	}
 
-	var versions []Version
-	endpoint := fmt.Sprintf("/project/%s/version?%s", url.PathEscape(idOrSlug), params.Encode())
-	if err := c.getJSON(ctx, endpoint, &versions); err != nil {
-		return nil, fmt.Errorf("modrinth get project versions %q: %w", idOrSlug, err)
+	var all []Project
+	chunkSize := 100
+	for i := 0; i < len(idsOrSlugs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(idsOrSlugs) {
+			end = len(idsOrSlugs)
+		}
+		chunk := idsOrSlugs[i:end]
+		idsJSON, err := json.Marshal(chunk)
+		if err != nil {
+			return nil, err
+		}
+
+		var projects []Project
+		endpoint := fmt.Sprintf("/projects?ids=%s", url.QueryEscape(string(idsJSON)))
+		if err := c.getJSON(ctx, endpoint, &projects); err != nil {
+			return nil, fmt.Errorf("modrinth get projects batch: %w", err)
+		}
+		all = append(all, projects...)
 	}
-	return versions, nil
+
+	return all, nil
+}
+
+// GetProjectVersions returns versions for a project filtered by loader (default "neoforge") and optionally mcVersion.
+// For "neoforge", it queries both "neoforge" and "forge" loaders (critical for MC 1.20.x ecosystem compatibility).
+func (c *Client) GetProjectVersions(ctx context.Context, idOrSlug, mcVersion, loader string) ([]Version, error) {
+	loader = strings.ToLower(strings.TrimSpace(loader))
+	if loader == "" {
+		loader = "neoforge"
+	}
+
+	queryVersions := func(loaders []string, gameVer string) ([]Version, error) {
+		loadersJSON, _ := json.Marshal(loaders)
+		params := url.Values{}
+		params.Set("loaders", string(loadersJSON))
+		if gameVer != "" {
+			params.Set("game_versions", fmt.Sprintf(`["%s"]`, gameVer))
+		}
+
+		var vers []Version
+		endpoint := fmt.Sprintf("/project/%s/version?%s", url.PathEscape(idOrSlug), params.Encode())
+		if err := c.getJSON(ctx, endpoint, &vers); err != nil {
+			return nil, err
+		}
+		return vers, nil
+	}
+
+	// 1. Primary query: for neoforge, include forge as valid loader
+	primaryLoaders := []string{loader}
+	if loader == "neoforge" {
+		primaryLoaders = []string{"neoforge", "forge"}
+	}
+	versions, err := queryVersions(primaryLoaders, mcVersion)
+	if err == nil && len(versions) > 0 {
+		return versions, nil
+	}
+
+	// 2. If no versions found for exact mcVersion with point release (e.g. 1.20.1), try base version (e.g. 1.20)
+	if mcVersion != "" && strings.Count(mcVersion, ".") >= 2 {
+		parts := strings.Split(mcVersion, ".")
+		baseVer := parts[0] + "." + parts[1]
+		if vers, err := queryVersions(primaryLoaders, baseVer); err == nil && len(vers) > 0 {
+			return vers, nil
+		}
+	}
+
+	// 3. Fallback: query without game_versions filter, and inspect if any version advertises mcVersion
+	if allVers, err := queryVersions(primaryLoaders, ""); err == nil && len(allVers) > 0 {
+		var matched []Version
+		for _, v := range allVers {
+			for _, gv := range v.GameVersions {
+				if gv == mcVersion || (strings.Count(mcVersion, ".") >= 2 && gv == strings.Split(mcVersion, ".")[0]+"."+strings.Split(mcVersion, ".")[1]) {
+					matched = append(matched, v)
+					break
+				}
+			}
+		}
+		if len(matched) > 0 {
+			return matched, nil
+		}
+	}
+
+	return versions, err
 }
 
 // GetVersion returns details for a specific version ID.
@@ -180,8 +292,8 @@ func (c *Client) GetVersion(ctx context.Context, versionID string) (*Version, er
 	return &v, nil
 }
 
-// ResolveRequiredDependencies recursively finds all required project slugs/IDs for a mod on a given mcVersion.
-func (c *Client) ResolveRequiredDependencies(ctx context.Context, idOrSlug, mcVersion string) ([]string, error) {
+// ResolveRequiredDependencies recursively finds all required project slugs/IDs for a mod on a given mcVersion and loader.
+func (c *Client) ResolveRequiredDependencies(ctx context.Context, idOrSlug, mcVersion, loader string) ([]string, error) {
 	visited := make(map[string]bool)
 	var resolved []string
 
@@ -192,10 +304,10 @@ func (c *Client) ResolveRequiredDependencies(ctx context.Context, idOrSlug, mcVe
 		}
 		visited[curr] = true
 
-		versions, err := c.GetProjectVersions(ctx, curr, mcVersion)
+		versions, err := c.GetProjectVersions(ctx, curr, mcVersion, loader)
 		if err != nil || len(versions) == 0 {
-			// If no specific neoforge version for this exact MC version, try without mcVersion filter as fallback
-			versions, err = c.GetProjectVersions(ctx, curr, "")
+			// If no specific loader version for this exact MC version, try without mcVersion filter as fallback
+			versions, err = c.GetProjectVersions(ctx, curr, "", loader)
 			if err != nil || len(versions) == 0 {
 				return nil
 			}

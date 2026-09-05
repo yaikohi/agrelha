@@ -92,6 +92,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Get("/api/minecraft/modpacks/search", s.mcModpacksSearch)
 	app.Get("/api/minecraft/modpacks/:id", s.mcModpackGet)
 	app.Post("/api/minecraft/modpacks/switch", s.mcModpackSwitch)
+	app.Post("/api/minecraft/loader/switch", s.mcLoaderSwitch)
 
 	app.Post("/minecraft/server/restart", s.guardMC("mc-restart", "Minecraft restart triggered — server is rolling.", func(ctx context.Context) error { return s.mck8s.Restart(ctx) }))
 	app.Post("/minecraft/server/stop", s.guardMC("mc-stop", "Stopping Minecraft server — scaling to 0.", func(ctx context.Context) error { return s.mck8s.Scale(ctx, 0) }))

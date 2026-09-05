@@ -45,10 +45,17 @@ func (s *FiberServer) applyAfterSync(cmName, key string, want func(string) bool)
 }
 
 // applyMinecraftAfterSync waits for ArgoCD to reconcile a committed ConfigMap
-// in the minecraft-neoforge namespace, then rolls the minecraft pod.
-func (s *FiberServer) applyMinecraftAfterSync(cmName, key string, want func(string) bool) {
+// in the minecraft namespace, then rolls the specified minecraft deployment.
+func (s *FiberServer) applyMinecraftAfterSync(cmName, depName, key string, want func(string) bool) {
 	if s.mck8s == nil {
 		return
+	}
+	if depName == "" {
+		if cmName == "minecraft-fabric-mods" || cmName == "minecraft-fabric-configs" {
+			depName = s.cfg.FabricDeployment
+		} else {
+			depName = s.cfg.MinecraftDeployment
+		}
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -66,11 +73,11 @@ func (s *FiberServer) applyMinecraftAfterSync(cmName, key string, want func(stri
 					continue
 				}
 				if want(data[key]) {
-					if err := s.mck8s.Restart(ctx); err != nil {
-						slog.Error("applyMinecraftAfterSync: restart failed", "configmap", cmName, "err", err)
+					if err := s.mck8s.RestartDeployment(ctx, depName); err != nil {
+						slog.Error("applyMinecraftAfterSync: restart failed", "configmap", cmName, "dep", depName, "err", err)
 						return
 					}
-					slog.Info("applyMinecraftAfterSync: change landed, rolled minecraft-neoforge", "configmap", cmName)
+					slog.Info("applyMinecraftAfterSync: change landed, rolled minecraft deployment", "configmap", cmName, "dep", depName)
 					_ = s.store.RecordEvent("mc-auto-restart", cmName)
 					return
 				}

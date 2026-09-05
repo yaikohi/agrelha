@@ -10,21 +10,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// podName finds the (single) valheim pod by the app label.
+// podName finds the active pod by the app label.
 func (c *Client) podName(ctx context.Context) (string, error) {
+	dep := c.activeDeploymentName(ctx)
 	pods, err := c.cs.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "app=" + c.deployment,
+		LabelSelector: "app=" + dep,
 	})
 	if err != nil {
 		return "", err
 	}
 	if len(pods.Items) == 0 {
-		return "", fmt.Errorf("no pod for app=%s in %s", c.deployment, c.namespace)
+		return "", fmt.Errorf("no pod for app=%s in %s", dep, c.namespace)
 	}
 	return pods.Items[0].Name, nil
 }
 
-// StreamLogs follows the valheim pod's logs, starting with the last `tail` lines.
+// StreamLogs follows the pod's logs, starting with the last `tail` lines.
 // Caller must Close the reader (or cancel ctx) to stop.
 func (c *Client) StreamLogs(ctx context.Context, tail int64) (io.ReadCloser, error) {
 	name, err := c.podName(ctx)
@@ -46,8 +47,9 @@ type PodStatus struct {
 }
 
 func (c *Client) PodStatus(ctx context.Context) (PodStatus, error) {
+	dep := c.activeDeploymentName(ctx)
 	pods, err := c.cs.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "app=" + c.deployment,
+		LabelSelector: "app=" + dep,
 	})
 	if err != nil || len(pods.Items) == 0 {
 		return PodStatus{Phase: "Down"}, err

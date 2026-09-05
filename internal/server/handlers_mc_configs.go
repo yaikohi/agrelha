@@ -75,7 +75,7 @@ func (s *FiberServer) mcConfigSave(c *fiber.Ctx) error {
 	}
 	_ = s.store.RecordAudit(s.actor(c), "mc-config-edit", file)
 	if changed {
-		s.applyMinecraftAfterSync(mcConfigsCM, file, func(v string) bool { return v == content })
+		s.applyMinecraftAfterSync(mcConfigsCM, "", file, func(v string) bool { return v == content })
 		setFlash(c, "ok", "Saved "+file+" — committed; the server will restart to apply.")
 	} else {
 		setFlash(c, "ok", file+" is unchanged.")
@@ -101,7 +101,7 @@ func (s *FiberServer) mcConfigDelete(c *fiber.Ctx) error {
 	}
 	_ = s.store.RecordAudit(s.actor(c), "mc-config-delete", file)
 	if changed {
-		s.applyMinecraftAfterSync(mcConfigsCM, file, func(v string) bool { return v == "" })
+		s.applyMinecraftAfterSync(mcConfigsCM, "", file, func(v string) bool { return v == "" })
 		setFlash(c, "ok", "Deleted "+file+" — committed; the server will restart to apply.")
 	} else {
 		setFlash(c, "ok", file+" was not present.")

@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 type ModpackUI struct {
@@ -42,7 +43,7 @@ func tabStyle(active bool) string {
 }
 
 templ MinecraftMods(
-	mcVersion, neoforgeVersion string,
+	mcVersion, loaderVersion string,
 	installedMods []string,
 	activeTab string,
 	modpacks []ModpackUI,
@@ -51,65 +52,174 @@ templ MinecraftMods(
 	currentPage, totalPages, totalPacks int,
 	mods []ModUI,
 	modQuery string,
+	currentLoader, activeRunningLoader string,
 	enabled bool,
 	flashKind, flashMsg string,
 ) {
 	@Layout("Minecraft Mods & Modpacks") {
 		@nav()
-		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-			<div>
-				<h1 class="text-2xl font-semibold">Minecraft NeoForge</h1>
-				<p class="text-sm text-zinc-400">Targeting Minecraft <span class="font-mono text-emerald-400">{ mcVersion }</span> ({ neoforgeVersion })</p>
-			</div>
-			<div class="flex items-center gap-2">
-				<form method="post" action="/api/minecraft/version/set" class="flex items-center gap-2 text-xs">
-					<label class="text-zinc-400">Minecraft:</label>
-					<select name="minecraft_version" class="rounded bg-zinc-900 border border-zinc-800 px-2.5 py-1.5 font-mono text-zinc-200 focus:border-zinc-600">
-						for _, v := range []string{"1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.2", "1.20.1"} {
-							if v == mcVersion {
-								<option value={ v } selected>{ v }</option>
+		<div class="space-y-6" data-signals="{showSwitchModal: false}">
+			<!-- Mod Engine Selector Header -->
+			<div class="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+				<div class="flex items-center gap-3">
+					<span class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Mod Engine:</span>
+					<div class="flex items-center gap-1 rounded-lg bg-zinc-900 p-1 border border-zinc-800">
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?loader=neoforge&tab=%s", activeTab)) }
+							class={ "flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium transition",
+								templ.KV("bg-zinc-800 text-white shadow-sm border border-zinc-700", currentLoader == "neoforge"),
+								templ.KV("text-zinc-400 hover:text-zinc-200", currentLoader != "neoforge") }
+						>
+							<span>NeoForge</span>
+							if activeRunningLoader == "neoforge" {
+								<span class="inline-flex items-center gap-1 rounded-full bg-emerald-950 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-800/60">
+									<span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+									ACTIVE
+								</span>
 							} else {
-								<option value={ v }>{ v }</option>
+								<span class="rounded bg-zinc-950 px-1.5 py-0.5 text-[10px] text-zinc-500 border border-zinc-800">
+									STOPPED
+								</span>
 							}
-						}
-					</select>
-					<input type="hidden" name="neoforge_version" value={ neoforgeVersion }/>
-					<span class="rounded bg-zinc-800/80 border border-zinc-700/50 px-2.5 py-1.5 font-mono text-[11px] text-zinc-400" title="NeoForge version auto-resolved to recommended">NeoForge: auto</span>
-					<button class="rounded bg-zinc-700 px-3 py-1.5 hover:bg-zinc-600 font-medium">Apply</button>
-				</form>
+						</a>
+						<a
+							href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?loader=fabric&tab=%s", activeTab)) }
+							class={ "flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium transition",
+								templ.KV("bg-zinc-800 text-white shadow-sm border border-zinc-700", currentLoader == "fabric"),
+								templ.KV("text-zinc-400 hover:text-zinc-200", currentLoader != "fabric") }
+						>
+							<span>Fabric</span>
+							if activeRunningLoader == "fabric" {
+								<span class="inline-flex items-center gap-1 rounded-full bg-emerald-950 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-800/60">
+									<span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+									ACTIVE
+								</span>
+							} else {
+								<span class="rounded bg-zinc-950 px-1.5 py-0.5 text-[10px] text-zinc-500 border border-zinc-800">
+									STOPPED
+								</span>
+							}
+						</a>
+					</div>
+				</div>
+
+				<div class="flex items-center gap-3">
+					if currentLoader == activeRunningLoader {
+						<div class="flex items-center gap-2 text-xs text-emerald-400">
+							<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+							<span>Running live on 192.168.20.225:25565</span>
+						</div>
+					} else {
+						<div class="flex items-center gap-2">
+							<span class="text-xs text-amber-400">Viewing inactive configuration</span>
+							<button
+								type="button"
+								data-on:click="$showSwitchModal = true"
+								class="rounded bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 shadow-sm transition"
+							>
+								Activate { strings.Title(currentLoader) } Engine
+							</button>
+						</div>
+					}
+				</div>
 			</div>
-		</div>
 
-		@flashBanner(flashKind, flashMsg)
-
-		<!-- Client Modpack Export Banner (Prism Launcher) -->
-		<div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded border border-emerald-800/50 bg-emerald-950/30 px-4 py-3">
-			<div class="min-w-0 flex-1">
-				<p class="text-sm font-medium text-emerald-100">Prism Launcher Client Modpack</p>
-				<p class="text-xs text-emerald-200/70">Export and share with players — import directly into Prism Launcher (Add Instance → Import from zip) to automatically install NeoForge, download client-compatible mods, and sync configs.</p>
+			<!-- Title & Version Controls -->
+			<div class="flex flex-wrap items-center justify-between gap-4">
+				<div>
+					<h1 class="text-2xl font-semibold capitalize">Minecraft { currentLoader }</h1>
+					<p class="text-sm text-zinc-400">Targeting Minecraft <span class="font-mono text-emerald-400">{ mcVersion }</span> ({ loaderVersion })</p>
+				</div>
+				<div class="flex items-center gap-2">
+					<form method="post" action="/api/minecraft/version/set" class="flex items-center gap-2 text-xs">
+						<input type="hidden" name="loader" value={ currentLoader }/>
+						<label class="text-zinc-400">Minecraft:</label>
+						<select name="minecraft_version" class="rounded bg-zinc-900 border border-zinc-800 px-2.5 py-1.5 font-mono text-zinc-200 focus:border-zinc-600">
+							for _, v := range []string{"1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.2", "1.20.1"} {
+								if v == mcVersion {
+									<option value={ v } selected>{ v }</option>
+								} else {
+									<option value={ v }>{ v }</option>
+								}
+							}
+						</select>
+						<input type="hidden" name="loader_version" value={ loaderVersion }/>
+						<span class="rounded bg-zinc-800/80 border border-zinc-700/50 px-2.5 py-1.5 font-mono text-[11px] text-zinc-400 capitalize">{ currentLoader }: auto</span>
+						<button class="rounded bg-zinc-700 px-3 py-1.5 hover:bg-zinc-600 font-medium">Apply</button>
+					</form>
+				</div>
 			</div>
-			<a href="/minecraft/mods/export" class="shrink-0 rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600" title="Download a Prism Launcher compatible Modrinth pack (.mrpack) of installed client mods and configs">Export for Prism (.mrpack)</a>
-		</div>
 
-		if !enabled {
-			<p class="mb-6 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to switch modpacks or install mods.</p>
-		}
+			@flashBanner(flashKind, flashMsg)
 
-		<!-- Tabs Switcher -->
-		<div class="mb-6 flex border-b border-zinc-800 text-sm">
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?tab=modpacks&q=%s&filter_version=%s", packQuery, filterVersion)) }
-				class={ "px-4 py-2.5 border-b-2 transition -mb-px " + tabStyle(activeTab == "modpacks") }
+			<!-- Client Modpack Export Banner (Prism Launcher) -->
+			<div class="flex flex-wrap items-center justify-between gap-4 rounded border border-emerald-800/50 bg-emerald-950/30 px-4 py-3">
+				<div class="min-w-0 flex-1">
+					<p class="text-sm font-medium text-emerald-100 capitalize">Prism Launcher Client Modpack ({ currentLoader })</p>
+					<p class="text-xs text-emerald-200/70">Export and share with players — import directly into Prism Launcher (Add Instance → Import from zip) to automatically install { strings.Title(currentLoader) }, download client-compatible mods, and sync configs.</p>
+				</div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods/export?loader=%s", currentLoader)) } class="shrink-0 rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600" title="Download a Prism Launcher compatible Modrinth pack (.mrpack) of installed client mods and configs">Export for Prism (.mrpack)</a>
+			</div>
+
+			if !enabled {
+				<p class="rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to switch modpacks or install mods.</p>
+			}
+
+			<!-- Engine Switch Confirmation Modal -->
+			<div
+				data-show="$showSwitchModal"
+				class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+				style="display: none;"
 			>
-				Modpacks
-			</a>
-			<a
-				href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?tab=mods&mod_q=%s", modQuery)) }
-				class={ "px-4 py-2.5 border-b-2 transition -mb-px " + tabStyle(activeTab == "mods") }
-			>
-				Individual Mods
-			</a>
-		</div>
+				<div class="max-w-md w-full rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
+					<div class="flex items-center justify-between pb-3 border-b border-zinc-800">
+						<h3 class="text-lg font-semibold text-zinc-100">Switch Engine to { strings.Title(currentLoader) }?</h3>
+						<button type="button" data-on:click="$showSwitchModal = false" class="text-zinc-400 hover:text-zinc-200">✕</button>
+					</div>
+					<div class="py-4 text-sm text-zinc-300 space-y-3">
+						<p>
+							Node <code class="font-mono text-emerald-400">game-01</code> runs one engine at a time to preserve RAM & CPU.
+						</p>
+						<p>
+							Switching will scale down <strong class="text-zinc-100 capitalize">{ activeRunningLoader }</strong> to 0 replicas, and scale up <strong class="text-emerald-400 capitalize">{ currentLoader }</strong> with its dedicated NVMe storage and mod list.
+						</p>
+						<p class="text-xs text-zinc-400">
+							Incoming player traffic on <code class="font-mono text-zinc-300">192.168.20.225:25565</code> will automatically route to the new engine once started.
+						</p>
+					</div>
+					<div class="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
+						<button
+							type="button"
+							data-on:click="$showSwitchModal = false"
+							class="rounded border border-zinc-700 px-3.5 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
+						>
+							Manage Mods First
+						</button>
+						<form method="post" action="/api/minecraft/loader/switch">
+							<input type="hidden" name="target" value={ currentLoader }/>
+							<button class="rounded bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 shadow-md">
+								Switch Directly Now
+							</button>
+						</form>
+					</div>
+				</div>
+			</div>
+
+			<!-- Tabs Switcher -->
+			<div class="flex border-b border-zinc-800 text-sm">
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?loader=%s&tab=modpacks&q=%s&filter_version=%s", currentLoader, packQuery, filterVersion)) }
+					class={ "px-4 py-2.5 border-b-2 transition -mb-px " + tabStyle(activeTab == "modpacks") }
+				>
+					Modpacks
+				</a>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?loader=%s&tab=mods&mod_q=%s", currentLoader, modQuery)) }
+					class={ "px-4 py-2.5 border-b-2 transition -mb-px " + tabStyle(activeTab == "mods") }
+				>
+					Individual Mods
+				</a>
+			</div>
 
 		if activeTab == "modpacks" {
 			<!-- Modpack Index Switcher -->
@@ -122,6 +232,7 @@ templ MinecraftMods(
 				</div>
 
 				<form method="get" action="/minecraft/mods" class="mb-6 flex flex-wrap items-center gap-2">
+					<input type="hidden" name="loader" value={ currentLoader }/>
 					<input type="hidden" name="tab" value="modpacks"/>
 					<div class="relative flex-1 min-w-[260px]">
 						<input
@@ -147,7 +258,7 @@ templ MinecraftMods(
 					</select>
 					<button class="rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Search Packs</button>
 					if packQuery != "" || filterVersion != "" {
-						<a href="/minecraft/mods?tab=modpacks" class="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800">Clear</a>
+						<a href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?loader=%s&tab=modpacks", currentLoader)) } class="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800">Clear</a>
 					}
 				</form>
 
@@ -187,6 +298,7 @@ templ MinecraftMods(
 										}
 									</div>
 									<form method="post" action="/api/minecraft/modpacks/switch" onsubmit="return confirm('Switching modpack will replace installed mods with this pack. Continue?');">
+										<input type="hidden" name="loader" value={ currentLoader }/>
 										<input type="hidden" name="modpack_id" value={ strconv.Itoa(p.ID) }/>
 										<button class="rounded bg-emerald-700 px-3 py-1 text-xs font-medium hover:bg-emerald-600">Switch</button>
 									</form>
@@ -207,7 +319,7 @@ templ MinecraftMods(
 							<div class="flex items-center gap-2">
 								if currentPage > 1 {
 									<a
-										href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?tab=modpacks&q=%s&filter_version=%s&page=%d", packQuery, filterVersion, currentPage-1)) }
+										href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?loader=%s&tab=modpacks&q=%s&filter_version=%s&page=%d", currentLoader, packQuery, filterVersion, currentPage-1)) }
 										class="rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-zinc-200 hover:bg-zinc-800"
 									>← Previous</a>
 								} else {
@@ -215,7 +327,7 @@ templ MinecraftMods(
 								}
 								if currentPage < totalPages {
 									<a
-										href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?tab=modpacks&q=%s&filter_version=%s&page=%d", packQuery, filterVersion, currentPage+1)) }
+										href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?loader=%s&tab=modpacks&q=%s&filter_version=%s&page=%d", currentLoader, packQuery, filterVersion, currentPage+1)) }
 										class="rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-zinc-200 hover:bg-zinc-800"
 									>Next →</a>
 								} else {
@@ -234,11 +346,12 @@ templ MinecraftMods(
 				<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
 					<div>
 						<h2 class="text-lg font-medium text-zinc-100">Modrinth Mod Discovery</h2>
-						<p class="text-xs text-zinc-400">Search and install NeoForge mods compatible with Minecraft <span class="font-mono text-emerald-400">{ mcVersion }</span>.</p>
+						<p class="text-xs text-zinc-400 capitalize">Search and install { currentLoader } mods compatible with Minecraft <span class="font-mono text-emerald-400">{ mcVersion }</span>.</p>
 					</div>
 				</div>
 
 				<form method="get" action="/minecraft/mods" class="mb-4 flex flex-wrap items-center gap-2">
+					<input type="hidden" name="loader" value={ currentLoader }/>
 					<input type="hidden" name="tab" value="mods"/>
 					<div class="relative flex-1 min-w-[260px]">
 						<input
@@ -250,7 +363,7 @@ templ MinecraftMods(
 					</div>
 					<button class="rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Search Modrinth</button>
 					if modQuery != "" {
-						<a href="/minecraft/mods?tab=mods" class="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800">Clear</a>
+						<a href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?loader=%s&tab=mods", currentLoader)) } class="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800">Clear</a>
 					}
 				</form>
 
@@ -258,6 +371,7 @@ templ MinecraftMods(
 				<details class="mb-6 text-xs text-zinc-400">
 					<summary class="cursor-pointer hover:text-zinc-200">Or install directly by Modrinth project slug…</summary>
 					<form method="post" action="/api/minecraft/mods/install" class="mt-2 flex flex-wrap items-center gap-2">
+						<input type="hidden" name="loader" value={ currentLoader }/>
 						<input name="slug" placeholder="Modrinth slug (e.g. jei, journeymap)" class="w-72 rounded bg-zinc-950 px-3 py-1.5 border border-zinc-800 font-mono text-xs focus:border-zinc-600"/>
 						<input type="hidden" name="version" value={ mcVersion }/>
 						<button class="rounded bg-emerald-700 px-3.5 py-1.5 font-medium hover:bg-emerald-600 text-white">Install + Dependencies</button>
@@ -266,7 +380,7 @@ templ MinecraftMods(
 
 				if len(mods) == 0 {
 					<div class="rounded bg-zinc-950 p-6 text-center text-sm text-zinc-400">
-						No mods found on Modrinth matching your query.
+						No { currentLoader } mods found on Modrinth matching your query.
 					</div>
 				} else {
 					<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -295,6 +409,7 @@ templ MinecraftMods(
 										<span class="rounded bg-zinc-800 border border-zinc-700 px-2.5 py-1 text-xs text-emerald-400 font-medium">✓ Installed</span>
 									} else {
 										<form method="post" action="/api/minecraft/mods/install">
+											<input type="hidden" name="loader" value={ currentLoader }/>
 											<input type="hidden" name="slug" value={ m.Slug }/>
 											<input type="hidden" name="version" value={ mcVersion }/>
 											<button class="rounded bg-emerald-700 px-3 py-1 text-xs font-medium hover:bg-emerald-600">Install + Deps</button>
@@ -311,10 +426,10 @@ templ MinecraftMods(
 		<!-- Installed Mods List -->
 		<section class="mt-8">
 			<div class="mb-3 flex items-center justify-between">
-				<h2 class="text-sm font-medium text-zinc-400">Currently Installed Mods ({ strconv.Itoa(len(installedMods)) })</h2>
+				<h2 class="text-sm font-medium text-zinc-400 capitalize">Currently Installed { currentLoader } Mods ({ strconv.Itoa(len(installedMods)) })</h2>
 			</div>
 			if len(installedMods) == 0 {
-				<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No mods installed yet. Search for a modpack or individual mods above.</p>
+				<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No { currentLoader } mods installed yet. Search for a modpack or individual mods above.</p>
 			} else {
 				<ul class="divide-y divide-zinc-800 rounded border border-zinc-800 bg-zinc-900/80 overflow-hidden">
 					for _, mod := range installedMods {
@@ -325,6 +440,7 @@ templ MinecraftMods(
 								<a href={ templ.SafeURL("https://modrinth.com/mod/" + mod) } target="_blank" class="text-xs text-zinc-500 hover:text-sky-400">modrinth ↗</a>
 							</div>
 							<form method="post" action="/api/minecraft/mods/remove">
+								<input type="hidden" name="loader" value={ currentLoader }/>
 								<input type="hidden" name="slug" value={ mod }/>
 								<button class="rounded bg-red-900/60 px-2.5 py-1 text-xs text-red-200 hover:bg-red-800">Remove</button>
 							</form>
@@ -346,6 +462,7 @@ templ MinecraftMods(
 			<div class="flex items-center justify-between border-t border-zinc-800 px-5 py-3 bg-zinc-950/50">
 				<button type="button" onclick="document.getElementById('modpack-preview-dialog').close()" class="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Close</button>
 				<form method="post" action="/api/minecraft/modpacks/switch" onsubmit="return confirm('Switching modpack will replace installed mods with this pack. Continue?');">
+					<input type="hidden" name="loader" value={ currentLoader }/>
 					<input type="hidden" name="modpack_id" id="preview-switch-id" value=""/>
 					<button class="rounded bg-emerald-700 px-4 py-1.5 text-xs font-medium hover:bg-emerald-600 text-white">Switch to this Pack</button>
 				</form>
@@ -388,6 +505,7 @@ templ MinecraftMods(
 					});
 			}
 		</script>
+		</div>
 	}
 }
 

@@ -19,19 +19,45 @@ func isHTMLForm(c *fiber.Ctx) bool {
 	return strings.Contains(accept, "text/html") && !strings.Contains(accept, "application/json")
 }
 
+func (s *FiberServer) mcLoaderManager(loader string) (*minecraft.ModManager, string, string) {
+	if loader == "fabric" {
+		return s.fabMods, "minecraft-fabric-mods", s.cfg.FabricDeployment
+	}
+	return s.mcMods, "minecraft-neoforge-mods", s.cfg.MinecraftDeployment
+}
+
 // mcModsPage renders the Minecraft mods, versions, and modpacks page.
 func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
+	activeRunningLoader := "neoforge"
+	if s.mck8s != nil {
+		if l, err := s.mck8s.ActiveLoader(c.UserContext(), s.cfg.MinecraftDeployment, s.cfg.FabricDeployment); err == nil && l != "" {
+			activeRunningLoader = l
+		}
+	}
+
+	currentLoader := strings.ToLower(strings.TrimSpace(c.Query("loader")))
+	if currentLoader != "fabric" && currentLoader != "neoforge" {
+		currentLoader = activeRunningLoader
+	}
+
+	cmName := "minecraft-neoforge-mods"
+	versionKey := "NEOFORGE_VERSION"
+	if currentLoader == "fabric" {
+		cmName = "minecraft-fabric-mods"
+		versionKey = "FABRIC_VERSION"
+	}
+
 	mcVer := "1.21.1"
-	nfVer := "latest"
+	loaderVer := "latest"
 	var installedMods []string
 
 	if s.mck8s != nil {
-		if data, err := s.mck8s.ConfigMapData(c.UserContext(), "minecraft-neoforge-mods"); err == nil {
+		if data, err := s.mck8s.ConfigMapData(c.UserContext(), cmName); err == nil {
 			if v := strings.TrimSpace(data["MINECRAFT_VERSION"]); v != "" {
 				mcVer = v
 			}
-			if v := strings.TrimSpace(data["NEOFORGE_VERSION"]); v != "" {
-				nfVer = v
+			if v := strings.TrimSpace(data[versionKey]); v != "" {
+				loaderVer = v
 			}
 			installedMods = minecraft.ParseMods(data["mods.txt"])
 		}
@@ -87,7 +113,7 @@ func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
 		for _, m := range installedMods {
 			installedSet[m] = true
 		}
-		mrRes, err := s.mr.Search(c.UserContext(), modQ, mcVer, 24, 0)
+		mrRes, err := s.mr.Search(c.UserContext(), modQ, mcVer, currentLoader, 24, 0)
 		if err == nil && mrRes != nil {
 			for _, hit := range mrRes.Hits {
 				modsUI = append(modsUI, pages.ModUI{
@@ -105,7 +131,7 @@ func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
 
 	fk, fm := takeFlash(c)
 	return render(c, pages.MinecraftMods(
-		mcVer, nfVer,
+		mcVer, loaderVer,
 		installedMods,
 		tab,
 		modpacksUI,
@@ -114,6 +140,7 @@ func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
 		currentPage, totalPages, totalPacks,
 		modsUI,
 		modQ,
+		currentLoader, activeRunningLoader,
 		s.git != nil,
 		fk, fm,
 	))
@@ -125,7 +152,11 @@ func (s *FiberServer) mcAccessPage(c *fiber.Ctx) error {
 	var whitelist []string
 
 	if s.mck8s != nil {
-		if data, err := s.mck8s.ConfigMapData(c.UserContext(), "minecraft-neoforge-access"); err == nil {
+		data, err := s.mck8s.ConfigMapData(c.UserContext(), "minecraft-modded-access")
+		if err != nil {
+			data, err = s.mck8s.ConfigMapData(c.UserContext(), "minecraft-neoforge-access")
+		}
+		if err == nil {
 			ops = minecraft.ParseUsers(data["ops.txt"])
 			whitelist = minecraft.ParseUsers(data["whitelist.txt"])
 		}
@@ -146,30 +177,38 @@ func (s *FiberServer) mcAccessPage(c *fiber.Ctx) error {
 	return render(c, pages.MinecraftAccess(ops, whitelist, onlinePlayers, whitelistEnforced, s.git != nil, fk, fm))
 }
 
-// mcModsSearch handles searching Modrinth for NeoForge mods.
+// mcModsSearch handles searching Modrinth for mods.
 func (s *FiberServer) mcModsSearch(c *fiber.Ctx) error {
 	if s.mr == nil {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Modrinth client unconfigured"})
 	}
 	q := c.Query("q", "")
 	mcVersion := c.Query("version", "1.21.1")
+	loader := c.Query("loader", "neoforge")
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	res, err := s.mr.Search(c.UserContext(), q, mcVersion, limit, offset)
+	res, err := s.mr.Search(c.UserContext(), q, mcVersion, loader, limit, offset)
 	if err != nil {
-		slog.Error("modrinth search error", "err", err, "query", q)
+		slog.Error("modrinth search error", "err", err, "query", q, "loader", loader)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 	return c.JSON(res)
 }
 
-// mcModsInstall resolves dependencies and commits the requested mod to neoforge-mods.yaml.
+// mcModsInstall resolves dependencies and commits the requested mod to the loader's mods.yaml.
 func (s *FiberServer) mcModsInstall(c *fiber.Ctx) error {
-	if s.mcMods == nil {
+	loader := strings.ToLower(strings.TrimSpace(c.FormValue("loader")))
+	if loader != "fabric" {
+		loader = "neoforge"
+	}
+	mgr, cmName, depName := s.mcLoaderManager(loader)
+	redirectURL := fmt.Sprintf("/minecraft/mods?loader=%s&tab=mods", loader)
+
+	if mgr == nil {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "GitOps plane disabled — no Codeberg token configured.")
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "GitOps plane disabled — no Codeberg token configured"})
 	}
@@ -177,7 +216,7 @@ func (s *FiberServer) mcModsInstall(c *fiber.Ctx) error {
 	if slug == "" {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Mod slug is required.")
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "slug is required"})
 	}
@@ -191,53 +230,61 @@ func (s *FiberServer) mcModsInstall(c *fiber.Ctx) error {
 
 	// Resolve dependencies if Modrinth client available
 	if s.mr != nil {
-		deps, err := s.mr.ResolveRequiredDependencies(ctx, slug, mcVersion)
+		deps, err := s.mr.ResolveRequiredDependencies(ctx, slug, mcVersion, loader)
 		if err != nil {
-			slog.Warn("could not resolve all mod dependencies", "slug", slug, "err", err)
+			slog.Warn("could not resolve all mod dependencies", "slug", slug, "loader", loader, "err", err)
 		} else {
 			slugsToInstall = append(slugsToInstall, deps...)
 		}
 	}
 
-	changed, err := s.mcMods.Install(ctx, slugsToInstall)
+	changed, err := mgr.Install(ctx, slugsToInstall)
 	if err != nil {
-		slog.Error("mc-mods install error", "err", err, "slug", slug)
+		slog.Error("mc-mods install error", "loader", loader, "err", err, "slug", slug)
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Install failed: "+err.Error())
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	_ = s.store.RecordAudit(s.actor(c), "mc-mod-install", strings.Join(slugsToInstall, ", "))
+	_ = s.store.RecordAudit(s.actor(c), "mc-mod-install", fmt.Sprintf("[%s] %s", loader, strings.Join(slugsToInstall, ", ")))
 	if changed {
-		s.applyMinecraftAfterSync("minecraft-neoforge-mods", "mods.txt", func(txt string) bool {
+		s.applyMinecraftAfterSync(cmName, depName, "mods.txt", func(txt string) bool {
 			return strings.Contains(txt, slug)
 		})
 	}
 
 	if isHTMLForm(c) {
 		if changed {
-			setFlash(c, "ok", "Installed "+slug+" (and dependencies) — committed to GitOps; server will restart.")
+			setFlash(c, "ok", fmt.Sprintf("Installed %s (and dependencies) for %s — committed to GitOps; server will restart.", slug, strings.Title(loader)))
 		} else {
 			setFlash(c, "ok", slug+" is already installed.")
 		}
-		return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+		return c.Redirect(redirectURL, fiber.StatusSeeOther)
 	}
 
 	return c.JSON(fiber.Map{
 		"ok":        true,
+		"loader":    loader,
 		"changed":   changed,
 		"installed": slugsToInstall,
 	})
 }
 
-// mcModsRemove removes a mod from neoforge-mods.yaml.
+// mcModsRemove removes a mod from the loader's mods.yaml.
 func (s *FiberServer) mcModsRemove(c *fiber.Ctx) error {
-	if s.mcMods == nil {
+	loader := strings.ToLower(strings.TrimSpace(c.FormValue("loader")))
+	if loader != "fabric" {
+		loader = "neoforge"
+	}
+	mgr, cmName, depName := s.mcLoaderManager(loader)
+	redirectURL := fmt.Sprintf("/minecraft/mods?loader=%s", loader)
+
+	if mgr == nil {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "GitOps plane disabled")
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "GitOps plane disabled"})
 	}
@@ -245,88 +292,101 @@ func (s *FiberServer) mcModsRemove(c *fiber.Ctx) error {
 	if slug == "" {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Mod slug is required")
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "slug is required"})
 	}
 
-	changed, err := s.mcMods.Uninstall(c.UserContext(), slug)
+	changed, err := mgr.Uninstall(c.UserContext(), slug)
 	if err != nil {
-		slog.Error("mc-mods remove error", "err", err, "slug", slug)
+		slog.Error("mc-mods remove error", "loader", loader, "err", err, "slug", slug)
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Remove failed: "+err.Error())
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	_ = s.store.RecordAudit(s.actor(c), "mc-mod-remove", slug)
+	_ = s.store.RecordAudit(s.actor(c), "mc-mod-remove", fmt.Sprintf("[%s] %s", loader, slug))
 	if changed {
-		s.applyMinecraftAfterSync("minecraft-neoforge-mods", "mods.txt", func(txt string) bool {
+		s.applyMinecraftAfterSync(cmName, depName, "mods.txt", func(txt string) bool {
 			return !strings.Contains(txt, slug)
 		})
 	}
 
 	if isHTMLForm(c) {
 		if changed {
-			setFlash(c, "ok", "Removed "+slug+" — committed to GitOps; server will restart.")
+			setFlash(c, "ok", fmt.Sprintf("Removed %s from %s — committed to GitOps; server will restart.", slug, strings.Title(loader)))
 		} else {
 			setFlash(c, "ok", slug+" was not installed.")
 		}
-		return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+		return c.Redirect(redirectURL, fiber.StatusSeeOther)
 	}
 
-	return c.JSON(fiber.Map{"ok": true, "changed": changed, "slug": slug})
+	return c.JSON(fiber.Map{"ok": true, "loader": loader, "changed": changed, "slug": slug})
 }
 
-// mcVersionSet updates the target Minecraft and NeoForge versions in neoforge-mods.yaml.
+// mcVersionSet updates the target Minecraft and loader versions.
 func (s *FiberServer) mcVersionSet(c *fiber.Ctx) error {
-	if s.mcMods == nil {
+	loader := strings.ToLower(strings.TrimSpace(c.FormValue("loader")))
+	if loader != "fabric" {
+		loader = "neoforge"
+	}
+	mgr, cmName, depName := s.mcLoaderManager(loader)
+	redirectURL := fmt.Sprintf("/minecraft/mods?loader=%s", loader)
+
+	if mgr == nil {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "GitOps plane disabled")
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "GitOps plane disabled"})
 	}
 	mcVer := strings.TrimSpace(c.FormValue("minecraft_version"))
-	nfVer := strings.TrimSpace(c.FormValue("neoforge_version"))
+	loaderVer := strings.TrimSpace(c.FormValue("loader_version"))
+	if loaderVer == "" {
+		loaderVer = strings.TrimSpace(c.FormValue("neoforge_version"))
+	}
+	if loaderVer == "" {
+		loaderVer = strings.TrimSpace(c.FormValue("fabric_version"))
+	}
 	if mcVer == "" {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "minecraft_version is required")
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "minecraft_version is required"})
 	}
-	if nfVer == "" || nfVer == "recommended" {
-		nfVer = "latest"
+	if loaderVer == "" || loaderVer == "recommended" {
+		loaderVer = "latest"
 	}
 
-	changed, err := s.mcMods.SetVersion(c.UserContext(), mcVer, nfVer)
+	changed, err := mgr.SetVersion(c.UserContext(), mcVer, loaderVer)
 	if err != nil {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Version change failed: "+err.Error())
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	_ = s.store.RecordAudit(s.actor(c), "mc-version-set", mcVer+" / "+nfVer)
+	_ = s.store.RecordAudit(s.actor(c), "mc-version-set", fmt.Sprintf("[%s] %s / %s", loader, mcVer, loaderVer))
 	if changed {
-		s.applyMinecraftAfterSync("minecraft-neoforge-mods", "MINECRAFT_VERSION", func(v string) bool {
+		s.applyMinecraftAfterSync(cmName, depName, "MINECRAFT_VERSION", func(v string) bool {
 			return v == mcVer
 		})
 	}
 
 	if isHTMLForm(c) {
 		if changed {
-			setFlash(c, "ok", fmt.Sprintf("Updated versions to Minecraft %s / NeoForge %s — committed; server will restart.", mcVer, nfVer))
+			setFlash(c, "ok", fmt.Sprintf("Updated %s versions to Minecraft %s / %s — committed; server will restart.", strings.Title(loader), mcVer, loaderVer))
 		} else {
 			setFlash(c, "ok", "Versions already match.")
 		}
-		return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+		return c.Redirect(redirectURL, fiber.StatusSeeOther)
 	}
 
-	return c.JSON(fiber.Map{"ok": true, "changed": changed})
+	return c.JSON(fiber.Map{"ok": true, "loader": loader, "changed": changed})
 }
 
 // mcAccessGrantOp grants operator status to a player in Git and via live RCON.
@@ -590,10 +650,17 @@ func (s *FiberServer) mcModpackGet(c *fiber.Ctx) error {
 
 // mcModpackSwitch switches the server's modpack by pulling the mod list from Modpack Index.
 func (s *FiberServer) mcModpackSwitch(c *fiber.Ctx) error {
-	if s.mpi == nil || s.mcMods == nil {
+	loader := strings.ToLower(strings.TrimSpace(c.FormValue("loader")))
+	if loader != "fabric" {
+		loader = "neoforge"
+	}
+	mgr, cmName, depName := s.mcLoaderManager(loader)
+	redirectURL := fmt.Sprintf("/minecraft/mods?loader=%s", loader)
+
+	if s.mpi == nil || mgr == nil {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Modpack or GitOps service unavailable")
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Modpack or GitOps service unavailable"})
 	}
@@ -602,7 +669,7 @@ func (s *FiberServer) mcModpackSwitch(c *fiber.Ctx) error {
 	if err != nil || id <= 0 {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Valid modpack_id is required")
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "valid modpack_id is required"})
 	}
@@ -612,7 +679,7 @@ func (s *FiberServer) mcModpackSwitch(c *fiber.Ctx) error {
 	if err != nil {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Fetch modpack details: "+err.Error())
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "fetch modpack details: " + err.Error()})
 	}
@@ -621,7 +688,7 @@ func (s *FiberServer) mcModpackSwitch(c *fiber.Ctx) error {
 	if err != nil {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Fetch modpack mods: "+err.Error())
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "fetch modpack mods: " + err.Error()})
 	}
@@ -643,47 +710,41 @@ func (s *FiberServer) mcModpackSwitch(c *fiber.Ctx) error {
 				}
 			}
 		}
-		// 2. Fall back to mod slug
+		// 2. Fall back to mod slug (marked optional with '?' so mc-image-helper won't crash if CurseForge-only)
 		if selectedSlug == "" && m.Slug != "" {
-			selectedSlug = m.Slug
+			selectedSlug = m.Slug + "?"
 		}
 		if selectedSlug != "" {
 			slugs = append(slugs, selectedSlug)
 		}
 	}
 
-	changed, err := s.mcMods.SwitchModpack(ctx, pack.Name, targetMCVersion, slugs)
+	changed, err := mgr.SwitchModpack(ctx, pack.Name, targetMCVersion, slugs)
 	if err != nil {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Switch modpack failed: "+err.Error())
-			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+			return c.Redirect(redirectURL, fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "git commit switch failed: " + err.Error()})
 	}
 
-	_ = s.store.RecordAudit(s.actor(c), "mc-modpack-switch", fmt.Sprintf("%s (id=%d, mods=%d)", pack.Name, id, len(slugs)))
+	_ = s.store.RecordAudit(s.actor(c), "mc-modpack-switch", fmt.Sprintf("[%s] %s (id=%d, mods=%d)", loader, pack.Name, id, len(slugs)))
 	if changed {
-		s.applyMinecraftAfterSync("minecraft-neoforge-mods", "mods.txt", func(txt string) bool {
+		s.applyMinecraftAfterSync(cmName, depName, "mods.txt", func(txt string) bool {
 			return strings.Contains(txt, pack.Name)
 		})
 	}
 
 	if isHTMLForm(c) {
-		setFlash(c, "ok", fmt.Sprintf("Switched to modpack %q (%d mods) — committed to GitOps; server will restart.", pack.Name, len(slugs)))
-		return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+		setFlash(c, "ok", fmt.Sprintf("Switched %s to modpack %q (%d mods) — committed to GitOps; server will restart.", strings.Title(loader), pack.Name, len(slugs)))
+		return c.Redirect(redirectURL, fiber.StatusSeeOther)
 	}
 
-	return c.JSON(fiber.Map{
-		"ok":                true,
-		"changed":           changed,
-		"modpack_name":      pack.Name,
-		"minecraft_version": targetMCVersion,
-		"mods_count":        len(slugs),
-	})
+	return c.JSON(fiber.Map{"ok": true, "pack": pack.Name, "mods": len(slugs), "changed": changed})
 }
 
 // mcModpackExport generates a Prism Launcher compatible Modrinth modpack (.mrpack)
-// for the installed Minecraft NeoForge mods, excluding server-only mods.
+// for the installed mods, excluding server-only mods.
 func (s *FiberServer) mcModpackExport(c *fiber.Ctx) error {
 	if s.mck8s == nil {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "minecraft k8s client not available")
@@ -693,43 +754,124 @@ func (s *FiberServer) mcModpackExport(c *fiber.Ctx) error {
 	}
 	ctx := c.UserContext()
 
-	data, err := s.mck8s.ConfigMapData(ctx, "minecraft-neoforge-mods")
+	loader := strings.ToLower(strings.TrimSpace(c.Query("loader")))
+	if loader != "fabric" {
+		loader = "neoforge"
+	}
+	cmName := "minecraft-neoforge-mods"
+	versionKey := "NEOFORGE_VERSION"
+	packName := "Minecraft NeoForge"
+	cfgCM := "minecraft-neoforge-configs"
+	filename := fmt.Sprintf("minecraft-neoforge-client-%s.mrpack", time.Now().Format("2006-01-02"))
+
+	if loader == "fabric" {
+		cmName = "minecraft-fabric-mods"
+		versionKey = "FABRIC_VERSION"
+		packName = "Minecraft Fabric"
+		cfgCM = "minecraft-fabric-configs"
+		filename = fmt.Sprintf("minecraft-fabric-client-%s.mrpack", time.Now().Format("2006-01-02"))
+	}
+
+	redirectURL := fmt.Sprintf("/minecraft/mods?loader=%s", loader)
+	data, err := s.mck8s.ConfigMapData(ctx, cmName)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "read minecraft-neoforge-mods: "+err.Error())
+		return fiber.NewError(fiber.StatusInternalServerError, "read "+cmName+": "+err.Error())
 	}
 
 	mcVer := strings.TrimSpace(data["MINECRAFT_VERSION"])
 	if mcVer == "" {
 		mcVer = "1.21.1"
 	}
-	nfVer := strings.TrimSpace(data["NEOFORGE_VERSION"])
-	if nfVer == "" {
-		nfVer = "recommended"
+	loaderVer := strings.TrimSpace(data[versionKey])
+	if loaderVer == "" {
+		loaderVer = "latest"
 	}
 
-	slugs := minecraft.ParseMods(data["mods.txt"])
-	if len(slugs) == 0 {
+	// Try extracting friendly pack name from header comment (e.g. "# Modpack: Neuroshroud: The Abandoned")
+	for _, line := range strings.Split(data["mods.txt"], "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "# Modpack:") {
+			candidate := strings.TrimSpace(strings.TrimPrefix(line, "# Modpack:"))
+			if candidate != "" {
+				packName = candidate
+			}
+			break
+		}
+	}
+
+	rawSlugs := minecraft.ParseMods(data["mods.txt"])
+	if len(rawSlugs) == 0 {
 		setFlash(c, "err", "No mods are installed — nothing to export.")
-		return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+		return c.Redirect(redirectURL, fiber.StatusSeeOther)
+	}
+
+	var slugs []string
+	for _, s := range rawSlugs {
+		cleaned := strings.TrimSuffix(strings.TrimSpace(s), "?")
+		if cleaned != "" {
+			slugs = append(slugs, cleaned)
+		}
 	}
 
 	configs := map[string]string{}
-	if cfgData, err := s.mck8s.ConfigMapData(ctx, mcConfigsCM); err == nil {
+	if cfgData, err := s.mck8s.ConfigMapData(ctx, cfgCM); err == nil {
 		for k, v := range cfgData {
 			configs[k] = v
 		}
 	}
 
-	packName := "Minecraft NeoForge"
-	blob, err := modpack.BuildMrpack(ctx, s.mr, packName, mcVer, nfVer, slugs, configs)
+	blob, err := modpack.BuildMrpack(ctx, s.mr, packName, mcVer, loader, loaderVer, slugs, configs)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "build mrpack: "+err.Error())
 	}
 
-	_ = s.store.RecordAudit(s.actor(c), "mc-modpack-export", fmt.Sprintf("mc=%s, nf=%s, mods=%d", mcVer, nfVer, len(slugs)))
+	_ = s.store.RecordAudit(s.actor(c), "mc-modpack-export", fmt.Sprintf("[%s] name=%q, mc=%s, ver=%s, mods=%d", loader, packName, mcVer, loaderVer, len(slugs)))
 
-	filename := fmt.Sprintf("minecraft-neoforge-client-%s.mrpack", time.Now().Format("2006-01-02"))
 	c.Set("Content-Type", "application/x-modrinth-modpack+zip")
 	c.Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	return c.Send(blob)
+}
+
+// mcLoaderSwitch switches the live Minecraft engine between NeoForge and Fabric.
+func (s *FiberServer) mcLoaderSwitch(c *fiber.Ctx) error {
+	target := strings.ToLower(strings.TrimSpace(c.FormValue("target")))
+	if target != "fabric" && target != "neoforge" {
+		if isHTMLForm(c) {
+			setFlash(c, "err", "Invalid target loader (must be fabric or neoforge)")
+			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "target must be fabric or neoforge"})
+	}
+
+	if s.mck8s == nil {
+		if isHTMLForm(c) {
+			setFlash(c, "err", "Minecraft cluster client unconfigured")
+			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+		}
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "minecraft cluster client unconfigured"})
+	}
+
+	ctx := c.UserContext()
+	if err := s.mck8s.SwitchLoader(ctx, target, s.cfg.MinecraftDeployment, s.cfg.FabricDeployment); err != nil {
+		slog.Error("mc loader switch failed", "target", target, "err", err)
+		if isHTMLForm(c) {
+			setFlash(c, "err", "Failed to switch loader: "+err.Error())
+			return c.Redirect("/minecraft/mods?loader="+target, fiber.StatusSeeOther)
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	_ = s.store.RecordAudit(s.actor(c), "mc-loader-switch", target)
+	_ = s.store.RecordEvent("mc-loader-switch", target)
+
+	if isHTMLForm(c) {
+		displayName := "NeoForge"
+		if target == "fabric" {
+			displayName = "Fabric"
+		}
+		setFlash(c, "ok", fmt.Sprintf("Switched active engine to %s — pod is starting.", displayName))
+		return c.Redirect("/minecraft/mods?loader="+target, fiber.StatusSeeOther)
+	}
+
+	return c.JSON(fiber.Map{"ok": true, "loader": target})
 }

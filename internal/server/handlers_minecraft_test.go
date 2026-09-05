@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -47,6 +48,11 @@ func TestMinecraftEndpoints(t *testing.T) {
 		cm("minecraft-neoforge-configs", map[string]string{
 			"test.toml": "key = \"val\"\n",
 		}),
+		cm("minecraft-fabric-mods", map[string]string{
+			"MINECRAFT_VERSION": "1.21.1",
+			"FABRIC_VERSION":    "latest",
+			"mods.txt":          "fabric-api\nlithium\n",
+		}),
 	)
 
 	s := &FiberServer{
@@ -69,7 +75,14 @@ func TestMinecraftEndpoints(t *testing.T) {
 			method:     fiber.MethodGet,
 			path:       "/minecraft/mods",
 			wantStatus: fiber.StatusOK,
-			wantBody:   "Minecraft NeoForge",
+			wantBody:   "Minecraft neoforge",
+		},
+		{
+			name:       "minecraft fabric mods page",
+			method:     fiber.MethodGet,
+			path:       "/minecraft/mods?loader=fabric",
+			wantStatus: fiber.StatusOK,
+			wantBody:   "Minecraft fabric",
 		},
 		{
 			name:       "minecraft access page",
@@ -290,3 +303,184 @@ func TestMinecraftWhitelistToggle(t *testing.T) {
 		t.Fatalf("location = %q, want /minecraft/access", loc)
 	}
 }
+
+func TestMinecraftLoaderSwitch(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	r1 := int32(1)
+	r0 := int32(0)
+	cs := fake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "minecraft-neoforge", Namespace: "minecraft-modded"},
+			Spec:       appsv1.DeploymentSpec{Replicas: &r1},
+		},
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "minecraft-fabric", Namespace: "minecraft-modded"},
+			Spec:       appsv1.DeploymentSpec{Replicas: &r0},
+		},
+	)
+
+	s := &FiberServer{
+		App: fiber.New(),
+		cfg: &config.Config{
+			MinecraftNamespace:  "minecraft-modded",
+			MinecraftDeployment: "minecraft-neoforge",
+			FabricDeployment:    "minecraft-fabric",
+		},
+		store: st,
+		mck8s: k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-neoforge"),
+	}
+	s.RegisterFiberRoutes()
+
+	// 1. Invalid target returns 400
+	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/loader/switch", strings.NewReader("target=forge"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+
+	// 2. Switch to fabric
+	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/loader/switch", strings.NewReader("target=fabric"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err = s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	// Verify fabric deployment scaled to 1 and neoforge scaled to 0
+	active, err := s.mck8s.ActiveLoader(req.Context(), "minecraft-neoforge", "minecraft-fabric")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active != "fabric" {
+		t.Fatalf("active loader = %s, want fabric", active)
+	}
+
+	// 3. Switch back to neoforge via HTML form
+	formReq := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/loader/switch", strings.NewReader("target=neoforge"))
+	formReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	formReq.Header.Set("Accept", "text/html")
+	resp, err = s.App.Test(formReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("status = %d, want 303 redirect", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/minecraft/mods?loader=neoforge" {
+		t.Fatalf("location = %q, want /minecraft/mods?loader=neoforge", loc)
+	}
+}
+
+func TestMinecraftFabricExportEndpoint(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// Mock Modrinth API server
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasPrefix(path, "/project/fabric-api/version") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[
+				{
+					"version_number": "0.100.0",
+					"files": [
+						{
+							"filename": "fabric-api-0.100.0.jar",
+							"primary": true,
+							"size": 2048,
+							"url": "https://cdn.modrinth.com/data/fabric-api.jar",
+							"hashes": {"sha1": "abc", "sha512": "def"}
+						}
+					]
+				}
+			]`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ts.Close()
+
+	cm := func(name string, data map[string]string) *corev1.ConfigMap {
+		return &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "minecraft-modded"},
+			Data:       data,
+		}
+	}
+	cs := fake.NewSimpleClientset(
+		cm("minecraft-fabric-mods", map[string]string{
+			"MINECRAFT_VERSION": "1.21.1",
+			"FABRIC_VERSION":    "0.16.5",
+			"mods.txt":          "fabric-api\n",
+		}),
+		cm("minecraft-fabric-configs", map[string]string{
+			"fabric.json": "{\"test\": true}\n",
+		}),
+	)
+
+	s := &FiberServer{
+		App: fiber.New(),
+		cfg: &config.Config{
+			MinecraftNamespace:  "minecraft-modded",
+			MinecraftDeployment: "minecraft-neoforge",
+			FabricDeployment:    "minecraft-fabric",
+		},
+		store: st,
+		mck8s: k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-neoforge"),
+		mr:    modrinth.New(ts.URL),
+	}
+	s.RegisterFiberRoutes()
+
+	req := httptest.NewRequest(fiber.MethodGet, "/minecraft/mods/export?loader=fabric", nil)
+	resp, err := s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/x-modrinth-modpack+zip" {
+		t.Fatalf("content-type = %s, want application/x-modrinth-modpack+zip", ct)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("read zip: %v", err)
+	}
+
+	var foundIndex, foundConfig bool
+	for _, f := range zr.File {
+		if f.Name == "modrinth.index.json" {
+			foundIndex = true
+		}
+		if f.Name == "overrides/config/fabric.json" {
+			foundConfig = true
+		}
+	}
+
+	if !foundIndex {
+		t.Errorf("modrinth.index.json missing from fabric mrpack")
+	}
+	if !foundConfig {
+		t.Errorf("overrides/config/fabric.json missing from fabric mrpack")
+	}
+}
+

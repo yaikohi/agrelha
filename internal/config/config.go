@@ -34,12 +34,14 @@ type Config struct {
 	ValheimStatusURL  string
 	BackupsDir        string
 
-	// Minecraft NeoForge
+	// Minecraft Modded (NeoForge & Fabric)
 	MinecraftModsPath     string
+	FabricModsPath        string
 	MinecraftAccessPath   string
 	MinecraftConfigsPath  string
 	MinecraftNamespace    string
 	MinecraftDeployment   string
+	FabricDeployment      string
 	MinecraftRconAddr     string
 	MinecraftRconPassword string
 	ModrinthAPI           string
@@ -85,12 +87,14 @@ func Load() *Config {
 		ValheimStatusURL:  env("VALHEIM_STATUS_URL", ""),
 		BackupsDir:        env("BACKUPS_DIR", ""),
 
-		MinecraftModsPath:     env("MINECRAFT_MODS_PATH", "manifests/neoforge-mods.yaml"),
-		MinecraftAccessPath:   env("MINECRAFT_ACCESS_PATH", "manifests/neoforge-access.yaml"),
-		MinecraftConfigsPath:  env("MINECRAFT_CONFIGS_PATH", "manifests/neoforge-configs.yaml"),
-		MinecraftNamespace:    env("MINECRAFT_NAMESPACE", "minecraft-neoforge"),
+		MinecraftModsPath:     env("MINECRAFT_MODS_PATH", "manifests/minecraft-modded-neoforge-mods.yaml"),
+		FabricModsPath:        env("FABRIC_MODS_PATH", "manifests/minecraft-modded-fabric-mods.yaml"),
+		MinecraftAccessPath:   env("MINECRAFT_ACCESS_PATH", "manifests/minecraft-modded-access.yaml"),
+		MinecraftConfigsPath:  env("MINECRAFT_CONFIGS_PATH", "manifests/minecraft-modded-configs.yaml"),
+		MinecraftNamespace:    env("MINECRAFT_NAMESPACE", "minecraft-modded"),
 		MinecraftDeployment:   env("MINECRAFT_DEPLOYMENT", "minecraft-neoforge"),
-		MinecraftRconAddr:     env("MINECRAFT_RCON_ADDR", "minecraft-neoforge.minecraft-neoforge.svc.cluster.local:25575"),
+		FabricDeployment:      env("FABRIC_DEPLOYMENT", "minecraft-fabric"),
+		MinecraftRconAddr:     env("MINECRAFT_RCON_ADDR", "minecraft-modded.minecraft-modded.svc.cluster.local:25575"),
 		MinecraftRconPassword: env("MINECRAFT_RCON_PASSWORD", ""),
 		ModrinthAPI:           env("MODRINTH_API", "https://api.modrinth.com/v2"),
 

@@ -16,9 +16,10 @@ import (
 )
 
 type Client struct {
-	cs         kubernetes.Interface
-	namespace  string
-	deployment string
+	cs            kubernetes.Interface
+	namespace     string
+	deployment    string
+	altDeployment string
 }
 
 func New(namespace, deployment string) (*Client, error) {
@@ -37,31 +38,52 @@ func NewWithClientset(cs kubernetes.Interface, namespace, deployment string) *Cl
 	return &Client{cs: cs, namespace: namespace, deployment: deployment}
 }
 
-// Restart triggers a rolling restart by stamping the pod template annotation,
-// exactly like `kubectl rollout restart`.
+// SetAltDeployment configures an alternate deployment (e.g. fabric vs neoforge) in the same namespace.
+func (c *Client) SetAltDeployment(alt string) {
+	c.altDeployment = alt
+}
+
+func (c *Client) activeDeploymentName(ctx context.Context) string {
+	if c.altDeployment == "" {
+		return c.deployment
+	}
+	if d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, c.altDeployment, metav1.GetOptions{}); err == nil {
+		if (d.Spec.Replicas != nil && *d.Spec.Replicas > 0) || d.Status.ReadyReplicas > 0 {
+			return c.altDeployment
+		}
+	}
+	return c.deployment
+}
+
+// Restart triggers a rolling restart of the active deployment.
 func (c *Client) Restart(ctx context.Context) error {
+	return c.RestartDeployment(ctx, c.activeDeploymentName(ctx))
+}
+
+// RestartDeployment triggers a rolling restart of a specific deployment by name.
+func (c *Client) RestartDeployment(ctx context.Context, depName string) error {
+	if depName == "" {
+		depName = c.activeDeploymentName(ctx)
+	}
 	patch := fmt.Sprintf(
 		`{"spec":{"template":{"metadata":{"annotations":{"agrelha.ykhi.xyz/restartedAt":%q}}}}}`,
 		time.Now().UTC().Format(time.RFC3339),
 	)
 	_, err := c.cs.AppsV1().Deployments(c.namespace).Patch(
-		ctx, c.deployment, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{},
+		ctx, depName, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{},
 	)
 	return err
 }
 
-// Scale sets the replica count (Stop = 0, Start = 1).
+// Scale sets the replica count of the active deployment.
 func (c *Client) Scale(ctx context.Context, replicas int32) error {
-	patch := fmt.Sprintf(`{"spec":{"replicas":%d}}`, replicas)
-	_, err := c.cs.AppsV1().Deployments(c.namespace).Patch(
-		ctx, c.deployment, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{},
-	)
-	return err
+	return c.ScaleDeployment(ctx, c.activeDeploymentName(ctx), replicas)
 }
 
-// Replicas reports desired/ready replica counts for the status tiles.
+// Replicas reports desired/ready replica counts for the active deployment.
 func (c *Client) Replicas(ctx context.Context) (desired, ready int32, err error) {
-	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, c.deployment, metav1.GetOptions{})
+	dep := c.activeDeploymentName(ctx)
+	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, dep, metav1.GetOptions{})
 	if err != nil {
 		return 0, 0, err
 	}

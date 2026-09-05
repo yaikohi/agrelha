@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"agrelha/internal/modrinth"
@@ -24,7 +25,7 @@ func (m *mockModrinth) GetProject(ctx context.Context, idOrSlug string) (*modrin
 	return nil, fmt.Errorf("project not found: %s", idOrSlug)
 }
 
-func (m *mockModrinth) GetProjectVersions(ctx context.Context, idOrSlug, mcVersion string) ([]modrinth.Version, error) {
+func (m *mockModrinth) GetProjectVersions(ctx context.Context, idOrSlug, mcVersion, loader string) ([]modrinth.Version, error) {
 	if v, ok := m.versions[idOrSlug]; ok {
 		return v, nil
 	}
@@ -74,12 +75,12 @@ func TestBuildMrpack(t *testing.T) {
 					Files: []modrinth.VersionFile{
 						{
 							FileName: "ferritecore-7.0.0-neoforge.jar",
-							URL:      "https://cdn.modrinth.com/data/xyz/ferritecore.jar",
+							URL:      "https://cdn.modrinth.com/data/ferrite/versions/xyz/fc.jar",
 							Primary:  true,
 							Size:     654321,
 							Hashes: map[string]string{
-								"sha1":   "fchash123",
-								"sha512": "fchash512",
+								"sha1":   "hash456",
+								"sha512": "hash512xyz",
 							},
 						},
 					},
@@ -95,7 +96,7 @@ func TestBuildMrpack(t *testing.T) {
 
 	slugs := []string{"jei", "luckperms", "ferrite-core"}
 
-	zipBytes, err := BuildMrpack(context.Background(), mock, "TestPack", "1.21.1", "21.1.249", slugs, configs)
+	zipBytes, err := BuildMrpack(context.Background(), mock, "TestPack", "1.21.1", "neoforge", "21.1.249", slugs, configs)
 	if err != nil {
 		t.Fatalf("BuildMrpack failed: %v", err)
 	}
@@ -156,3 +157,241 @@ func TestBuildMrpack(t *testing.T) {
 		t.Errorf("overrides/config/mod.toml content mismatch")
 	}
 }
+
+func TestBuildMrpackFabric(t *testing.T) {
+	mock := &mockModrinth{
+		projects: map[string]*modrinth.Project{
+			"fabric-api": {
+				Slug:       "fabric-api",
+				ClientSide: "optional",
+				ServerSide: "optional",
+			},
+		},
+		versions: map[string][]modrinth.Version{
+			"fabric-api": {
+				{
+					VersionNum: "0.100.0",
+					Files: []modrinth.VersionFile{
+						{
+							FileName: "fabric-api-0.100.0.jar",
+							URL:      "https://cdn.modrinth.com/data/fabric/api.jar",
+							Primary:  true,
+							Size:     100000,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	zipBytes, err := BuildMrpack(context.Background(), mock, "FabricPack", "1.21.1", "fabric", "latest", []string{"fabric-api"}, nil)
+	if err != nil {
+		t.Fatalf("BuildMrpack failed: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		t.Fatalf("invalid zip: %v", err)
+	}
+
+	var foundIndex bool
+	for _, f := range zr.File {
+		if f.Name == "modrinth.index.json" {
+			foundIndex = true
+			rc, _ := f.Open()
+			var idx MrpackIndex
+			_ = json.NewDecoder(rc).Decode(&idx)
+			rc.Close()
+			if idx.Dependencies["fabric-loader"] != "0.16.10" {
+				t.Errorf("fabric-loader version = %s, want 0.16.10", idx.Dependencies["fabric-loader"])
+			}
+			if idx.Dependencies["minecraft"] != "1.21.1" {
+				t.Errorf("minecraft version = %s, want 1.21.1", idx.Dependencies["minecraft"])
+			}
+		}
+	}
+	if !foundIndex {
+		t.Fatal("missing modrinth.index.json")
+	}
+}
+
+func TestResolveNeoForgeVersion(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		mcVersion  string
+		requested  string
+		wantPrefix string
+	}{
+		{"1.20.1", "latest", "47.1."},
+		{"1.20.1", "", "47.1."},
+		{"1.20.4", "latest", "20.4."},
+		{"1.20.6", "latest", "20.6."},
+		{"1.21.1", "latest", "21.1."},
+		{"1.21.1", "21.1.100", "21.1.100"}, // explicit requested version preserved
+	}
+
+	for _, tt := range tests {
+		got := ResolveNeoForgeVersion(ctx, tt.mcVersion, tt.requested)
+		if !strings.HasPrefix(got, tt.wantPrefix) {
+			t.Errorf("ResolveNeoForgeVersion(%q, %q) = %q, want prefix %q", tt.mcVersion, tt.requested, got, tt.wantPrefix)
+		}
+	}
+}
+
+type mockBatchModrinth struct {
+	mockModrinth
+}
+
+func (m *mockBatchModrinth) GetProjects(ctx context.Context, idsOrSlugs []string) ([]modrinth.Project, error) {
+	var out []modrinth.Project
+	for _, id := range idsOrSlugs {
+		if p, ok := m.projects[id]; ok {
+			out = append(out, *p)
+		}
+	}
+	return out, nil
+}
+
+func TestBuildMrpackWithReportAndBatch(t *testing.T) {
+	mock := &mockBatchModrinth{
+		mockModrinth: mockModrinth{
+			projects: map[string]*modrinth.Project{
+				"jei": {
+					Slug:       "jei",
+					ClientSide: "optional",
+					ServerSide: "optional",
+				},
+				"luckperms": {
+					Slug:       "luckperms",
+					ClientSide: "unsupported", // Server-only
+					ServerSide: "required",
+				},
+			},
+			versions: map[string][]modrinth.Version{
+				"jei": {
+					{
+						VersionNum: "19.21.0.246",
+						Files: []modrinth.VersionFile{
+							{
+								FileName: "jei-1.20.1-neoforge-19.21.0.246.jar",
+								URL:      "https://cdn.modrinth.com/data/jei.jar",
+								Primary:  true,
+								Size:     123456,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	slugs := []string{"jei", "luckperms", "nonexistent-curseforge-mod"}
+
+	zipBytes, err := BuildMrpack(context.Background(), mock, "Test120Pack", "1.20.1", "neoforge", "latest", slugs, nil)
+	if err != nil {
+		t.Fatalf("BuildMrpack failed: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		t.Fatalf("invalid zip: %v", err)
+	}
+
+	var foundIndex, foundReport bool
+	for _, f := range zr.File {
+		if f.Name == "modrinth.index.json" {
+			foundIndex = true
+			rc, _ := f.Open()
+			var idx MrpackIndex
+			_ = json.NewDecoder(rc).Decode(&idx)
+			rc.Close()
+
+			if idx.Dependencies["neoforge"] != "47.1.106" {
+				t.Errorf("expected neoforge 47.1.106 for MC 1.20.1, got %s", idx.Dependencies["neoforge"])
+			}
+			if len(idx.Files) != 1 {
+				t.Errorf("expected 1 file (jei), got %d", len(idx.Files))
+			}
+		}
+		if f.Name == "overrides/MOD_EXPORT_REPORT.txt" {
+			foundReport = true
+			rc, _ := f.Open()
+			b, _ := io.ReadAll(rc)
+			rc.Close()
+			content := string(b)
+			if !strings.Contains(content, "luckperms") {
+				t.Errorf("report should mention luckperms as server-only")
+			}
+			if !strings.Contains(content, "nonexistent-curseforge-mod") {
+		}
+	}
+	}
+
+	if !foundIndex {
+		t.Error("modrinth.index.json not found")
+	}
+	if !foundReport {
+		t.Error("overrides/MOD_EXPORT_REPORT.txt not found")
+	}
+}
+
+func TestBuildMrpackLiveSample(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live Modrinth test in short mode")
+	}
+
+	mr := modrinth.New("")
+	slugs := []string{
+		"enchantment-descriptions",
+		"xaeros-minimap",
+		"curios",
+		"aether",
+		"create",
+		"entityculling", // was failing before (only forge tagged)
+		"placebo",
+		"sodium",
+		"spark", // server-only mod
+	}
+
+	zipBytes, err := BuildMrpack(context.Background(), mr, "LiveTestPack", "1.20.1", "neoforge", "latest", slugs, nil)
+	if err != nil {
+		t.Fatalf("BuildMrpack failed: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		t.Fatalf("invalid zip: %v", err)
+	}
+
+	var foundIndex, foundReport bool
+	for _, f := range zr.File {
+		if f.Name == "modrinth.index.json" {
+			foundIndex = true
+			rc, _ := f.Open()
+			var idx MrpackIndex
+			_ = json.NewDecoder(rc).Decode(&idx)
+			rc.Close()
+
+			if idx.Dependencies["neoforge"] != "47.1.106" {
+				t.Errorf("expected neoforge 47.1.106, got %s", idx.Dependencies["neoforge"])
+			}
+			t.Logf("Exported %d client mod files", len(idx.Files))
+		}
+		if f.Name == "overrides/MOD_EXPORT_REPORT.txt" {
+			foundReport = true
+			rc, _ := f.Open()
+			b, _ := io.ReadAll(rc)
+			rc.Close()
+			t.Logf("Export report:\n%s", string(b))
+		}
+	}
+
+	if !foundIndex || !foundReport {
+		t.Errorf("missing index or report: index=%v, report=%v", foundIndex, foundReport)
+	}
+}
+
+
+
+

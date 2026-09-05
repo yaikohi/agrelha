@@ -160,7 +160,7 @@ func (s *FiberServer) sseLogs(c *fiber.Ctx) error {
 func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 	sig := map[string]any{
 		"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "backup": "—", "backupinfo": "",
-		"mc_players": "—", "mc_cpu": "—", "mc_mem": "—", "mc_uptime": "—", "mc_state": "unknown",
+		"mc_players": "—", "mc_cpu": "—", "mc_mem": "—", "mc_uptime": "—", "mc_state": "unknown", "mc_loader": "NeoForge",
 	}
 
 	if s.store != nil {
@@ -189,6 +189,12 @@ func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 		if cpu, mem, err := s.k8s.PodMetrics(ctx); err == nil {
 			sig["cpu"] = fmt.Sprintf("%dm", cpu)
 			sig["mem"] = fmt.Sprintf("%d Mi", mem)
+		}
+	}
+
+	if s.mck8s != nil {
+		if l, err := s.mck8s.ActiveLoader(ctx, s.cfg.MinecraftDeployment, s.cfg.FabricDeployment); err == nil && l == "fabric" {
+			sig["mc_loader"] = "Fabric"
 		}
 	}
 

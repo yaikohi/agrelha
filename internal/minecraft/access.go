@@ -182,11 +182,19 @@ func (a *AccessManager) WhitelistEnforced() (bool, error) {
 	if a.rcon == nil {
 		return false, fmt.Errorf("rcon client not configured")
 	}
-	res, err := a.rcon.Execute("/whitelist status")
+	// Modern Minecraft (1.13+) does not have "/whitelist status".
+	// Sending "/whitelist on" returns "Whitelist is already turned on" if on,
+	// or "Whitelist is now turned on" if off (in which case we immediately revert to off).
+	res, err := a.rcon.Execute("/whitelist on")
 	if err != nil {
 		return false, err
 	}
-	return strings.Contains(strings.ToLower(res), " on"), nil
+	if strings.Contains(strings.ToLower(res), "already") {
+		return true, nil
+	}
+	// It was off and just got turned on; revert back to off to preserve state.
+	_, _ = a.rcon.Execute("/whitelist off")
+	return false, nil
 }
 
 // SetWhitelistEnforced turns whitelist on or off in-game via RCON.

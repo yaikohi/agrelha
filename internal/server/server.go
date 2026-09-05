@@ -38,6 +38,7 @@ type FiberServer struct {
 	mr       *modrinth.Client
 	mpi      *modpackindex.Client
 	mcMods   *minecraft.ModManager
+	fabMods  *minecraft.ModManager
 	mcAccess *minecraft.AccessManager
 	mcRcon   *minecraft.RconClient
 	mck8s    *k8s.Client
@@ -96,6 +97,7 @@ func New(cfg *config.Config) *FiberServer {
 		s.mods = mods.New(committer, cfg.ModsPath)
 		s.admins = admins.New(committer, cfg.AdminsPath)
 		s.mcMods = minecraft.NewModManager(committer, cfg.MinecraftModsPath)
+		s.fabMods = minecraft.NewFabricModManager(committer, cfg.FabricModsPath)
 		s.mcAccess = minecraft.NewAccessManager(committer, cfg.MinecraftAccessPath, s.mcRcon)
 	} else {
 		slog.Warn("git token unset: declarative plane (mods/admins) disabled")
@@ -111,6 +113,9 @@ func New(cfg *config.Config) *FiberServer {
 	if mcK8s, err := k8s.New(cfg.MinecraftNamespace, cfg.MinecraftDeployment); err != nil {
 		slog.Warn("minecraft k8s client unavailable (dev?)", "err", err)
 	} else {
+		if cfg.FabricDeployment != "" {
+			mcK8s.SetAltDeployment(cfg.FabricDeployment)
+		}
 		s.mck8s = mcK8s
 	}
 
