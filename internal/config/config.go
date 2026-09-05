@@ -37,6 +37,7 @@ type Config struct {
 	// Minecraft NeoForge
 	MinecraftModsPath     string
 	MinecraftAccessPath   string
+	MinecraftConfigsPath  string
 	MinecraftNamespace    string
 	MinecraftDeployment   string
 	MinecraftRconAddr     string
@@ -86,6 +87,7 @@ func Load() *Config {
 
 		MinecraftModsPath:     env("MINECRAFT_MODS_PATH", "manifests/neoforge-mods.yaml"),
 		MinecraftAccessPath:   env("MINECRAFT_ACCESS_PATH", "manifests/neoforge-access.yaml"),
+		MinecraftConfigsPath:  env("MINECRAFT_CONFIGS_PATH", "manifests/neoforge-configs.yaml"),
 		MinecraftNamespace:    env("MINECRAFT_NAMESPACE", "minecraft-neoforge"),
 		MinecraftDeployment:   env("MINECRAFT_DEPLOYMENT", "minecraft-neoforge"),
 		MinecraftRconAddr:     env("MINECRAFT_RCON_ADDR", "minecraft-neoforge.minecraft-neoforge.svc.cluster.local:25575"),

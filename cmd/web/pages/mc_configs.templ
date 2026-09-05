@@ -1,0 +1,36 @@
+package pages
+
+templ MinecraftConfigs(files []string, enabled bool, flashKind, flashMsg string) {
+	@Layout("Minecraft Mod Configs") {
+		@nav()
+		<div class="mb-4 flex items-center justify-between">
+			<h1 class="text-2xl font-semibold">Minecraft Mod Configs</h1>
+			if enabled {
+				<a href="/minecraft/configs/new" class="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600">New file</a>
+			}
+		</div>
+		@flashBanner(flashKind, flashMsg)
+		if !enabled {
+			<p class="mb-4 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to edit mod configs.</p>
+		}
+		<p class="mb-6 text-xs text-zinc-500">Mod configuration files (<code class="rounded bg-zinc-800 px-1">.toml</code>, <code class="rounded bg-zinc-800 px-1">.json</code>, <code class="rounded bg-zinc-800 px-1">.yaml</code>, <code class="rounded bg-zinc-800 px-1">.cfg</code>) in the <code class="rounded bg-zinc-800 px-1">minecraft-neoforge-configs</code> ConfigMap. Git is the source of truth; files are synced to <code class="rounded bg-zinc-800 px-1">/data/config/</code> on server boot.</p>
+		if len(files) == 0 {
+			<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No custom mod configs yet. Mods will use their default settings unless overridden here.</p>
+		} else {
+			<ul class="divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900">
+				for _, f := range files {
+					<li class="flex items-center justify-between px-4 py-2.5 text-sm">
+						<a href={ templ.SafeURL("/minecraft/configs/edit?f=" + f) } class="font-mono text-xs hover:underline">{ f }</a>
+						<div class="flex items-center gap-2">
+							<a href={ templ.SafeURL("/minecraft/configs/edit?f=" + f) } class="rounded bg-zinc-700 px-3 py-1 text-xs hover:bg-zinc-600">Edit</a>
+							<form method="post" action="/minecraft/configs/delete" onsubmit="return confirm('Delete this config file?')">
+								<input type="hidden" name="file" value={ f }/>
+								<button class="rounded bg-red-800 px-3 py-1 text-xs hover:bg-red-700">Delete</button>
+							</form>
+						</div>
+					</li>
+				}
+			</ul>
+		}
+	}
+}

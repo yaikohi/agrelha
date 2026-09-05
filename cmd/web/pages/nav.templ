@@ -3,13 +3,23 @@ package pages
 templ nav() {
 	<nav class="mb-8 flex items-center gap-4 text-sm">
 		<a href="/" class="font-semibold text-zinc-100 hover:text-white">Agrelha</a>
-		<a href="/mods" class="relative text-zinc-400 hover:text-zinc-200">
-			Mods
-			<span data-show="$updates > 0 && !$updatePending" class="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-zinc-950"></span>
-			<span data-show="$updatePending" class="absolute -right-2 -top-1 h-2 w-2 animate-pulse rounded-full bg-amber-400 ring-2 ring-zinc-950"></span>
-		</a>
-		<a href="/configs" class="text-zinc-400 hover:text-zinc-200">Configs</a>
-		<a href="/admins" class="text-zinc-400 hover:text-zinc-200">Admins</a>
+		<span class="text-zinc-700">|</span>
+		<div class="flex items-center gap-2">
+			<a href="/mods" class="relative text-zinc-400 hover:text-zinc-200">
+				Valheim
+				<span data-show="$updates > 0 && !$updatePending" class="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-zinc-950"></span>
+				<span data-show="$updatePending" class="absolute -right-2 -top-1 h-2 w-2 animate-pulse rounded-full bg-amber-400 ring-2 ring-zinc-950"></span>
+			</a>
+			<a href="/configs" class="text-xs text-zinc-500 hover:text-zinc-300">configs</a>
+			<a href="/admins" class="text-xs text-zinc-500 hover:text-zinc-300">admins</a>
+		</div>
+		<span class="text-zinc-700">|</span>
+		<div class="flex items-center gap-2">
+			<a href="/minecraft/mods" class="text-zinc-400 hover:text-zinc-200">Minecraft NeoForge</a>
+			<a href="/minecraft/configs" class="text-xs text-zinc-500 hover:text-zinc-300">configs</a>
+			<a href="/minecraft/access" class="text-xs text-zinc-500 hover:text-zinc-300">access</a>
+		</div>
+		<span class="text-zinc-700">|</span>
 		<a href="/history" class="text-zinc-400 hover:text-zinc-200">History</a>
 		<div class="relative ml-auto flex items-center gap-4">
 			<button

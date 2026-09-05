@@ -105,3 +105,23 @@ func (m *ModManager) SetVersion(ctx context.Context, mcVersion, neoforgeVersion 
 	}
 	return changedMC, nil
 }
+
+// SwitchModpack replaces mods.txt with the mods from a modpack and optionally updates MINECRAFT_VERSION.
+func (m *ModManager) SwitchModpack(ctx context.Context, packName, mcVersion string, slugs []string) (bool, error) {
+	if mcVersion != "" {
+		_, _ = m.SetVersion(ctx, mcVersion, "recommended")
+	}
+
+	msg := fmt.Sprintf("mc-modpack: switch to %s (%d mods)", packName, len(slugs))
+	return m.committer.Patch(ctx, m.path, "mods.txt", msg, func(cur string) (string, error) {
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("# Modpack: %s\n", packName))
+		for _, s := range slugs {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				b.WriteString(s + "\n")
+			}
+		}
+		return b.String(), nil
+	})
+}

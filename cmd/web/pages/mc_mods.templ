@@ -1,0 +1,120 @@
+package pages
+
+import (
+	"fmt"
+	"strconv"
+)
+
+type ModpackUI struct {
+	ID            int
+	Name          string
+	Summary       string
+	ThumbnailURL  string
+	DownloadCount int64
+	PageURL       string
+}
+
+templ MinecraftMods(mcVersion, neoforgeVersion string, installedMods []string, modpacks []ModpackUI, enabled bool, flashKind, flashMsg string) {
+	@Layout("Minecraft Mods & Modpacks") {
+		@nav()
+		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+			<div>
+				<h1 class="text-2xl font-semibold">Minecraft NeoForge</h1>
+				<p class="text-sm text-zinc-400">Targeting Minecraft <span class="font-mono text-emerald-400">{ mcVersion }</span> ({ neoforgeVersion })</p>
+			</div>
+			<div class="flex items-center gap-2">
+				<form method="post" action="/api/minecraft/version/set" class="flex items-center gap-2 text-xs">
+					<input name="minecraft_version" value={ mcVersion } placeholder="1.21.1" class="w-20 rounded bg-zinc-900 px-2 py-1.5 font-mono"/>
+					<input name="neoforge_version" value={ neoforgeVersion } placeholder="recommended" class="w-28 rounded bg-zinc-900 px-2 py-1.5 font-mono"/>
+					<button class="rounded bg-zinc-700 px-3 py-1.5 hover:bg-zinc-600">Change Version</button>
+				</form>
+			</div>
+		</div>
+
+		@flashBanner(flashKind, flashMsg)
+
+		if !enabled {
+			<p class="mb-6 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to switch modpacks or install mods.</p>
+		}
+
+		<!-- Modpack Index Switcher -->
+		<section class="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/60 p-5">
+			<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+				<div>
+					<h2 class="text-lg font-medium text-zinc-100">Modpack Switcher</h2>
+					<p class="text-xs text-zinc-400">Discover and switch modpacks indexed from <a href="https://www.modpackindex.com" target="_blank" class="text-sky-400 hover:underline">Modpack Index</a>.</p>
+				</div>
+			</div>
+			<form method="get" action="/minecraft/mods" class="mb-4 flex gap-2">
+				<input name="pack_query" placeholder="search modpacks (e.g. All the Mods 10, ATM9, Cobblemon)…" class="w-full max-w-md rounded bg-zinc-950 px-3 py-2 text-sm text-zinc-200 border border-zinc-800 focus:border-zinc-600"/>
+				<button class="rounded bg-zinc-700 px-4 py-2 text-sm hover:bg-zinc-600">Search Packs</button>
+			</form>
+
+			if len(modpacks) > 0 {
+				<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+					for _, p := range modpacks {
+						<div class="flex flex-col justify-between rounded border border-zinc-800 bg-zinc-950 p-3">
+							<div class="flex gap-3">
+								if p.ThumbnailURL != "" {
+									<img src={ p.ThumbnailURL } class="h-12 w-12 rounded object-cover" loading="lazy"/>
+								} else {
+									<div class="h-12 w-12 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-500">Pack</div>
+								}
+								<div class="min-w-0 flex-1">
+									<h3 class="truncate text-sm font-medium text-zinc-200" title={ p.Name }>{ p.Name }</h3>
+									<p class="line-clamp-2 text-xs text-zinc-400">{ p.Summary }</p>
+									<span class="text-[10px] text-zinc-500">{ fmt.Sprintf("%d downloads", p.DownloadCount) }</span>
+								</div>
+							</div>
+							<div class="mt-3 flex items-center justify-between pt-2 border-t border-zinc-800/50">
+								if p.PageURL != "" {
+									<a href={ templ.SafeURL(p.PageURL) } target="_blank" class="text-xs text-zinc-500 hover:text-zinc-300">View details ↗</a>
+								}
+								<form method="post" action="/api/minecraft/modpacks/switch" onsubmit="return confirm('Switching modpack will replace installed mods with this pack. Continue?');">
+									<input type="hidden" name="modpack_id" value={ strconv.Itoa(p.ID) }/>
+									<button class="rounded bg-emerald-700 px-3 py-1 text-xs font-medium hover:bg-emerald-600">Switch to Pack</button>
+								</form>
+							</div>
+						</div>
+					}
+				</div>
+			}
+		</section>
+
+		<!-- Individual Mod Installation (Modrinth) -->
+		<section class="mb-8">
+			<h2 class="mb-2 text-sm font-medium text-zinc-400">Install Individual Mod (Modrinth)</h2>
+			<form method="post" action="/api/minecraft/mods/install" class="flex flex-wrap items-center gap-2 text-sm">
+				<input name="slug" placeholder="Modrinth slug (e.g. jei, journeymap, ferrite-core)" class="w-80 rounded bg-zinc-900 px-3 py-2 border border-zinc-800 focus:border-zinc-600"/>
+				<input type="hidden" name="version" value={ mcVersion }/>
+				<button class="rounded bg-emerald-700 px-4 py-2 hover:bg-emerald-600 font-medium">Install + Dependencies</button>
+			</form>
+		</section>
+
+		<!-- Installed Mods List -->
+		<section>
+			<div class="mb-3 flex items-center justify-between">
+				<h2 class="text-sm font-medium text-zinc-400">Installed Mods ({ strconv.Itoa(len(installedMods)) })</h2>
+			</div>
+			if len(installedMods) == 0 {
+				<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No mods installed yet. Search for a modpack above or install individual mods.</p>
+			} else {
+				<ul class="divide-y divide-zinc-800 rounded border border-zinc-800 bg-zinc-900/80 overflow-hidden">
+					for _, mod := range installedMods {
+						<li class="flex items-center justify-between px-4 py-2.5 text-sm">
+							<div class="flex items-center gap-3">
+								<span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+								<span class="font-mono text-zinc-200">{ mod }</span>
+								<a href={ templ.SafeURL("https://modrinth.com/mod/" + mod) } target="_blank" class="text-xs text-zinc-500 hover:text-sky-400">modrinth ↗</a>
+							</div>
+							<form method="post" action="/api/minecraft/mods/remove">
+								<input type="hidden" name="slug" value={ mod }/>
+								<button class="rounded bg-red-900/60 px-2.5 py-1 text-xs text-red-200 hover:bg-red-800">Remove</button>
+							</form>
+						</li>
+					}
+				</ul>
+			}
+		</section>
+	}
+}

@@ -1,0 +1,86 @@
+package pages
+
+import "strconv"
+
+templ MinecraftAccess(ops []string, whitelist []string, onlinePlayers []string, enabled bool, flashKind, flashMsg string) {
+	@Layout("Minecraft Access") {
+		@nav()
+		<h1 class="mb-6 text-2xl font-semibold">Minecraft Access Management</h1>
+		@flashBanner(flashKind, flashMsg)
+
+		if !enabled {
+			<p class="mb-6 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to manage ops or whitelist.</p>
+		}
+
+		<div class="grid grid-cols-1 gap-8 md:grid-cols-2">
+			<!-- Server Operators (Ops) -->
+			<section class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-5">
+				<div class="mb-4">
+					<h2 class="text-lg font-medium text-zinc-100">Server Operators ({ strconv.Itoa(len(ops)) })</h2>
+					<p class="text-xs text-zinc-400">Operators hold in-game level-4 admin permissions. Synced live via RCON and stored in Git.</p>
+				</div>
+				<form method="post" action="/api/minecraft/access/op" class="mb-4 flex gap-2">
+					<input name="username" placeholder="Mojang username…" class="w-full rounded bg-zinc-950 px-3 py-2 text-sm border border-zinc-800 focus:border-zinc-600"/>
+					<button class="shrink-0 rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Op Player</button>
+				</form>
+				<ul class="divide-y divide-zinc-800 rounded border border-zinc-800 bg-zinc-950 overflow-hidden">
+					if len(ops) == 0 {
+						<li class="px-4 py-3 text-xs text-zinc-500">No server operators defined.</li>
+					}
+					for _, op := range ops {
+						<li class="flex items-center justify-between px-4 py-2.5 text-sm">
+							<span class="font-mono text-zinc-200">{ op }</span>
+							<form method="post" action="/api/minecraft/access/deop">
+								<input type="hidden" name="username" value={ op }/>
+								<button class="rounded bg-red-900/60 px-2.5 py-1 text-xs text-red-200 hover:bg-red-800">Deop</button>
+							</form>
+						</li>
+					}
+				</ul>
+			</section>
+
+			<!-- Whitelist -->
+			<section class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-5">
+				<div class="mb-4">
+					<h2 class="text-lg font-medium text-zinc-100">Whitelist ({ strconv.Itoa(len(whitelist)) })</h2>
+					<p class="text-xs text-zinc-400">Players permitted to connect. Synced live via RCON and stored in Git.</p>
+				</div>
+				<form method="post" action="/api/minecraft/access/whitelist/add" class="mb-4 flex gap-2">
+					<input name="username" placeholder="Mojang username…" class="w-full rounded bg-zinc-950 px-3 py-2 text-sm border border-zinc-800 focus:border-zinc-600"/>
+					<button class="shrink-0 rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Add to Whitelist</button>
+				</form>
+				<ul class="divide-y divide-zinc-800 rounded border border-zinc-800 bg-zinc-950 overflow-hidden">
+					if len(whitelist) == 0 {
+						<li class="px-4 py-3 text-xs text-zinc-500">Whitelist is empty.</li>
+					}
+					for _, user := range whitelist {
+						<li class="flex items-center justify-between px-4 py-2.5 text-sm">
+							<span class="font-mono text-zinc-200">{ user }</span>
+							<form method="post" action="/api/minecraft/access/whitelist/remove">
+								<input type="hidden" name="username" value={ user }/>
+								<button class="rounded bg-red-900/60 px-2.5 py-1 text-xs text-red-200 hover:bg-red-800">Remove</button>
+							</form>
+						</li>
+					}
+				</ul>
+			</section>
+		</div>
+
+		<!-- Online Players -->
+		<section class="mt-8">
+			<h2 class="mb-3 text-sm font-medium text-zinc-400">Online Players Now ({ strconv.Itoa(len(onlinePlayers)) })</h2>
+			if len(onlinePlayers) == 0 {
+				<p class="rounded bg-zinc-900 p-4 text-xs text-zinc-500">No players currently connected to the server.</p>
+			} else {
+				<div class="flex flex-wrap gap-3">
+					for _, player := range onlinePlayers {
+						<div class="flex items-center gap-2.5 rounded bg-zinc-900 px-3 py-2 border border-zinc-800">
+							<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+							<span class="font-mono text-sm text-zinc-200">{ player }</span>
+						</div>
+					}
+				</div>
+			}
+		</section>
+	}
+}

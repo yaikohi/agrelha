@@ -56,6 +56,22 @@ func HistoryLabel(kind string) string {
 		return "Admin granted"
 	case "admin-revoke":
 		return "Admin revoked"
+	case "mc-mod-install":
+		return "Minecraft: Mod installed"
+	case "mc-mod-remove":
+		return "Minecraft: Mod removed"
+	case "mc-modpack-switch":
+		return "Minecraft: Modpack switched"
+	case "mc-version-set":
+		return "Minecraft: Version changed"
+	case "mc-op-grant":
+		return "Minecraft: Op granted"
+	case "mc-op-revoke":
+		return "Minecraft: Op revoked"
+	case "mc-whitelist-add":
+		return "Minecraft: Whitelist added"
+	case "mc-whitelist-remove":
+		return "Minecraft: Whitelist removed"
 	case "join":
 		return "Player joined"
 	case "leave":

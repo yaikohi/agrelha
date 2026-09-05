@@ -1,0 +1,44 @@
+package pages
+
+templ MinecraftConfigEdit(name, content string, isNew, enabled bool) {
+	@Layout("Edit Minecraft Config") {
+		@nav()
+		<div class="mb-6 flex items-center gap-3">
+			<a href="/minecraft/configs" class="text-sm text-zinc-400 hover:text-zinc-200">← Minecraft Configs</a>
+			<h1 class="text-2xl font-semibold">
+				if isNew {
+					New Minecraft Config File
+				} else {
+					<span class="font-mono text-xl">{ name }</span>
+				}
+			</h1>
+		</div>
+		if !enabled {
+			<p class="mb-4 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to save.</p>
+		}
+		<form method="post" action="/minecraft/configs/save" class="space-y-4">
+			if isNew {
+				<div>
+					<label class="mb-1 block text-xs text-zinc-400">File name (.toml, .json, .yaml, .cfg)</label>
+					<input name="file" placeholder="jei-server.ini or mod.toml" class="w-80 rounded bg-zinc-900 px-3 py-2 font-mono text-sm border border-zinc-800 focus:border-zinc-600"/>
+				</div>
+			} else {
+				<input type="hidden" name="file" value={ name }/>
+			}
+			<div>
+				<label class="mb-1 block text-xs text-zinc-400">Contents</label>
+				<textarea name="content" spellcheck="false" rows="24" class="w-full rounded border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs text-zinc-200">{ content }</textarea>
+			</div>
+			<div class="flex items-center gap-3">
+				<button class="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600">Save &amp; apply on restart</button>
+				<a href="/minecraft/configs" class="rounded border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-800">Cancel</a>
+			</div>
+		</form>
+		if !isNew {
+			<form method="post" action="/minecraft/configs/delete" class="mt-4" onsubmit="return confirm('Delete this config file?')">
+				<input type="hidden" name="file" value={ name }/>
+				<button class="rounded bg-red-800 px-4 py-2 text-sm hover:bg-red-700">Delete file</button>
+			</form>
+		}
+	}
+}

@@ -4,37 +4,96 @@ templ Dashboard(grafanaURL, flashKind, flashMsg string) {
 	@Layout("Agrelha") {
 		@nav()
 		@flashBanner(flashKind, flashMsg)
-		<div>
-			<section class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-				@tile("Players", "players")
-				@tile("CPU", "cpu")
-				@tile("Memory", "mem")
-				@tile("Uptime", "uptime")
-			</section>
-			<section class="mt-4 text-sm text-zinc-400">
-				Last backup: <span class="text-zinc-200" data-text="$backup"></span>
-				<span class="ml-2 text-zinc-600" data-text="$backupinfo"></span>
-			</section>
-			<section class="mt-6 flex flex-wrap gap-3">
-				<button type="button" data-on:click="@post('/server/restart')" class="rounded bg-amber-600 px-4 py-2 text-sm font-medium hover:bg-amber-500">Restart</button>
-				<button type="button" data-on:click="@post('/server/update')" title="Restarts the server — the image installs any Valheim update on boot" class="rounded bg-sky-700 px-4 py-2 text-sm font-medium hover:bg-sky-600">Update</button>
-				<button type="button" data-on:click="@post('/server/stop')" class="rounded bg-red-700 px-4 py-2 text-sm font-medium hover:bg-red-600">Stop</button>
-				<button type="button" data-on:click="@post('/server/start')" class="rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Start</button>
-				if grafanaURL != "" {
-					<a href={ templ.SafeURL(grafanaURL) } target="_blank" class="ml-auto rounded border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-800">Full metrics in Grafana ↗</a>
-				}
-			</section>
-			<section class="mt-8" data-effect="@get('/sse/logs')">
-				<h2 class="mb-2 text-sm font-medium text-zinc-400">Logs</h2>
-				<pre id="logs" class="h-72 overflow-auto rounded bg-black/60 p-4 font-mono text-xs text-zinc-300"></pre>
+		<div class="space-y-8">
+			<!-- Game Servers Grid -->
+			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+				<!-- Valheim Dedicated Card -->
+				<div class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-5 flex flex-col justify-between">
+					<div>
+						<div class="flex items-center justify-between pb-3 border-b border-zinc-800">
+							<div class="flex items-center gap-2.5">
+								<span class="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+								<h2 class="text-lg font-semibold text-zinc-100">Valheim Dedicated</h2>
+							</div>
+							<span class="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400 font-mono">game-01</span>
+						</div>
+						<div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+							@tile("Players", "players")
+							@tile("CPU", "cpu")
+							@tile("Memory", "mem")
+							@tile("Uptime", "uptime")
+						</div>
+						<div class="mt-3 text-xs text-zinc-500">
+							Last backup: <span class="text-zinc-300" data-text="$backup"></span>
+							<span class="ml-1 text-zinc-600" data-text="$backupinfo"></span>
+						</div>
+					</div>
+					<div class="mt-5 flex flex-wrap items-center gap-2 pt-4 border-t border-zinc-800/60">
+						<button type="button" data-on:click="@post('/server/restart')" class="rounded bg-amber-600/90 px-3 py-1.5 text-xs font-medium hover:bg-amber-500">Restart</button>
+						<button type="button" data-on:click="@post('/server/update')" title="Restarts the server — updates on boot" class="rounded bg-sky-700 px-3 py-1.5 text-xs font-medium hover:bg-sky-600">Update</button>
+						<button type="button" data-on:click="@post('/server/stop')" class="rounded bg-red-800/80 px-3 py-1.5 text-xs font-medium hover:bg-red-700">Stop</button>
+						<button type="button" data-on:click="@post('/server/start')" class="rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium hover:bg-emerald-600">Start</button>
+						<a href="/mods" class="ml-auto rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Manage Mods →</a>
+					</div>
+				</div>
+
+				<!-- Minecraft NeoForge Card -->
+				<div class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-5 flex flex-col justify-between">
+					<div>
+						<div class="flex items-center justify-between pb-3 border-b border-zinc-800">
+							<div class="flex items-center gap-2.5">
+								<span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+								<h2 class="text-lg font-semibold text-zinc-100">Minecraft NeoForge</h2>
+							</div>
+							<span class="rounded bg-emerald-950/80 border border-emerald-800/40 px-2 py-0.5 text-xs text-emerald-400 font-mono">nf.ykhi.xyz</span>
+						</div>
+						<div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+							<div class="rounded bg-zinc-950 p-3 border border-zinc-800/50">
+								<div class="text-[10px] uppercase tracking-wide text-zinc-500">Engine</div>
+								<div class="mt-1 text-sm font-semibold text-zinc-200">NeoForge</div>
+							</div>
+							<div class="rounded bg-zinc-950 p-3 border border-zinc-800/50">
+								<div class="text-[10px] uppercase tracking-wide text-zinc-500">MC Version</div>
+								<div class="mt-1 text-sm font-semibold text-emerald-400">1.21.1</div>
+							</div>
+							<div class="rounded bg-zinc-950 p-3 border border-zinc-800/50">
+								<div class="text-[10px] uppercase tracking-wide text-zinc-500">RAM Allocated</div>
+								<div class="mt-1 text-sm font-semibold text-zinc-200">12 GB</div>
+							</div>
+							<div class="rounded bg-zinc-950 p-3 border border-zinc-800/50">
+								<div class="text-[10px] uppercase tracking-wide text-zinc-500">Node</div>
+								<div class="mt-1 text-sm font-semibold text-zinc-200">game-01</div>
+							</div>
+						</div>
+						<div class="mt-3 text-xs text-zinc-500">
+							Modpack support: Modpack Index + Modrinth API enabled.
+						</div>
+					</div>
+					<div class="mt-5 flex flex-wrap items-center gap-2 pt-4 border-t border-zinc-800/60">
+						<a href="/minecraft/mods" class="rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium hover:bg-emerald-600">Mods & Modpack Switcher →</a>
+						<a href="/minecraft/configs" class="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Configs →</a>
+						<a href="/minecraft/access" class="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Ops & Whitelist →</a>
+						if grafanaURL != "" {
+							<a href={ templ.SafeURL(grafanaURL) } target="_blank" class="ml-auto text-xs text-zinc-500 hover:text-zinc-300">Grafana ↗</a>
+						}
+					</div>
+				</div>
+			</div>
+
+			<!-- Live Logs Section -->
+			<section data-effect="@get('/sse/logs')">
+				<div class="mb-2 flex items-center justify-between">
+					<h2 class="text-sm font-medium text-zinc-400">Live Server Logs</h2>
+				</div>
+				<pre id="logs" class="h-64 overflow-auto rounded bg-black/60 p-4 font-mono text-xs text-zinc-300"></pre>
 			</section>
 		</div>
 	}
 }
 
 templ tile(label, signal string) {
-	<div class="rounded-lg bg-zinc-900 p-4">
-		<div class="text-xs uppercase tracking-wide text-zinc-500">{ label }</div>
-		<div class="mt-1 text-2xl font-semibold" data-text={ "$" + signal }></div>
+	<div class="rounded bg-zinc-950 p-3 border border-zinc-800/50">
+		<div class="text-[10px] uppercase tracking-wide text-zinc-500">{ label }</div>
+		<div class="mt-1 text-xl font-semibold" data-text={ "$" + signal }></div>
 	</div>
 }

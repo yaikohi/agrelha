@@ -43,3 +43,38 @@ func (s *FiberServer) applyAfterSync(cmName, key string, want func(string) bool)
 		}
 	}()
 }
+
+// applyMinecraftAfterSync waits for ArgoCD to reconcile a committed ConfigMap
+// in the minecraft-neoforge namespace, then rolls the minecraft pod.
+func (s *FiberServer) applyMinecraftAfterSync(cmName, key string, want func(string) bool) {
+	if s.mck8s == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		t := time.NewTicker(10 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				slog.Warn("applyMinecraftAfterSync: timed out waiting for ArgoCD sync", "configmap", cmName)
+				return
+			case <-t.C:
+				data, err := s.mck8s.ConfigMapData(ctx, cmName)
+				if err != nil {
+					continue
+				}
+				if want(data[key]) {
+					if err := s.mck8s.Restart(ctx); err != nil {
+						slog.Error("applyMinecraftAfterSync: restart failed", "configmap", cmName, "err", err)
+						return
+					}
+					slog.Info("applyMinecraftAfterSync: change landed, rolled minecraft-neoforge", "configmap", cmName)
+					_ = s.store.RecordEvent("mc-auto-restart", cmName)
+					return
+				}
+			}
+		}
+	}()
+}

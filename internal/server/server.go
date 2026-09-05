@@ -17,6 +17,7 @@ import (
 	"agrelha/internal/ingest"
 	"agrelha/internal/k8s"
 	"agrelha/internal/minecraft"
+	"agrelha/internal/modpackindex"
 	"agrelha/internal/modrinth"
 	"agrelha/internal/mods"
 	"agrelha/internal/store"
@@ -35,9 +36,11 @@ type FiberServer struct {
 	git      *gitops.Committer
 	ts       *thunderstore.Client
 	mr       *modrinth.Client
+	mpi      *modpackindex.Client
 	mcMods   *minecraft.ModManager
 	mcAccess *minecraft.AccessManager
 	mcRcon   *minecraft.RconClient
+	mck8s    *k8s.Client
 
 	bkMu   sync.Mutex
 	bkInfo backups.Info
@@ -78,6 +81,7 @@ func New(cfg *config.Config) *FiberServer {
 	go s.ts.WarmLoop(context.Background())
 
 	s.mr = modrinth.New(cfg.ModrinthAPI)
+	s.mpi = modpackindex.New("")
 	if cfg.MinecraftRconPassword != "" {
 		s.mcRcon = minecraft.NewRconClient(cfg.MinecraftRconAddr, cfg.MinecraftRconPassword, 3*time.Second)
 	}
@@ -102,6 +106,12 @@ func New(cfg *config.Config) *FiberServer {
 	} else {
 		s.k8s = c
 		go ingest.Run(context.Background(), c, st)
+	}
+
+	if mcK8s, err := k8s.New(cfg.MinecraftNamespace, cfg.MinecraftDeployment); err != nil {
+		slog.Warn("minecraft k8s client unavailable (dev?)", "err", err)
+	} else {
+		s.mck8s = mcK8s
 	}
 
 	if cfg.OIDCIssuer != "" {
