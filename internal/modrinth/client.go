@@ -55,19 +55,21 @@ type SearchResponse struct {
 }
 
 type Project struct {
-	ID          string   `json:"id"`
-	Slug        string   `json:"slug"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Body        string   `json:"body"`
-	IconURL     string   `json:"icon_url"`
-	SourceURL   string   `json:"source_url"`
-	IssuesURL   string   `json:"issues_url"`
-	WikiURL     string   `json:"wiki_url"`
-	Categories  []string `json:"categories"`
-	Loaders     []string `json:"loaders"`
+	ID           string   `json:"id"`
+	Slug         string   `json:"slug"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	Body         string   `json:"body"`
+	IconURL      string   `json:"icon_url"`
+	SourceURL    string   `json:"source_url"`
+	IssuesURL    string   `json:"issues_url"`
+	WikiURL      string   `json:"wiki_url"`
+	Categories   []string `json:"categories"`
+	Loaders      []string `json:"loaders"`
 	GameVersions []string `json:"game_versions"`
-	Downloads   int      `json:"downloads"`
+	ClientSide   string   `json:"client_side"` // "required", "optional", "unsupported"
+	ServerSide   string   `json:"server_side"` // "required", "optional", "unsupported"
+	Downloads    int      `json:"downloads"`
 }
 
 type VersionDependency struct {
@@ -78,10 +80,11 @@ type VersionDependency struct {
 }
 
 type VersionFile struct {
-	URL      string `json:"url"`
-	FileName string `json:"filename"`
-	Primary  bool   `json:"primary"`
-	Size     int64  `json:"size"`
+	Hashes   map[string]string `json:"hashes"` // "sha1", "sha512"
+	URL      string            `json:"url"`
+	FileName string            `json:"filename"`
+	Primary  bool              `json:"primary"`
+	Size     int64             `json:"size"`
 }
 
 type Version struct {

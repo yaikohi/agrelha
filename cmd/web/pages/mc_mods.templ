@@ -33,6 +33,15 @@ templ MinecraftMods(mcVersion, neoforgeVersion string, installedMods []string, m
 
 		@flashBanner(flashKind, flashMsg)
 
+		<!-- Client Modpack Export Banner (Prism Launcher) -->
+		<div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded border border-emerald-800/50 bg-emerald-950/30 px-4 py-3">
+			<div class="min-w-0 flex-1">
+				<p class="text-sm font-medium text-emerald-100">Prism Launcher Client Modpack</p>
+				<p class="text-xs text-emerald-200/70">Export and share with players — import directly into Prism Launcher (Add Instance → Import from zip) to automatically install NeoForge, download client-compatible mods, and sync configs.</p>
+			</div>
+			<a href="/minecraft/mods/export" class="shrink-0 rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600" title="Download a Prism Launcher compatible Modrinth pack (.mrpack) of installed client mods and configs">Export for Prism (.mrpack)</a>
+		</div>
+
 		if !enabled {
 			<p class="mb-6 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to switch modpacks or install mods.</p>
 		}

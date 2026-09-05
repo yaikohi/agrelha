@@ -5,11 +5,13 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/cmd/web/pages"
 	"agrelha/internal/minecraft"
+	"agrelha/internal/modpack"
 )
 
 func isHTMLForm(c *fiber.Ctx) bool {
@@ -577,4 +579,56 @@ func (s *FiberServer) mcModpackSwitch(c *fiber.Ctx) error {
 		"minecraft_version": targetMCVersion,
 		"mods_count":        len(slugs),
 	})
+}
+
+// mcModpackExport generates a Prism Launcher compatible Modrinth modpack (.mrpack)
+// for the installed Minecraft NeoForge mods, excluding server-only mods.
+func (s *FiberServer) mcModpackExport(c *fiber.Ctx) error {
+	if s.mck8s == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "minecraft k8s client not available")
+	}
+	if s.mr == nil {
+		return fiber.NewError(fiber.StatusServiceUnavailable, "modrinth client not available")
+	}
+	ctx := c.UserContext()
+
+	data, err := s.mck8s.ConfigMapData(ctx, "minecraft-neoforge-mods")
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "read minecraft-neoforge-mods: "+err.Error())
+	}
+
+	mcVer := strings.TrimSpace(data["MINECRAFT_VERSION"])
+	if mcVer == "" {
+		mcVer = "1.21.1"
+	}
+	nfVer := strings.TrimSpace(data["NEOFORGE_VERSION"])
+	if nfVer == "" {
+		nfVer = "recommended"
+	}
+
+	slugs := minecraft.ParseMods(data["mods.txt"])
+	if len(slugs) == 0 {
+		setFlash(c, "err", "No mods are installed — nothing to export.")
+		return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
+	}
+
+	configs := map[string]string{}
+	if cfgData, err := s.mck8s.ConfigMapData(ctx, mcConfigsCM); err == nil {
+		for k, v := range cfgData {
+			configs[k] = v
+		}
+	}
+
+	packName := "Minecraft NeoForge"
+	blob, err := modpack.BuildMrpack(ctx, s.mr, packName, mcVer, nfVer, slugs, configs)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "build mrpack: "+err.Error())
+	}
+
+	_ = s.store.RecordAudit(s.actor(c), "mc-modpack-export", fmt.Sprintf("mc=%s, nf=%s, mods=%d", mcVer, nfVer, len(slugs)))
+
+	filename := fmt.Sprintf("minecraft-neoforge-client-%s.mrpack", time.Now().Format("2006-01-02"))
+	c.Set("Content-Type", "application/x-modrinth-modpack+zip")
+	c.Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	return c.Send(blob)
 }

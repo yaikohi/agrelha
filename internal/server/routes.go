@@ -70,6 +70,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	// --- Minecraft NeoForge routes ---
 	app.Get("/minecraft/mods", s.mcModsPage)
+	app.Get("/minecraft/mods/export", s.mcModpackExport)
 	app.Get("/minecraft/access", s.mcAccessPage)
 	app.Get("/minecraft/configs", s.mcConfigsPage)
 	app.Get("/minecraft/configs/new", s.mcConfigNew)
