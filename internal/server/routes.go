@@ -67,6 +67,17 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Get("/admins", s.adminsPage)
 	app.Post("/admins/grant", s.adminsGrant)
 	app.Post("/admins/revoke", s.adminsRevoke)
+
+	// --- Minecraft NeoForge routes ---
+	app.Get("/api/minecraft/mods/search", s.mcModsSearch)
+	app.Post("/api/minecraft/mods/install", s.mcModsInstall)
+	app.Post("/api/minecraft/mods/remove", s.mcModsRemove)
+	app.Post("/api/minecraft/version/set", s.mcVersionSet)
+	app.Post("/api/minecraft/access/op", s.mcAccessGrantOp)
+	app.Post("/api/minecraft/access/deop", s.mcAccessRevokeOp)
+	app.Post("/api/minecraft/access/whitelist/add", s.mcAccessAddWhitelist)
+	app.Post("/api/minecraft/access/whitelist/remove", s.mcAccessRemoveWhitelist)
+	app.Get("/api/minecraft/players", s.mcOnlinePlayers)
 }
 
 func (s *FiberServer) actor(c *fiber.Ctx) string {

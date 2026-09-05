@@ -34,6 +34,15 @@ type Config struct {
 	ValheimStatusURL  string
 	BackupsDir        string
 
+	// Minecraft NeoForge
+	MinecraftModsPath     string
+	MinecraftAccessPath   string
+	MinecraftNamespace    string
+	MinecraftDeployment   string
+	MinecraftRconAddr     string
+	MinecraftRconPassword string
+	ModrinthAPI           string
+
 	// Observability
 	InfluxDBURL         string
 	GrafanaDashboardURL string
@@ -74,6 +83,14 @@ func Load() *Config {
 		ValheimDeployment: env("VALHEIM_DEPLOYMENT", "valheim"),
 		ValheimStatusURL:  env("VALHEIM_STATUS_URL", ""),
 		BackupsDir:        env("BACKUPS_DIR", ""),
+
+		MinecraftModsPath:     env("MINECRAFT_MODS_PATH", "manifests/neoforge-mods.yaml"),
+		MinecraftAccessPath:   env("MINECRAFT_ACCESS_PATH", "manifests/neoforge-access.yaml"),
+		MinecraftNamespace:    env("MINECRAFT_NAMESPACE", "minecraft-neoforge"),
+		MinecraftDeployment:   env("MINECRAFT_DEPLOYMENT", "minecraft-neoforge"),
+		MinecraftRconAddr:     env("MINECRAFT_RCON_ADDR", "minecraft-neoforge.minecraft-neoforge.svc.cluster.local:25575"),
+		MinecraftRconPassword: env("MINECRAFT_RCON_PASSWORD", ""),
+		ModrinthAPI:           env("MODRINTH_API", "https://api.modrinth.com/v2"),
 
 		InfluxDBURL:         env("INFLUXDB_URL", ""),
 		GrafanaDashboardURL: env("GRAFANA_DASHBOARD_URL", ""),

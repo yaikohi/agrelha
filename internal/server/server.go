@@ -16,6 +16,8 @@ import (
 	"agrelha/internal/gitops"
 	"agrelha/internal/ingest"
 	"agrelha/internal/k8s"
+	"agrelha/internal/minecraft"
+	"agrelha/internal/modrinth"
 	"agrelha/internal/mods"
 	"agrelha/internal/store"
 	"agrelha/internal/thunderstore"
@@ -24,14 +26,18 @@ import (
 type FiberServer struct {
 	*fiber.App
 
-	cfg    *config.Config
-	store  *store.Store
-	k8s    *k8s.Client
-	auth   *auth.Authenticator
-	mods   *mods.Manager
-	admins *admins.Manager
-	git    *gitops.Committer
-	ts     *thunderstore.Client
+	cfg      *config.Config
+	store    *store.Store
+	k8s      *k8s.Client
+	auth     *auth.Authenticator
+	mods     *mods.Manager
+	admins   *admins.Manager
+	git      *gitops.Committer
+	ts       *thunderstore.Client
+	mr       *modrinth.Client
+	mcMods   *minecraft.ModManager
+	mcAccess *minecraft.AccessManager
+	mcRcon   *minecraft.RconClient
 
 	bkMu   sync.Mutex
 	bkInfo backups.Info
@@ -71,6 +77,11 @@ func New(cfg *config.Config) *FiberServer {
 	}
 	go s.ts.WarmLoop(context.Background())
 
+	s.mr = modrinth.New(cfg.ModrinthAPI)
+	if cfg.MinecraftRconPassword != "" {
+		s.mcRcon = minecraft.NewRconClient(cfg.MinecraftRconAddr, cfg.MinecraftRconPassword, 3*time.Second)
+	}
+
 	if cfg.GitToken != "" {
 		committer := &gitops.Committer{
 			RepoURL: cfg.GitRepoURL, Branch: cfg.GitBranch,
@@ -80,6 +91,8 @@ func New(cfg *config.Config) *FiberServer {
 		s.git = committer
 		s.mods = mods.New(committer, cfg.ModsPath)
 		s.admins = admins.New(committer, cfg.AdminsPath)
+		s.mcMods = minecraft.NewModManager(committer, cfg.MinecraftModsPath)
+		s.mcAccess = minecraft.NewAccessManager(committer, cfg.MinecraftAccessPath, s.mcRcon)
 	} else {
 		slog.Warn("git token unset: declarative plane (mods/admins) disabled")
 	}
