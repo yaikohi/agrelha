@@ -86,6 +86,9 @@ func (m *ModManager) Uninstall(ctx context.Context, slug string) (bool, error) {
 
 // SetVersion updates MINECRAFT_VERSION and NEOFORGE_VERSION in neoforge-mods.yaml.
 func (m *ModManager) SetVersion(ctx context.Context, mcVersion, neoforgeVersion string) (bool, error) {
+	if neoforgeVersion == "" || neoforgeVersion == "recommended" {
+		neoforgeVersion = "latest"
+	}
 	msg := fmt.Sprintf("mc-server: set MC=%s NeoForge=%s", mcVersion, neoforgeVersion)
 	changedMC, err := m.committer.Patch(ctx, m.path, "MINECRAFT_VERSION", msg, func(cur string) (string, error) {
 		return strings.TrimSpace(mcVersion), nil
@@ -109,7 +112,7 @@ func (m *ModManager) SetVersion(ctx context.Context, mcVersion, neoforgeVersion 
 // SwitchModpack replaces mods.txt with the mods from a modpack and optionally updates MINECRAFT_VERSION.
 func (m *ModManager) SwitchModpack(ctx context.Context, packName, mcVersion string, slugs []string) (bool, error) {
 	if mcVersion != "" {
-		_, _ = m.SetVersion(ctx, mcVersion, "recommended")
+		_, _ = m.SetVersion(ctx, mcVersion, "latest")
 	}
 
 	msg := fmt.Sprintf("mc-modpack: switch to %s (%d mods)", packName, len(slugs))

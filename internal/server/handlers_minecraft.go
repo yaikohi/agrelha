@@ -22,7 +22,7 @@ func isHTMLForm(c *fiber.Ctx) bool {
 // mcModsPage renders the Minecraft mods, versions, and modpacks page.
 func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
 	mcVer := "1.21.1"
-	nfVer := "recommended"
+	nfVer := "latest"
 	var installedMods []string
 
 	if s.mck8s != nil {
@@ -297,8 +297,8 @@ func (s *FiberServer) mcVersionSet(c *fiber.Ctx) error {
 		}
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "minecraft_version is required"})
 	}
-	if nfVer == "" {
-		nfVer = "recommended"
+	if nfVer == "" || nfVer == "recommended" {
+		nfVer = "latest"
 	}
 
 	changed, err := s.mcMods.SetVersion(c.UserContext(), mcVer, nfVer)
