@@ -2,7 +2,16 @@ package pages
 
 import "strconv"
 
-templ MinecraftAccess(ops []string, whitelist []string, onlinePlayers []string, enabled bool, flashKind, flashMsg string) {
+func containsUser(list []string, item string) bool {
+	for _, s := range list {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+templ MinecraftAccess(ops []string, whitelist []string, onlinePlayers []string, whitelistEnforced bool, enabled bool, flashKind, flashMsg string) {
 	@Layout("Minecraft Access") {
 		@nav()
 		<h1 class="mb-6 text-2xl font-semibold">Minecraft Access Management</h1>
@@ -11,6 +20,34 @@ templ MinecraftAccess(ops []string, whitelist []string, onlinePlayers []string, 
 		if !enabled {
 			<p class="mb-6 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to manage ops or whitelist.</p>
 		}
+
+		<!-- Whitelist Enforcement Control -->
+		<div class="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-900/60 p-5">
+			<div>
+				<div class="flex items-center gap-3">
+					<h2 class="text-base font-medium text-zinc-100">Whitelist Enforcement</h2>
+					if whitelistEnforced {
+						<span class="rounded bg-emerald-950 border border-emerald-800 px-2.5 py-0.5 text-xs font-medium text-emerald-400">ACTIVE (Enforced)</span>
+					} else {
+						<span class="rounded bg-amber-950 border border-amber-800 px-2.5 py-0.5 text-xs font-medium text-amber-400">DISABLED (Public)</span>
+					}
+				</div>
+				<p class="mt-1 text-xs text-zinc-400">
+					if whitelistEnforced {
+						Only players in the whitelist are permitted to join. Non-whitelisted players are rejected.
+					} else {
+						Whitelist is currently inactive in-game — any player with the server address can join.
+					}
+				</p>
+			</div>
+			<form method="post" action="/api/minecraft/access/whitelist/toggle">
+				if whitelistEnforced {
+					<button class="rounded bg-amber-700 px-4 py-2 text-xs font-medium hover:bg-amber-600 text-white">Disable Whitelist</button>
+				} else {
+					<button class="rounded bg-emerald-700 px-4 py-2 text-xs font-medium hover:bg-emerald-600 text-white">Enforce Whitelist</button>
+				}
+			</form>
+		</div>
 
 		<div class="grid grid-cols-1 gap-8 md:grid-cols-2">
 			<!-- Server Operators (Ops) -->
@@ -74,9 +111,29 @@ templ MinecraftAccess(ops []string, whitelist []string, onlinePlayers []string, 
 			} else {
 				<div class="flex flex-wrap gap-3">
 					for _, player := range onlinePlayers {
-						<div class="flex items-center gap-2.5 rounded bg-zinc-900 px-3 py-2 border border-zinc-800">
-							<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-							<span class="font-mono text-sm text-zinc-200">{ player }</span>
+						<div class="flex items-center gap-3 rounded bg-zinc-900 px-3.5 py-2 border border-zinc-800">
+							<div class="flex items-center gap-2">
+								<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+								<span class="font-mono text-sm text-zinc-200">{ player }</span>
+							</div>
+							<div class="flex items-center gap-1.5 border-l border-zinc-800 pl-3">
+								if containsUser(ops, player) {
+									<span class="rounded bg-amber-950/80 border border-amber-800/40 px-2 py-0.5 text-[10px] text-amber-400 font-mono">OP</span>
+								} else {
+									<form method="post" action="/api/minecraft/access/op" class="inline">
+										<input type="hidden" name="username" value={ player }/>
+										<button class="rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-1 text-[11px] text-zinc-300">Make Op</button>
+									</form>
+								}
+								if containsUser(whitelist, player) {
+									<span class="rounded bg-emerald-950/80 border border-emerald-800/40 px-2 py-0.5 text-[10px] text-emerald-400 font-mono">Whitelisted</span>
+								} else {
+									<form method="post" action="/api/minecraft/access/whitelist/add" class="inline">
+										<input type="hidden" name="username" value={ player }/>
+										<button class="rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-1 text-[11px] text-zinc-300">Whitelist</button>
+									</form>
+								}
+							</div>
 						</div>
 					}
 				</div>

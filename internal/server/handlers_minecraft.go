@@ -37,14 +37,28 @@ func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
 		}
 	}
 
+	tab := c.Query("tab", "modpacks")
+	if tab != "modpacks" && tab != "mods" {
+		tab = "modpacks"
+	}
+
+	packQ := strings.TrimSpace(c.Query("q"))
+	if packQ == "" {
+		packQ = strings.TrimSpace(c.Query("pack_query"))
+	}
+	filterVer := strings.TrimSpace(c.Query("filter_version"))
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+
 	var modpacksUI []pages.ModpackUI
+	currentPage := 1
+	totalPages := 1
+	totalPacks := 0
+
 	if s.mpi != nil {
-		q := c.Query("q", "")
-		page, _ := strconv.Atoi(c.Query("page", "1"))
-		if page < 1 {
-			page = 1
-		}
-		res, err := s.mpi.SearchModpacks(c.UserContext(), q, mcVer, page)
+		res, err := s.mpi.SearchModpacks(c.UserContext(), packQ, filterVer, page)
 		if err == nil && res != nil {
 			for _, p := range res.Data {
 				modpacksUI = append(modpacksUI, pages.ModpackUI{
@@ -56,11 +70,53 @@ func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
 					PageURL:       p.URL,
 				})
 			}
+			if res.Meta.CurrentPage > 0 {
+				currentPage = res.Meta.CurrentPage
+			}
+			if res.Meta.LastPage > 0 {
+				totalPages = res.Meta.LastPage
+			}
+			totalPacks = res.Meta.Total
+		}
+	}
+
+	modQ := strings.TrimSpace(c.Query("mod_q"))
+	var modsUI []pages.ModUI
+	if tab == "mods" && s.mr != nil {
+		installedSet := make(map[string]bool, len(installedMods))
+		for _, m := range installedMods {
+			installedSet[m] = true
+		}
+		mrRes, err := s.mr.Search(c.UserContext(), modQ, mcVer, 24, 0)
+		if err == nil && mrRes != nil {
+			for _, hit := range mrRes.Hits {
+				modsUI = append(modsUI, pages.ModUI{
+					Slug:        hit.Slug,
+					Title:       hit.Title,
+					Description: hit.Description,
+					IconURL:     hit.IconURL,
+					Downloads:   hit.Downloads,
+					Author:      hit.Author,
+					Installed:   installedSet[hit.Slug],
+				})
+			}
 		}
 	}
 
 	fk, fm := takeFlash(c)
-	return render(c, pages.MinecraftMods(mcVer, nfVer, installedMods, modpacksUI, s.git != nil, fk, fm))
+	return render(c, pages.MinecraftMods(
+		mcVer, nfVer,
+		installedMods,
+		tab,
+		modpacksUI,
+		packQ,
+		filterVer,
+		currentPage, totalPages, totalPacks,
+		modsUI,
+		modQ,
+		s.git != nil,
+		fk, fm,
+	))
 }
 
 // mcAccessPage renders the server operators, whitelist, and live players page.
@@ -76,14 +132,18 @@ func (s *FiberServer) mcAccessPage(c *fiber.Ctx) error {
 	}
 
 	var onlinePlayers []string
+	whitelistEnforced := false
 	if s.mcAccess != nil {
 		if pl, err := s.mcAccess.OnlinePlayers(); err == nil {
 			onlinePlayers = pl
 		}
+		if enf, err := s.mcAccess.WhitelistEnforced(); err == nil {
+			whitelistEnforced = enf
+		}
 	}
 
 	fk, fm := takeFlash(c)
-	return render(c, pages.MinecraftAccess(ops, whitelist, onlinePlayers, s.git != nil, fk, fm))
+	return render(c, pages.MinecraftAccess(ops, whitelist, onlinePlayers, whitelistEnforced, s.git != nil, fk, fm))
 }
 
 // mcModsSearch handles searching Modrinth for NeoForge mods.
@@ -431,6 +491,47 @@ func (s *FiberServer) mcAccessRemoveWhitelist(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"ok": true, "changed": changed, "user": user})
+}
+
+// mcAccessWhitelistToggle toggles in-game whitelist enforcement via RCON.
+func (s *FiberServer) mcAccessWhitelistToggle(c *fiber.Ctx) error {
+	if s.mcAccess == nil {
+		if isHTMLForm(c) {
+			setFlash(c, "err", "Access manager unconfigured")
+			return c.Redirect("/minecraft/access", fiber.StatusSeeOther)
+		}
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Access manager unconfigured"})
+	}
+
+	current, err := s.mcAccess.WhitelistEnforced()
+	if err != nil {
+		if isHTMLForm(c) {
+			setFlash(c, "err", "Failed to query whitelist status: "+err.Error())
+			return c.Redirect("/minecraft/access", fiber.StatusSeeOther)
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	target := !current
+	if err := s.mcAccess.SetWhitelistEnforced(target); err != nil {
+		if isHTMLForm(c) {
+			setFlash(c, "err", "Failed to toggle whitelist: "+err.Error())
+			return c.Redirect("/minecraft/access", fiber.StatusSeeOther)
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	actionDesc := "enabled"
+	if !target {
+		actionDesc = "disabled"
+	}
+	_ = s.store.RecordAudit(s.actor(c), "mc-whitelist-toggle", actionDesc)
+
+	if isHTMLForm(c) {
+		setFlash(c, "ok", fmt.Sprintf("Whitelist enforcement %s via live RCON.", actionDesc))
+		return c.Redirect("/minecraft/access", fiber.StatusSeeOther)
+	}
+	return c.JSON(fiber.Map{"ok": true, "enforced": target})
 }
 
 // mcOnlinePlayers queries live online players via RCON.

@@ -16,7 +16,7 @@ func (s *Store) ListHistory(limit int) ([]HistoryEntry, error) {
 		FROM audit
 		UNION ALL
 		SELECT at, 'event' AS source, kind AS kind, '' AS actor, COALESCE(detail,'') AS detail
-		FROM events WHERE kind NOT IN ('restart','stop','start')
+		FROM events WHERE kind NOT IN ('restart','stop','start','mc-restart','mc-stop','mc-start')
 		ORDER BY at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err

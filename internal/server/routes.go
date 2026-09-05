@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -86,10 +87,15 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/api/minecraft/access/deop", s.mcAccessRevokeOp)
 	app.Post("/api/minecraft/access/whitelist/add", s.mcAccessAddWhitelist)
 	app.Post("/api/minecraft/access/whitelist/remove", s.mcAccessRemoveWhitelist)
+	app.Post("/api/minecraft/access/whitelist/toggle", s.mcAccessWhitelistToggle)
 	app.Get("/api/minecraft/players", s.mcOnlinePlayers)
 	app.Get("/api/minecraft/modpacks/search", s.mcModpacksSearch)
 	app.Get("/api/minecraft/modpacks/:id", s.mcModpackGet)
 	app.Post("/api/minecraft/modpacks/switch", s.mcModpackSwitch)
+
+	app.Post("/minecraft/server/restart", s.guardMC("mc-restart", "Minecraft restart triggered — server is rolling.", func(ctx context.Context) error { return s.mck8s.Restart(ctx) }))
+	app.Post("/minecraft/server/stop", s.guardMC("mc-stop", "Stopping Minecraft server — scaling to 0.", func(ctx context.Context) error { return s.mck8s.Scale(ctx, 0) }))
+	app.Post("/minecraft/server/start", s.guardMC("mc-start", "Starting Minecraft server — scaling to 1.", func(ctx context.Context) error { return s.mck8s.Scale(ctx, 1) }))
 }
 
 func (s *FiberServer) actor(c *fiber.Ctx) string {
@@ -109,6 +115,26 @@ func (s *FiberServer) guard(action, okMsg string, fn func(context.Context) error
 		defer cancel()
 		if err := fn(ctx); err != nil {
 			metrics.ControlActions.WithLabelValues(action, "error").Inc()
+			return sseToast(c, "err", action+" failed: "+err.Error(), nil)
+		}
+		metrics.ControlActions.WithLabelValues(action, "ok").Inc()
+		_ = s.store.RecordAudit(s.actor(c), action, "")
+		_ = s.store.RecordEvent(action, s.actor(c))
+		return sseToast(c, "ok", okMsg, nil)
+	}
+}
+
+func (s *FiberServer) guardMC(action, okMsg string, fn func(context.Context) error) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if s.mck8s == nil {
+			metrics.ControlActions.WithLabelValues(action, "disabled").Inc()
+			return sseToast(c, "err", "Minecraft imperative plane disabled — no cluster access.", nil)
+		}
+		ctx, cancel := context.WithTimeout(c.UserContext(), 15*time.Second)
+		defer cancel()
+		if err := fn(ctx); err != nil {
+			metrics.ControlActions.WithLabelValues(action, "error").Inc()
+			slog.Error("minecraft control action failed", "action", action, "err", err)
 			return sseToast(c, "err", action+" failed: "+err.Error(), nil)
 		}
 		metrics.ControlActions.WithLabelValues(action, "ok").Inc()

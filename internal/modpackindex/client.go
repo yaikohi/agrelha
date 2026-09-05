@@ -131,22 +131,43 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
+// KnownMCVersionIDs maps common NeoForge-compatible Minecraft versions to Modpack Index version IDs.
+var KnownMCVersionIDs = map[string]int{
+	"1.21.1": 91,
+	"1.21":   90,
+	"1.20.6": 89,
+	"1.20.4": 87,
+	"1.20.2": 85,
+	"1.20.1": 84,
+}
+
 // SearchModpacks queries modpacks by name and optional minecraft_version.
 func (c *Client) SearchModpacks(ctx context.Context, query, mcVersion string, page int) (*SearchResponse, error) {
 	if page <= 0 {
 		page = 1
 	}
-	params := url.Values{}
+
+	var endpoint string
 	if query != "" {
+		params := url.Values{}
 		params.Set("name", query)
+		params.Set("page", fmt.Sprintf("%d", page))
+		endpoint = "/modpacks?" + params.Encode()
+	} else if mcVersion != "" {
+		if vID, ok := KnownMCVersionIDs[mcVersion]; ok {
+			endpoint = fmt.Sprintf("/minecraft/version/%d/modpacks?page=%d", vID, page)
+		} else {
+			params := url.Values{}
+			params.Set("page", fmt.Sprintf("%d", page))
+			endpoint = "/modpacks?" + params.Encode()
+		}
+	} else {
+		params := url.Values{}
+		params.Set("page", fmt.Sprintf("%d", page))
+		endpoint = "/modpacks?" + params.Encode()
 	}
-	if mcVersion != "" {
-		params.Set("minecraft_version", mcVersion)
-	}
-	params.Set("page", fmt.Sprintf("%d", page))
 
 	var res SearchResponse
-	endpoint := "/modpacks?" + params.Encode()
 	if err := c.getJSON(ctx, endpoint, &res); err != nil {
 		return nil, fmt.Errorf("modpackindex search: %w", err)
 	}

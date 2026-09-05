@@ -99,6 +99,27 @@ func TestMinecraftEndpoints(t *testing.T) {
 			wantStatus: fiber.StatusOK,
 			wantBody:   "test.toml",
 		},
+		{
+			name:       "minecraft mods page modpacks tab",
+			method:     fiber.MethodGet,
+			path:       "/minecraft/mods?tab=modpacks",
+			wantStatus: fiber.StatusOK,
+			wantBody:   "Modpack Switcher",
+		},
+		{
+			name:       "minecraft mods page individual mods tab",
+			method:     fiber.MethodGet,
+			path:       "/minecraft/mods?tab=mods",
+			wantStatus: fiber.StatusOK,
+			wantBody:   "Modrinth Mod Discovery",
+		},
+		{
+			name:       "minecraft access page whitelist enforcement",
+			method:     fiber.MethodGet,
+			path:       "/minecraft/access",
+			wantStatus: fiber.StatusOK,
+			wantBody:   "Whitelist Enforcement",
+		},
 	}
 
 	for _, tt := range tests {
@@ -229,5 +250,43 @@ func TestMinecraftModpackExportEndpoint(t *testing.T) {
 	}
 	if !foundConfig {
 		t.Errorf("overrides/config/jei-client.ini missing from mrpack")
+	}
+}
+
+func TestMinecraftWhitelistToggle(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	s := &FiberServer{
+		App:   fiber.New(),
+		cfg:   &config.Config{},
+		store: st,
+	}
+	s.RegisterFiberRoutes()
+
+	// 1. Without mcAccess configured, API returns 503
+	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodPost, "/api/minecraft/access/whitelist/toggle", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", resp.StatusCode)
+	}
+
+	// 2. HTML form redirect when unconfigured
+	formReq := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
+	formReq.Header.Set("Accept", "text/html")
+	resp, err = s.App.Test(formReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("status = %d, want 303 redirect", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/minecraft/access" {
+		t.Fatalf("location = %q, want /minecraft/access", loc)
 	}
 }

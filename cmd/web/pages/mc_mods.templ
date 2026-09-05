@@ -14,7 +14,46 @@ type ModpackUI struct {
 	PageURL       string
 }
 
-templ MinecraftMods(mcVersion, neoforgeVersion string, installedMods []string, modpacks []ModpackUI, enabled bool, flashKind, flashMsg string) {
+type ModUI struct {
+	Slug        string
+	Title       string
+	Description string
+	IconURL     string
+	Downloads   int
+	Author      string
+	Installed   bool
+}
+
+func formatDownloads(n int64) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
+	if n >= 1_000 {
+		return fmt.Sprintf("%.1fk", float64(n)/1_000)
+	}
+	return strconv.FormatInt(n, 10)
+}
+
+func tabStyle(active bool) string {
+	if active {
+		return "border-emerald-500 text-emerald-400 font-semibold"
+	}
+	return "border-transparent text-zinc-400 hover:text-zinc-200"
+}
+
+templ MinecraftMods(
+	mcVersion, neoforgeVersion string,
+	installedMods []string,
+	activeTab string,
+	modpacks []ModpackUI,
+	packQuery string,
+	filterVersion string,
+	currentPage, totalPages, totalPacks int,
+	mods []ModUI,
+	modQuery string,
+	enabled bool,
+	flashKind, flashMsg string,
+) {
 	@Layout("Minecraft Mods & Modpacks") {
 		@nav()
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -24,9 +63,19 @@ templ MinecraftMods(mcVersion, neoforgeVersion string, installedMods []string, m
 			</div>
 			<div class="flex items-center gap-2">
 				<form method="post" action="/api/minecraft/version/set" class="flex items-center gap-2 text-xs">
-					<input name="minecraft_version" value={ mcVersion } placeholder="1.21.1" class="w-20 rounded bg-zinc-900 px-2 py-1.5 font-mono"/>
-					<input name="neoforge_version" value={ neoforgeVersion } placeholder="recommended" class="w-28 rounded bg-zinc-900 px-2 py-1.5 font-mono"/>
-					<button class="rounded bg-zinc-700 px-3 py-1.5 hover:bg-zinc-600">Change Version</button>
+					<label class="text-zinc-400">Minecraft:</label>
+					<select name="minecraft_version" class="rounded bg-zinc-900 border border-zinc-800 px-2.5 py-1.5 font-mono text-zinc-200 focus:border-zinc-600">
+						for _, v := range []string{"1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.2", "1.20.1"} {
+							if v == mcVersion {
+								<option value={ v } selected>{ v }</option>
+							} else {
+								<option value={ v }>{ v }</option>
+							}
+						}
+					</select>
+					<input type="hidden" name="neoforge_version" value={ neoforgeVersion }/>
+					<span class="rounded bg-zinc-800/80 border border-zinc-700/50 px-2.5 py-1.5 font-mono text-[11px] text-zinc-400" title="NeoForge version auto-resolved to recommended">NeoForge: auto</span>
+					<button class="rounded bg-zinc-700 px-3 py-1.5 hover:bg-zinc-600 font-medium">Apply</button>
 				</form>
 			</div>
 		</div>
@@ -46,67 +95,226 @@ templ MinecraftMods(mcVersion, neoforgeVersion string, installedMods []string, m
 			<p class="mb-6 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to switch modpacks or install mods.</p>
 		}
 
-		<!-- Modpack Index Switcher -->
-		<section class="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/60 p-5">
-			<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-				<div>
-					<h2 class="text-lg font-medium text-zinc-100">Modpack Switcher</h2>
-					<p class="text-xs text-zinc-400">Discover and switch modpacks indexed from <a href="https://www.modpackindex.com" target="_blank" class="text-sky-400 hover:underline">Modpack Index</a>.</p>
-				</div>
-			</div>
-			<form method="get" action="/minecraft/mods" class="mb-4 flex gap-2">
-				<input name="pack_query" placeholder="search modpacks (e.g. All the Mods 10, ATM9, Cobblemon)…" class="w-full max-w-md rounded bg-zinc-950 px-3 py-2 text-sm text-zinc-200 border border-zinc-800 focus:border-zinc-600"/>
-				<button class="rounded bg-zinc-700 px-4 py-2 text-sm hover:bg-zinc-600">Search Packs</button>
-			</form>
+		<!-- Tabs Switcher -->
+		<div class="mb-6 flex border-b border-zinc-800 text-sm">
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?tab=modpacks&q=%s&filter_version=%s", packQuery, filterVersion)) }
+				class={ "px-4 py-2.5 border-b-2 transition -mb-px " + tabStyle(activeTab == "modpacks") }
+			>
+				Modpacks
+			</a>
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?tab=mods&mod_q=%s", modQuery)) }
+				class={ "px-4 py-2.5 border-b-2 transition -mb-px " + tabStyle(activeTab == "mods") }
+			>
+				Individual Mods
+			</a>
+		</div>
 
-			if len(modpacks) > 0 {
-				<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-					for _, p := range modpacks {
-						<div class="flex flex-col justify-between rounded border border-zinc-800 bg-zinc-950 p-3">
-							<div class="flex gap-3">
-								if p.ThumbnailURL != "" {
-									<img src={ p.ThumbnailURL } class="h-12 w-12 rounded object-cover" loading="lazy"/>
-								} else {
-									<div class="h-12 w-12 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-500">Pack</div>
-								}
-								<div class="min-w-0 flex-1">
-									<h3 class="truncate text-sm font-medium text-zinc-200" title={ p.Name }>{ p.Name }</h3>
-									<p class="line-clamp-2 text-xs text-zinc-400">{ p.Summary }</p>
-									<span class="text-[10px] text-zinc-500">{ fmt.Sprintf("%d downloads", p.DownloadCount) }</span>
+		if activeTab == "modpacks" {
+			<!-- Modpack Index Switcher -->
+			<section class="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/60 p-5">
+				<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+					<div>
+						<h2 class="text-lg font-medium text-zinc-100">Modpack Switcher</h2>
+						<p class="text-xs text-zinc-400">Discover and switch modpacks indexed from <a href="https://www.modpackindex.com" target="_blank" class="text-sky-400 hover:underline">Modpack Index</a>.</p>
+					</div>
+				</div>
+
+				<form method="get" action="/minecraft/mods" class="mb-6 flex flex-wrap items-center gap-2">
+					<input type="hidden" name="tab" value="modpacks"/>
+					<div class="relative flex-1 min-w-[260px]">
+						<input
+							name="q"
+							value={ packQuery }
+							placeholder="Search modpacks (e.g. All the Mods, ATM10, Cobblemon, Create)…"
+							class="w-full rounded bg-zinc-950 px-3 py-2 text-sm text-zinc-200 border border-zinc-800 focus:border-zinc-600"
+						/>
+					</div>
+					<select name="filter_version" class="rounded bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm text-zinc-300">
+						if filterVersion == "" {
+							<option value="" selected>All Versions</option>
+						} else {
+							<option value="">All Versions</option>
+						}
+						for _, v := range []string{"1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.2", "1.20.1"} {
+							if filterVersion == v {
+								<option value={ v } selected>{ v }</option>
+							} else {
+								<option value={ v }>{ v }</option>
+							}
+						}
+					</select>
+					<button class="rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Search Packs</button>
+					if packQuery != "" || filterVersion != "" {
+						<a href="/minecraft/mods?tab=modpacks" class="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800">Clear</a>
+					}
+				</form>
+
+				if len(modpacks) == 0 {
+					<div class="rounded bg-zinc-950 p-6 text-center text-sm text-zinc-400">
+						No modpacks found matching your search. Try a different query or select "All Versions".
+					</div>
+				} else {
+					<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+						for _, p := range modpacks {
+							<div class="flex flex-col justify-between rounded border border-zinc-800 bg-zinc-950 p-3">
+								<div class="flex gap-3">
+									if p.ThumbnailURL != "" {
+										<img src={ p.ThumbnailURL } class="h-12 w-12 rounded object-cover" loading="lazy"/>
+									} else {
+										<div class="h-12 w-12 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-500">Pack</div>
+									}
+									<div class="min-w-0 flex-1">
+										<h3 class="truncate text-sm font-medium text-zinc-200" title={ p.Name }>{ p.Name }</h3>
+										<p class="line-clamp-2 text-xs text-zinc-400">{ p.Summary }</p>
+										<span class="text-[10px] text-zinc-500">{ formatDownloads(p.DownloadCount) } downloads</span>
+									</div>
+								</div>
+								<div class="mt-3 flex items-center justify-between pt-2 border-t border-zinc-800/50">
+									<div class="flex items-center gap-2">
+										<button
+											type="button"
+											data-pack-id={ strconv.Itoa(p.ID) }
+											data-pack-name={ p.Name }
+											onclick="previewModpack(this.dataset.packId, this.dataset.packName)"
+											class="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-800"
+										>
+											Preview Mods
+										</button>
+										if p.PageURL != "" {
+											<a href={ templ.SafeURL(p.PageURL) } target="_blank" class="text-xs text-zinc-500 hover:text-zinc-300" title="Open on Modpack Index">↗</a>
+										}
+									</div>
+									<form method="post" action="/api/minecraft/modpacks/switch" onsubmit="return confirm('Switching modpack will replace installed mods with this pack. Continue?');">
+										<input type="hidden" name="modpack_id" value={ strconv.Itoa(p.ID) }/>
+										<button class="rounded bg-emerald-700 px-3 py-1 text-xs font-medium hover:bg-emerald-600">Switch</button>
+									</form>
 								</div>
 							</div>
-							<div class="mt-3 flex items-center justify-between pt-2 border-t border-zinc-800/50">
-								if p.PageURL != "" {
-									<a href={ templ.SafeURL(p.PageURL) } target="_blank" class="text-xs text-zinc-500 hover:text-zinc-300">View details ↗</a>
+						}
+					</div>
+
+					<!-- Pagination -->
+					if totalPages > 1 {
+						<div class="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-zinc-800/80 pt-4 text-xs text-zinc-400">
+							<div>
+								<span>Showing page <strong class="text-zinc-200">{ strconv.Itoa(currentPage) }</strong> of <strong class="text-zinc-200">{ strconv.Itoa(totalPages) }</strong></span>
+								if totalPacks > 0 {
+									<span class="ml-1 text-zinc-500">({ strconv.Itoa(totalPacks) } modpacks found)</span>
 								}
-								<form method="post" action="/api/minecraft/modpacks/switch" onsubmit="return confirm('Switching modpack will replace installed mods with this pack. Continue?');">
-									<input type="hidden" name="modpack_id" value={ strconv.Itoa(p.ID) }/>
-									<button class="rounded bg-emerald-700 px-3 py-1 text-xs font-medium hover:bg-emerald-600">Switch to Pack</button>
-								</form>
+							</div>
+							<div class="flex items-center gap-2">
+								if currentPage > 1 {
+									<a
+										href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?tab=modpacks&q=%s&filter_version=%s&page=%d", packQuery, filterVersion, currentPage-1)) }
+										class="rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-zinc-200 hover:bg-zinc-800"
+									>← Previous</a>
+								} else {
+									<span class="rounded border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-zinc-600 cursor-not-allowed">← Previous</span>
+								}
+								if currentPage < totalPages {
+									<a
+										href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?tab=modpacks&q=%s&filter_version=%s&page=%d", packQuery, filterVersion, currentPage+1)) }
+										class="rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-zinc-200 hover:bg-zinc-800"
+									>Next →</a>
+								} else {
+									<span class="rounded border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-zinc-600 cursor-not-allowed">Next →</span>
+								}
 							</div>
 						</div>
 					}
-				</div>
-			}
-		</section>
+				}
+			</section>
+		}
 
-		<!-- Individual Mod Installation (Modrinth) -->
-		<section class="mb-8">
-			<h2 class="mb-2 text-sm font-medium text-zinc-400">Install Individual Mod (Modrinth)</h2>
-			<form method="post" action="/api/minecraft/mods/install" class="flex flex-wrap items-center gap-2 text-sm">
-				<input name="slug" placeholder="Modrinth slug (e.g. jei, journeymap, ferrite-core)" class="w-80 rounded bg-zinc-900 px-3 py-2 border border-zinc-800 focus:border-zinc-600"/>
-				<input type="hidden" name="version" value={ mcVersion }/>
-				<button class="rounded bg-emerald-700 px-4 py-2 hover:bg-emerald-600 font-medium">Install + Dependencies</button>
-			</form>
-		</section>
+		if activeTab == "mods" {
+			<!-- Individual Mod Discovery & Installation (Modrinth) -->
+			<section class="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/60 p-5">
+				<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+					<div>
+						<h2 class="text-lg font-medium text-zinc-100">Modrinth Mod Discovery</h2>
+						<p class="text-xs text-zinc-400">Search and install NeoForge mods compatible with Minecraft <span class="font-mono text-emerald-400">{ mcVersion }</span>.</p>
+					</div>
+				</div>
+
+				<form method="get" action="/minecraft/mods" class="mb-4 flex flex-wrap items-center gap-2">
+					<input type="hidden" name="tab" value="mods"/>
+					<div class="relative flex-1 min-w-[260px]">
+						<input
+							name="mod_q"
+							value={ modQuery }
+							placeholder="Search Modrinth mods (e.g. jei, journeymap, ferrite-core, create, backpack)…"
+							class="w-full rounded bg-zinc-950 px-3 py-2 text-sm text-zinc-200 border border-zinc-800 focus:border-zinc-600"
+						/>
+					</div>
+					<button class="rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Search Modrinth</button>
+					if modQuery != "" {
+						<a href="/minecraft/mods?tab=mods" class="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800">Clear</a>
+					}
+				</form>
+
+				<!-- Direct Slug Install Accordion -->
+				<details class="mb-6 text-xs text-zinc-400">
+					<summary class="cursor-pointer hover:text-zinc-200">Or install directly by Modrinth project slug…</summary>
+					<form method="post" action="/api/minecraft/mods/install" class="mt-2 flex flex-wrap items-center gap-2">
+						<input name="slug" placeholder="Modrinth slug (e.g. jei, journeymap)" class="w-72 rounded bg-zinc-950 px-3 py-1.5 border border-zinc-800 font-mono text-xs focus:border-zinc-600"/>
+						<input type="hidden" name="version" value={ mcVersion }/>
+						<button class="rounded bg-emerald-700 px-3.5 py-1.5 font-medium hover:bg-emerald-600 text-white">Install + Dependencies</button>
+					</form>
+				</details>
+
+				if len(mods) == 0 {
+					<div class="rounded bg-zinc-950 p-6 text-center text-sm text-zinc-400">
+						No mods found on Modrinth matching your query.
+					</div>
+				} else {
+					<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+						for _, m := range mods {
+							<div class="flex flex-col justify-between rounded border border-zinc-800 bg-zinc-950 p-3">
+								<div class="flex gap-3">
+									if m.IconURL != "" {
+										<img src={ m.IconURL } class="h-12 w-12 rounded object-cover" loading="lazy"/>
+									} else {
+										<div class="h-12 w-12 rounded bg-zinc-800 flex items-center justify-center text-xs text-zinc-500">Mod</div>
+									}
+									<div class="min-w-0 flex-1">
+										<h3 class="truncate text-sm font-medium text-zinc-200" title={ m.Title }>{ m.Title }</h3>
+										<p class="line-clamp-2 text-xs text-zinc-400">{ m.Description }</p>
+										<div class="mt-1 flex items-center gap-2 text-[10px] text-zinc-500">
+											<span>{ formatDownloads(int64(m.Downloads)) } downloads</span>
+											if m.Author != "" {
+												<span>· by { m.Author }</span>
+											}
+										</div>
+									</div>
+								</div>
+								<div class="mt-3 flex items-center justify-between pt-2 border-t border-zinc-800/50">
+									<a href={ templ.SafeURL("https://modrinth.com/mod/" + m.Slug) } target="_blank" class="text-xs text-zinc-500 hover:text-zinc-300">Modrinth ↗</a>
+									if m.Installed {
+										<span class="rounded bg-zinc-800 border border-zinc-700 px-2.5 py-1 text-xs text-emerald-400 font-medium">✓ Installed</span>
+									} else {
+										<form method="post" action="/api/minecraft/mods/install">
+											<input type="hidden" name="slug" value={ m.Slug }/>
+											<input type="hidden" name="version" value={ mcVersion }/>
+											<button class="rounded bg-emerald-700 px-3 py-1 text-xs font-medium hover:bg-emerald-600">Install + Deps</button>
+										</form>
+									}
+								</div>
+							</div>
+						}
+					</div>
+				}
+			</section>
+		}
 
 		<!-- Installed Mods List -->
-		<section>
+		<section class="mt-8">
 			<div class="mb-3 flex items-center justify-between">
-				<h2 class="text-sm font-medium text-zinc-400">Installed Mods ({ strconv.Itoa(len(installedMods)) })</h2>
+				<h2 class="text-sm font-medium text-zinc-400">Currently Installed Mods ({ strconv.Itoa(len(installedMods)) })</h2>
 			</div>
 			if len(installedMods) == 0 {
-				<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No mods installed yet. Search for a modpack above or install individual mods.</p>
+				<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No mods installed yet. Search for a modpack or individual mods above.</p>
 			} else {
 				<ul class="divide-y divide-zinc-800 rounded border border-zinc-800 bg-zinc-900/80 overflow-hidden">
 					for _, mod := range installedMods {
@@ -125,5 +333,61 @@ templ MinecraftMods(mcVersion, neoforgeVersion string, installedMods []string, m
 				</ul>
 			}
 		</section>
+
+		<!-- Modpack Preview Dialog -->
+		<dialog id="modpack-preview-dialog" class="backdrop:bg-black/75 rounded-lg border border-zinc-700 bg-zinc-900 p-0 text-zinc-100 shadow-2xl max-w-lg w-full m-auto">
+			<div class="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+				<h3 id="preview-pack-title" class="font-medium text-base text-zinc-100">Modpack Preview</h3>
+				<button type="button" onclick="document.getElementById('modpack-preview-dialog').close()" class="text-zinc-400 hover:text-zinc-100">✕</button>
+			</div>
+			<div id="preview-pack-body" class="p-5">
+				<div class="py-8 text-center text-zinc-400">Loading mod list...</div>
+			</div>
+			<div class="flex items-center justify-between border-t border-zinc-800 px-5 py-3 bg-zinc-950/50">
+				<button type="button" onclick="document.getElementById('modpack-preview-dialog').close()" class="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Close</button>
+				<form method="post" action="/api/minecraft/modpacks/switch" onsubmit="return confirm('Switching modpack will replace installed mods with this pack. Continue?');">
+					<input type="hidden" name="modpack_id" id="preview-switch-id" value=""/>
+					<button class="rounded bg-emerald-700 px-4 py-1.5 text-xs font-medium hover:bg-emerald-600 text-white">Switch to this Pack</button>
+				</form>
+			</div>
+		</dialog>
+
+		<script>
+			function previewModpack(id, name) {
+				const d = document.getElementById('modpack-preview-dialog');
+				const title = document.getElementById('preview-pack-title');
+				const body = document.getElementById('preview-pack-body');
+				const switchInput = document.getElementById('preview-switch-id');
+				if (!d || !body) return;
+				title.textContent = name;
+				switchInput.value = id;
+				body.innerHTML = '<div class="py-8 text-center text-zinc-400">Loading mod list from Modpack Index...</div>';
+				d.showModal();
+				fetch('/api/minecraft/modpacks/' + id)
+					.then(r => r.json())
+					.then(data => {
+						if (!data.mods || data.mods.length === 0) {
+							body.innerHTML = '<p class="text-zinc-400 text-sm">No mods list available for this pack.</p>';
+							return;
+						}
+						let html = '<div class="mb-3 flex items-center justify-between text-xs text-zinc-400">';
+						html += '<span>Includes <strong>' + data.mods.length + '</strong> mods</span>';
+						if (data.modpack && data.modpack.minecraft_versions && data.modpack.minecraft_versions.length > 0) {
+							html += '<span class="font-mono text-emerald-400">MC ' + data.modpack.minecraft_versions[0].name + '</span>';
+						}
+						html += '</div>';
+						html += '<div class="max-h-80 overflow-y-auto divide-y divide-zinc-800/60 rounded border border-zinc-800 bg-zinc-950 p-2">';
+						data.mods.forEach(m => {
+							html += '<div class="py-1.5 px-2 flex items-center justify-between text-xs"><span class="font-medium text-zinc-200">' + (m.name || m.slug) + '</span><span class="text-[11px] text-zinc-500 font-mono">' + m.slug + '</span></div>';
+						});
+						html += '</div>';
+						body.innerHTML = html;
+					})
+					.catch(err => {
+						body.innerHTML = '<p class="text-red-400 text-sm">Failed to load preview: ' + err.message + '</p>';
+					});
+			}
+		</script>
 	}
 }
+

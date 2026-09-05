@@ -101,16 +101,16 @@ func updatesSignature(ups []pages.ModUpdate) string {
 	return b.String()
 }
 
-// sseLogs streams only the live log tail into #logs. Dashboard-only, so other
-// pages don't pay for a log stream they don't render.
+// sseLogs streams only the live log tail into #logs. Supports ?server=valheim (default) or ?server=minecraft.
 func (s *FiberServer) sseLogs(c *fiber.Ctx) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 
+	server := c.Query("server", "valheim")
 	id := rid(c)
 	actor := s.actor(c)
-	slog.Info("sse open", "rid", id, "actor", actor, "stream", "logs")
+	slog.Info("sse open", "rid", id, "actor", actor, "stream", "logs", "server", server)
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -124,16 +124,20 @@ func (s *FiberServer) sseLogs(c *fiber.Ctx) error {
 		defer func() {
 			metrics.SSEActive.Dec()
 			metrics.SSEClosed.WithLabelValues(reason).Inc()
-			slog.Info("sse close", "rid", id, "actor", actor, "stream", "logs",
+			slog.Info("sse close", "rid", id, "actor", actor, "stream", "logs", "server", server,
 				"reason", reason, "log_lines", logLines, "dur_ms", time.Since(start).Milliseconds())
 		}()
 
-		if s.k8s == nil {
+		client := s.k8s
+		if server == "minecraft" {
+			client = s.mck8s
+		}
+		if client == nil {
 			return
 		}
-		rc, err := s.k8s.StreamLogs(ctx, 50)
+		rc, err := client.StreamLogs(ctx, 50)
 		if err != nil {
-			slog.Warn("sse log stream unavailable", "rid", id, "err", err)
+			slog.Warn("sse log stream unavailable", "rid", id, "server", server, "err", err)
 			return
 		}
 		defer rc.Close()
@@ -143,7 +147,7 @@ func (s *FiberServer) sseLogs(c *fiber.Ctx) error {
 			el := fmt.Sprintf(`<div class="whitespace-pre-wrap">%s</div>`, html.EscapeString(sc.Text()))
 			if err := sse.AppendElement(w, "#logs", el); err != nil {
 				reason = "client-gone"
-				slog.Debug("sse write failed", "rid", id, "frame", "log", "err", err)
+				slog.Debug("sse write failed", "rid", id, "frame", "log", "server", server, "err", err)
 				return
 			}
 			logLines++
@@ -154,7 +158,10 @@ func (s *FiberServer) sseLogs(c *fiber.Ctx) error {
 }
 
 func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
-	sig := map[string]any{"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "backup": "—", "backupinfo": ""}
+	sig := map[string]any{
+		"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "backup": "—", "backupinfo": "",
+		"mc_players": "—", "mc_cpu": "—", "mc_mem": "—", "mc_uptime": "—", "mc_state": "unknown",
+	}
 
 	if s.store != nil {
 		if n, err := s.store.CountOnline(); err == nil {
@@ -184,6 +191,29 @@ func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 			sig["mem"] = fmt.Sprintf("%d Mi", mem)
 		}
 	}
+
+	if s.mcAccess != nil {
+		if pl, err := s.mcAccess.OnlinePlayers(); err == nil {
+			sig["mc_players"] = len(pl)
+		}
+	}
+	if s.mck8s != nil {
+		if ps, err := s.mck8s.PodStatus(ctx); err == nil {
+			if ps.Ready {
+				sig["mc_state"] = "Up"
+			} else {
+				sig["mc_state"] = ps.Phase
+			}
+			if !ps.StartedAt.IsZero() {
+				sig["mc_uptime"] = humanDuration(time.Since(ps.StartedAt))
+			}
+		}
+		if cpu, mem, err := s.mck8s.PodMetrics(ctx); err == nil {
+			sig["mc_cpu"] = fmt.Sprintf("%dm", cpu)
+			sig["mc_mem"] = fmt.Sprintf("%d Mi", mem)
+		}
+	}
+
 	return sig
 }
 

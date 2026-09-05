@@ -87,3 +87,40 @@ func countAudit(t *testing.T, st *store.Store) int {
 	}
 	return len(rows)
 }
+
+func TestMinecraftServerControlSSEToast(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	cs := fake.NewSimpleClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "minecraft-neoforge", Namespace: "minecraft-neoforge"},
+	})
+	s := &FiberServer{
+		App:   fiber.New(),
+		cfg:   &config.Config{},
+		store: st,
+		mck8s: k8s.NewWithClientset(cs, "minecraft-neoforge", "minecraft-neoforge"),
+	}
+	s.RegisterFiberRoutes()
+
+	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodPost, "/minecraft/server/restart", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("content-type = %q, want text/event-stream", ct)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "toast") {
+		t.Fatalf("body missing toast signal: %q", body)
+	}
+	if n := countAudit(t, st); n != 1 {
+		t.Fatalf("audit rows = %d, want 1", n)
+	}
+}

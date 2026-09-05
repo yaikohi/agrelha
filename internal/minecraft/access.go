@@ -176,3 +176,28 @@ func (a *AccessManager) OnlinePlayers() ([]string, error) {
 	}
 	return players, nil
 }
+
+// WhitelistEnforced checks if the whitelist is currently enabled in-game via RCON.
+func (a *AccessManager) WhitelistEnforced() (bool, error) {
+	if a.rcon == nil {
+		return false, fmt.Errorf("rcon client not configured")
+	}
+	res, err := a.rcon.Execute("/whitelist status")
+	if err != nil {
+		return false, err
+	}
+	return strings.Contains(strings.ToLower(res), " on"), nil
+}
+
+// SetWhitelistEnforced turns whitelist on or off in-game via RCON.
+func (a *AccessManager) SetWhitelistEnforced(enforce bool) error {
+	if a.rcon == nil {
+		return fmt.Errorf("rcon client not configured")
+	}
+	cmd := "/whitelist off"
+	if enforce {
+		cmd = "/whitelist on"
+	}
+	_, err := a.rcon.Execute(cmd)
+	return err
+}
