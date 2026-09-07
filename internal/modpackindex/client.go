@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,11 @@ type Client struct {
 	baseURL   string
 	userAgent string
 	http      *http.Client
+
+	verMu      sync.Mutex
+	verCache   map[string]int
+	verList    []MCVersion
+	verFetched time.Time
 }
 
 func New(baseURL string) *Client {
@@ -131,7 +137,8 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
-// KnownMCVersionIDs maps common NeoForge-compatible Minecraft versions to Modpack Index version IDs.
+// KnownMCVersionIDs is a last-resort fallback used only when the live
+// /minecraft/versions lookup fails. Prefer Client.VersionIDs.
 var KnownMCVersionIDs = map[string]int{
 	"1.21.1": 91,
 	"1.21":   90,
@@ -139,6 +146,50 @@ var KnownMCVersionIDs = map[string]int{
 	"1.20.4": 87,
 	"1.20.2": 85,
 	"1.20.1": 84,
+}
+
+const versionCacheTTL = 6 * time.Hour
+
+type versionsResponse struct {
+	Data []MCVersion `json:"data"`
+}
+
+// Versions returns every Minecraft version Modpack Index knows about, newest last.
+func (c *Client) Versions(ctx context.Context) []MCVersion {
+	c.verMu.Lock()
+	defer c.verMu.Unlock()
+
+	if c.verList != nil && time.Since(c.verFetched) < versionCacheTTL {
+		return c.verList
+	}
+
+	var res versionsResponse
+	if err := c.getJSON(ctx, "/minecraft/versions", &res); err != nil || len(res.Data) == 0 {
+		return c.verList
+	}
+
+	ids := make(map[string]int, len(res.Data))
+	for _, v := range res.Data {
+		if v.Name != "" {
+			ids[v.Name] = v.ID
+		}
+	}
+	c.verList = res.Data
+	c.verCache = ids
+	c.verFetched = time.Now()
+	return c.verList
+}
+
+// VersionIDs maps Minecraft version name to Modpack Index version ID, fetched live.
+func (c *Client) VersionIDs(ctx context.Context) map[string]int {
+	c.Versions(ctx)
+
+	c.verMu.Lock()
+	defer c.verMu.Unlock()
+	if len(c.verCache) > 0 {
+		return c.verCache
+	}
+	return KnownMCVersionIDs
 }
 
 // SearchModpacks queries modpacks by name and optional minecraft_version.
@@ -154,7 +205,7 @@ func (c *Client) SearchModpacks(ctx context.Context, query, mcVersion string, pa
 		params.Set("page", fmt.Sprintf("%d", page))
 		endpoint = "/modpacks?" + params.Encode()
 	} else if mcVersion != "" {
-		if vID, ok := KnownMCVersionIDs[mcVersion]; ok {
+		if vID, ok := c.VersionIDs(ctx)[mcVersion]; ok {
 			endpoint = fmt.Sprintf("/minecraft/version/%d/modpacks?page=%d", vID, page)
 		} else {
 			params := url.Values{}

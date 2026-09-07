@@ -44,6 +44,7 @@ func tabStyle(active bool) string {
 
 templ MinecraftMods(
 	mcVersion, loaderVersion string,
+	availableVersions []string,
 	installedMods []string,
 	activeTab string,
 	modpacks []ModpackUI,
@@ -135,7 +136,7 @@ templ MinecraftMods(
 						<input type="hidden" name="loader" value={ currentLoader }/>
 						<label class="text-zinc-400">Minecraft:</label>
 						<select name="minecraft_version" class="rounded bg-zinc-900 border border-zinc-800 px-2.5 py-1.5 font-mono text-zinc-200 focus:border-zinc-600">
-							for _, v := range []string{"1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.2", "1.20.1"} {
+							for _, v := range availableVersions {
 								if v == mcVersion {
 									<option value={ v } selected>{ v }</option>
 								} else {
@@ -248,7 +249,7 @@ templ MinecraftMods(
 						} else {
 							<option value="">All Versions</option>
 						}
-						for _, v := range []string{"1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.2", "1.20.1"} {
+						for _, v := range availableVersions {
 							if filterVersion == v {
 								<option value={ v } selected>{ v }</option>
 							} else {

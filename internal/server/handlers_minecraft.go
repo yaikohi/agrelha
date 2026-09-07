@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -10,9 +11,49 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/cmd/web/pages"
+	"agrelha/internal/mcversions"
 	"agrelha/internal/minecraft"
 	"agrelha/internal/modpack"
 )
+
+func (s *FiberServer) defaultMCVersion(ctx context.Context) string {
+	if s.mcv == nil {
+		return mcversions.FallbackLatest
+	}
+	return s.mcv.Latest(ctx)
+}
+
+func (s *FiberServer) mcVersionChoices(ctx context.Context, current string) []string {
+	var out []string
+	if s.mcv != nil {
+		out = s.mcv.Releases(ctx, 15)
+	}
+	if len(out) == 0 {
+		out = []string{mcversions.FallbackLatest}
+	}
+	if current == "" {
+		return out
+	}
+	for _, v := range out {
+		if v == current {
+			return out
+		}
+	}
+	return append([]string{current}, out...)
+}
+
+func loaderMatches(loaders []string, target string) bool {
+	if len(loaders) == 0 {
+		return true
+	}
+	for _, l := range loaders {
+		l = strings.ToLower(strings.TrimSpace(l))
+		if l == target || (target == "neoforge" && l == "forge") {
+			return true
+		}
+	}
+	return false
+}
 
 func isHTMLForm(c *fiber.Ctx) bool {
 	accept := c.Get("Accept")
@@ -47,7 +88,7 @@ func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
 		versionKey = "FABRIC_VERSION"
 	}
 
-	mcVer := "1.21.1"
+	mcVer := s.defaultMCVersion(c.UserContext())
 	loaderVer := "latest"
 	var installedMods []string
 
@@ -132,6 +173,7 @@ func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
 	fk, fm := takeFlash(c)
 	return render(c, pages.MinecraftMods(
 		mcVer, loaderVer,
+		s.mcVersionChoices(c.UserContext(), mcVer),
 		installedMods,
 		tab,
 		modpacksUI,
@@ -183,7 +225,10 @@ func (s *FiberServer) mcModsSearch(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Modrinth client unconfigured"})
 	}
 	q := c.Query("q", "")
-	mcVersion := c.Query("version", "1.21.1")
+	mcVersion := strings.TrimSpace(c.Query("version"))
+	if mcVersion == "" {
+		mcVersion = s.defaultMCVersion(c.UserContext())
+	}
 	loader := c.Query("loader", "neoforge")
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
@@ -222,7 +267,7 @@ func (s *FiberServer) mcModsInstall(c *fiber.Ctx) error {
 	}
 	mcVersion := strings.TrimSpace(c.FormValue("version"))
 	if mcVersion == "" {
-		mcVersion = "1.21.1"
+		mcVersion = s.defaultMCVersion(c.UserContext())
 	}
 
 	ctx := c.UserContext()
@@ -704,7 +749,7 @@ func (s *FiberServer) mcModpackSwitch(c *fiber.Ctx) error {
 		// 1. Prefer Modrinth slug if available
 		if len(m.ModrinthInfo) > 0 {
 			for _, mi := range m.ModrinthInfo {
-				if mi.Slug != "" {
+				if mi.Slug != "" && loaderMatches(mi.Loaders, loader) {
 					selectedSlug = mi.Slug
 					break
 				}
@@ -780,7 +825,7 @@ func (s *FiberServer) mcModpackExport(c *fiber.Ctx) error {
 
 	mcVer := strings.TrimSpace(data["MINECRAFT_VERSION"])
 	if mcVer == "" {
-		mcVer = "1.21.1"
+		mcVer = s.defaultMCVersion(c.UserContext())
 	}
 	loaderVer := strings.TrimSpace(data[versionKey])
 	if loaderVer == "" {

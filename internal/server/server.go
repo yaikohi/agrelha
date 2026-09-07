@@ -16,6 +16,7 @@ import (
 	"agrelha/internal/gitops"
 	"agrelha/internal/ingest"
 	"agrelha/internal/k8s"
+	"agrelha/internal/mcversions"
 	"agrelha/internal/minecraft"
 	"agrelha/internal/modpackindex"
 	"agrelha/internal/modrinth"
@@ -37,6 +38,7 @@ type FiberServer struct {
 	ts       *thunderstore.Client
 	mr       *modrinth.Client
 	mpi      *modpackindex.Client
+	mcv      *mcversions.Client
 	mcMods   *minecraft.ModManager
 	fabMods  *minecraft.ModManager
 	mcAccess *minecraft.AccessManager
@@ -83,6 +85,7 @@ func New(cfg *config.Config) *FiberServer {
 
 	s.mr = modrinth.New(cfg.ModrinthAPI)
 	s.mpi = modpackindex.New("")
+	s.mcv = mcversions.New("")
 	if cfg.MinecraftRconPassword != "" {
 		s.mcRcon = minecraft.NewRconClient(cfg.MinecraftRconAddr, cfg.MinecraftRconPassword, 3*time.Second)
 	}
