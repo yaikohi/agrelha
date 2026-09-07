@@ -81,6 +81,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/api/minecraft/wizard/mods/search", s.mcWizardModsSearch)
 	app.Post("/api/minecraft/wizard/cart/check", s.mcWizardCartCheck)
 	app.Post("/api/minecraft/wizard/create", s.mcWizardCreate)
+	app.Post("/api/minecraft/wizard/import", s.mcWizardImport)
 	app.Post("/api/minecraft/instances", s.mcInstanceCreate)
 	app.Post("/api/minecraft/instances/:num/start", s.mcInstanceStart)
 	app.Post("/api/minecraft/instances/:num/stop", s.mcInstanceStop)
@@ -88,10 +89,24 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Delete("/api/minecraft/instances/:num", s.mcInstanceDelete)
 
 	// --- Legacy/Per-instance routes ---
-	app.Get("/minecraft/mods", s.mcModsPage)
+	app.Get("/minecraft/mods", func(c *fiber.Ctx) error {
+		if s.mcInstances != nil {
+			if insts, err := s.mcInstances.ListInstances(c.UserContext()); err == nil && len(insts) > 0 {
+				return c.Redirect(fmt.Sprintf("/minecraft/%d/mods", insts[0].Number), fiber.StatusTemporaryRedirect)
+			}
+		}
+		return s.mcModsPage(c)
+	})
 	app.Get("/minecraft/mods/export", s.mcModpackExport)
 	app.Get("/minecraft/access", s.mcAccessPage)
-	app.Get("/minecraft/configs", s.mcConfigsPage)
+	app.Get("/minecraft/configs", func(c *fiber.Ctx) error {
+		if s.mcInstances != nil {
+			if insts, err := s.mcInstances.ListInstances(c.UserContext()); err == nil && len(insts) > 0 {
+				return c.Redirect(fmt.Sprintf("/minecraft/%d/configs", insts[0].Number), fiber.StatusTemporaryRedirect)
+			}
+		}
+		return s.mcConfigsPage(c)
+	})
 	app.Get("/minecraft/configs/new", s.mcConfigNew)
 	app.Get("/minecraft/configs/edit", s.mcConfigEdit)
 	app.Post("/minecraft/configs/save", s.mcConfigSave)

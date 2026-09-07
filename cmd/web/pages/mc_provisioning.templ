@@ -58,6 +58,13 @@ templ MinecraftProvisioning(inst InstanceUI) {
 					>
 						Return to Dashboard
 					</a>
+					<a
+						data-show="$ready"
+						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d", inst.Number)) }
+						class="rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-600"
+					>
+						Manage World &rarr;
+					</a>
 				</div>
 			</div>
 		</div>

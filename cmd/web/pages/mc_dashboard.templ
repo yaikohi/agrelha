@@ -68,7 +68,9 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 									<div>
 										<div class="flex items-center gap-2">
 											<span class="font-mono text-xs text-zinc-500">{ fmt.Sprintf("#%02d", inst.Number) }</span>
-											<h3 class="text-base font-semibold text-zinc-100">{ inst.Name }</h3>
+											<a href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d", inst.Number)) } class="text-base font-semibold text-zinc-100 hover:text-emerald-400 transition">
+												{ inst.Name } &rarr;
+											</a>
 										</div>
 										<p class="mt-0.5 font-mono text-xs text-zinc-400">{ inst.LBIP }:25565</p>
 									</div>
@@ -125,8 +127,35 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 								}
 							</div>
 
-							<!-- Actions -->
-							<div class="mt-5 flex items-center justify-between border-t border-zinc-800/60 pt-3">
+							<!-- Actions & Direct Links -->
+							<div class="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/60 pt-3">
+								<div class="flex flex-wrap items-center gap-1.5">
+									<a
+										href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/overview", inst.Number)) }
+										class="rounded-lg border border-zinc-800 bg-zinc-800/80 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition"
+									>
+										Manage
+									</a>
+									<a
+										href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/configs", inst.Number)) }
+										class="rounded-lg border border-zinc-800/80 bg-zinc-900 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition"
+									>
+										Configs
+									</a>
+									<a
+										href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/mods", inst.Number)) }
+										class="rounded-lg border border-zinc-800/80 bg-zinc-900 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition"
+									>
+										Mods
+									</a>
+									<a
+										href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/console", inst.Number)) }
+										class="rounded-lg border border-zinc-800/80 bg-zinc-900 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition"
+									>
+										Console
+									</a>
+								</div>
+
 								<div class="flex items-center gap-2">
 									if inst.State == "running" {
 										<button
@@ -156,9 +185,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 											</button>
 										}
 									}
-								</div>
 
-								<div class="flex items-center gap-2">
 									if inst.State != "running" {
 										<button
 											type="button"

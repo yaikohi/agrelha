@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"agrelha/cmd/web/pages"
 	"agrelha/internal/mcversions"
 	"agrelha/internal/minecraft"
+	"agrelha/internal/modpack"
 	"agrelha/internal/sse"
 )
 
@@ -551,4 +554,64 @@ func ssePatch(c *fiber.Ctx, signals map[string]any, fragments map[string]string)
 	}
 
 	return c.Send(buf.Bytes())
+}
+
+func (s *FiberServer) mcWizardImport(c *fiber.Ctx) error {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "No file uploaded: " + err.Error()})
+	}
+
+	f, err := fileHeader.Open()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to open file: " + err.Error()})
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read file: " + err.Error()})
+	}
+
+	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+	var world *modpack.ImportedWorld
+
+	if ext == ".mrpack" {
+		world, err = modpack.ParseMrpack(bytes.NewReader(data), int64(len(data)))
+	} else if ext == ".zip" {
+		if w, mrErr := modpack.ParseMrpack(bytes.NewReader(data), int64(len(data))); mrErr == nil {
+			world = w
+		} else {
+			world, err = modpack.ParsePrismZip(bytes.NewReader(data), int64(len(data)))
+		}
+	} else if ext == ".txt" {
+		world = modpack.ParseRawModList(string(data))
+	} else {
+		if w, zipErr := modpack.ParseMrpack(bytes.NewReader(data), int64(len(data))); zipErr == nil {
+			world = w
+		} else if w, pErr := modpack.ParsePrismZip(bytes.NewReader(data), int64(len(data))); pErr == nil {
+			world = w
+		} else {
+			world = modpack.ParseRawModList(string(data))
+		}
+	}
+
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Failed to parse archive: " + err.Error()})
+	}
+	if world == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Unable to extract world data from archive"})
+	}
+
+	if world.Name == "" {
+		world.Name = strings.TrimSuffix(fileHeader.Filename, filepath.Ext(fileHeader.Filename))
+	}
+
+	return c.JSON(fiber.Map{
+		"name":       world.Name,
+		"mc_version": world.MCVersion,
+		"loader":     world.Loader,
+		"raw_mods":   world.RawMods,
+		"slugs":      world.Slugs,
+	})
 }
