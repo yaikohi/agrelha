@@ -99,6 +99,7 @@ func (s *FiberServer) mcInstanceCreate(c *fiber.Ctx) error {
 		Seed:      seed,
 		MCVersion: mcVersion,
 		Tier:      tier,
+		State:     minecraft.StateRunning,
 	}
 
 	if loaderStr == "vanilla" {

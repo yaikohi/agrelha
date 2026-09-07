@@ -252,7 +252,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 					<!-- Command input bar -->
 					<form
 						class="flex gap-2"
-						data-on:submit.prevent={ fmt.Sprintf("@post('/api/minecraft/%d/rcon', {cmd: $cmd}); $cmd = ''", d.Number) }
+						data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/rcon', {cmd: $cmd}); $cmd = ''", d.Number) }
 					>
 						<input
 							type="text"
@@ -324,7 +324,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 
 					<form
 						class="mt-6 space-y-4"
-						data-on:submit.prevent={ fmt.Sprintf("@post('/api/minecraft/%d/settings')", d.Number) }
+						data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/settings', {contentType: 'form'})", d.Number) }
 					>
 						<div>
 							<label class="block text-xs font-medium text-zinc-300">World Name</label>

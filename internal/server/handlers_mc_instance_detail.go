@@ -109,7 +109,14 @@ func (s *FiberServer) mcInstanceRcon(c *fiber.Ctx) error {
 		return sseToast(c, "err", "Instance not found.", nil)
 	}
 
-	cmd := strings.TrimSpace(c.FormValue("cmd"))
+	var body struct {
+		Cmd string `json:"cmd" form:"cmd"`
+	}
+	_ = c.BodyParser(&body)
+	cmd := strings.TrimSpace(body.Cmd)
+	if cmd == "" {
+		cmd = strings.TrimSpace(c.FormValue("cmd"))
+	}
 	if cmd == "" {
 		return sseToast(c, "err", "Command cannot be empty.", nil)
 	}
@@ -234,11 +241,38 @@ func (s *FiberServer) mcInstanceSettingsSave(c *fiber.Ctx) error {
 		return sseToast(c, "err", "Instance not found.", nil)
 	}
 
-	inst.Name = strings.TrimSpace(c.FormValue("name"))
-	inst.MOTD = strings.TrimSpace(c.FormValue("motd"))
-	inst.Tier = minecraft.NormalizeTier(c.FormValue("tier"))
-	if v := strings.TrimSpace(c.FormValue("mc_version")); v != "" {
-		inst.MCVersion = v
+	var req struct {
+		Name      string `json:"name" form:"name"`
+		MOTD      string `json:"motd" form:"motd"`
+		Tier      string `json:"tier" form:"tier"`
+		MCVersion string `json:"mc_version" form:"mc_version"`
+	}
+	_ = c.BodyParser(&req)
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = strings.TrimSpace(c.FormValue("name"))
+	}
+	motd := strings.TrimSpace(req.MOTD)
+	if motd == "" {
+		motd = strings.TrimSpace(c.FormValue("motd"))
+	}
+	tierStr := strings.TrimSpace(req.Tier)
+	if tierStr == "" {
+		tierStr = strings.TrimSpace(c.FormValue("tier"))
+	}
+	mcVer := strings.TrimSpace(req.MCVersion)
+	if mcVer == "" {
+		mcVer = strings.TrimSpace(c.FormValue("mc_version"))
+	}
+
+	if name != "" {
+		inst.Name = name
+	}
+	inst.MOTD = motd
+	inst.Tier = minecraft.NormalizeTier(tierStr)
+	if mcVer != "" {
+		inst.MCVersion = mcVer
 	}
 
 	if err := s.store.UpsertInstance(inst.ToRecord()); err != nil {

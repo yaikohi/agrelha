@@ -95,7 +95,16 @@ func (s *FiberServer) mcWizardModpacksSearch(c *fiber.Ctx) error {
 	for _, p := range res.Data {
 		cleanJSName := strings.ReplaceAll(strings.ReplaceAll(p.Name, `\`, `\\`), `'`, `\'`)
 		cleanJSName = strings.ReplaceAll(cleanJSName, `"`, `&quot;`)
-		cleanPageURL := strings.ReplaceAll(p.PageURL, `'`, `\'`)
+
+		packRefURL := p.URL
+		if packRefURL == "" && p.Links != nil {
+			packRefURL = p.Links["curseforge"]
+		}
+		if packRefURL == "" {
+			packRefURL = p.PageURL
+		}
+		cleanRefURL := strings.ReplaceAll(packRefURL, `'`, `\'`)
+
 		sb.WriteString(fmt.Sprintf(`
 			<div class="flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-4">
 				<div>
@@ -116,7 +125,7 @@ func (s *FiberServer) mcWizardModpacksSearch(c *fiber.Ctx) error {
 					</button>
 				</div>
 			</div>
-		`, html.EscapeString(p.ThumbnailURL), html.EscapeString(p.Name), p.DownloadCount, html.EscapeString(p.Summary), cleanJSName, p.ID, cleanPageURL))
+		`, html.EscapeString(p.ThumbnailURL), html.EscapeString(p.Name), p.DownloadCount, html.EscapeString(p.Summary), cleanJSName, p.ID, cleanRefURL))
 	}
 
 	return ssePatchElements(c, "#wizard-pack-results", sb.String())
@@ -182,7 +191,7 @@ func (s *FiberServer) mcWizardModsSearch(c *fiber.Ctx) error {
 					</div>
 				</div>
 				<button type="button"
-					data-on:click="if (!$cart.includes('%s')) { $cart.push('%s'); @post('/api/minecraft/wizard/cart/check') }"
+					data-on:click="if (!$cart.includes('%s')) { $cart = [...$cart, '%s']; @post('/api/minecraft/wizard/cart/check') }"
 					class="shrink-0 rounded bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:bg-emerald-700 hover:text-white">
 					+ Add
 				</button>
@@ -370,6 +379,7 @@ func (s *FiberServer) mcWizardCreate(c *fiber.Ctx) error {
 		Difficulty: difficulty,
 		Gamemode:   gamemode,
 		WorldType:  worldType,
+		State:      minecraft.StateRunning,
 	}
 
 	switch source {

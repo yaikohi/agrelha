@@ -7,7 +7,8 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 		@nav()
 		<div
 			class="space-y-6"
-			data-signals="{step:1,name:'',seed:'',source:'modpack',loader:'neoforge',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false}"
+			data-signals="{step:1,name:'',seed:'',source:'modpack',loader:'neoforge',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false,redirect:''}"
+			data-effect="if ($redirect) { window.location.href = $redirect }"
 		>
 			<!-- Stepper progress header -->
 			<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-sm">
@@ -188,25 +189,24 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 					</div>
 				</div>
 
-				<form
-					class="mt-6 flex gap-3"
-					data-on:submit.prevent="@post('/api/minecraft/wizard/modpacks/search')"
-				>
+				<div class="mt-6 flex gap-3">
 					<input
 						type="text"
 						data-bind="packQuery"
+						data-on:keydown="if (evt.key === 'Enter') { evt.preventDefault(); @post('/api/minecraft/wizard/modpacks/search') }"
 						placeholder="Search modpacks (e.g. Cobblemon, All the Mods, Better MC)..."
 						class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
 					/>
 					<button
-						type="submit"
+						type="button"
 						data-indicator="packSearchLoading"
+						data-on:click="@post('/api/minecraft/wizard/modpacks/search')"
 						class="rounded-xl bg-zinc-800 px-5 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-white"
 					>
 						<span data-show="!$packSearchLoading">Search</span>
 						<span data-show="$packSearchLoading" class="animate-pulse">Searching...</span>
 					</button>
-				</form>
+				</div>
 
 				<div id="wizard-pack-results" class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<div class="col-span-full py-8 text-center text-xs text-zinc-500">
@@ -267,25 +267,24 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 				</div>
 
 				<!-- Mod Search & Cart -->
-				<form
-					class="mt-6 flex gap-3"
-					data-on:submit.prevent="@post('/api/minecraft/wizard/mods/search')"
-				>
+				<div class="mt-6 flex gap-3">
 					<input
 						type="text"
 						data-bind="modQuery"
+						data-on:keydown="if (evt.key === 'Enter') { evt.preventDefault(); @post('/api/minecraft/wizard/mods/search') }"
 						placeholder="Search Modrinth mods (e.g. JEI, Waystones, Create, Sodium)..."
 						class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
 					/>
 					<button
-						type="submit"
+						type="button"
 						data-indicator="modSearchLoading"
+						data-on:click="@post('/api/minecraft/wizard/mods/search')"
 						class="rounded-xl bg-zinc-800 px-5 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-white"
 					>
 						<span data-show="!$modSearchLoading">Search</span>
 						<span data-show="$modSearchLoading" class="animate-pulse">Searching...</span>
 					</button>
-				</form>
+				</div>
 
 				<div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
 					<!-- Search Results -->
@@ -495,18 +494,16 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 					</div>
 				</div>
 
-				<form
-					class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4"
-					data-on:submit.prevent="@post('/api/minecraft/wizard/create')"
-				>
+				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
 					<button type="button" data-on:click="$step = 3" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
 					<button
-						type="submit"
+						type="button"
+						data-on:click="@post('/api/minecraft/wizard/create')"
 						class="rounded-xl bg-emerald-700 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-950/50 hover:bg-emerald-600"
 					>
 						Create Instance & Launch
 					</button>
-				</form>
+				</div>
 			</div>
 		</div>
 	}

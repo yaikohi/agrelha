@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"net/url"
@@ -103,6 +104,18 @@ func TestMCWizardPage(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("wizard missing %q", want)
 		}
+	}
+	if strings.Contains(html, `data-on:submit.prevent`) {
+		t.Errorf("wizard contains unsupported data-on:submit.prevent, which causes native page reloads")
+	}
+	if !strings.Contains(html, `@post('/api/minecraft/wizard/modpacks/search')`) {
+		t.Errorf("wizard missing modpack search @post handler")
+	}
+	if !strings.Contains(html, `@post('/api/minecraft/wizard/mods/search')`) {
+		t.Errorf("wizard missing mods search @post handler")
+	}
+	if !strings.Contains(html, `@post('/api/minecraft/wizard/create')`) {
+		t.Errorf("wizard missing create @post handler")
 	}
 }
 
@@ -307,4 +320,47 @@ func TestMCWizardSearchEndpoints(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }
+
+func TestMCSettingsSave(t *testing.T) {
+	s, st, mgr := setupTestMCServer(t)
+	defer st.Close()
+
+	inst, err := mgr.CreateInstance(context.Background(), minecraft.Instance{
+		Name:      "OldName",
+		MCVersion: "1.21.1",
+		Tier:      minecraft.TierSmall,
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test settings save via JSON
+	jsonBody, _ := json.Marshal(map[string]string{
+		"name":       "NewNameJSON",
+		"motd":       "Hello World",
+		"tier":       "medium",
+		"mc_version": "1.21.1",
+	})
+	req := httptest.NewRequest(fiber.MethodPost, fmt.Sprintf("/api/minecraft/%d/settings", inst.Number), bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("settings save status = %d, want 200", resp.StatusCode)
+	}
+
+	updated, err := mgr.GetInstance(context.Background(), inst.Number)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Name != "NewNameJSON" {
+		t.Errorf("got name %q, want NewNameJSON", updated.Name)
+	}
+	if updated.Tier != minecraft.TierMedium {
+		t.Errorf("got tier %s, want medium", updated.Tier)
+	}
+}
+
 

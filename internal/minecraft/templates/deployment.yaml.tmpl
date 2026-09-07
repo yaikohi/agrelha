@@ -61,7 +61,7 @@ spec:
             - name: EULA
               value: "TRUE"
             - name: INIT_MEMORY
-              value: "{{ .MemoryGiB }}G"
+              value: "{{ .HeapInitMemoryGiB }}G"
             - name: MAX_MEMORY
               value: "{{ .MemoryGiB }}G"
             - name: SYNC_CHUNK_WRITES
@@ -121,7 +121,7 @@ spec:
               cpu: 2000m
               memory: {{ .MemoryGiB }}Gi
             limits:
-              memory: {{ .MemoryGiB }}Gi
+              memory: {{ .MemoryLimitGiB }}Gi
           volumeMounts:
             - name: data-volume
               mountPath: /data

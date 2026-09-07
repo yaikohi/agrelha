@@ -145,6 +145,28 @@ func (inst Instance) MemoryGiB() int {
 	return inst.Tier.MemoryGiB()
 }
 
+func (inst Instance) MemoryLimitGiB() int {
+	switch inst.Tier {
+	case TierSmall:
+		return 6
+	case TierLarge:
+		return 16
+	default:
+		return 10
+	}
+}
+
+func (inst Instance) HeapInitMemoryGiB() int {
+	switch inst.Tier {
+	case TierSmall:
+		return 3
+	case TierLarge:
+		return 10
+	default:
+		return 6
+	}
+}
+
 func (inst Instance) Env() map[string]string {
 	env := map[string]string{
 		"WORLD_SLOT": inst.Slug,
