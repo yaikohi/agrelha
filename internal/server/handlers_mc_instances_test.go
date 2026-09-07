@@ -252,3 +252,59 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 		t.Fatalf("expected 0 instances after delete, got %d", len(instances))
 	}
 }
+
+func TestMCWizardSearchEndpoints(t *testing.T) {
+	s, st, _ := setupTestMCServer(t)
+	defer st.Close()
+
+	// 1. Modpack search via POST (Datastar v1.0.2 style)
+	body, _ := json.Marshal(map[string]string{"packQuery": "fluxw"})
+	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/modpacks/search", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.App.Test(req)
+	if err != nil {
+		t.Fatalf("modpack search POST failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	respBytes, _ := io.ReadAll(resp.Body)
+	respStr := string(respBytes)
+	if !strings.Contains(respStr, "event: datastar-patch-elements") {
+		t.Errorf("expected datastar-patch-elements, got %s", respStr)
+	}
+	if !strings.Contains(respStr, "selector #wizard-pack-results") {
+		t.Errorf("expected selector #wizard-pack-results, got %s", respStr)
+	}
+
+	// 2. Mod search via POST (Datastar v1.0.2 style)
+	body, _ = json.Marshal(map[string]string{"modQuery": "jei", "mc_version": "1.21.1"})
+	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/mods/search", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = s.App.Test(req)
+	if err != nil {
+		t.Fatalf("mods search POST failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	respBytes, _ = io.ReadAll(resp.Body)
+	respStr = string(respBytes)
+	if !strings.Contains(respStr, "event: datastar-patch-elements") {
+		t.Errorf("expected datastar-patch-elements, got %s", respStr)
+	}
+	if !strings.Contains(respStr, "selector #wizard-mod-results") {
+		t.Errorf("expected selector #wizard-mod-results, got %s", respStr)
+	}
+
+	// 3. Modpack search via GET
+	req = httptest.NewRequest(fiber.MethodGet, "/api/minecraft/wizard/modpacks/search?q=fluxw", nil)
+	resp, err = s.App.Test(req)
+	if err != nil {
+		t.Fatalf("modpack search GET failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+

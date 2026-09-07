@@ -2,8 +2,10 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"agrelha/cmd/web/pages"
 	"agrelha/internal/mcversions"
 	"agrelha/internal/minecraft"
+	"agrelha/internal/sse"
 )
 
 func (s *FiberServer) mcWizardPage(c *fiber.Ctx) error {
@@ -46,23 +49,53 @@ func (s *FiberServer) mcWizardPage(c *fiber.Ctx) error {
 	return render(c, pages.MinecraftWizard(releases, budgetUI))
 }
 
+func ssePatchElements(c *fiber.Ctx, selector, content string) error {
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	if err := sse.InnerElement(w, selector, content); err != nil {
+		return err
+	}
+	return c.Send(buf.Bytes())
+}
+
 func (s *FiberServer) mcWizardModpacksSearch(c *fiber.Ctx) error {
 	if s.mpi == nil {
-		return c.SendString(`<div class="col-span-full text-xs text-red-400">Modpack Index unconfigured</div>`)
+		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full text-xs text-red-400 py-6 text-center">Modpack Index unconfigured</div>`)
 	}
 
-	q := strings.TrimSpace(c.Query("q"))
+	var req struct {
+		Q         string `json:"q" form:"q"`
+		PackQuery string `json:"packQuery" form:"packQuery"`
+	}
+	_ = c.BodyParser(&req)
+
+	q := strings.TrimSpace(req.PackQuery)
+	if q == "" {
+		q = strings.TrimSpace(req.Q)
+	}
+	if q == "" {
+		q = strings.TrimSpace(c.Query("q"))
+	}
+
+	if q == "" {
+		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full py-8 text-center text-xs text-zinc-500">Type a modpack name above and click Search to browse available packs.</div>`)
+	}
+
 	res, err := s.mpi.SearchModpacks(c.UserContext(), q, "", 1)
 	if err != nil {
-		return c.SendString(fmt.Sprintf(`<div class="col-span-full text-xs text-red-400">Search error: %s</div>`, err.Error()))
+		return ssePatchElements(c, "#wizard-pack-results", fmt.Sprintf(`<div class="col-span-full text-xs text-red-400 py-6 text-center">Search error: %s</div>`, html.EscapeString(err.Error())))
 	}
 	if len(res.Data) == 0 {
-		return c.SendString(`<div class="col-span-full text-xs text-zinc-500 py-6 text-center">No modpacks found matching your search.</div>`)
+		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full text-xs text-zinc-500 py-8 text-center">No modpacks found matching your search.</div>`)
 	}
 
 	var sb strings.Builder
 	for _, p := range res.Data {
-		cleanName := strings.ReplaceAll(p.Name, "'", "\\'")
+		cleanJSName := strings.ReplaceAll(strings.ReplaceAll(p.Name, `\`, `\\`), `'`, `\'`)
+		cleanJSName = strings.ReplaceAll(cleanJSName, `"`, `&quot;`)
+		cleanPageURL := strings.ReplaceAll(p.PageURL, `'`, `\'`)
 		sb.WriteString(fmt.Sprintf(`
 			<div class="flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-4">
 				<div>
@@ -83,36 +116,59 @@ func (s *FiberServer) mcWizardModpacksSearch(c *fiber.Ctx) error {
 					</button>
 				</div>
 			</div>
-		`, p.ThumbnailURL, p.Name, p.DownloadCount, p.Summary, cleanName, p.ID, p.PageURL))
+		`, html.EscapeString(p.ThumbnailURL), html.EscapeString(p.Name), p.DownloadCount, html.EscapeString(p.Summary), cleanJSName, p.ID, cleanPageURL))
 	}
 
-	c.Set("Content-Type", "text/html")
-	return c.SendString(sb.String())
+	return ssePatchElements(c, "#wizard-pack-results", sb.String())
 }
 
 func (s *FiberServer) mcWizardModsSearch(c *fiber.Ctx) error {
 	if s.mr == nil {
-		return c.SendString(`<p class="text-xs text-red-400">Modrinth client unconfigured</p>`)
+		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-red-400 py-4 text-center">Modrinth client unconfigured</p>`)
 	}
 
-	q := strings.TrimSpace(c.Query("q"))
-	mcVersion := strings.TrimSpace(c.Query("version"))
+	var req struct {
+		Q         string `json:"q" form:"q"`
+		ModQuery  string `json:"modQuery" form:"modQuery"`
+		MCVersion string `json:"mc_version" form:"mc_version"`
+		Version   string `json:"version" form:"version"`
+	}
+	_ = c.BodyParser(&req)
+
+	q := strings.TrimSpace(req.ModQuery)
+	if q == "" {
+		q = strings.TrimSpace(req.Q)
+	}
+	if q == "" {
+		q = strings.TrimSpace(c.Query("q"))
+	}
+
+	if q == "" {
+		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-zinc-500 py-4 text-center">Search mods to populate results.</p>`)
+	}
+
+	mcVersion := strings.TrimSpace(req.MCVersion)
+	if mcVersion == "" {
+		mcVersion = strings.TrimSpace(req.Version)
+	}
+	if mcVersion == "" {
+		mcVersion = strings.TrimSpace(c.Query("version"))
+	}
 	if mcVersion == "" {
 		mcVersion = "1.21.1"
 	}
 
 	res, err := s.mr.Search(c.UserContext(), q, mcVersion, "", 20, 0)
 	if err != nil {
-		return c.SendString(fmt.Sprintf(`<p class="text-xs text-red-400">Search error: %s</p>`, err.Error()))
+		return ssePatchElements(c, "#wizard-mod-results", fmt.Sprintf(`<p class="text-xs text-red-400 py-4 text-center">Search error: %s</p>`, html.EscapeString(err.Error())))
 	}
 	if len(res.Hits) == 0 {
-		return c.SendString(`<p class="text-xs text-zinc-500">No mods found.</p>`)
+		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-zinc-500 py-4 text-center">No mods found matching your search.</p>`)
 	}
 
 	var sb strings.Builder
 	for _, h := range res.Hits {
 		cleanSlug := strings.ReplaceAll(h.Slug, "'", "\\'")
-		cleanTitle := strings.ReplaceAll(h.Title, "'", "\\'")
 		sb.WriteString(fmt.Sprintf(`
 			<div class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
 				<div class="flex items-center gap-2.5 overflow-hidden">
@@ -131,12 +187,10 @@ func (s *FiberServer) mcWizardModsSearch(c *fiber.Ctx) error {
 					+ Add
 				</button>
 			</div>
-		`, h.IconURL, h.Title, h.Slug, h.Description, cleanSlug, cleanSlug))
-		_ = cleanTitle
+		`, html.EscapeString(h.IconURL), html.EscapeString(h.Title), html.EscapeString(h.Slug), html.EscapeString(h.Description), cleanSlug, cleanSlug))
 	}
 
-	c.Set("Content-Type", "text/html")
-	return c.SendString(sb.String())
+	return ssePatchElements(c, "#wizard-mod-results", sb.String())
 }
 
 func (s *FiberServer) mcWizardCartCheck(c *fiber.Ctx) error {
@@ -393,7 +447,9 @@ func (s *FiberServer) mcProvisioningPage(c *fiber.Ctx) error {
 
 func (s *FiberServer) mcProvisioningStream(c *fiber.Ctx) error {
 	if s.mcInstances == nil || s.mck8s == nil {
-		return c.SendString("data: {phase:'ready',ready:true}\n\n")
+		c.Set("Content-Type", "text/event-stream")
+		c.Set("Cache-Control", "no-cache")
+		return c.SendString("event: datastar-patch-signals\ndata: signals {\"phase\":\"ready\",\"ready\":true}\n\n")
 	}
 
 	num, err := strconv.Atoi(c.Params("num"))
@@ -426,9 +482,12 @@ func (s *FiberServer) mcProvisioningStream(c *fiber.Ctx) error {
 				}
 			}
 
-			payload := fmt.Sprintf(`{"phase":%q,"ready":%t,"lb_ip":%q,"num":%d}`, phase, isReady, inst.LBIP, inst.Number)
-			_, _ = fmt.Fprintf(w, "event: datastar-merge-signals\ndata: %s\n\n", payload)
-			_ = w.Flush()
+			_ = sse.PatchSignals(w, map[string]any{
+				"phase": phase,
+				"ready": isReady,
+				"lb_ip": inst.LBIP,
+				"num":   inst.Number,
+			})
 
 			if isReady {
 				break
@@ -445,24 +504,20 @@ func ssePatch(c *fiber.Ctx, signals map[string]any, fragments map[string]string)
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 
-	var sb strings.Builder
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+
 	if len(signals) > 0 {
-		var parts []string
-		for k, v := range signals {
-			switch val := v.(type) {
-			case string:
-				parts = append(parts, fmt.Sprintf("%s:%q", k, val))
-			default:
-				parts = append(parts, fmt.Sprintf("%s:%v", k, val))
-			}
+		if err := sse.PatchSignals(w, signals); err != nil {
+			return err
 		}
-		sb.WriteString("event: datastar-merge-signals\n")
-		sb.WriteString(fmt.Sprintf("data: {%s}\n\n", strings.Join(parts, ",")))
 	}
 
 	for selector, html := range fragments {
-		sb.WriteString(fmt.Sprintf("event: datastar-merge-fragments\ndata: selector %s\ndata: %s\n\n", selector, html))
+		if err := sse.InnerElement(w, selector, html); err != nil {
+			return err
+		}
 	}
 
-	return c.SendString(sb.String())
+	return c.Send(buf.Bytes())
 }

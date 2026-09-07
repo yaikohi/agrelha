@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"html"
@@ -16,6 +17,7 @@ import (
 	"agrelha/cmd/web/pages"
 	"agrelha/internal/minecraft"
 	"agrelha/internal/modpack"
+	"agrelha/internal/sse"
 )
 
 func (s *FiberServer) mcInstancePage(c *fiber.Ctx) error {
@@ -133,13 +135,20 @@ func (s *FiberServer) mcInstanceRcon(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 
-	out := fmt.Sprintf("event: datastar-merge-fragments\ndata: selector #console-logs\ndata: mergeMode append\ndata: %s\n\n", fragment)
-	return c.SendString(out)
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	_ = sse.AppendElement(w, "#console-logs", fragment)
+	return c.Send(buf.Bytes())
 }
 
 func (s *FiberServer) mcInstanceLogsStream(c *fiber.Ctx) error {
 	if s.mcInstances == nil || s.mck8s == nil {
-		return c.SendString("data: Logs unavailable\n\n")
+		c.Set("Content-Type", "text/event-stream")
+		c.Set("Cache-Control", "no-cache")
+		var buf bytes.Buffer
+		w := bufio.NewWriter(&buf)
+		_ = sse.AppendElement(w, "#console-logs", "<p class=\"text-zinc-500\">Logs unavailable</p>")
+		return c.Send(buf.Bytes())
 	}
 
 	num, err := strconv.Atoi(c.Params("num"))
@@ -159,8 +168,7 @@ func (s *FiberServer) mcInstanceLogsStream(c *fiber.Ctx) error {
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		stream, err := s.mck8s.StreamDeploymentLogs(context.Background(), inst.DeploymentName(), 100)
 		if err != nil {
-			_, _ = fmt.Fprintf(w, "event: datastar-merge-fragments\ndata: selector #console-logs\ndata: <p class=\"text-red-400\">Log stream error: %s</p>\n\n", html.EscapeString(err.Error()))
-			_ = w.Flush()
+			_ = sse.AppendElement(w, "#console-logs", fmt.Sprintf("<p class=\"text-red-400\">Log stream error: %s</p>", html.EscapeString(err.Error())))
 			return
 		}
 		defer stream.Close()
@@ -169,8 +177,7 @@ func (s *FiberServer) mcInstanceLogsStream(c *fiber.Ctx) error {
 		for scanner.Scan() {
 			line := html.EscapeString(scanner.Text())
 			frag := fmt.Sprintf("<div class=\"text-zinc-300\">%s</div>", line)
-			_, _ = fmt.Fprintf(w, "event: datastar-merge-fragments\ndata: selector #console-logs\ndata: mergeMode append\ndata: %s\n\n", frag)
-			_ = w.Flush()
+			_ = sse.AppendElement(w, "#console-logs", frag)
 		}
 	})
 
