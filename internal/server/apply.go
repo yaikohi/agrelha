@@ -51,11 +51,7 @@ func (s *FiberServer) applyMinecraftAfterSync(cmName, depName, key string, want 
 		return
 	}
 	if depName == "" {
-		if cmName == "minecraft-fabric-mods" || cmName == "minecraft-fabric-configs" {
-			depName = s.cfg.FabricDeployment
-		} else {
-			depName = s.cfg.MinecraftDeployment
-		}
+		depName = s.cfg.MinecraftDeployment
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)

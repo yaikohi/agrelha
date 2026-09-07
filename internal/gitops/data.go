@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,6 +25,12 @@ func (c *Committer) SetData(ctx context.Context, relPath, key, value, commitMsg 
 func (c *Committer) DeleteData(ctx context.Context, relPath, key, commitMsg string) (bool, error) {
 	return c.mutate(ctx, relPath, commitMsg, func(data *yaml.Node) (bool, error) {
 		return deleteData(data, key), nil
+	})
+}
+
+func (c *Committer) ReplaceData(ctx context.Context, relPath string, data map[string]string, commitMsg string) (bool, error) {
+	return c.mutate(ctx, relPath, commitMsg, func(node *yaml.Node) (bool, error) {
+		return replaceData(node, data), nil
 	})
 }
 
@@ -134,4 +141,46 @@ func deleteData(data *yaml.Node, key string) bool {
 		}
 	}
 	return false
+}
+
+func replaceData(data *yaml.Node, next map[string]string) bool {
+	if data.Kind != yaml.MappingNode {
+		return false
+	}
+
+	keys := make([]string, 0, len(next))
+	for k := range next {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	content := make([]*yaml.Node, 0, len(keys)*2)
+	for _, k := range keys {
+		v := next[k]
+		kn := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k}
+		vn := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: v}
+		if strings.Contains(v, "\n") {
+			vn.Style = yaml.LiteralStyle
+		}
+		content = append(content, kn, vn)
+	}
+
+	if sameMapping(data.Content, content) {
+		return false
+	}
+	data.Content = content
+	data.Style = 0
+	return true
+}
+
+func sameMapping(a, b []*yaml.Node) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Value != b[i].Value {
+			return false
+		}
+	}
+	return true
 }

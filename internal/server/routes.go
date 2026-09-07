@@ -83,6 +83,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/api/minecraft/mods/install", s.mcModsInstall)
 	app.Post("/api/minecraft/mods/remove", s.mcModsRemove)
 	app.Post("/api/minecraft/version/set", s.mcVersionSet)
+	app.Post("/api/minecraft/slot/switch", s.mcSlotSwitch)
 	app.Post("/api/minecraft/access/op", s.mcAccessGrantOp)
 	app.Post("/api/minecraft/access/deop", s.mcAccessRevokeOp)
 	app.Post("/api/minecraft/access/whitelist/add", s.mcAccessAddWhitelist)

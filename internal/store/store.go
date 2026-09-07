@@ -74,6 +74,15 @@ func (s *Store) migrate() error {
 		fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (full_name, version)
 	);
+	CREATE TABLE IF NOT EXISTS mc_slots (
+		slot        TEXT PRIMARY KEY,
+		type        TEXT NOT NULL,          -- AUTO_CURSEFORGE|NEOFORGE|FABRIC
+		pack        TEXT,
+		mc_version  TEXT,
+		cf_page_url TEXT,
+		created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_used   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	CREATE TABLE IF NOT EXISTS meta (
 		key   TEXT PRIMARY KEY,
 		value TEXT

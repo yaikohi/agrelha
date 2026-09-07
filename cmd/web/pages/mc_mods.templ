@@ -45,6 +45,8 @@ func tabStyle(active bool) string {
 templ MinecraftMods(
 	mcVersion, loaderVersion string,
 	availableVersions []string,
+	currentSlot string,
+	slots []SlotUI,
 	installedMods []string,
 	activeTab string,
 	modpacks []ModpackUI,
@@ -220,7 +222,76 @@ templ MinecraftMods(
 				>
 					Individual Mods
 				</a>
+				<a
+					href={ templ.SafeURL(fmt.Sprintf("/minecraft/mods?loader=%s&tab=worlds", currentLoader)) }
+					class={ "px-4 py-2.5 border-b-2 transition -mb-px " + tabStyle(activeTab == "worlds") }
+				>
+					Worlds
+					if len(slots) > 0 {
+						<span class="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">{ fmt.Sprintf("%d", len(slots)) }</span>
+					}
+				</a>
 			</div>
+
+		if activeTab == "worlds" {
+			<section class="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/60 p-5">
+				<div class="mb-1 flex items-center justify-between">
+					<h2 class="text-base font-semibold text-zinc-100">World slots</h2>
+					if currentSlot != "" {
+						<span class="rounded bg-emerald-950/80 border border-emerald-800/40 px-2 py-0.5 font-mono text-xs text-emerald-400">{ currentSlot }</span>
+					}
+				</div>
+				<p class="mb-4 text-xs text-zinc-500">
+					Each slot is a separate world on the shared data volume. Switching packs
+					creates a new slot and leaves the previous world untouched — switch back
+					here to resume it. Only one slot runs at a time.
+				</p>
+				if len(slots) == 0 {
+					<p class="rounded border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+						No world slots recorded yet. Installing a modpack creates one.
+					</p>
+				} else {
+					<div class="space-y-2">
+						for _, sl := range slots {
+							<div class={ "flex flex-wrap items-center justify-between gap-3 rounded border p-3 " + slotRowStyle(sl.Active) }>
+								<div class="min-w-0">
+									<div class="flex items-center gap-2">
+										<span class="font-mono text-sm text-zinc-100">{ sl.Slot }</span>
+										if sl.Active {
+											<span class="rounded bg-emerald-700/80 px-1.5 py-0.5 text-[10px] font-medium text-emerald-50">RUNNING</span>
+										}
+									</div>
+									<p class="mt-0.5 text-xs text-zinc-500">
+										{ SlotEngine(sl.Type) }
+										if sl.Pack != "" {
+											<span class="text-zinc-400"> · { sl.Pack }</span>
+										}
+										if sl.MCVersion != "" {
+											<span class="font-mono text-emerald-400"> · MC { sl.MCVersion }</span>
+										}
+										if sl.LastUsed != "" {
+											<span class="text-zinc-600"> · last used { sl.LastUsed }</span>
+										}
+									</p>
+								</div>
+								if !sl.Active {
+									<form method="post" action="/api/minecraft/slot/switch">
+										<input type="hidden" name="slot" value={ sl.Slot }/>
+										<button class="rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium hover:bg-emerald-600">
+											Switch to this world
+										</button>
+									</form>
+								}
+							</div>
+						}
+					</div>
+					<p class="mt-4 text-xs text-zinc-600">
+						Switching commits to GitOps and restarts the server. The previous
+						world stays on disk.
+					</p>
+				}
+			</section>
+		}
 
 		if activeTab == "modpacks" {
 			<!-- Modpack Index Switcher -->

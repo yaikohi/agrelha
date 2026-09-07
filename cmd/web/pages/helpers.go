@@ -104,3 +104,30 @@ func HistoryBadge(source, kind string) string {
 		return "bg-zinc-800 text-zinc-300"
 	}
 }
+
+type SlotUI struct {
+	Slot      string
+	Type      string
+	Pack      string
+	MCVersion string
+	Active    bool
+	LastUsed  string
+}
+
+func SlotEngine(t string) string {
+	switch t {
+	case "AUTO_CURSEFORGE":
+		return "CurseForge pack"
+	case "FABRIC":
+		return "Fabric"
+	default:
+		return "NeoForge"
+	}
+}
+
+func slotRowStyle(active bool) string {
+	if active {
+		return "border-emerald-800/50 bg-emerald-950/20"
+	}
+	return "border-zinc-800 bg-zinc-950"
+}

@@ -3,6 +3,7 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -36,7 +37,7 @@ func TestMinecraftEndpoints(t *testing.T) {
 		}
 	}
 	cs := fake.NewSimpleClientset(
-		cm("minecraft-neoforge-mods", map[string]string{
+		cm("minecraft-modded-mods", map[string]string{
 			"MINECRAFT_VERSION": "1.21.1",
 			"NEOFORGE_VERSION":  "recommended",
 			"mods.txt":          "jei\nferrite-core\n",
@@ -47,11 +48,6 @@ func TestMinecraftEndpoints(t *testing.T) {
 		}),
 		cm("minecraft-neoforge-configs", map[string]string{
 			"test.toml": "key = \"val\"\n",
-		}),
-		cm("minecraft-fabric-mods", map[string]string{
-			"MINECRAFT_VERSION": "1.21.1",
-			"FABRIC_VERSION":    "latest",
-			"mods.txt":          "fabric-api\nlithium\n",
 		}),
 	)
 
@@ -204,7 +200,7 @@ func TestMinecraftModpackExportEndpoint(t *testing.T) {
 		}
 	}
 	cs := fake.NewSimpleClientset(
-		cm("minecraft-neoforge-mods", map[string]string{
+		cm("minecraft-modded-mods", map[string]string{
 			"MINECRAFT_VERSION": "1.21.1",
 			"NEOFORGE_VERSION":  "21.1.249",
 			"mods.txt":          "jei\n",
@@ -312,15 +308,17 @@ func TestMinecraftLoaderSwitch(t *testing.T) {
 	defer st.Close()
 
 	r1 := int32(1)
-	r0 := int32(0)
 	cs := fake.NewSimpleClientset(
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "minecraft-neoforge", Namespace: "minecraft-modded"},
+			ObjectMeta: metav1.ObjectMeta{Name: "minecraft-modded", Namespace: "minecraft-modded"},
 			Spec:       appsv1.DeploymentSpec{Replicas: &r1},
 		},
-		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "minecraft-fabric", Namespace: "minecraft-modded"},
-			Spec:       appsv1.DeploymentSpec{Replicas: &r0},
+		&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "minecraft-modded-slot", Namespace: "minecraft-modded"},
+			Data: map[string]string{
+				"WORLD_SLOT": "ducktopia",
+				"TYPE":       "AUTO_CURSEFORGE",
+			},
 		},
 	)
 
@@ -328,58 +326,43 @@ func TestMinecraftLoaderSwitch(t *testing.T) {
 		App: fiber.New(),
 		cfg: &config.Config{
 			MinecraftNamespace:  "minecraft-modded",
-			MinecraftDeployment: "minecraft-neoforge",
-			FabricDeployment:    "minecraft-fabric",
+			MinecraftDeployment: "minecraft-modded",
 		},
 		store: st,
-		mck8s: k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-neoforge"),
+		mck8s: k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded"),
 	}
 	s.RegisterFiberRoutes()
 
-	// 1. Invalid target returns 400
-	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/loader/switch", strings.NewReader("target=forge"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := s.App.Test(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != fiber.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
-
-	// 2. Switch to fabric
-	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/loader/switch", strings.NewReader("target=fabric"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err = s.App.Test(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	post := func(target, accept string) int {
+		req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/loader/switch", strings.NewReader("target="+target))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if accept != "" {
+			req.Header.Set("Accept", accept)
+		}
+		resp, err := s.App.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.StatusCode
 	}
 
-	// Verify fabric deployment scaled to 1 and neoforge scaled to 0
-	active, err := s.mck8s.ActiveLoader(req.Context(), "minecraft-neoforge", "minecraft-fabric")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if active != "fabric" {
-		t.Fatalf("active loader = %s, want fabric", active)
+	if code := post("forge", ""); code != fiber.StatusBadRequest {
+		t.Fatalf("invalid target: status = %d, want 400", code)
 	}
 
-	// 3. Switch back to neoforge via HTML form
-	formReq := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/loader/switch", strings.NewReader("target=neoforge"))
-	formReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	formReq.Header.Set("Accept", "text/html")
-	resp, err = s.App.Test(formReq)
+	// Switching now rewrites the slot ConfigMap through the GitOps plane rather
+	// than scaling two deployments, so with no committer configured it must
+	// refuse rather than silently no-op.
+	if code := post("fabric", ""); code != fiber.StatusServiceUnavailable {
+		t.Fatalf("no gitops: status = %d, want 503", code)
+	}
+
+	slot, typ, err := s.mck8s.ActiveSlot(context.Background(), "minecraft-modded-slot")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != fiber.StatusSeeOther {
-		t.Fatalf("status = %d, want 303 redirect", resp.StatusCode)
-	}
-	if loc := resp.Header.Get("Location"); loc != "/minecraft/mods?loader=neoforge" {
-		t.Fatalf("location = %q, want /minecraft/mods?loader=neoforge", loc)
+	if slot != "ducktopia" || typ != "AUTO_CURSEFORGE" {
+		t.Fatalf("ActiveSlot() = %q/%q, want ducktopia/AUTO_CURSEFORGE", slot, typ)
 	}
 }
 
@@ -422,7 +405,7 @@ func TestMinecraftFabricExportEndpoint(t *testing.T) {
 		}
 	}
 	cs := fake.NewSimpleClientset(
-		cm("minecraft-fabric-mods", map[string]string{
+		cm("minecraft-modded-mods", map[string]string{
 			"MINECRAFT_VERSION": "1.21.1",
 			"FABRIC_VERSION":    "0.16.5",
 			"mods.txt":          "fabric-api\n",
@@ -484,3 +467,73 @@ func TestMinecraftFabricExportEndpoint(t *testing.T) {
 	}
 }
 
+func TestWorldsTabListsSlots(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	for _, sl := range []store.Slot{
+		{Slot: "ducktopia", Type: "AUTO_CURSEFORGE", Pack: "Ducktopia Farlands"},
+		{Slot: "atm9", Type: "NEOFORGE", Pack: "All The Mods 9", MCVersion: "1.21.1"},
+	} {
+		if err := st.UpsertSlot(sl); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cs := fake.NewSimpleClientset(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "minecraft-modded-slot", Namespace: "minecraft-modded"},
+		Data:       map[string]string{"WORLD_SLOT": "ducktopia", "TYPE": "AUTO_CURSEFORGE"},
+	})
+
+	s := &FiberServer{
+		App:   fiber.New(),
+		cfg:   &config.Config{MinecraftNamespace: "minecraft-modded", MinecraftDeployment: "minecraft-modded"},
+		store: st,
+		mck8s: k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded"),
+	}
+	s.RegisterFiberRoutes()
+
+	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodGet, "/minecraft/mods?tab=worlds", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	html := string(body)
+
+	for _, want := range []string{"World slots", "ducktopia", "atm9", "All The Mods 9", "RUNNING"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("worlds tab missing %q", want)
+		}
+	}
+	// The running slot must not offer a switch button for itself.
+	if strings.Count(html, "Switch to this world") != 1 {
+		t.Fatalf("want exactly one switch button (for the inactive slot), got %d", strings.Count(html, "Switch to this world"))
+	}
+}
+
+func TestSlotSwitchRejectsUnknownSlot(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	s := &FiberServer{App: fiber.New(), cfg: &config.Config{}, store: st}
+	s.RegisterFiberRoutes()
+
+	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/slot/switch", strings.NewReader("slot="))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("empty slot: status = %d, want 400", resp.StatusCode)
+	}
+}

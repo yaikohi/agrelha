@@ -193,7 +193,7 @@ func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 	}
 
 	if s.mck8s != nil {
-		if l, err := s.mck8s.ActiveLoader(ctx, s.cfg.MinecraftDeployment, s.cfg.FabricDeployment); err == nil && l == "fabric" {
+		if _, typ, err := s.mck8s.ActiveSlot(ctx, "minecraft-modded-slot"); err == nil && typ == "FABRIC" {
 			sig["mc_loader"] = "Fabric"
 		}
 	}
