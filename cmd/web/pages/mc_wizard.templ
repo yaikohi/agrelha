@@ -1,0 +1,505 @@
+package pages
+
+import "fmt"
+
+templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
+	@Layout("Create Minecraft World") {
+		@nav()
+		<div
+			class="space-y-6"
+			data-signals="{step:1,name:'',seed:'',source:'modpack',loader:'neoforge',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false}"
+		>
+			<!-- Stepper progress header -->
+			<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-sm">
+				<div class="flex items-center justify-between text-xs font-medium">
+					<div
+						class="flex items-center gap-2"
+						data-class="{'text-emerald-400 font-semibold': $step == 1, 'text-zinc-500': $step != 1}"
+					>
+						<span
+							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
+							data-class="{'bg-emerald-700 text-white': $step == 1, 'bg-zinc-800 text-zinc-400': $step != 1}"
+						>1</span>
+						<span>Identity</span>
+					</div>
+					<div class="h-0.5 w-12 bg-zinc-800"></div>
+					<div
+						class="flex items-center gap-2"
+						data-class="{'text-emerald-400 font-semibold': $step == 2, 'text-zinc-500': $step != 2}"
+					>
+						<span
+							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
+							data-class="{'bg-emerald-700 text-white': $step == 2, 'bg-zinc-800 text-zinc-400': $step != 2}"
+						>2</span>
+						<span>World Type</span>
+					</div>
+					<div class="h-0.5 w-12 bg-zinc-800"></div>
+					<div
+						class="flex items-center gap-2"
+						data-class="{'text-emerald-400 font-semibold': $step == 3, 'text-zinc-500': $step != 3}"
+					>
+						<span
+							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
+							data-class="{'bg-emerald-700 text-white': $step == 3, 'bg-zinc-800 text-zinc-400': $step != 3}"
+						>3</span>
+						<span>Configure</span>
+					</div>
+					<div class="h-0.5 w-12 bg-zinc-800"></div>
+					<div
+						class="flex items-center gap-2"
+						data-class="{'text-emerald-400 font-semibold': $step == 4, 'text-zinc-500': $step != 4}"
+					>
+						<span
+							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
+							data-class="{'bg-emerald-700 text-white': $step == 4, 'bg-zinc-800 text-zinc-400': $step != 4}"
+						>4</span>
+						<span>Review & Create</span>
+					</div>
+				</div>
+			</div>
+
+			<!-- STEP 1: IDENTITY -->
+			<div data-show="$step == 1" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 1: Name Your World</h2>
+				<p class="mt-1 text-xs text-zinc-400">Give your world a recognizable title and an optional seed.</p>
+
+				<div class="mt-6 max-w-md space-y-4">
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">World Name <span class="text-red-400">*</span></label>
+						<input
+							type="text"
+							data-bind="name"
+							placeholder="e.g. Aetheria Realm, Cobblemon Valley"
+							required
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+						/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">World Seed <span class="text-zinc-500">(optional)</span></label>
+						<input
+							type="text"
+							data-bind="seed"
+							placeholder="Leave empty for a random seed"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+						/>
+					</div>
+				</div>
+
+				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
+					<a href="/minecraft" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Cancel</a>
+					<button
+						type="button"
+						data-on:click="if ($name.trim() !== '') { $step = 2 } else { alert('Please enter a world name') }"
+						class="rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-emerald-950/50 hover:bg-emerald-600"
+					>
+						Next: Choose World Type &rarr;
+					</button>
+				</div>
+			</div>
+
+			<!-- STEP 2: WORLD TYPE -->
+			<div data-show="$step == 2" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 2: Choose World Type</h2>
+				<p class="mt-1 text-xs text-zinc-400">Select how content and gameplay will be structured for this instance.</p>
+
+				<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<!-- Path 1: Modpack -->
+					<div
+						data-on:click="$source = 'modpack'; $step = 3"
+						class="group cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-emerald-600 hover:bg-zinc-800/60"
+						data-class="{'border-emerald-600 bg-emerald-950/20 ring-1 ring-emerald-600': $source == 'modpack'}"
+					>
+						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-950/50 text-2xl text-purple-400 ring-1 ring-purple-800/50">
+							📦
+						</div>
+						<h3 class="mt-4 text-base font-semibold text-zinc-100 group-hover:text-emerald-400">Install a Modpack</h3>
+						<p class="mt-1 text-xs leading-relaxed text-zinc-400">
+							Browse curated packs from Modpack Index with 1-click installation. The pack dictates the engine and Minecraft version automatically.
+						</p>
+					</div>
+
+					<!-- Path 2: Assemble Your Own -->
+					<div
+						data-on:click="$source = 'assemble'; $step = 3"
+						class="group cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-emerald-600 hover:bg-zinc-800/60"
+						data-class="{'border-emerald-600 bg-emerald-950/20 ring-1 ring-emerald-600': $source == 'assemble'}"
+					>
+						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-950/50 text-2xl text-sky-400 ring-1 ring-sky-800/50">
+							🔧
+						</div>
+						<h3 class="mt-4 text-base font-semibold text-zinc-100 group-hover:text-emerald-400">Assemble Your Own</h3>
+						<p class="mt-1 text-xs leading-relaxed text-zinc-400">
+							Pick your Minecraft release and add individual mods from Modrinth. A live compatibility analyzer recommends NeoForge or Fabric.
+						</p>
+					</div>
+
+					<!-- Path 3: Vanilla -->
+					<div
+						data-on:click="$source = 'vanilla'; $loader = 'vanilla'; $step = 3"
+						class="group cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-emerald-600 hover:bg-zinc-800/60"
+						data-class="{'border-emerald-600 bg-emerald-950/20 ring-1 ring-emerald-600': $source == 'vanilla'}"
+					>
+						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-950/50 text-2xl text-amber-400 ring-1 ring-amber-800/50">
+							🌍
+						</div>
+						<h3 class="mt-4 text-base font-semibold text-zinc-100 group-hover:text-emerald-400">Vanilla</h3>
+						<p class="mt-1 text-xs leading-relaxed text-zinc-400">
+							Clean official Minecraft server without mods. Choose game mode, difficulty, world type, and server properties.
+						</p>
+					</div>
+
+					<!-- Path 4: Import -->
+					<div
+						data-on:click="$source = 'import'; $step = 3"
+						class="group cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-emerald-600 hover:bg-zinc-800/60"
+						data-class="{'border-emerald-600 bg-emerald-950/20 ring-1 ring-emerald-600': $source == 'import'}"
+					>
+						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-950/50 text-2xl text-emerald-400 ring-1 ring-emerald-800/50">
+							📥
+						</div>
+						<h3 class="mt-4 text-base font-semibold text-zinc-100 group-hover:text-emerald-400">Import Existing World</h3>
+						<p class="mt-1 text-xs leading-relaxed text-zinc-400">
+							Upload a Modrinth <code class="text-zinc-300">.mrpack</code>, a Prism Launcher zip, or paste a list of mod slugs.
+						</p>
+					</div>
+				</div>
+
+				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
+					<button
+						type="button"
+						data-on:click="$step = 1"
+						class="text-xs text-zinc-400 hover:text-zinc-200"
+					>
+						&larr; Back to Identity
+					</button>
+				</div>
+			</div>
+
+			<!-- STEP 3: CONFIGURE (PATH SPECIFIC) -->
+			<!-- 3A: MODPACK -->
+			<div data-show="$step == 3 && $source == 'modpack'" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<div class="flex items-center justify-between">
+					<div>
+						<h2 class="text-lg font-bold text-zinc-100">Step 3: Browse Modpacks</h2>
+						<p class="mt-1 text-xs text-zinc-400">Search Modpack Index freely. Selecting a pack automatically sets the engine and version.</p>
+					</div>
+					<div data-show="$pack_name != ''" class="rounded-xl border border-purple-800/60 bg-purple-950/40 px-4 py-2">
+						<span class="text-xs text-purple-300">Selected: <strong class="font-semibold text-purple-200" data-text="$pack_name"></strong></span>
+					</div>
+				</div>
+
+				<div class="mt-6 flex gap-3">
+					<input
+						type="text"
+						data-bind="packQuery"
+						placeholder="Search modpacks (e.g. Cobblemon, All the Mods, Better MC)..."
+						class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+					/>
+					<button
+						type="button"
+						data-on:click="@get('/api/minecraft/wizard/modpacks/search?q=' + $packQuery)"
+						class="rounded-xl bg-zinc-800 px-5 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-white"
+					>
+						Search
+					</button>
+				</div>
+
+				<div id="wizard-pack-results" class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<div class="col-span-full py-8 text-center text-xs text-zinc-500">
+						Type a modpack name above and click Search to browse available packs.
+					</div>
+				</div>
+
+				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
+					<button type="button" data-on:click="$step = 2" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
+					<button
+						type="button"
+						data-on:click="if ($pack_name != '') { $step = 4 } else { alert('Please select a modpack first') }"
+						class="rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white hover:bg-emerald-600"
+					>
+						Next: Review &rarr;
+					</button>
+				</div>
+			</div>
+
+			<!-- 3B: ASSEMBLE YOUR OWN -->
+			<div data-show="$step == 3 && $source == 'assemble'" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 3: Assemble Mods</h2>
+				<p class="mt-1 text-xs text-zinc-400">Pick Minecraft version and select mods. We analyze loader compatibility in real time.</p>
+
+				<!-- Version & Live Compatibility Bar -->
+				<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Minecraft Version</label>
+						<select
+							data-bind="mc_version"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+						>
+							for _, v := range availableVersions {
+								<option value={ v }>{ v }</option>
+							}
+						</select>
+					</div>
+					<div class="sm:col-span-2 rounded-xl border border-zinc-800 bg-zinc-900/90 p-4">
+						<div class="flex items-center justify-between text-xs">
+							<span class="font-medium text-zinc-300">Loader Compatibility</span>
+							<span class="text-zinc-400">Recommended: <strong class="uppercase text-emerald-400" data-text="$bestLoader"></strong></span>
+						</div>
+						<div class="mt-3 grid grid-cols-2 gap-3 text-xs">
+							<div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+								<div class="flex justify-between font-mono">
+									<span>NeoForge</span>
+									<span data-text="$neoFit + '/' + $totalFitMods"></span>
+								</div>
+							</div>
+							<div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+								<div class="flex justify-between font-mono">
+									<span>Fabric</span>
+									<span data-text="$fabFit + '/' + $totalFitMods"></span>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Mod Search & Cart -->
+				<div class="mt-6 flex gap-3">
+					<input
+						type="text"
+						data-bind="modQuery"
+						placeholder="Search Modrinth mods (e.g. JEI, Waystones, Create, Sodium)..."
+						class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+					/>
+					<button
+						type="button"
+						data-on:click="@get('/api/minecraft/wizard/mods/search?q=' + $modQuery + '&version=' + $mc_version)"
+						class="rounded-xl bg-zinc-800 px-5 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-white"
+					>
+						Search
+					</button>
+				</div>
+
+				<div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+					<!-- Search Results -->
+					<div class="lg:col-span-2">
+						<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Available Mods</h3>
+						<div id="wizard-mod-results" class="mt-3 space-y-2 max-h-80 overflow-y-auto pr-1">
+							<p class="text-xs text-zinc-500">Search mods to populate results.</p>
+						</div>
+					</div>
+
+					<!-- Cart -->
+					<div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+						<div class="flex items-center justify-between border-b border-zinc-800 pb-2">
+							<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Selected Cart</h3>
+							<span class="rounded bg-zinc-800 px-2 py-0.5 text-[10px] font-mono text-zinc-400" data-text="$cart.length + ' mods'"></span>
+						</div>
+						<div id="wizard-cart-items" class="mt-3 space-y-1.5 max-h-64 overflow-y-auto text-xs">
+							<p data-show="$cart.length == 0" class="text-xs text-zinc-500">No mods in cart yet.</p>
+						</div>
+					</div>
+				</div>
+
+				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
+					<button type="button" data-on:click="$step = 2" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
+					<button
+						type="button"
+						data-on:click="$loader = $bestLoader; $step = 4"
+						class="rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white hover:bg-emerald-600"
+					>
+						Next: Review &rarr;
+					</button>
+				</div>
+			</div>
+
+			<!-- 3C: VANILLA -->
+			<div data-show="$step == 3 && $source == 'vanilla'" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 3: Vanilla Server Settings</h2>
+				<p class="mt-1 text-xs text-zinc-400">Configure your official Minecraft vanilla world parameters.</p>
+
+				<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-2xl">
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Minecraft Version</label>
+						<select
+							data-bind="mc_version"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+						>
+							for _, v := range availableVersions {
+								<option value={ v }>{ v }</option>
+							}
+						</select>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Game Mode</label>
+						<select
+							data-bind="gamemode"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+						>
+							<option value="survival" selected>Survival</option>
+							<option value="creative">Creative</option>
+							<option value="adventure">Adventure</option>
+							<option value="spectator">Spectator</option>
+						</select>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Difficulty</label>
+						<select
+							data-bind="difficulty"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+						>
+							<option value="peaceful">Peaceful</option>
+							<option value="easy">Easy</option>
+							<option value="normal" selected>Normal</option>
+							<option value="hard">Hard</option>
+						</select>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">World Generation Type</label>
+						<select
+							data-bind="world_type"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+						>
+							<option value="default" selected>Default</option>
+							<option value="flat">Flat</option>
+							<option value="large_biomes">Large Biomes</option>
+							<option value="amplified">Amplified</option>
+						</select>
+					</div>
+				</div>
+
+				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
+					<button type="button" data-on:click="$step = 2" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
+					<button type="button" data-on:click="$step = 4" class="rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white hover:bg-emerald-600">Next: Review &rarr;</button>
+				</div>
+			</div>
+
+			<!-- 3D: IMPORT -->
+			<div data-show="$step == 3 && $source == 'import'" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 3: Import World Content</h2>
+				<p class="mt-1 text-xs text-zinc-400">Upload a modpack archive (.mrpack or Prism zip) or paste a mod list.</p>
+
+				<div class="mt-6 space-y-4 max-w-xl">
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Upload Archive (.mrpack or Prism instance .zip)</label>
+						<input
+							type="file"
+							id="importFileInput"
+							accept=".mrpack,.zip"
+							class="mt-1 block w-full text-xs text-zinc-400 file:mr-4 file:rounded-xl file:border-0 file:bg-zinc-800 file:px-4 file:py-2.5 file:text-xs file:font-semibold file:text-zinc-200 hover:file:bg-zinc-700"
+						/>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Or Paste Mod List (<code class="text-zinc-400">mods.txt</code>)</label>
+						<textarea
+							data-bind="raw_mods"
+							rows="4"
+							placeholder="# Modpack: My Pack&#10;jei&#10;appleskin&#10;waystones"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 font-mono text-xs text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+						></textarea>
+					</div>
+				</div>
+
+				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
+					<button type="button" data-on:click="$step = 2" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
+					<button type="button" data-on:click="$step = 4" class="rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white hover:bg-emerald-600">Next: Review &rarr;</button>
+				</div>
+			</div>
+
+			<!-- STEP 4: REVIEW & CREATE -->
+			<div data-show="$step == 4" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 4: Review & Resource Allocation</h2>
+				<p class="mt-1 text-xs text-zinc-400">Confirm parameters and choose RAM tier based on cluster budget.</p>
+
+				<div class="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+					<!-- Summary Card -->
+					<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+						<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Instance Configuration</h3>
+						<dl class="mt-4 space-y-2.5 text-xs">
+							<div class="flex justify-between">
+								<dt class="text-zinc-500">World Name:</dt>
+								<dd class="font-medium text-zinc-200" data-text="$name"></dd>
+							</div>
+							<div class="flex justify-between">
+								<dt class="text-zinc-500">Source:</dt>
+								<dd class="font-medium capitalize text-zinc-200" data-text="$source"></dd>
+							</div>
+							<div class="flex justify-between">
+								<dt class="text-zinc-500">Engine / Loader:</dt>
+								<dd class="font-medium uppercase text-emerald-400" data-text="$loader"></dd>
+							</div>
+							<div class="flex justify-between">
+								<dt class="text-zinc-500">Minecraft Version:</dt>
+								<dd class="font-mono text-zinc-200" data-text="$mc_version"></dd>
+							</div>
+							<div class="flex justify-between" data-show="$seed != ''">
+								<dt class="text-zinc-500">Seed:</dt>
+								<dd class="font-mono text-zinc-400" data-text="$seed"></dd>
+							</div>
+						</dl>
+					</div>
+
+					<!-- RAM Tier Selection -->
+					<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+						<div class="flex items-center justify-between">
+							<h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Resource Tier</h3>
+							<span class="text-xs text-zinc-500">
+								{ fmt.Sprintf("%d / %d GiB Used", budget.UsedGiB, budget.TotalBudgetGiB) }
+							</span>
+						</div>
+
+						<div class="mt-4 space-y-3">
+							<!-- Small: 4 GiB -->
+							<div
+								data-on:click="$tier = 'small'"
+								class="cursor-pointer rounded-lg border border-zinc-800 p-3 transition hover:border-zinc-700"
+								data-class="{'border-emerald-600 bg-emerald-950/20 ring-1 ring-emerald-600': $tier == 'small'}"
+							>
+								<div class="flex items-center justify-between text-xs">
+									<span class="font-semibold text-zinc-200">Small (4 GiB)</span>
+									<span class="text-zinc-400">Light / Vanilla</span>
+								</div>
+							</div>
+
+							<!-- Medium: 8 GiB -->
+							<div
+								data-on:click="$tier = 'medium'"
+								class="cursor-pointer rounded-lg border border-zinc-800 p-3 transition hover:border-zinc-700"
+								data-class="{'border-emerald-600 bg-emerald-950/20 ring-1 ring-emerald-600': $tier == 'medium'}"
+							>
+								<div class="flex items-center justify-between text-xs">
+									<span class="font-semibold text-zinc-200">Medium (8 GiB)</span>
+									<span class="text-emerald-400 font-medium">Recommended</span>
+								</div>
+							</div>
+
+							<!-- Large: 12 GiB -->
+							<div
+								data-on:click="$tier = 'large'"
+								class="cursor-pointer rounded-lg border border-zinc-800 p-3 transition hover:border-zinc-700"
+								data-class="{'border-emerald-600 bg-emerald-950/20 ring-1 ring-emerald-600': $tier == 'large'}"
+							>
+								<div class="flex items-center justify-between text-xs">
+									<span class="font-semibold text-zinc-200">Large (12 GiB)</span>
+									<span class="text-zinc-400">150+ Mods / Heavy Pack</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<form
+					class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4"
+					data-on:submit.prevent="@post('/api/minecraft/wizard/create')"
+				>
+					<button type="button" data-on:click="$step = 3" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
+					<button
+						type="submit"
+						class="rounded-xl bg-emerald-700 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-950/50 hover:bg-emerald-600"
+					>
+						Create Instance & Launch
+					</button>
+				</form>
+			</div>
+		</div>
+	}
+}

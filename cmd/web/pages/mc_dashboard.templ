@@ -1,0 +1,191 @@
+package pages
+
+import "fmt"
+
+templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
+	@Layout("Minecraft") {
+		@nav()
+		<div class="space-y-6">
+			<!-- Header & Budget bar -->
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<h1 class="text-xl font-bold tracking-tight text-zinc-100">Minecraft Instances</h1>
+					<p class="mt-0.5 text-xs text-zinc-400">Manage up to 4 server worlds. Up to 2 can run concurrently.</p>
+				</div>
+				<div class="flex flex-wrap items-center gap-2">
+					<div class="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs">
+						<span class="text-zinc-500">RAM:</span>
+						<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d GiB", budget.UsedGiB, budget.TotalBudgetGiB) }</span>
+						<div class="ml-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800">
+							<div
+								class="h-full bg-emerald-500"
+								style={ fmt.Sprintf("width: %d%%", (budget.UsedGiB * 100) / budget.TotalBudgetGiB) }
+							></div>
+						</div>
+					</div>
+					<div class="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs">
+						<span class="text-zinc-500">Running:</span>
+						<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d", budget.RunningCount, budget.MaxRunning) }</span>
+					</div>
+					<div class="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs">
+						<span class="text-zinc-500">Saved:</span>
+						<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d", budget.TotalInstances, budget.MaxInstances) }</span>
+					</div>
+					<a
+						href="/minecraft/access"
+						class="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white"
+					>
+						Access (Whitelist / Ops)
+					</a>
+				</div>
+			</div>
+
+			if len(instances) == 0 {
+				<!-- Empty state hero -->
+				<div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 p-12 text-center">
+					<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-950/40 text-3xl text-emerald-400 ring-1 ring-emerald-800/40">
+						🌍
+					</div>
+					<h2 class="text-lg font-semibold text-zinc-100">Create your first world</h2>
+					<p class="mx-auto mt-1 max-w-sm text-sm text-zinc-400">
+						Assemble a modded NeoForge/Fabric world, install a modpack, or start fresh with vanilla Minecraft.
+					</p>
+					<a
+						href="/minecraft/create"
+						class="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-950/50 hover:bg-emerald-600"
+					>
+						<span>+</span> Create New World
+					</a>
+				</div>
+			} else {
+				<!-- Instances grid -->
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					for _, inst := range instances {
+						<div class="flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-sm">
+							<div>
+								<!-- Card top: name + number + status -->
+								<div class="flex items-start justify-between">
+									<div>
+										<div class="flex items-center gap-2">
+											<span class="font-mono text-xs text-zinc-500">{ fmt.Sprintf("#%02d", inst.Number) }</span>
+											<h3 class="text-base font-semibold text-zinc-100">{ inst.Name }</h3>
+										</div>
+										<p class="mt-0.5 font-mono text-xs text-zinc-400">{ inst.LBIP }:25565</p>
+									</div>
+									<div>
+										if inst.State == "running" {
+											<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/80 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/50">
+												<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"></span>
+												Running
+											</span>
+										} else if inst.State == "provisioning" {
+											<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-950/80 px-2.5 py-0.5 text-xs font-medium text-amber-300 ring-1 ring-amber-800/50">
+												<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"></span>
+												Starting…
+											</span>
+										} else {
+											<span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-800/80 px-2.5 py-0.5 text-xs font-medium text-zinc-400 ring-1 ring-zinc-700/50">
+												<span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
+												Stopped
+											</span>
+										}
+									</div>
+								</div>
+
+								<!-- Badges: Loader, Source, Tier, Version -->
+								<div class="mt-4 flex flex-wrap gap-1.5">
+									if inst.Loader == "fabric" {
+										<span class="rounded bg-sky-950/60 px-2 py-0.5 text-[11px] font-medium text-sky-300 ring-1 ring-sky-800/40">Fabric</span>
+									} else if inst.Loader == "neoforge" {
+										<span class="rounded bg-orange-950/60 px-2 py-0.5 text-[11px] font-medium text-orange-300 ring-1 ring-orange-800/40">NeoForge</span>
+									} else {
+										<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-300">Vanilla</span>
+									}
+
+									if inst.MCVersion != "" {
+										<span class="rounded bg-zinc-800 px-2 py-0.5 font-mono text-[11px] text-zinc-300">{ inst.MCVersion }</span>
+									}
+
+									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
+										{ fmt.Sprintf("%s (%d GiB)", inst.Tier, inst.MemoryGiB) }
+									</span>
+
+									if inst.Pack != "" {
+										<span class="truncate rounded bg-purple-950/60 px-2 py-0.5 text-[11px] font-medium text-purple-300 ring-1 ring-purple-800/40">
+											{ inst.Pack }
+										</span>
+									}
+								</div>
+
+								if inst.Seed != "" {
+									<div class="mt-3 flex items-center gap-1.5 text-xs text-zinc-500">
+										<span>Seed:</span>
+										<code class="font-mono text-zinc-400">{ inst.Seed }</code>
+									</div>
+								}
+							</div>
+
+							<!-- Actions -->
+							<div class="mt-5 flex items-center justify-between border-t border-zinc-800/60 pt-3">
+								<div class="flex items-center gap-2">
+									if inst.State == "running" {
+										<button
+											type="button"
+											data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", inst.Number) }
+											class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-1 text-xs font-medium text-amber-200 hover:bg-amber-900/50"
+										>
+											Stop
+										</button>
+									} else {
+										if inst.CanStart {
+											<button
+												type="button"
+												data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/start')", inst.Number) }
+												class="rounded-lg bg-emerald-700 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600"
+											>
+												Start
+											</button>
+										} else {
+											<button
+												type="button"
+												disabled
+												title={ inst.StartBlockedReason }
+												class="cursor-not-allowed rounded-lg bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-500"
+											>
+												Start
+											</button>
+										}
+									}
+								</div>
+
+								<div class="flex items-center gap-2">
+									if inst.State != "running" {
+										<button
+											type="button"
+											data-on:click={ fmt.Sprintf("if (confirm('Delete instance #%02d (%s)? World data and configurations will be removed.')) @delete('/api/minecraft/instances/%d')", inst.Number, inst.Name, inst.Number) }
+											class="rounded-lg px-2.5 py-1 text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300"
+										>
+											Delete
+										</button>
+									}
+								</div>
+							</div>
+						</div>
+					}
+
+					if len(instances) < budget.MaxInstances {
+						<!-- "+ New Instance" card -->
+						<a
+							href="/minecraft/create"
+							class="flex min-h-[160px] flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-6 text-center transition hover:border-zinc-700 hover:bg-zinc-900/60"
+						>
+							<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-lg text-zinc-300">+</span>
+							<span class="mt-3 text-sm font-medium text-zinc-300">Create New World</span>
+							<span class="mt-0.5 text-xs text-zinc-500">{ fmt.Sprintf("%d slots available", budget.MaxInstances - len(instances)) }</span>
+						</a>
+					}
+				</div>
+			}
+		</div>
+	}
+}

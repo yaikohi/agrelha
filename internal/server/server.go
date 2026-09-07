@@ -41,10 +41,12 @@ type FiberServer struct {
 	mcv      *mcversions.Client
 	mcMods   *minecraft.ModManager
 	fabMods  *minecraft.ModManager
-	mcSlot   *minecraft.SlotManager
-	mcAccess *minecraft.AccessManager
-	mcRcon   *minecraft.RconClient
-	mck8s    *k8s.Client
+	mcSlot      *minecraft.SlotManager
+	mcAccess    *minecraft.AccessManager
+	mcRcon      *minecraft.RconClient
+	mcRconPool  *minecraft.RconPool
+	mck8s       *k8s.Client
+	mcInstances *minecraft.InstanceManager
 
 	bkMu   sync.Mutex
 	bkInfo backups.Info
@@ -89,6 +91,7 @@ func New(cfg *config.Config) *FiberServer {
 	s.mcv = mcversions.New("")
 	if cfg.MinecraftRconPassword != "" {
 		s.mcRcon = minecraft.NewRconClient(cfg.MinecraftRconAddr, cfg.MinecraftRconPassword, 3*time.Second)
+		s.mcRconPool = minecraft.NewRconPool(cfg.MinecraftRconPassword, 3*time.Second)
 	}
 
 	if cfg.GitToken != "" {
@@ -123,6 +126,12 @@ func New(cfg *config.Config) *FiberServer {
 		}
 		s.mck8s = mcK8s
 	}
+
+	s.mcInstances = minecraft.NewInstanceManager(
+		st, s.git, s.mck8s,
+		cfg.MCTotalBudgetGiB, cfg.MCMaxInstances, cfg.MCMaxRunning,
+		"manifests/minecraft-modded",
+	)
 
 	if cfg.OIDCIssuer != "" {
 		if a, err := auth.New(context.Background(), cfg); err != nil {

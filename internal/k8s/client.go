@@ -82,8 +82,12 @@ func (c *Client) Scale(ctx context.Context, replicas int32) error {
 
 // Replicas reports desired/ready replica counts for the active deployment.
 func (c *Client) Replicas(ctx context.Context) (desired, ready int32, err error) {
-	dep := c.activeDeploymentName(ctx)
-	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, dep, metav1.GetOptions{})
+	return c.DeploymentReplicas(ctx, c.activeDeploymentName(ctx))
+}
+
+// DeploymentReplicas reports desired/ready replica counts for a specific deployment.
+func (c *Client) DeploymentReplicas(ctx context.Context, depName string) (desired, ready int32, err error) {
+	d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, depName, metav1.GetOptions{})
 	if err != nil {
 		return 0, 0, err
 	}

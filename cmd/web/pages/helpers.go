@@ -74,6 +74,14 @@ func HistoryLabel(kind string) string {
 		return "Minecraft: Whitelist added"
 	case "mc-whitelist-remove":
 		return "Minecraft: Whitelist removed"
+	case "mc-instance-create":
+		return "Minecraft: Instance created"
+	case "mc-instance-start":
+		return "Minecraft: Instance started"
+	case "mc-instance-stop":
+		return "Minecraft: Instance stopped"
+	case "mc-instance-delete":
+		return "Minecraft: Instance deleted"
 	case "join":
 		return "Player joined"
 	case "leave":
@@ -93,11 +101,11 @@ func HistoryBadge(source, kind string) string {
 	switch kind {
 	case "crash":
 		return "bg-red-900/60 text-red-200"
-	case "join":
+	case "join", "mc-instance-start":
 		return "bg-emerald-900/50 text-emerald-200"
 	case "leave":
 		return "bg-zinc-800 text-zinc-300"
-	case "stop", "mod-remove", "admin-revoke":
+	case "stop", "mod-remove", "admin-revoke", "mc-instance-stop", "mc-instance-delete":
 		return "bg-amber-900/50 text-amber-200"
 	default:
 		if source == "action" {
@@ -116,6 +124,33 @@ type SlotUI struct {
 	MCVersion    string
 	Active       bool
 	LastUsed     string
+}
+
+type InstanceUI struct {
+	Number             int
+	Name               string
+	Slug               string
+	Seed               string
+	Loader             string
+	Source             string
+	Pack               string
+	MCVersion          string
+	Tier               string
+	MemoryGiB          int
+	State              string
+	MOTD               string
+	LBIP               string
+	CanStart           bool
+	StartBlockedReason string
+}
+
+type BudgetUI struct {
+	UsedGiB        int
+	TotalBudgetGiB int
+	RunningCount   int
+	MaxRunning     int
+	TotalInstances int
+	MaxInstances   int
 }
 
 // SlotEngine describes a slot the way the domain does: the loader is what runs,

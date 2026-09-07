@@ -39,6 +39,26 @@ func (c *Client) StreamLogs(ctx context.Context, tail int64) (io.ReadCloser, err
 	return req.Stream(ctx)
 }
 
+// StreamDeploymentLogs follows logs for any deployment by app label.
+func (c *Client) StreamDeploymentLogs(ctx context.Context, depName string, tail int64) (io.ReadCloser, error) {
+	pods, err := c.cs.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app=" + depName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(pods.Items) == 0 {
+		return nil, fmt.Errorf("no pod found for app=%s in %s", depName, c.namespace)
+	}
+	name := pods.Items[0].Name
+	req := c.cs.CoreV1().Pods(c.namespace).GetLogs(name, &corev1.PodLogOptions{
+		Follow:    true,
+		TailLines: &tail,
+		Container: "minecraft",
+	})
+	return req.Stream(ctx)
+}
+
 // PodStatus is a snapshot for the dashboard tiles.
 type PodStatus struct {
 	Phase     string
@@ -47,9 +67,13 @@ type PodStatus struct {
 }
 
 func (c *Client) PodStatus(ctx context.Context) (PodStatus, error) {
-	dep := c.activeDeploymentName(ctx)
+	return c.DeploymentPodStatus(ctx, c.activeDeploymentName(ctx))
+}
+
+// DeploymentPodStatus retrieves pod status for a specific deployment.
+func (c *Client) DeploymentPodStatus(ctx context.Context, depName string) (PodStatus, error) {
 	pods, err := c.cs.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "app=" + dep,
+		LabelSelector: "app=" + depName,
 	})
 	if err != nil || len(pods.Items) == 0 {
 		return PodStatus{Phase: "Down"}, err

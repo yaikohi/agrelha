@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -69,7 +70,22 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/admins/grant", s.adminsGrant)
 	app.Post("/admins/revoke", s.adminsRevoke)
 
-	// --- Minecraft NeoForge routes ---
+	// --- Minecraft Multi-Instance routes ---
+	app.Get("/minecraft", s.mcDashboard)
+	app.Get("/minecraft/create", s.mcWizardPage)
+	app.Get("/minecraft/provisioning/:num", s.mcProvisioningPage)
+	app.Get("/api/minecraft/provisioning/:num/stream", s.mcProvisioningStream)
+	app.Get("/api/minecraft/wizard/modpacks/search", s.mcWizardModpacksSearch)
+	app.Get("/api/minecraft/wizard/mods/search", s.mcWizardModsSearch)
+	app.Post("/api/minecraft/wizard/cart/check", s.mcWizardCartCheck)
+	app.Post("/api/minecraft/wizard/create", s.mcWizardCreate)
+	app.Post("/api/minecraft/instances", s.mcInstanceCreate)
+	app.Post("/api/minecraft/instances/:num/start", s.mcInstanceStart)
+	app.Post("/api/minecraft/instances/:num/stop", s.mcInstanceStop)
+	app.Post("/api/minecraft/instances/:num/restart", s.mcInstanceRestart)
+	app.Delete("/api/minecraft/instances/:num", s.mcInstanceDelete)
+
+	// --- Legacy/Per-instance routes ---
 	app.Get("/minecraft/mods", s.mcModsPage)
 	app.Get("/minecraft/mods/export", s.mcModpackExport)
 	app.Get("/minecraft/access", s.mcAccessPage)
@@ -98,6 +114,18 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/minecraft/server/restart", s.guardMC("mc-restart", "Minecraft restart triggered — server is rolling.", func(ctx context.Context) error { return s.mck8s.Restart(ctx) }))
 	app.Post("/minecraft/server/stop", s.guardMC("mc-stop", "Stopping Minecraft server — scaling to 0.", func(ctx context.Context) error { return s.mck8s.Scale(ctx, 0) }))
 	app.Post("/minecraft/server/start", s.guardMC("mc-start", "Starting Minecraft server — scaling to 1.", func(ctx context.Context) error { return s.mck8s.Scale(ctx, 1) }))
+
+	// --- Per-instance detail & controls ---
+	app.Get("/minecraft/:num<int>", func(c *fiber.Ctx) error {
+		return c.Redirect(fmt.Sprintf("/minecraft/%s/overview", c.Params("num")))
+	})
+	app.Get("/minecraft/:num<int>/:tab", s.mcInstancePage)
+	app.Post("/api/minecraft/:num<int>/rcon", s.mcInstanceRcon)
+	app.Get("/api/minecraft/:num<int>/logs/stream", s.mcInstanceLogsStream)
+	app.Post("/api/minecraft/:num<int>/backups/create", s.mcInstanceBackupCreate)
+	app.Post("/api/minecraft/:num<int>/settings", s.mcInstanceSettingsSave)
+	app.Post("/api/minecraft/:num<int>/mods/remove", s.mcInstanceModsRemove)
+	app.Get("/api/minecraft/:num<int>/mods/export", s.mcInstanceExport)
 }
 
 func (s *FiberServer) actor(c *fiber.Ctx) string {

@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .DeploymentName }}
+  namespace: minecraft-modded
+  labels:
+    app: {{ .DeploymentName }}
+    role: mc-instance
+    instance: "{{ .Number }}"
+    world: "{{ .Slug }}"
+spec:
+  replicas: {{ if eq .State "running" }}1{{ else }}0{{ end }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .DeploymentName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .DeploymentName }}
+        role: mc-instance
+        instance: "{{ .Number }}"
+        world: "{{ .Slug }}"
+    spec:
+      nodeSelector:
+        ykhi.xyz/gameserver: "true"
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "gameserver"
+          effect: "NoSchedule"
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: sync-configs
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              mkdir -p /data/config
+              if [ -d /custom-configs ] && [ "$(ls -A /custom-configs 2>/dev/null)" ]; then
+                echo ">> Syncing custom mod configs to /data/config..."
+                cp -Lf /custom-configs/* /data/config/ 2>/dev/null || true
+              fi
+          volumeMounts:
+            - name: data-volume
+              mountPath: /data
+            - name: custom-configs
+              mountPath: /custom-configs
+      containers:
+        - name: minecraft
+          image: itzg/minecraft-server:java21
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: {{ .SlotCMName }}
+          env:
+            - name: EULA
+              value: "TRUE"
+            - name: INIT_MEMORY
+              value: "{{ .MemoryGiB }}G"
+            - name: MAX_MEMORY
+              value: "{{ .MemoryGiB }}G"
+            - name: SYNC_CHUNK_WRITES
+              value: "FALSE"
+            - name: JVM_XX_OPTS
+              value: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch"
+            - name: TZ
+              value: "Europe/Amsterdam"
+            - name: ENABLE_RCON
+              value: "TRUE"
+            - name: RCON_PORT
+              value: "25575"
+            - name: RCON_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minecraft-modded-secret
+                  key: rcon-password
+            - name: ENABLE_QUERY
+              value: "TRUE"
+            - name: ONLINE_MODE
+              value: "TRUE"
+            - name: ENFORCE_WHITELIST
+              value: "TRUE"
+            - name: WHITELIST
+              valueFrom:
+                configMapKeyRef:
+                  name: minecraft-modded-access
+                  key: whitelist.txt
+            - name: OPS
+              valueFrom:
+                configMapKeyRef:
+                  name: minecraft-modded-access
+                  key: ops.txt
+          ports:
+            - containerPort: 25565
+              name: minecraft
+              protocol: TCP
+            - containerPort: 25565
+              name: query
+              protocol: UDP
+            - containerPort: 25575
+              name: rcon
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: 25565
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: 25565
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 2000m
+              memory: {{ .MemoryGiB }}Gi
+            limits:
+              memory: {{ .MemoryGiB }}Gi
+          volumeMounts:
+            - name: data-volume
+              mountPath: /data
+            - name: backups-volume
+              mountPath: /backups
+            - name: access-config
+              mountPath: /config-access
+              readOnly: true
+            - name: mods-config
+              mountPath: /config-mods
+              readOnly: true
+            - name: custom-configs
+              mountPath: /custom-configs
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: {{ .PVCName }}
+        - name: backups-volume
+          persistentVolumeClaim:
+            claimName: minecraft-modded-backups
+        - name: access-config
+          configMap:
+            name: minecraft-modded-access
+        - name: mods-config
+          configMap:
+            name: {{ .ModsCMName }}
+            optional: true
+        - name: custom-configs
+          configMap:
+            name: {{ .ConfigsCMName }}
+            optional: true

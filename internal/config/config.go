@@ -3,7 +3,10 @@
 // OIDC_CLIENT_*) come from the agrelha-env Secret. See yaya-ops manifests/agrelha-*.
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 type Config struct {
 	ListenAddr string
@@ -47,6 +50,11 @@ type Config struct {
 	MinecraftRconPassword string
 	ModrinthAPI           string
 
+	// Multi-instance settings
+	MCTotalBudgetGiB int
+	MCMaxInstances   int
+	MCMaxRunning     int
+
 	// Observability
 	InfluxDBURL         string
 	GrafanaDashboardURL string
@@ -57,6 +65,15 @@ type Config struct {
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
 	}
 	return def
 }
@@ -99,6 +116,10 @@ func Load() *Config {
 		MinecraftRconAddr:     env("MINECRAFT_RCON_ADDR", "minecraft-modded.minecraft-modded.svc.cluster.local:25575"),
 		MinecraftRconPassword: env("MINECRAFT_RCON_PASSWORD", ""),
 		ModrinthAPI:           env("MODRINTH_API", "https://api.modrinth.com/v2"),
+
+		MCTotalBudgetGiB: envInt("MC_TOTAL_BUDGET_GIB", 24),
+		MCMaxInstances:   envInt("MC_MAX_INSTANCES", 4),
+		MCMaxRunning:     envInt("MC_MAX_RUNNING", 2),
 
 		InfluxDBURL:         env("INFLUXDB_URL", ""),
 		GrafanaDashboardURL: env("GRAFANA_DASHBOARD_URL", ""),

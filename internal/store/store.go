@@ -85,6 +85,28 @@ func (s *Store) migrate() error {
 		created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		last_used     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
+	CREATE TABLE IF NOT EXISTS mc_instances (
+		number        INTEGER PRIMARY KEY,               -- 1 to 4
+		name          TEXT NOT NULL,
+		slug          TEXT NOT NULL,
+		seed          TEXT,
+		loader        TEXT NOT NULL DEFAULT 'neoforge',  -- fabric|neoforge|vanilla
+		source        TEXT NOT NULL DEFAULT 'modlist',   -- modpack|modlist|vanilla|import
+		pack          TEXT,
+		pack_provider TEXT,
+		pack_ref      TEXT,
+		mc_version    TEXT,
+		tier          TEXT NOT NULL DEFAULT 'medium',    -- small|medium|large
+		state         TEXT NOT NULL DEFAULT 'stopped',   -- running|stopped|provisioning|error
+		motd          TEXT,
+		difficulty    TEXT DEFAULT 'normal',
+		gamemode      TEXT DEFAULT 'survival',
+		world_type    TEXT DEFAULT 'default',
+		max_players   INTEGER DEFAULT 20,
+		lb_ip         TEXT,
+		created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_used     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	CREATE TABLE IF NOT EXISTS meta (
 		key   TEXT PRIMARY KEY,
 		value TEXT

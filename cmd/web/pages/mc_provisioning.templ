@@ -1,0 +1,65 @@
+package pages
+
+import "fmt"
+
+templ MinecraftProvisioning(inst InstanceUI) {
+	@Layout("Provisioning " + inst.Name) {
+		@nav()
+		<div
+			class="mx-auto max-w-2xl space-y-6"
+			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,lb_ip:%q,num:%d,detail:'Waiting for ArgoCD synchronization...'}", inst.LBIP, inst.Number) }
+			data-effect={ fmt.Sprintf("@get('/api/minecraft/provisioning/%d/stream')", inst.Number) }
+		>
+			<div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm text-center">
+				<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-950/50 text-3xl text-emerald-400 ring-1 ring-emerald-800/40">
+					<span data-show="!$ready" class="animate-spin">⚙️</span>
+					<span data-show="$ready">🎮</span>
+				</div>
+
+				<h1 class="mt-4 text-xl font-bold text-zinc-100">{ inst.Name }</h1>
+				<p class="mt-1 font-mono text-xs text-zinc-400">{ fmt.Sprintf("Instance #%02d · %s", inst.Number, inst.LBIP) }</p>
+
+				<div class="mt-8 space-y-3 text-left">
+					<!-- Step 1: GitOps -->
+					<div class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-xs">
+						<span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-900/60 text-emerald-300">✓</span>
+						<span class="font-medium text-zinc-200">GitOps manifests committed to Codeberg repository</span>
+					</div>
+
+					<!-- Step 2: ArgoCD Sync -->
+					<div class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-xs">
+						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-amber-900/60 text-amber-300 animate-pulse">⏳</span>
+						<span data-show="$phase != 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-900/60 text-emerald-300">✓</span>
+						<span class="font-medium text-zinc-200">ArgoCD reconciler syncing cluster state</span>
+					</div>
+
+					<!-- Step 3: Pod Scheduling & Container Startup -->
+					<div class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-xs">
+						<span data-show="$phase == 'booting'" class="flex h-5 w-5 items-center justify-center rounded-full bg-amber-900/60 text-amber-300 animate-pulse">⏳</span>
+						<span data-show="$phase == 'ready'" class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-900/60 text-emerald-300">✓</span>
+						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-zinc-500">○</span>
+						<span class="font-medium text-zinc-200">Pod scheduled on game-01 and booting</span>
+					</div>
+				</div>
+
+				<!-- Ready Banner -->
+				<div data-show="$ready" class="mt-8 rounded-xl border border-emerald-800/60 bg-emerald-950/30 p-5">
+					<h3 class="text-sm font-semibold text-emerald-300">Server is Online & Ready!</h3>
+					<p class="mt-1 text-xs text-zinc-300">Connect in Minecraft via:</p>
+					<div class="mt-2 font-mono text-sm font-bold text-white bg-zinc-900/80 py-2 rounded-lg border border-emerald-800/40">
+						<span data-text="$lb_ip + ':25565'"></span>
+					</div>
+				</div>
+
+				<div class="mt-8 flex items-center justify-center gap-3">
+					<a
+						href="/minecraft"
+						class="rounded-xl bg-zinc-800 px-5 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-white"
+					>
+						Return to Dashboard
+					</a>
+				</div>
+			</div>
+		</div>
+	}
+}

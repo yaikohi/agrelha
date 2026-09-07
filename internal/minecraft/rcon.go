@@ -153,3 +153,29 @@ func (c *RconClient) Close() error {
 	}
 	return nil
 }
+
+type RconPool struct {
+	password string
+	timeout  time.Duration
+	mu       sync.Mutex
+	clients  map[string]*RconClient
+}
+
+func NewRconPool(password string, timeout time.Duration) *RconPool {
+	return &RconPool{
+		password: password,
+		timeout:  timeout,
+		clients:  make(map[string]*RconClient),
+	}
+}
+
+func (p *RconPool) ClientFor(addr string) *RconClient {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if c, ok := p.clients[addr]; ok {
+		return c
+	}
+	c := NewRconClient(addr, p.password, p.timeout)
+	p.clients[addr] = c
+	return c
+}
