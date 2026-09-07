@@ -96,11 +96,14 @@ func (s *FiberServer) mcWizardModpacksSearch(c *fiber.Ctx) error {
 		cleanJSName := strings.ReplaceAll(strings.ReplaceAll(p.Name, `\`, `\\`), `'`, `\'`)
 		cleanJSName = strings.ReplaceAll(cleanJSName, `"`, `&quot;`)
 
-		packRefURL := p.URL
-		if packRefURL == "" && p.Links != nil {
+		packRefURL := ""
+		if p.Links != nil && p.Links["curseforge"] != "" {
 			packRefURL = p.Links["curseforge"]
-		}
-		if packRefURL == "" {
+		} else if strings.Contains(p.URL, "curseforge.com") {
+			packRefURL = p.URL
+		} else if p.URL != "" {
+			packRefURL = p.URL
+		} else {
 			packRefURL = p.PageURL
 		}
 		cleanRefURL := strings.ReplaceAll(packRefURL, `'`, `\'`)
@@ -326,6 +329,24 @@ func (s *FiberServer) mcWizardCreate(c *fiber.Ctx) error {
 	packProvider := strings.TrimSpace(req.PackProvider)
 	if packProvider == "" {
 		packProvider = strings.TrimSpace(c.FormValue("pack_provider"))
+	}
+
+	if s.mpi != nil && strings.Contains(packRef, "modpackindex.com/modpack/") {
+		parts := strings.Split(packRef, "/")
+		for i, part := range parts {
+			if part == "modpack" && i+1 < len(parts) {
+				if id, err := strconv.Atoi(parts[i+1]); err == nil && id > 0 {
+					if detail, err := s.mpi.GetModpack(c.UserContext(), id); err == nil && detail != nil {
+						if cfURL := detail.Links["curseforge"]; cfURL != "" {
+							packRef = cfURL
+						} else if detail.URL != "" && strings.Contains(detail.URL, "curseforge.com") {
+							packRef = detail.URL
+						}
+					}
+				}
+				break
+			}
+		}
 	}
 
 	var modsTxt string
