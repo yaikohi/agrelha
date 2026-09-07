@@ -52,7 +52,7 @@ spec:
               mountPath: /custom-configs
       containers:
         - name: minecraft
-          image: itzg/minecraft-server:java21
+          image: itzg/minecraft-server:java25
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
