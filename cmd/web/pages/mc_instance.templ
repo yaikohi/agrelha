@@ -91,6 +91,12 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 						Mods
 					</a>
 					<a
+						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/configs", d.Number)) }
+						class={ "pb-3 border-b-2 transition " + instanceTabStyle(d.ActiveTab == "configs") }
+					>
+						Configs
+					</a>
+					<a
 						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/console", d.Number)) }
 						class={ "pb-3 border-b-2 transition " + instanceTabStyle(d.ActiveTab == "console") }
 					>
@@ -130,14 +136,48 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 							</div>
 						</div>
 						<div class="flex items-center gap-2">
-							<a
-								href={ templ.SafeURL(fmt.Sprintf("/api/minecraft/%d/mods/export", d.Number)) }
-								class="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
-							>
-								Download Prism .mrpack
-							</a>
+							if d.Pack != "" && d.PackRef != "" {
+								<a
+									href={ templ.SafeURL(d.PackRef) }
+									target="_blank"
+									rel="noopener noreferrer"
+									class="rounded-xl border border-purple-700/80 bg-purple-900/60 px-4 py-2 text-xs font-medium text-purple-200 hover:bg-purple-800 hover:text-white"
+								>
+									CurseForge Page ↗
+								</a>
+							} else if d.Source != "vanilla" {
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/api/minecraft/%d/mods/export", d.Number)) }
+									class="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
+								>
+									Download Prism .mrpack
+								</a>
+							}
 						</div>
 					</div>
+
+					if d.Pack != "" {
+						<div class="rounded-2xl border border-purple-800/40 bg-purple-950/20 p-5">
+							<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+								<div>
+									<span class="text-xs font-semibold text-purple-300 uppercase tracking-wider">How to join with friends</span>
+									<p class="mt-1 text-xs text-purple-200/90 leading-relaxed">
+										This world runs the <strong>{ d.Pack }</strong> modpack. Players can install it directly in <strong>Prism Launcher</strong> (Add Instance → CurseForge tab → search <code class="rounded bg-purple-900/60 px-1.5 py-0.5 font-mono text-purple-100">{ d.Pack }</code>) or the <strong>CurseForge App</strong>.
+									</p>
+								</div>
+								if d.PackRef != "" {
+									<a
+										href={ templ.SafeURL(d.PackRef) }
+										target="_blank"
+										rel="noopener noreferrer"
+										class="shrink-0 rounded-xl bg-purple-800 px-4 py-2 text-xs font-medium text-white hover:bg-purple-700"
+									>
+										View Pack ↗
+									</a>
+								}
+							</div>
+						</div>
+					}
 
 					<!-- Details Grid -->
 					<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -179,20 +219,41 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 					<div class="flex items-center justify-between">
 						<div>
 							<h2 class="text-base font-semibold text-zinc-100">Installed Mods</h2>
-							<p class="mt-0.5 text-xs text-zinc-400">{ fmt.Sprintf("%d mods configured in mods.txt", len(d.InstalledMods)) }</p>
+							<p class="mt-0.5 text-xs text-zinc-400">
+								if d.Pack != "" {
+									{ fmt.Sprintf("CurseForge modpack %s automatically manages its mod collection.", d.Pack) }
+								} else {
+									{ fmt.Sprintf("%d mods configured in mods.txt", len(d.InstalledMods)) }
+								}
+							</p>
 						</div>
-						<a
-							href={ templ.SafeURL(fmt.Sprintf("/api/minecraft/%d/mods/export", d.Number)) }
-							class="rounded-lg bg-emerald-700 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600"
-						>
-							Export for Prism (.mrpack)
-						</a>
+						if d.Pack != "" && d.PackRef != "" {
+							<a
+								href={ templ.SafeURL(d.PackRef) }
+								target="_blank"
+								rel="noopener noreferrer"
+								class="rounded-lg bg-purple-800 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-purple-700"
+							>
+								CurseForge Pack ↗
+							</a>
+						} else if d.Source != "vanilla" {
+							<a
+								href={ templ.SafeURL(fmt.Sprintf("/api/minecraft/%d/mods/export", d.Number)) }
+								class="rounded-lg bg-emerald-700 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600"
+							>
+								Export for Prism (.mrpack)
+							</a>
+						}
 					</div>
 
 					<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 overflow-hidden">
 						if len(d.InstalledMods) == 0 {
 							<div class="p-8 text-center text-xs text-zinc-500">
-								No mods installed in this world.
+								if d.Pack != "" {
+									{ fmt.Sprintf("Mods for %s are downloaded automatically on container launch from CurseForge.", d.Pack) }
+								} else {
+									No mods installed in this world.
+								}
 							</div>
 						} else {
 							<table class="w-full text-left text-xs">
@@ -217,6 +278,126 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 													data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/mods/remove', {slug: '%s'})", d.Number, modSlug) }
 													class="text-red-400 hover:text-red-300"
 												>Remove</button>
+											</td>
+										</tr>
+									}
+								</tbody>
+							</table>
+						}
+					</div>
+				</div>
+			}
+
+			<!-- TAB 3: CONFIGS -->
+			if d.ActiveTab == "configs" {
+				<div
+					class="space-y-6"
+					data-signals="{selectedFile: '', fileContent: '', isNew: false, saveLoading: false, showEditor: false}"
+				>
+					<div class="flex items-center justify-between">
+						<div>
+							<h2 class="text-base font-semibold text-zinc-100">Mod Configurations</h2>
+							<p class="mt-0.5 text-xs text-zinc-400">Custom .toml, .json, .yaml, and .cfg files synced to /data/config on startup.</p>
+						</div>
+						<button
+							type="button"
+							data-on:click="$selectedFile = ''; $fileContent = ''; $isNew = true; $showEditor = true"
+							class="rounded-lg bg-emerald-700 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600"
+						>
+							+ New Config File
+						</button>
+					</div>
+
+					<!-- Config Editor Modal / Panel -->
+					<div data-show="$showEditor" class="rounded-xl border border-zinc-800 bg-zinc-900/95 p-5 space-y-4 shadow-xl">
+						<div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+							<h3 class="text-sm font-semibold text-zinc-200">
+								<span data-show="$isNew">Create New Config File</span>
+								<span data-show="!$isNew">Editing: <code class="font-mono text-emerald-400" data-text="$selectedFile"></code></span>
+							</h3>
+							<button
+								type="button"
+								data-on:click="$showEditor = false"
+								class="text-xs text-zinc-400 hover:text-zinc-200"
+							>
+								✕ Close
+							</button>
+						</div>
+
+						<div data-show="$isNew">
+							<label class="block text-xs font-medium text-zinc-300">File Name (.toml, .json, .yaml, .cfg, .snbt)</label>
+							<input
+								type="text"
+								data-bind="selectedFile"
+								placeholder="e.g. jei-client.ini, fabric-server.toml, config.json"
+								class="mt-1 w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-mono text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+							/>
+						</div>
+
+						<div>
+							<label class="block text-xs font-medium text-zinc-300">File Contents</label>
+							<textarea
+								data-bind="fileContent"
+								rows="16"
+								spellcheck="false"
+								placeholder="# Paste or type config contents here..."
+								class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs text-zinc-200 placeholder-zinc-600 focus:border-emerald-500 focus:outline-none leading-relaxed"
+							></textarea>
+						</div>
+
+						<div class="flex items-center justify-between pt-2">
+							<button
+								type="button"
+								data-on:click="$showEditor = false"
+								class="rounded-lg border border-zinc-700 px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-800"
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								data-indicator="saveLoading"
+								data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/configs/save', {file: $selectedFile, content: $fileContent})", d.Number) }
+								class="rounded-lg bg-emerald-700 px-5 py-2 text-xs font-semibold text-white shadow-md hover:bg-emerald-600"
+							>
+								<span data-show="!$saveLoading">Save & Apply on Restart</span>
+								<span data-show="$saveLoading" class="animate-pulse">Saving...</span>
+							</button>
+						</div>
+					</div>
+
+					<!-- Config Files List -->
+					<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 overflow-hidden">
+						if len(d.ConfigFiles) == 0 {
+							<div class="p-8 text-center text-xs text-zinc-500">
+								No custom mod configs configured for this world yet. Mods use default configurations.
+							</div>
+						} else {
+							<table class="w-full text-left text-xs">
+								<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400">
+									<tr>
+										<th class="px-4 py-2.5 font-medium">Config File</th>
+										<th class="px-4 py-2.5 font-medium text-right">Actions</th>
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-zinc-800/60">
+									for _, cfgFile := range d.ConfigFiles {
+										<tr class="hover:bg-zinc-800/30">
+											<td class="px-4 py-2.5 font-mono text-zinc-200">{ cfgFile }</td>
+											<td class="px-4 py-2.5 text-right space-x-2">
+												<button
+													type="button"
+													data-on:click={ fmt.Sprintf("@get('/api/minecraft/%d/configs/file?f=%s')", d.Number, cfgFile) }
+													class="rounded bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-white"
+												>
+													Edit
+												</button>
+												<button
+													type="button"
+													data-on:click={ fmt.Sprintf("if (confirm('Delete %s?')) { @post('/api/minecraft/%d/configs/delete', {file: '%s'}) }", cfgFile, d.Number, cfgFile) }
+													class="rounded bg-red-950/50 px-2.5 py-1 text-xs text-red-400 hover:bg-red-900/80 hover:text-red-200"
+												>
+													Delete
+												</button>
 											</td>
 										</tr>
 									}

@@ -8,6 +8,7 @@ import (
 	"html"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -40,26 +41,36 @@ func (s *FiberServer) mcInstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Instance not found")
 	}
 
+	packName := ""
+	packRef := ""
+	packProvider := ""
+	if inst.Pack != nil {
+		packName = inst.Pack.Name
+		packRef = inst.Pack.Ref
+		packProvider = string(inst.Pack.Provider)
+	}
+
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
-			Number:    inst.Number,
-			Name:      inst.Name,
-			Slug:      inst.Slug,
-			Seed:      inst.Seed,
-			Loader:    string(inst.Loader),
-			Source:    string(inst.Source),
-			MCVersion: inst.MCVersion,
-			Tier:      string(inst.Tier),
-			MemoryGiB: inst.MemoryGiB(),
-			State:     string(inst.State),
-			MOTD:      inst.MOTD,
-			LBIP:      inst.LBIP,
+			Number:       inst.Number,
+			Name:         inst.Name,
+			Slug:         inst.Slug,
+			Seed:         inst.Seed,
+			Loader:       string(inst.Loader),
+			Source:       string(inst.Source),
+			Pack:         packName,
+			PackRef:      packRef,
+			PackProvider: packProvider,
+			MCVersion:    inst.MCVersion,
+			Tier:         string(inst.Tier),
+			MemoryGiB:    inst.MemoryGiB(),
+			State:        string(inst.State),
+			MOTD:         inst.MOTD,
+			LBIP:         inst.LBIP,
 		},
 		ActiveTab: tab,
 	}
-	if inst.Pack != nil {
-		d.Pack = inst.Pack.Name
-	}
+	d.Pack = packName
 
 	// Fetch installed mods if on mods tab or overview
 	if s.mck8s != nil {
@@ -72,6 +83,16 @@ func (s *FiberServer) mcInstancePage(c *fiber.Ctx) error {
 					}
 				}
 			}
+		}
+	}
+
+	// Fetch config files if on configs tab or overview
+	if (tab == "configs" || tab == "overview") && s.mck8s != nil {
+		if data, err := s.mck8s.ConfigMapData(c.UserContext(), inst.ConfigsCMName()); err == nil {
+			for k := range data {
+				d.ConfigFiles = append(d.ConfigFiles, k)
+			}
+			sort.Strings(d.ConfigFiles)
 		}
 	}
 
@@ -219,11 +240,20 @@ func (s *FiberServer) mcInstanceBackupCreate(c *fiber.Ctx) error {
 
 	timestamp := time.Now().Format("20060102-150405")
 	backupName := fmt.Sprintf("mc-%s-%02d-%s.tar.gz", inst.Slug, inst.Number, timestamp)
+	jobName := fmt.Sprintf("mc-bkp-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
+
+	if s.mck8s != nil {
+		dataPVC := fmt.Sprintf("mc-instance-%02d-data", inst.Number)
+		backupsPVC := "minecraft-modded-backups"
+		if err := s.mck8s.CreateBackupJob(c.UserContext(), jobName, backupName, dataPVC, backupsPVC); err != nil {
+			return sseToast(c, "err", fmt.Sprintf("Failed to launch backup Job: %s", err.Error()), nil)
+		}
+	}
 
 	_ = s.store.RecordAudit(s.actor(c), "mc-backup", fmt.Sprintf("Backup %s for instance #%02d", backupName, num))
 	_ = s.store.RecordEvent("mc-backup", s.actor(c))
 
-	return sseToast(c, "ok", fmt.Sprintf("Backup triggered: %s", backupName), nil)
+	return sseToast(c, "ok", fmt.Sprintf("Backup job started: %s. Archiving to NAS...", backupName), nil)
 }
 
 func (s *FiberServer) mcInstanceSettingsSave(c *fiber.Ctx) error {
@@ -366,4 +396,130 @@ func (s *FiberServer) mcInstanceExport(c *fiber.Ctx) error {
 	c.Set("Content-Type", "application/x-modrinth-modpack+zip")
 	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fileName))
 	return c.Send(mrpackBytes)
+}
+
+func (s *FiberServer) mcInstanceConfigGet(c *fiber.Ctx) error {
+	if s.mcInstances == nil || s.mck8s == nil {
+		return c.Status(fiber.StatusServiceUnavailable).SendString("Service unavailable")
+	}
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
+	}
+	inst, err := s.mcInstances.GetInstance(c.UserContext(), num)
+	if err != nil || inst == nil {
+		return c.Status(fiber.StatusNotFound).SendString("Instance not found")
+	}
+
+	fileName := strings.TrimSpace(c.Query("f"))
+	if fileName == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("File name required")
+	}
+
+	content := ""
+	if data, err := s.mck8s.ConfigMapData(c.UserContext(), inst.ConfigsCMName()); err == nil {
+		content = data[fileName]
+	}
+
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	signals := map[string]any{
+		"selectedFile": fileName,
+		"fileContent":  content,
+		"isNew":        false,
+		"showEditor":   true,
+	}
+	if err := sse.PatchSignals(w, signals); err != nil {
+		return err
+	}
+	return c.Send(buf.Bytes())
+}
+
+func (s *FiberServer) mcInstanceConfigSave(c *fiber.Ctx) error {
+	if s.mcInstances == nil || s.git == nil {
+		return sseToast(c, "err", "Instance manager or Git committer unconfigured.", nil)
+	}
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return sseToast(c, "err", "Invalid instance number.", nil)
+	}
+	inst, err := s.mcInstances.GetInstance(c.UserContext(), num)
+	if err != nil || inst == nil {
+		return sseToast(c, "err", "Instance not found.", nil)
+	}
+
+	var req struct {
+		File    string `json:"file" form:"file"`
+		Content string `json:"content" form:"content"`
+	}
+	_ = c.BodyParser(&req)
+
+	fileName := strings.TrimSpace(req.File)
+	if fileName == "" {
+		fileName = strings.TrimSpace(c.FormValue("file"))
+	}
+	if !mcCfgNameRe.MatchString(fileName) {
+		return sseToast(c, "err", "Invalid config file name. Must end in .toml, .json, .yaml, .cfg, .snbt, etc.", nil)
+	}
+
+	content := strings.ReplaceAll(req.Content, "\r\n", "\n")
+	relPath := fmt.Sprintf("manifests/minecraft-modded/instance-%02d/configs.yaml", inst.Number)
+
+	changed, err := s.git.SetData(c.UserContext(), relPath, fileName, content,
+		fmt.Sprintf("agrelha: edit config %s for instance #%02d", fileName, inst.Number))
+	if err != nil {
+		return sseToast(c, "err", "Save failed: "+err.Error(), nil)
+	}
+
+	_ = s.store.RecordAudit(s.actor(c), "mc-config-edit", fmt.Sprintf("Saved %s on #%02d", fileName, num))
+	if changed {
+		return sseToast(c, "ok", fmt.Sprintf("Saved %s — committed to git. Restarts apply.", fileName), map[string]any{
+			"showEditor": false,
+		})
+	}
+	return sseToast(c, "ok", fmt.Sprintf("%s is unchanged.", fileName), map[string]any{
+		"showEditor": false,
+	})
+}
+
+func (s *FiberServer) mcInstanceConfigDelete(c *fiber.Ctx) error {
+	if s.mcInstances == nil || s.git == nil {
+		return sseToast(c, "err", "Instance manager or Git committer unconfigured.", nil)
+	}
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return sseToast(c, "err", "Invalid instance number.", nil)
+	}
+	inst, err := s.mcInstances.GetInstance(c.UserContext(), num)
+	if err != nil || inst == nil {
+		return sseToast(c, "err", "Instance not found.", nil)
+	}
+
+	var req struct {
+		File string `json:"file" form:"file"`
+	}
+	_ = c.BodyParser(&req)
+
+	fileName := strings.TrimSpace(req.File)
+	if fileName == "" {
+		fileName = strings.TrimSpace(c.FormValue("file"))
+	}
+	if fileName == "" {
+		return sseToast(c, "err", "File name required.", nil)
+	}
+
+	relPath := fmt.Sprintf("manifests/minecraft-modded/instance-%02d/configs.yaml", inst.Number)
+	changed, err := s.git.DeleteData(c.UserContext(), relPath, fileName,
+		fmt.Sprintf("agrelha: delete config %s for instance #%02d", fileName, inst.Number))
+	if err != nil {
+		return sseToast(c, "err", "Delete failed: "+err.Error(), nil)
+	}
+
+	_ = s.store.RecordAudit(s.actor(c), "mc-config-delete", fmt.Sprintf("Deleted %s on #%02d", fileName, num))
+	if changed {
+		return sseToast(c, "ok", fmt.Sprintf("Deleted %s — committed to git.", fileName), nil)
+	}
+	return sseToast(c, "ok", fmt.Sprintf("%s was not present.", fileName), nil)
 }

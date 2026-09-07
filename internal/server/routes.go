@@ -128,6 +128,9 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/api/minecraft/:num<int>/settings", s.mcInstanceSettingsSave)
 	app.Post("/api/minecraft/:num<int>/mods/remove", s.mcInstanceModsRemove)
 	app.Get("/api/minecraft/:num<int>/mods/export", s.mcInstanceExport)
+	app.Get("/api/minecraft/:num<int>/configs/file", s.mcInstanceConfigGet)
+	app.Post("/api/minecraft/:num<int>/configs/save", s.mcInstanceConfigSave)
+	app.Post("/api/minecraft/:num<int>/configs/delete", s.mcInstanceConfigDelete)
 }
 
 func (s *FiberServer) actor(c *fiber.Ctx) string {

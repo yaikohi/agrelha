@@ -74,6 +74,12 @@ func RenderInstanceManifests(inst Instance, modsTxt string) (map[string][]byte, 
 	}
 	files["slot.yaml"] = slotBuf.Bytes()
 
+	var cfgBuf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&cfgBuf, "configs.yaml.tmpl", data); err != nil {
+		return nil, fmt.Errorf("render configs: %w", err)
+	}
+	files["configs.yaml"] = cfgBuf.Bytes()
+
 	if inst.Source != SourceVanilla || strings.TrimSpace(modsTxt) != "" {
 		if strings.TrimSpace(data.ModsTxt) == "" {
 			data.ModsTxt = fmt.Sprintf("# Mod list for %s\n", inst.Name)

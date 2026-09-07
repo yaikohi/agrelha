@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -36,6 +38,11 @@ func New(namespace, deployment string) (*Client, error) {
 
 func NewWithClientset(cs kubernetes.Interface, namespace, deployment string) *Client {
 	return &Client{cs: cs, namespace: namespace, deployment: deployment}
+}
+
+// Clientset returns the underlying kubernetes clientset.
+func (c *Client) Clientset() kubernetes.Interface {
+	return c.cs
 }
 
 // SetAltDeployment configures an alternate deployment (e.g. fabric vs neoforge) in the same namespace.
@@ -97,5 +104,87 @@ func (c *Client) DeploymentReplicas(ctx context.Context, depName string) (desire
 	return desired, d.Status.ReadyReplicas, nil
 }
 
-// TODO(step③): StreamLogs — follow the valheim pod's logs (pods/log) and pipe
-// lines to the SSE handler; the log-ingester goroutine also parses join events.
+// CreateBackupJob creates a one-off Kubernetes Job that mounts the instance PVC and archives /data to the backups PVC.
+func (c *Client) CreateBackupJob(ctx context.Context, jobName, archiveName, dataClaimName, backupsClaimName string) error {
+	ttl := int32(300)
+	backoff := int32(1)
+	readOnly := true
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: c.namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":      "mc-backup",
+				"app.kubernetes.io/component": "backup-job",
+			},
+		},
+		Spec: batchv1.JobSpec{
+			TTLSecondsAfterFinished: &ttl,
+			BackoffLimit:            &backoff,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app.kubernetes.io/name": "mc-backup",
+					},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					NodeSelector: map[string]string{
+						"ykhi.xyz/gameserver": "true",
+					},
+					Tolerations: []corev1.Toleration{
+						{
+							Key:      "dedicated",
+							Operator: corev1.TolerationOpEqual,
+							Value:    "gameserver",
+							Effect:   corev1.TaintEffectNoSchedule,
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name:    "backup",
+							Image:   "busybox:1.36",
+							Command: []string{"sh", "-c"},
+							Args: []string{
+								fmt.Sprintf("tar -czf /backups/%s -C /data .", archiveName),
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "data",
+									MountPath: "/data",
+									ReadOnly:  readOnly,
+								},
+								{
+									Name:      "backups",
+									MountPath: "/backups",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "data",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: dataClaimName,
+								},
+							},
+						},
+						{
+							Name: "backups",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: backupsClaimName,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := c.cs.BatchV1().Jobs(c.namespace).Create(ctx, job, metav1.CreateOptions{})
+	return err
+}

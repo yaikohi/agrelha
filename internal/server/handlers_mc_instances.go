@@ -40,8 +40,12 @@ func (s *FiberServer) mcDashboard(c *fiber.Ctx) error {
 		}
 
 		packName := ""
+		packRef := ""
+		packProvider := ""
 		if inst.Pack != nil {
 			packName = inst.Pack.Name
+			packRef = inst.Pack.Ref
+			packProvider = string(inst.Pack.Provider)
 		}
 
 		uiInstances = append(uiInstances, pages.InstanceUI{
@@ -52,6 +56,8 @@ func (s *FiberServer) mcDashboard(c *fiber.Ctx) error {
 			Loader:             string(inst.Loader),
 			Source:             string(inst.Source),
 			Pack:               packName,
+			PackRef:            packRef,
+			PackProvider:       packProvider,
 			MCVersion:          inst.MCVersion,
 			Tier:               string(inst.Tier),
 			MemoryGiB:          inst.MemoryGiB(),

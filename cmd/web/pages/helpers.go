@@ -134,6 +134,8 @@ type InstanceUI struct {
 	Loader             string
 	Source             string
 	Pack               string
+	PackRef            string
+	PackProvider       string
 	MCVersion          string
 	Tier               string
 	MemoryGiB          int
