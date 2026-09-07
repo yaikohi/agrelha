@@ -77,15 +77,3 @@ func (c *Client) Deployment() string {
 func (c *Client) SetDeployment(dep string) {
 	c.deployment = dep
 }
-
-// ActiveSlot reads the slot ConfigMap and reports the current WORLD_SLOT and TYPE.
-func (c *Client) ActiveSlot(ctx context.Context, cmName string) (slot string, typ string, err error) {
-	if cmName == "" {
-		cmName = "minecraft-modded-slot"
-	}
-	data, err := c.ConfigMapData(ctx, cmName)
-	if err != nil {
-		return "", "", err
-	}
-	return strings.TrimSpace(data["WORLD_SLOT"]), strings.ToUpper(strings.TrimSpace(data["TYPE"])), nil
-}

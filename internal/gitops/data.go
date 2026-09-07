@@ -34,7 +34,50 @@ func (c *Committer) ReplaceData(ctx context.Context, relPath string, data map[st
 	})
 }
 
+// ReplaceSlot rewrites a ConfigMap's data map AND its metadata.annotations in a
+// single commit, so domain intent (annotations) and derived output (data) can
+// never disagree in git.
+func (c *Committer) ReplaceSlot(ctx context.Context, relPath string, data, annotations map[string]string, commitMsg string) (bool, error) {
+	return c.mutateDoc(ctx, relPath, commitMsg, func(root *yaml.Node) (bool, error) {
+		dataNode := mapValue(root, "data")
+		if dataNode == nil {
+			return false, fmt.Errorf("no data map in %s", relPath)
+		}
+		changed := replaceData(dataNode, data)
+
+		meta := mapValue(root, "metadata")
+		if meta == nil {
+			return false, fmt.Errorf("no metadata in %s", relPath)
+		}
+		ann := mapValue(meta, "annotations")
+		if ann == nil {
+			kn := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "annotations"}
+			ann = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			meta.Content = append(meta.Content, kn, ann)
+			changed = true
+		}
+		if replaceData(ann, annotations) {
+			changed = true
+		}
+		return changed, nil
+	})
+}
+
+func (c *Committer) mutateDoc(ctx context.Context, relPath, commitMsg string, fn func(root *yaml.Node) (bool, error)) (bool, error) {
+	return c.mutateRaw(ctx, relPath, commitMsg, fn)
+}
+
 func (c *Committer) mutate(ctx context.Context, relPath, commitMsg string, fn func(data *yaml.Node) (bool, error)) (bool, error) {
+	return c.mutateRaw(ctx, relPath, commitMsg, func(root *yaml.Node) (bool, error) {
+		data := mapValue(root, "data")
+		if data == nil {
+			return false, fmt.Errorf("no data map in %s", relPath)
+		}
+		return fn(data)
+	})
+}
+
+func (c *Committer) mutateRaw(ctx context.Context, relPath, commitMsg string, fn func(root *yaml.Node) (bool, error)) (bool, error) {
 	dir, err := os.MkdirTemp("", "agrelha-git-")
 	if err != nil {
 		return false, err
@@ -65,12 +108,7 @@ func (c *Committer) mutate(ctx context.Context, relPath, commitMsg string, fn fu
 	if len(doc.Content) == 0 {
 		return false, fmt.Errorf("empty yaml %s", relPath)
 	}
-	data := mapValue(doc.Content[0], "data")
-	if data == nil {
-		return false, fmt.Errorf("no data map in %s", relPath)
-	}
-
-	changed, err := fn(data)
+	changed, err := fn(doc.Content[0])
 	if err != nil {
 		return false, err
 	}

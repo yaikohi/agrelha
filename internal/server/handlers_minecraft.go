@@ -14,6 +14,7 @@ import (
 	"agrelha/internal/mcversions"
 	"agrelha/internal/minecraft"
 	"agrelha/internal/modpack"
+	"agrelha/internal/modpackindex"
 	"agrelha/internal/store"
 )
 
@@ -61,37 +62,29 @@ func isHTMLForm(c *fiber.Ctx) bool {
 	return strings.Contains(accept, "text/html") && !strings.Contains(accept, "application/json")
 }
 
+const slotConfigMap = "minecraft-modded-slot"
+
 func (s *FiberServer) mcLoaderManager(loader string) (*minecraft.ModManager, string, string) {
 	return s.mcMods, "minecraft-modded-mods", s.cfg.MinecraftDeployment
 }
 
-func (s *FiberServer) activeSlot(ctx context.Context) (slot, typ string) {
+// activeSlot reconstructs the domain model of the running slot from the live
+// ConfigMap: intent from annotations, falling back to derived env where needed.
+func (s *FiberServer) activeSlot(ctx context.Context) minecraft.Slot {
 	if s.mck8s == nil {
-		return "", minecraft.TypeNeoForge
+		return minecraft.Slot{Loader: minecraft.LoaderNeoForge, Source: minecraft.SourceModlist}
 	}
-	sl, tp, err := s.mck8s.ActiveSlot(ctx, "minecraft-modded-slot")
+	data, ann, err := s.mck8s.ConfigMapMeta(ctx, slotConfigMap)
 	if err != nil {
-		return "", minecraft.TypeNeoForge
+		return minecraft.Slot{Loader: minecraft.LoaderNeoForge, Source: minecraft.SourceModlist}
 	}
-	if tp == "" {
-		tp = minecraft.TypeNeoForge
-	}
-	return sl, tp
+	return minecraft.SlotFromAnnotations(ann, data)
 }
 
 // mcModsPage renders the Minecraft mods, versions, and modpacks page.
 func (s *FiberServer) mcModsPage(c *fiber.Ctx) error {
-	activeRunningLoader := "neoforge"
-	if s.mck8s != nil {
-		if _, typ := s.activeSlot(c.UserContext()); typ != "" {
-			switch typ {
-			case minecraft.TypeFabric:
-				activeRunningLoader = "fabric"
-			case minecraft.TypeCurseForge:
-				activeRunningLoader = "curseforge"
-			}
-		}
-	}
+	active := s.activeSlot(c.UserContext())
+	activeRunningLoader := string(minecraft.NormalizeLoader(string(active.Loader)))
 
 	currentLoader := strings.ToLower(strings.TrimSpace(c.Query("loader")))
 	if currentLoader != "fabric" && currentLoader != "neoforge" {
@@ -758,6 +751,35 @@ func (s *FiberServer) mcModpackSwitch(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "fetch modpack mods: " + err.Error()})
 	}
 
+	// Loader gate. modpackindex's public API exposes no loader field (verified:
+	// no `loaders` on search/detail, loader filter params are ignored, /loaders
+	// 404s, and the site's own panel is fed by a private v2 API that 403s), so
+	// the pack's loader is derived from which loaders its mods can actually run
+	// on. A raw per-loader tally is misleading because most mods are
+	// multi-loader — what matters is how many mods the target CANNOT run.
+	if ok, best, targetFit, bestFit := modpackindex.CheckLoader(mods, loader); !ok {
+		if strings.EqualFold(strings.TrimSpace(c.FormValue("force")), "true") {
+			slog.Warn("modpack loader mismatch overridden",
+				"pack", pack.Name, "target", loader, "best", best, "blocking", len(targetFit.Blocking))
+		} else {
+			msg := targetFit.Explain(pack.Name, best, bestFit)
+			slog.Warn("modpack loader mismatch refused", "pack", pack.Name, "target", loader, "best", best)
+			if isHTMLForm(c) {
+				setFlash(c, "err", msg)
+				return c.Redirect(redirectURL, fiber.StatusSeeOther)
+			}
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error":          msg,
+				"pack":           pack.Name,
+				"target_loader":  loader,
+				"pack_loader":    best,
+				"blocking_mods":  targetFit.Blocking,
+				"target_support": fmt.Sprintf("%d/%d", targetFit.Supported, targetFit.Known),
+				"best_support":   fmt.Sprintf("%d/%d", bestFit.Supported, bestFit.Known),
+			})
+		}
+	}
+
 	var targetMCVersion string
 	if len(pack.MinecraftVersions) > 0 {
 		targetMCVersion = pack.MinecraftVersions[0].Name
@@ -791,12 +813,14 @@ func (s *FiberServer) mcModpackSwitch(c *fiber.Ctx) error {
 		}
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "GitOps plane disabled"})
 	}
-	changed, err := s.mcSlot.SwitchToModList(ctx, pack.Name, loader, targetMCVersion, slugs)
-	s.registerSlot(minecraft.SlotSpec{
-		Slot:      pack.Name,
-		Type:      map[bool]string{true: minecraft.TypeFabric, false: minecraft.TypeNeoForge}[loader == "fabric"],
+	ld := minecraft.NormalizeLoader(loader)
+	changed, err := s.mcSlot.SwitchToModList(ctx, pack.Name, ld, targetMCVersion, slugs)
+	s.registerSlot(minecraft.Slot{
+		Name:      pack.Name,
+		Loader:    ld,
+		Source:    minecraft.SourceModlist,
 		MCVersion: targetMCVersion,
-	}, pack.Name)
+	})
 	if err != nil {
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Switch modpack failed: "+err.Error())
@@ -936,31 +960,29 @@ func (s *FiberServer) mcLoaderSwitch(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "GitOps plane disabled"})
 	}
 
-	slot, _ := s.activeSlot(ctx)
-	if slot == "" {
-		slot = target
+	cur := s.activeSlot(ctx)
+	if cur.Name == "" {
+		cur.Name = target
 	}
-	mcVer := s.defaultMCVersion(ctx)
-	if data, err := s.mck8s.ConfigMapData(ctx, "minecraft-modded-slot"); err == nil {
-		if v := strings.TrimSpace(data["VERSION"]); v != "" {
-			mcVer = v
-		}
+	if cur.MCVersion == "" {
+		cur.MCVersion = s.defaultMCVersion(ctx)
 	}
 
-	spec := minecraft.SlotSpec{Slot: slot, Type: target, MCVersion: mcVer}
-	msg := fmt.Sprintf("mc-slot: switch engine to %s (slot=%s)", target, minecraft.SlotName(slot))
-	if _, err := s.mcSlot.Apply(ctx, spec, msg); err != nil {
-		slog.Error("mc loader switch failed", "target", target, "err", err)
+	// SetLoader refuses when the slot is pack-defined: the pack decides the
+	// loader, and silently rewriting it is what destroyed a slot before.
+	if _, err := s.mcSlot.SetLoader(ctx, cur, minecraft.NormalizeLoader(target)); err != nil {
+		slog.Warn("mc loader switch refused", "target", target, "slot", cur.Name, "err", err)
 		if isHTMLForm(c) {
-			setFlash(c, "err", "Failed to switch loader: "+err.Error())
-			return c.Redirect("/minecraft/mods?loader="+target, fiber.StatusSeeOther)
+			setFlash(c, "err", err.Error())
+			return c.Redirect("/minecraft/mods", fiber.StatusSeeOther)
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
 	}
+	s.registerSlot(cur)
 
 	_ = s.store.RecordAudit(s.actor(c), "mc-loader-switch", target)
 	_ = s.store.RecordEvent("mc-loader-switch", target)
-	s.applyMinecraftAfterSync("minecraft-modded-slot", s.cfg.MinecraftDeployment, "TYPE", func(v string) bool {
+	s.applyMinecraftAfterSync(slotConfigMap, s.cfg.MinecraftDeployment, "TYPE", func(v string) bool {
 		return strings.EqualFold(v, target)
 	})
 
@@ -976,32 +998,43 @@ func (s *FiberServer) mcLoaderSwitch(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"ok": true, "loader": target})
 }
 
-func (s *FiberServer) registerSlot(sp minecraft.SlotSpec, pack string) {
+func (s *FiberServer) registerSlot(sl minecraft.Slot) {
 	if s.store == nil {
 		return
 	}
-	_ = s.store.UpsertSlot(store.Slot{
-		Slot:      minecraft.SlotName(sp.Slot),
-		Type:      minecraft.NormalizeType(sp.Type),
-		Pack:      pack,
-		MCVersion: sp.MCVersion,
-		CFPageURL: sp.CFPageURL,
-	})
+	row := store.Slot{
+		Slot:      minecraft.SlotName(sl.Name),
+		Loader:    string(minecraft.NormalizeLoader(string(sl.Loader))),
+		Source:    string(minecraft.NormalizeSource(string(sl.Source))),
+		MCVersion: sl.MCVersion,
+	}
+	if sl.PackDefined() {
+		row.PackProvider = string(sl.Pack.Provider)
+		row.PackRef = sl.Pack.Ref
+		row.Pack = sl.Pack.Name
+	}
+	_ = s.store.UpsertSlot(row)
 }
 
 func (s *FiberServer) knownSlots(ctx context.Context) (current string, slots []pages.SlotUI) {
-	current, curType := s.activeSlot(ctx)
+	active := s.activeSlot(ctx)
+	current = minecraft.SlotName(active.Name)
+	if active.Name == "" {
+		current = ""
+	}
 
 	if s.store != nil {
 		if rows, err := s.store.ListSlots(); err == nil {
 			for _, r := range rows {
 				slots = append(slots, pages.SlotUI{
-					Slot:      r.Slot,
-					Type:      r.Type,
-					Pack:      r.Pack,
-					MCVersion: r.MCVersion,
-					Active:    r.Slot == current,
-					LastUsed:  humanAgo(r.LastUsed),
+					Slot:         r.Slot,
+					Loader:       r.Loader,
+					Source:       r.Source,
+					Pack:         r.Pack,
+					PackProvider: r.PackProvider,
+					MCVersion:    r.MCVersion,
+					Active:       r.Slot == current,
+					LastUsed:     humanAgo(r.LastUsed),
 				})
 			}
 		}
@@ -1016,11 +1049,18 @@ func (s *FiberServer) knownSlots(ctx context.Context) (current string, slots []p
 			}
 		}
 		if !found {
-			slots = append([]pages.SlotUI{{
-				Slot:   current,
-				Type:   curType,
-				Active: true,
-			}}, slots...)
+			ui := pages.SlotUI{
+				Slot:      current,
+				Loader:    string(minecraft.NormalizeLoader(string(active.Loader))),
+				Source:    string(minecraft.NormalizeSource(string(active.Source))),
+				MCVersion: active.MCVersion,
+				Active:    true,
+			}
+			if active.PackDefined() {
+				ui.Pack = active.Pack.Name
+				ui.PackProvider = string(active.Pack.Provider)
+			}
+			slots = append([]pages.SlotUI{ui}, slots...)
 		}
 	}
 	return current, slots
@@ -1065,19 +1105,26 @@ func (s *FiberServer) mcSlotSwitch(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "unknown slot"})
 	}
 
-	sp := minecraft.SlotSpec{
-		Slot:      want.Slot,
-		Type:      want.Type,
+	sl := minecraft.Slot{
+		Name:      want.Slot,
+		Loader:    minecraft.NormalizeLoader(want.Loader),
+		Source:    minecraft.NormalizeSource(want.Source),
 		MCVersion: want.MCVersion,
-		CFPageURL: want.CFPageURL,
+	}
+	if sl.Source == minecraft.SourceModpack && want.PackRef != "" {
+		provider := minecraft.Provider(want.PackProvider)
+		if provider == "" {
+			provider = minecraft.ProviderCurseForge
+		}
+		sl.Pack = &minecraft.Pack{Provider: provider, Ref: want.PackRef, Name: want.Pack}
 	}
 	if want.Pack != "" {
-		sp.MOTD = fmt.Sprintf("%s (nf.ykhi.xyz)", want.Pack)
+		sl.MOTD = fmt.Sprintf("%s (nf.ykhi.xyz)", want.Pack)
 	}
 
 	ctx := c.UserContext()
 	msg := fmt.Sprintf("mc-slot: reactivate %s", want.Slot)
-	if _, err := s.mcSlot.Apply(ctx, sp, msg); err != nil {
+	if _, err := s.mcSlot.Apply(ctx, sl, msg); err != nil {
 		slog.Error("mc slot switch failed", "slot", target, "err", err)
 		if isHTMLForm(c) {
 			setFlash(c, "err", "Failed to switch world: "+err.Error())
@@ -1086,9 +1133,9 @@ func (s *FiberServer) mcSlotSwitch(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	s.registerSlot(sp, want.Pack)
+	s.registerSlot(sl)
 	_ = s.store.RecordAudit(s.actor(c), "mc-slot-switch", target)
-	s.applyMinecraftAfterSync("minecraft-modded-slot", s.cfg.MinecraftDeployment, "WORLD_SLOT", func(v string) bool {
+	s.applyMinecraftAfterSync(slotConfigMap, s.cfg.MinecraftDeployment, "WORLD_SLOT", func(v string) bool {
 		return v == target
 	})
 

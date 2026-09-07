@@ -13,14 +13,14 @@ func TestSlotUpsertPreservesMetadata(t *testing.T) {
 	defer st.Close()
 
 	if err := st.UpsertSlot(Slot{
-		Slot: "ducktopia", Type: "AUTO_CURSEFORGE",
-		Pack: "Ducktopia Farlands", CFPageURL: "https://cf/ducktopia",
+		Slot: "ducktopia", Loader: "fabric", Source: "modpack",
+		Pack: "Ducktopia Farlands", PackProvider: "curseforge", PackRef: "https://cf/ducktopia",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	// A later touch with empty metadata must not wipe what we already know.
-	if err := st.UpsertSlot(Slot{Slot: "ducktopia", Type: "AUTO_CURSEFORGE"}); err != nil {
+	if err := st.UpsertSlot(Slot{Slot: "ducktopia", Loader: "fabric", Source: "modpack"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -34,8 +34,11 @@ func TestSlotUpsertPreservesMetadata(t *testing.T) {
 	if rows[0].Pack != "Ducktopia Farlands" {
 		t.Fatalf("pack lost on re-upsert: %q", rows[0].Pack)
 	}
-	if rows[0].CFPageURL != "https://cf/ducktopia" {
-		t.Fatalf("cf url lost on re-upsert: %q", rows[0].CFPageURL)
+	if rows[0].PackRef != "https://cf/ducktopia" {
+		t.Fatalf("pack ref lost on re-upsert: %q", rows[0].PackRef)
+	}
+	if rows[0].PackProvider != "curseforge" {
+		t.Fatalf("provider lost on re-upsert: %q", rows[0].PackProvider)
 	}
 }
 
@@ -47,7 +50,7 @@ func TestListSlotsOrdersByLastUsed(t *testing.T) {
 	defer st.Close()
 
 	for _, s := range []string{"alpha", "beta"} {
-		if err := st.UpsertSlot(Slot{Slot: s, Type: "NEOFORGE"}); err != nil {
+		if err := st.UpsertSlot(Slot{Slot: s, Loader: "neoforge", Source: "modlist"}); err != nil {
 			t.Fatal(err)
 		}
 	}

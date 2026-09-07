@@ -19,6 +19,7 @@ import (
 
 	"agrelha/internal/config"
 	"agrelha/internal/k8s"
+	"agrelha/internal/minecraft"
 	"agrelha/internal/modrinth"
 	"agrelha/internal/store"
 )
@@ -314,7 +315,17 @@ func TestMinecraftLoaderSwitch(t *testing.T) {
 			Spec:       appsv1.DeploymentSpec{Replicas: &r1},
 		},
 		&corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: "minecraft-modded-slot", Namespace: "minecraft-modded"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "minecraft-modded-slot",
+				Namespace: "minecraft-modded",
+				Annotations: map[string]string{
+					"agrelha.ykhi.xyz/source":        "modpack",
+					"agrelha.ykhi.xyz/loader":        "fabric",
+					"agrelha.ykhi.xyz/pack-provider": "curseforge",
+					"agrelha.ykhi.xyz/pack-ref":      "https://cf/ducktopia",
+					"agrelha.ykhi.xyz/mc-version":    "26.1.2",
+				},
+			},
 			Data: map[string]string{
 				"WORLD_SLOT": "ducktopia",
 				"TYPE":       "AUTO_CURSEFORGE",
@@ -357,12 +368,13 @@ func TestMinecraftLoaderSwitch(t *testing.T) {
 		t.Fatalf("no gitops: status = %d, want 503", code)
 	}
 
-	slot, typ, err := s.mck8s.ActiveSlot(context.Background(), "minecraft-modded-slot")
+	data, ann, err := s.mck8s.ConfigMapMeta(context.Background(), "minecraft-modded-slot")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slot != "ducktopia" || typ != "AUTO_CURSEFORGE" {
-		t.Fatalf("ActiveSlot() = %q/%q, want ducktopia/AUTO_CURSEFORGE", slot, typ)
+	sl := minecraft.SlotFromAnnotations(ann, data)
+	if sl.Name != "ducktopia" || !sl.PackDefined() || sl.Loader != minecraft.LoaderFabric {
+		t.Fatalf("reconstructed slot = %+v, want ducktopia fabric modpack", sl)
 	}
 }
 
@@ -475,8 +487,8 @@ func TestWorldsTabListsSlots(t *testing.T) {
 	defer st.Close()
 
 	for _, sl := range []store.Slot{
-		{Slot: "ducktopia", Type: "AUTO_CURSEFORGE", Pack: "Ducktopia Farlands"},
-		{Slot: "atm9", Type: "NEOFORGE", Pack: "All The Mods 9", MCVersion: "1.21.1"},
+		{Slot: "ducktopia", Loader: "fabric", Source: "modpack", Pack: "Ducktopia Farlands", PackProvider: "curseforge"},
+		{Slot: "atm9", Loader: "neoforge", Source: "modlist", Pack: "All The Mods 9", MCVersion: "1.21.1"},
 	} {
 		if err := st.UpsertSlot(sl); err != nil {
 			t.Fatal(err)
@@ -484,8 +496,16 @@ func TestWorldsTabListsSlots(t *testing.T) {
 	}
 
 	cs := fake.NewSimpleClientset(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "minecraft-modded-slot", Namespace: "minecraft-modded"},
-		Data:       map[string]string{"WORLD_SLOT": "ducktopia", "TYPE": "AUTO_CURSEFORGE"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "minecraft-modded-slot",
+			Namespace: "minecraft-modded",
+			Annotations: map[string]string{
+				"agrelha.ykhi.xyz/source":        "modpack",
+				"agrelha.ykhi.xyz/loader":        "fabric",
+				"agrelha.ykhi.xyz/pack-provider": "curseforge",
+			},
+		},
+		Data: map[string]string{"WORLD_SLOT": "ducktopia", "TYPE": "AUTO_CURSEFORGE"},
 	})
 
 	s := &FiberServer{
@@ -535,5 +555,52 @@ func TestSlotSwitchRejectsUnknownSlot(t *testing.T) {
 	}
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Fatalf("empty slot: status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// End-to-end guard for the bug that silently destroyed the Ducktopia slot:
+// asking to switch engine on a pack-defined slot must be REFUSED, not applied.
+func TestLoaderSwitchRefusedOnPackDefinedSlot(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	cs := fake.NewSimpleClientset(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "minecraft-modded-slot",
+			Namespace: "minecraft-modded",
+			Annotations: map[string]string{
+				"agrelha.ykhi.xyz/source":        "modpack",
+				"agrelha.ykhi.xyz/loader":        "fabric",
+				"agrelha.ykhi.xyz/pack-provider": "curseforge",
+				"agrelha.ykhi.xyz/pack-ref":      "https://cf/ducktopia",
+			},
+		},
+		Data: map[string]string{"WORLD_SLOT": "ducktopia", "TYPE": "AUTO_CURSEFORGE"},
+	})
+
+	s := &FiberServer{
+		App:    fiber.New(),
+		cfg:    &config.Config{MinecraftNamespace: "minecraft-modded", MinecraftDeployment: "minecraft-modded"},
+		store:  st,
+		mck8s:  k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded"),
+		mcSlot: minecraft.NewSlotManager(nil, "", ""),
+	}
+	s.RegisterFiberRoutes()
+
+	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/loader/switch", strings.NewReader("target=neoforge"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("status = %d, want 409 Conflict (pack decides the loader)", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "pack") {
+		t.Fatalf("refusal should explain the pack owns the loader; got: %s", body)
 	}
 }

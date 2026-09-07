@@ -14,6 +14,7 @@ import (
 	"agrelha/cmd/web/pages"
 	"agrelha/internal/backups"
 	"agrelha/internal/metrics"
+	"agrelha/internal/minecraft"
 	"agrelha/internal/sse"
 )
 
@@ -193,8 +194,14 @@ func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 	}
 
 	if s.mck8s != nil {
-		if _, typ, err := s.mck8s.ActiveSlot(ctx, "minecraft-modded-slot"); err == nil && typ == "FABRIC" {
-			sig["mc_loader"] = "Fabric"
+		if data, ann, err := s.mck8s.ConfigMapMeta(ctx, slotConfigMap); err == nil {
+			sl := minecraft.SlotFromAnnotations(ann, data)
+			if sl.Loader == minecraft.LoaderFabric {
+				sig["mc_loader"] = "Fabric"
+			}
+			if sl.PackDefined() && sl.Pack.Name != "" {
+				sig["mc_pack"] = sl.Pack.Name
+			}
 		}
 	}
 

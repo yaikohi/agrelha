@@ -262,7 +262,7 @@ templ MinecraftMods(
 										}
 									</div>
 									<p class="mt-0.5 text-xs text-zinc-500">
-										{ SlotEngine(sl.Type) }
+										{ SlotEngine(sl.Loader, sl.Source, sl.PackProvider) }
 										if sl.Pack != "" {
 											<span class="text-zinc-400"> · { sl.Pack }</span>
 										}

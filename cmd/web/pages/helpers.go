@@ -1,5 +1,7 @@
 package pages
 
+import "fmt"
+
 import "strings"
 
 // ModKey reduces a "namespace/name/version" entry to "namespace/name".
@@ -106,22 +108,34 @@ func HistoryBadge(source, kind string) string {
 }
 
 type SlotUI struct {
-	Slot      string
-	Type      string
-	Pack      string
-	MCVersion string
-	Active    bool
-	LastUsed  string
+	Slot         string
+	Loader       string
+	Source       string
+	Pack         string
+	PackProvider string
+	MCVersion    string
+	Active       bool
+	LastUsed     string
 }
 
-func SlotEngine(t string) string {
-	switch t {
-	case "AUTO_CURSEFORGE":
-		return "CurseForge pack"
-	case "FABRIC":
-		return "Fabric"
+// SlotEngine describes a slot the way the domain does: the loader is what runs,
+// and the source (with its provider) is how the content got there. CurseForge is
+// a distributor, never an engine.
+func SlotEngine(loader, source, provider string) string {
+	name := "NeoForge"
+	if loader == "fabric" {
+		name = "Fabric"
+	}
+	switch source {
+	case "modpack":
+		if provider != "" {
+			return fmt.Sprintf("%s · %s pack", name, provider)
+		}
+		return name + " · modpack"
+	case "vanilla":
+		return "Vanilla"
 	default:
-		return "NeoForge"
+		return name + " · mod list"
 	}
 }
 

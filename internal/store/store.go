@@ -75,13 +75,15 @@ func (s *Store) migrate() error {
 		PRIMARY KEY (full_name, version)
 	);
 	CREATE TABLE IF NOT EXISTS mc_slots (
-		slot        TEXT PRIMARY KEY,
-		type        TEXT NOT NULL,          -- AUTO_CURSEFORGE|NEOFORGE|FABRIC
-		pack        TEXT,
-		mc_version  TEXT,
-		cf_page_url TEXT,
-		created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		last_used   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		slot          TEXT PRIMARY KEY,
+		loader        TEXT NOT NULL DEFAULT 'neoforge',  -- fabric|neoforge
+		source        TEXT NOT NULL DEFAULT 'modlist',   -- modpack|modlist|vanilla
+		pack          TEXT,                              -- display name
+		pack_provider TEXT,                              -- curseforge|modrinth
+		pack_ref      TEXT,
+		mc_version    TEXT,
+		created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_used     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE TABLE IF NOT EXISTS meta (
 		key   TEXT PRIMARY KEY,
@@ -94,6 +96,10 @@ func (s *Store) migrate() error {
 	for _, stmt := range []string{
 		`ALTER TABLE players ADD COLUMN online INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE players ADD COLUMN online_since TIMESTAMP`,
+		`ALTER TABLE mc_slots ADD COLUMN loader TEXT NOT NULL DEFAULT 'neoforge'`,
+		`ALTER TABLE mc_slots ADD COLUMN source TEXT NOT NULL DEFAULT 'modlist'`,
+		`ALTER TABLE mc_slots ADD COLUMN pack_provider TEXT`,
+		`ALTER TABLE mc_slots ADD COLUMN pack_ref TEXT`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
