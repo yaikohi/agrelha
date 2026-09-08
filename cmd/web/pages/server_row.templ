@@ -11,12 +11,12 @@ templ serverRow(r ServerRowUI) {
 			<div class="min-w-0">
 				<div class="flex flex-wrap items-center gap-2">
 					<span class="font-semibold text-zinc-100">{ r.Name }</span>
-					if r.StateSignal != "" {
+					if r.OnlineSignal != "" {
 						<span
 							class="rounded px-1.5 py-0.5 text-[10px] font-medium"
-							data-class={ fmt.Sprintf("{'bg-emerald-950 border border-emerald-800/60 text-emerald-300': $%s === 'running', 'bg-zinc-800 text-zinc-400': $%s !== 'running'}", r.StateSignal, r.StateSignal) }
+							data-class={ fmt.Sprintf("{'bg-emerald-950 border border-emerald-800/60 text-emerald-300': $%s, 'bg-zinc-800 text-zinc-400': !$%s}", r.OnlineSignal, r.OnlineSignal) }
 						>
-							<span data-text={ fmt.Sprintf("$%s === 'running' ? 'Online' : 'Offline'", r.StateSignal) }></span>
+							<span data-text={ fmt.Sprintf("$%s ? 'Online' : 'Offline'", r.OnlineSignal) }></span>
 						</span>
 					} else if r.Online {
 						<span class="rounded bg-emerald-950 border border-emerald-800/60 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">Online</span>
@@ -131,16 +131,16 @@ templ gameCard(g GameCardUI) {
 					</div>
 				</div>
 				<div>
-					if g.StateSignal != "" {
+					if g.OnlineSignal != "" {
 						<span
 							class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-							data-class={ fmt.Sprintf("{'bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-800/50': $%s === 'running', 'bg-zinc-800 text-zinc-400': $%s !== 'running'}", g.StateSignal, g.StateSignal) }
+							data-class={ fmt.Sprintf("{'bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-800/50': $%s, 'bg-zinc-800 text-zinc-400': !$%s}", g.OnlineSignal, g.OnlineSignal) }
 						>
 							<span
 								class="h-1.5 w-1.5 rounded-full"
-								data-class={ fmt.Sprintf("{'bg-emerald-400 animate-pulse': $%s === 'running', 'bg-zinc-500': $%s !== 'running'}", g.StateSignal, g.StateSignal) }
+								data-class={ fmt.Sprintf("{'bg-emerald-400 animate-pulse': $%s, 'bg-zinc-500': !$%s}", g.OnlineSignal, g.OnlineSignal) }
 							></span>
-							<span data-text={ fmt.Sprintf("$%s === 'running' ? '1 online' : 'Offline'", g.StateSignal) }></span>
+							<span data-text={ fmt.Sprintf("$%s ? '1 online' : 'Offline'", g.OnlineSignal) }></span>
 						</span>
 					} else if g.OnlineCount() > 0 {
 						<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/80 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/50">

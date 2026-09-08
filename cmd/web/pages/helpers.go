@@ -216,7 +216,7 @@ type ServerRowUI struct {
 	Players       int
 	PlayersKnown  bool
 	Uptime        string
-	StateSignal   string
+	OnlineSignal  string
 	PlayersSignal string
 	UptimeSignal  string
 }
@@ -277,14 +277,14 @@ type GameCardUI struct {
 	AccessNote string
 	EmptyText  string
 	EmptyHint  string
-	// StateSignal binds the header pill to a live Datastar signal instead of a
+	// OnlineSignal binds the header pill to a live Datastar signal instead of a
 	// server-rendered count, so a single-server card reports its real state
 	// rather than assuming a rendered row means "up".
-	StateSignal string
+	OnlineSignal string
 }
 
 // OnlineCount counts server-rendered rows only; signal-driven cards report
-// their state through StateSignal.
+// their state through OnlineSignal.
 func (g GameCardUI) OnlineCount() int {
 	n := 0
 	for _, r := range g.Rows {
@@ -306,13 +306,13 @@ func iconStyle(accent string) string {
 // the row and header pill bind rather than print.
 func ValheimCard(addr string, isAdmin bool) GameCardUI {
 	g := GameCardUI{
-		Icon:        "\u2694\ufe0f",
-		Accent:      "orange",
-		Title:       "Valheim Dedicated",
-		AccessPill:  "\U0001f512 Password",
-		Subtitle:    "Dedicated survival server",
-		StateSignal: "state",
-		AccessNote:  "Password required — ask the host on Discord / WireGuard.",
+		Icon:         "\u2694\ufe0f",
+		Accent:       "orange",
+		Title:        "Valheim Dedicated",
+		AccessPill:   "\U0001f512 Password",
+		Subtitle:     "Dedicated survival server",
+		OnlineSignal: "online",
+		AccessNote:   "Password required — ask the host on Discord / WireGuard.",
 		Rows: []ServerRowUI{{
 			Name:          "Valheim Dedicated",
 			Address:       addr,
@@ -320,7 +320,7 @@ func ValheimCard(addr string, isAdmin bool) GameCardUI {
 			DownloadFmt:   ".r2z",
 			Launchers:     []string{"r2modman", "Thunderstore Mod Manager"},
 			ImportSteps:   "Import → From file",
-			StateSignal:   "state",
+			OnlineSignal:  "online",
 			PlayersSignal: "players",
 			UptimeSignal:  "uptime",
 		}},

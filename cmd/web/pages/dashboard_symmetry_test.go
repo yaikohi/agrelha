@@ -121,3 +121,29 @@ func TestServersOnlineLabelWording(t *testing.T) {
 		}
 	}
 }
+
+// The Valheim SSE "state" signal emits "Up" (or a pod phase) — never "running",
+// which is the Minecraft instance vocabulary. Binding the card to "state" made
+// a healthy server render as Offline. The card must bind to the normalised
+// boolean "online" signal instead, and never string-compare against a state.
+func TestValheimBindsToOnlineBooleanNotStateString(t *testing.T) {
+	out := render(t, ValheimCard("192.168.20.224:2456", false))
+
+	if !strings.Contains(out, "$online") {
+		t.Fatal("Valheim card must bind to the normalised $online signal")
+	}
+	for _, stale := range []string{"=== 'running'", "!== 'running'", "$state ==="} {
+		if strings.Contains(out, stale) {
+			t.Fatalf("card still string-compares the state signal: %q", stale)
+		}
+	}
+	// templ HTML-escapes apostrophes in attributes; the browser unescapes them
+	// before Datastar evaluates the expression.
+	q := "&#39;"
+	if !strings.Contains(out, "$online ? "+q+"1 online"+q+" : "+q+"Offline"+q) {
+		t.Fatal("header pill must read from $online")
+	}
+	if !strings.Contains(out, "$online ? "+q+"Online"+q+" : "+q+"Offline"+q) {
+		t.Fatal("row status badge must read from $online")
+	}
+}

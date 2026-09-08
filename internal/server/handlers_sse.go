@@ -160,7 +160,7 @@ func (s *FiberServer) sseLogs(c *fiber.Ctx) error {
 
 func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 	sig := map[string]any{
-		"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "backup": "—", "backupinfo": "",
+		"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "online": false, "backup": "—", "backupinfo": "",
 		"mc_players": "—", "mc_cpu": "—", "mc_mem": "—", "mc_uptime": "—", "mc_state": "unknown", "mc_loader": "NeoForge",
 	}
 
@@ -183,6 +183,10 @@ func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 			} else {
 				sig["state"] = ps.Phase
 			}
+			// Normalised for the UI: "state" is a human label ("Up", or a pod
+			// phase), while Minecraft instances use "running". Binding the card
+			// to a boolean keeps the two vocabularies out of the template.
+			sig["online"] = ps.Ready
 			if !ps.StartedAt.IsZero() {
 				sig["uptime"] = humanDuration(time.Since(ps.StartedAt))
 			}
