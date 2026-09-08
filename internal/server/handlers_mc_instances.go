@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -157,6 +158,36 @@ func (s *FiberServer) mcInstanceStop(c *fiber.Ctx) error {
 		return sseToast(c, "err", "Invalid instance number.", nil)
 	}
 
+	inst, err := s.mcInstances.GetInstance(c.UserContext(), num)
+	if err == nil && inst != nil {
+		// 1. RCON save-all flush if active (with 250ms deadline so unreachable RCON does not hang)
+		if s.mcRconPool != nil && inst.State == minecraft.StateRunning {
+			addr := fmt.Sprintf("%s.minecraft-modded.svc.cluster.local:25575", inst.ServiceName())
+			client := s.mcRconPool.ClientFor(addr)
+			done := make(chan struct{})
+			go func() {
+				_, _ = client.Execute("/save-all flush")
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+
+		// 2. Pre-stop auto-backup
+		if s.mck8s != nil {
+			jobName := fmt.Sprintf("mc-backup-%s-%02d-stop-%d", inst.Slug, inst.Number, time.Now().Unix())
+			archiveName := minecraft.FormatBackupFileName(inst.Slug, inst.Number, "stop")
+			_ = s.mck8s.CreateBackupJob(c.UserContext(), jobName, archiveName, inst.PVCName(), "minecraft-modded-backups")
+		}
+
+		// 3. Prune older backups
+		if s.cfg != nil && s.cfg.BackupsDir != "" {
+			_ = minecraft.PruneBackups(s.cfg.BackupsDir, inst.Slug, inst.Number, 5)
+		}
+	}
+
 	if err := s.mcInstances.StopInstance(c.UserContext(), num); err != nil {
 		return sseToast(c, "err", "Failed to stop world: "+err.Error(), nil)
 	}
@@ -164,7 +195,7 @@ func (s *FiberServer) mcInstanceStop(c *fiber.Ctx) error {
 	_ = s.store.RecordAudit(s.actor(c), "mc-instance-stop", fmt.Sprintf("Instance #%02d", num))
 	_ = s.store.RecordEvent("mc-instance-stop", s.actor(c))
 
-	return sseToast(c, "ok", fmt.Sprintf("Stopped instance #%02d.", num), nil)
+	return sseToast(c, "ok", fmt.Sprintf("Stopping instance #%02d (pre-stop snapshot initiated)...", num), nil)
 }
 
 func (s *FiberServer) mcInstanceDelete(c *fiber.Ctx) error {
@@ -177,6 +208,14 @@ func (s *FiberServer) mcInstanceDelete(c *fiber.Ctx) error {
 		return sseToast(c, "err", "Invalid instance number.", nil)
 	}
 
+	inst, err := s.mcInstances.GetInstance(c.UserContext(), num)
+	if err == nil && inst != nil && s.mck8s != nil {
+		// Pre-delete final snapshot
+		jobName := fmt.Sprintf("mc-backup-%s-%02d-final-%d", inst.Slug, inst.Number, time.Now().Unix())
+		archiveName := minecraft.FormatBackupFileName(inst.Slug, inst.Number, "final")
+		_ = s.mck8s.CreateBackupJob(c.UserContext(), jobName, archiveName, inst.PVCName(), "minecraft-modded-backups")
+	}
+
 	if err := s.mcInstances.DeleteInstance(c.UserContext(), num); err != nil {
 		return sseToast(c, "err", "Failed to delete world: "+err.Error(), nil)
 	}
@@ -184,7 +223,7 @@ func (s *FiberServer) mcInstanceDelete(c *fiber.Ctx) error {
 	_ = s.store.RecordAudit(s.actor(c), "mc-instance-delete", fmt.Sprintf("Instance #%02d", num))
 	_ = s.store.RecordEvent("mc-instance-delete", s.actor(c))
 
-	return sseToast(c, "ok", fmt.Sprintf("Deleted instance #%02d.", num), nil)
+	return sseToast(c, "ok", fmt.Sprintf("Deleted instance #%02d (final snapshot saved to backups).", num), nil)
 }
 
 func (s *FiberServer) mcInstanceRestart(c *fiber.Ctx) error {

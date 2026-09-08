@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -85,4 +87,100 @@ func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
 	}
 
 	_ = inst
+}
+
+func TestMinecraftRestoreEndpoints(t *testing.T) {
+	s, st, mgr := setupTestMCServer(t)
+	defer st.Close()
+
+	backupsDir := t.TempDir()
+	s.cfg.BackupsDir = backupsDir
+
+	inst, err := mgr.CreateInstance(context.Background(), minecraft.Instance{
+		Name:      "Fluxweave",
+		Loader:    minecraft.LoaderNeoForge,
+		Source:    minecraft.SourceModlist,
+		MCVersion: "1.21.1",
+		Tier:      minecraft.TierMedium,
+	}, "jei\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	backupFile := "mc-fluxweave-01-test-20260101-120000.tar.gz"
+	backupPath := filepath.Join(backupsDir, backupFile)
+	if err := os.WriteFile(backupPath, []byte("dummy tar data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. In-place restore should fail when instance is running
+	_ = st.UpdateInstanceState(inst.Number, string(minecraft.StateRunning))
+	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/restore-inplace", strings.NewReader(`{"archive":"`+backupFile+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Cannot restore while world is running") {
+		t.Fatalf("expected running error toast, got: %s", string(body))
+	}
+
+	// 2. In-place restore should succeed when instance is stopped
+	_ = st.UpdateInstanceState(inst.Number, string(minecraft.StateStopped))
+	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/restore-inplace", strings.NewReader(`{"archive":"`+backupFile+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "In-place restore started") {
+		t.Fatalf("expected restore started toast, got: %s", string(body))
+	}
+
+	// 3. Restore as New World creates slot #02 and launches restore Job
+	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/restore-new", strings.NewReader(`{"name":"Fluxweave Clone","tier":"large","archive":"`+backupFile+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Fluxweave Clone") {
+		t.Fatalf("expected clone created toast, got: %s", string(body))
+	}
+
+	newInst, err := mgr.GetInstance(context.Background(), 2)
+	if err != nil || newInst == nil {
+		t.Fatal("expected instance #02 to exist after restore-new")
+	}
+	if newInst.Tier != minecraft.TierLarge {
+		t.Errorf("new instance tier = %s, want large", newInst.Tier)
+	}
+
+	// 4. Download backup file
+	req = httptest.NewRequest(fiber.MethodGet, "/api/minecraft/1/backups/download?f="+backupFile, nil)
+	resp, err = s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("download status = %d, want 200", resp.StatusCode)
+	}
+	dlData, _ := io.ReadAll(resp.Body)
+	if string(dlData) != "dummy tar data" {
+		t.Fatalf("download content = %q, want 'dummy tar data'", string(dlData))
+	}
+
+	// 5. Delete backup file
+	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/delete", strings.NewReader(`{"file":"`+backupFile+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = s.App.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
+		t.Errorf("expected %s to be deleted from disk", backupPath)
+	}
 }

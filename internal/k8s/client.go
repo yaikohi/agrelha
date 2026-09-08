@@ -188,3 +188,88 @@ func (c *Client) CreateBackupJob(ctx context.Context, jobName, archiveName, data
 	_, err := c.cs.BatchV1().Jobs(c.namespace).Create(ctx, job, metav1.CreateOptions{})
 	return err
 }
+
+// CreateRestoreJob creates a one-off Kubernetes Job that extracts a backup archive into the instance PVC.
+func (c *Client) CreateRestoreJob(ctx context.Context, jobName, archiveName, dataClaimName, backupsClaimName string) error {
+	ttl := int32(300)
+	backoff := int32(1)
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: c.namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/name":      "mc-restore",
+				"app.kubernetes.io/component": "restore-job",
+			},
+		},
+		Spec: batchv1.JobSpec{
+			TTLSecondsAfterFinished: &ttl,
+			BackoffLimit:            &backoff,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app.kubernetes.io/name": "mc-restore",
+					},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					NodeSelector: map[string]string{
+						"ykhi.xyz/gameserver": "true",
+					},
+					Tolerations: []corev1.Toleration{
+						{
+							Key:      "dedicated",
+							Operator: corev1.TolerationOpEqual,
+							Value:    "gameserver",
+							Effect:   corev1.TaintEffectNoSchedule,
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name:    "restore",
+							Image:   "busybox:1.36",
+							Command: []string{"sh", "-c"},
+							Args: []string{
+								fmt.Sprintf("rm -rf /data/* && tar -xzf /backups/%s -C /data/", archiveName),
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "data",
+									MountPath: "/data",
+									ReadOnly:  false,
+								},
+								{
+									Name:      "backups",
+									MountPath: "/backups",
+									ReadOnly:  true,
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "data",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: dataClaimName,
+								},
+							},
+						},
+						{
+							Name: "backups",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: backupsClaimName,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := c.cs.BatchV1().Jobs(c.namespace).Create(ctx, job, metav1.CreateOptions{})
+	return err
+}

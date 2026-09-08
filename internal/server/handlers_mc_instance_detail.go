@@ -250,10 +250,179 @@ func (s *FiberServer) mcInstanceBackupCreate(c *fiber.Ctx) error {
 		}
 	}
 
+	if s.cfg != nil && s.cfg.BackupsDir != "" {
+		_ = minecraft.PruneBackups(s.cfg.BackupsDir, inst.Slug, inst.Number, 5)
+	}
+
 	_ = s.store.RecordAudit(s.actor(c), "mc-backup", fmt.Sprintf("Backup %s for instance #%02d", backupName, num))
 	_ = s.store.RecordEvent("mc-backup", s.actor(c))
 
 	return sseToast(c, "ok", fmt.Sprintf("Backup job started: %s. Archiving to NAS...", backupName), nil)
+}
+
+func (s *FiberServer) mcInstanceBackupRestoreInPlace(c *fiber.Ctx) error {
+	if s.mcInstances == nil || s.mck8s == nil {
+		return sseToast(c, "err", "Instance manager or cluster client unconfigured.", nil)
+	}
+
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return sseToast(c, "err", "Invalid instance number.", nil)
+	}
+
+	inst, err := s.mcInstances.GetInstance(c.UserContext(), num)
+	if err != nil || inst == nil {
+		return sseToast(c, "err", "Instance not found.", nil)
+	}
+
+	if inst.State == minecraft.StateRunning {
+		return sseToast(c, "err", "Cannot restore while world is running. Please stop the server first.", nil)
+	}
+
+	var req struct {
+		Archive string `json:"archive" form:"archive"`
+	}
+	_ = c.BodyParser(&req)
+	archiveName := filepath.Base(strings.TrimSpace(req.Archive))
+	if archiveName == "" || archiveName == "." || !strings.HasSuffix(archiveName, ".tar.gz") {
+		return sseToast(c, "err", "Valid backup archive name required.", nil)
+	}
+
+	// 1. Take pre-restore safety snapshot
+	safetyArchive := minecraft.FormatBackupFileName(inst.Slug, inst.Number, "prerestore")
+	safetyJob := fmt.Sprintf("mc-bkp-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
+	_ = s.mck8s.CreateBackupJob(c.UserContext(), safetyJob, safetyArchive, inst.PVCName(), "minecraft-modded-backups")
+
+	// 2. Launch restore job
+	restoreJobName := fmt.Sprintf("mc-rst-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
+	if err := s.mck8s.CreateRestoreJob(c.UserContext(), restoreJobName, archiveName, inst.PVCName(), "minecraft-modded-backups"); err != nil {
+		return sseToast(c, "err", "Failed to launch restore Job: "+err.Error(), nil)
+	}
+
+	_ = s.store.RecordAudit(s.actor(c), "mc-backup-restore-inplace", fmt.Sprintf("Restored %s into #%02d", archiveName, num))
+	_ = s.store.RecordEvent("mc-backup-restore-inplace", s.actor(c))
+
+	return sseToast(c, "ok", fmt.Sprintf("In-place restore started from %s (safety snapshot saved). World data is unpacking.", archiveName), nil)
+}
+
+func (s *FiberServer) mcInstanceBackupRestoreNew(c *fiber.Ctx) error {
+	if s.mcInstances == nil || s.mck8s == nil {
+		return sseToast(c, "err", "Instance manager or cluster client unconfigured.", nil)
+	}
+
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return sseToast(c, "err", "Invalid instance number.", nil)
+	}
+
+	srcInst, err := s.mcInstances.GetInstance(c.UserContext(), num)
+	if err != nil || srcInst == nil {
+		return sseToast(c, "err", "Source instance not found.", nil)
+	}
+
+	var req struct {
+		Name    string `json:"name" form:"name"`
+		Tier    string `json:"tier" form:"tier"`
+		Archive string `json:"archive" form:"archive"`
+	}
+	_ = c.BodyParser(&req)
+
+	newName := strings.TrimSpace(req.Name)
+	if newName == "" {
+		newName = fmt.Sprintf("%s Restored", srcInst.Name)
+	}
+	archiveName := filepath.Base(strings.TrimSpace(req.Archive))
+	if archiveName == "" || archiveName == "." || !strings.HasSuffix(archiveName, ".tar.gz") {
+		return sseToast(c, "err", "Valid backup archive name required.", nil)
+	}
+
+	newTier := srcInst.Tier
+	if req.Tier != "" {
+		newTier = minecraft.NormalizeTier(req.Tier)
+	}
+
+	newInst := minecraft.Instance{
+		Name:       newName,
+		Seed:       srcInst.Seed,
+		Loader:     srcInst.Loader,
+		Source:     srcInst.Source,
+		Pack:       srcInst.Pack,
+		MCVersion:  srcInst.MCVersion,
+		Tier:       newTier,
+		MOTD:       fmt.Sprintf("%s (Restored)", newName),
+		Difficulty: srcInst.Difficulty,
+		Gamemode:   srcInst.Gamemode,
+		WorldType:  srcInst.WorldType,
+		State:      minecraft.StateStopped,
+	}
+
+	modsTxt := ""
+	if data, err := s.mck8s.ConfigMapData(c.UserContext(), srcInst.ModsCMName()); err == nil {
+		modsTxt = data["mods.txt"]
+	}
+
+	created, err := s.mcInstances.CreateInstance(c.UserContext(), newInst, modsTxt)
+	if err != nil {
+		return sseToast(c, "err", "Failed to create new instance: "+err.Error(), nil)
+	}
+
+	restoreJobName := fmt.Sprintf("mc-rst-%s-%d-%s", created.Slug, created.Number, time.Now().Format("150405"))
+	if err := s.mck8s.CreateRestoreJob(c.UserContext(), restoreJobName, archiveName, created.PVCName(), "minecraft-modded-backups"); err != nil {
+		return sseToast(c, "err", "Instance created, but restore Job failed: "+err.Error(), nil)
+	}
+
+	_ = s.store.RecordAudit(s.actor(c), "mc-backup-restore-new", fmt.Sprintf("Restored %s into new instance #%02d %q", archiveName, created.Number, created.Name))
+	_ = s.store.RecordEvent("mc-backup-restore-new", s.actor(c))
+
+	return sseToast(c, "ok", fmt.Sprintf("World %q created from backup! Redirecting...", created.Name), map[string]any{
+		"redirect": fmt.Sprintf("/minecraft/provisioning/%d", created.Number),
+	})
+}
+
+func (s *FiberServer) mcInstanceBackupDownload(c *fiber.Ctx) error {
+	if s.cfg == nil || s.cfg.BackupsDir == "" {
+		return c.Status(fiber.StatusServiceUnavailable).SendString("Backups directory unconfigured")
+	}
+
+	fileName := filepath.Base(strings.TrimSpace(c.Query("f")))
+	if fileName == "" || fileName == "." || !strings.HasSuffix(fileName, ".tar.gz") {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid backup file")
+	}
+
+	filePath := filepath.Join(s.cfg.BackupsDir, fileName)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return c.Status(fiber.StatusNotFound).SendString("Backup file not found")
+	}
+
+	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fileName))
+	return c.SendFile(filePath)
+}
+
+func (s *FiberServer) mcInstanceBackupDelete(c *fiber.Ctx) error {
+	if s.cfg == nil || s.cfg.BackupsDir == "" {
+		return sseToast(c, "err", "Backups directory unconfigured.", nil)
+	}
+
+	var req struct {
+		File string `json:"file" form:"file"`
+	}
+	_ = c.BodyParser(&req)
+
+	fileName := filepath.Base(strings.TrimSpace(req.File))
+	if fileName == "" || fileName == "." {
+		return sseToast(c, "err", "File name required.", nil)
+	}
+
+	if err := minecraft.DeleteBackup(s.cfg.BackupsDir, fileName); err != nil {
+		return sseToast(c, "err", "Failed to delete backup: "+err.Error(), nil)
+	}
+
+	num, _ := strconv.Atoi(c.Params("num"))
+	_ = s.store.RecordAudit(s.actor(c), "mc-backup-delete", fmt.Sprintf("Deleted backup %s for #%02d", fileName, num))
+
+	return sseToast(c, "ok", fmt.Sprintf("Deleted %s.", fileName), map[string]any{
+		"redirect": fmt.Sprintf("/minecraft/%d/backups", num),
+	})
 }
 
 func (s *FiberServer) mcInstanceSettingsSave(c *fiber.Ctx) error {

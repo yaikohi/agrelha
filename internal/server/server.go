@@ -132,6 +132,7 @@ func New(cfg *config.Config) *FiberServer {
 		cfg.MCTotalBudgetGiB, cfg.MCMaxInstances, cfg.MCMaxRunning,
 		"manifests/minecraft-modded",
 	)
+	s.StartMinecraftScheduler(context.Background())
 
 	if cfg.OIDCIssuer != "" {
 		if a, err := auth.New(context.Background(), cfg); err != nil {
