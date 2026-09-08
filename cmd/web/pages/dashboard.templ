@@ -1,111 +1,229 @@
 package pages
 
-templ Dashboard(grafanaURL, flashKind, flashMsg string) {
-	@Layout("Agrelha") {
+import "fmt"
+
+templ Dashboard(grafanaURL string, mcSummary MinecraftSummaryUI, flashKind, flashMsg string) {
+	@Layout("Agrelha · Game Server Portal") {
 		@nav()
 		@flashBanner(flashKind, flashMsg)
 		<div class="space-y-8">
-			<!-- Game Servers Grid -->
+			<!-- Header Banner -->
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-5">
+				<div>
+					<h1 class="text-2xl font-bold tracking-tight text-zinc-100">Game Server Hub</h1>
+					<p class="mt-1 text-xs text-zinc-400">Manage dedicated game servers on node <code class="text-zinc-300 font-mono">game-01</code>.</p>
+				</div>
+				<div class="flex items-center gap-2 text-xs">
+					<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/70 border border-emerald-800/50 px-3 py-1 font-medium text-emerald-300">
+						<span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+						Cluster Online
+					</span>
+					if grafanaURL != "" {
+						<a
+							href={ templ.SafeURL(grafanaURL) }
+							target="_blank"
+							rel="noopener noreferrer"
+							class="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1 font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
+						>
+							Grafana ↗
+						</a>
+					}
+				</div>
+			</div>
+
+			<!-- Balanced Game Servers Grid -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				<!-- Valheim Dedicated Card -->
-				<div class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-5 flex flex-col justify-between">
+				<!-- CARD 1: VALHEIM DEDICATED -->
+				<div class="flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 shadow-sm">
 					<div>
-						<div class="flex items-center justify-between pb-3 border-b border-zinc-800">
-							<div class="flex items-center gap-2.5">
-								<span class="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-								<h2 class="text-lg font-semibold text-zinc-100">Valheim Dedicated</h2>
+						<!-- Top: Icon, Title, Node, Status -->
+						<div class="flex items-start justify-between border-b border-zinc-800/80 pb-4">
+							<div class="flex items-center gap-3">
+								<div class="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-950/40 text-2xl text-orange-400 ring-1 ring-orange-800/40">
+									⚔️
+								</div>
+								<div>
+									<h2 class="text-base font-semibold text-zinc-100">Valheim Dedicated</h2>
+									<p class="font-mono text-xs text-zinc-400">192.168.20.224:2456</p>
+								</div>
 							</div>
-							<span class="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400 font-mono">game-01</span>
+							<div>
+								<span
+									class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+									data-class="{'bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-800/50': $state === 'running', 'bg-zinc-800 text-zinc-400': $state !== 'running'}"
+								>
+									<span
+										class="h-1.5 w-1.5 rounded-full"
+										data-class="{'bg-emerald-400 animate-pulse': $state === 'running', 'bg-zinc-500': $state !== 'running'}"
+									></span>
+									<span data-text="$state || 'Running'"></span>
+								</span>
+							</div>
 						</div>
-						<div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+
+						<!-- Metrics 4-tile grid -->
+						<div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
 							@tile("Players", "players")
 							@tile("CPU", "cpu")
 							@tile("Memory", "mem")
 							@tile("Uptime", "uptime")
 						</div>
-						<div class="mt-3 text-xs text-zinc-500">
-							Last backup: <span class="text-zinc-300" data-text="$backup"></span>
-							<span class="ml-1 text-zinc-600" data-text="$backupinfo"></span>
+
+						<!-- Backup & Node info -->
+						<div class="mt-4 flex items-center justify-between text-xs text-zinc-500">
+							<div>
+								Last backup: <span class="text-zinc-300 font-medium" data-text="$backup || 'Recent'"></span>
+								<span class="ml-1 text-zinc-600" data-text="$backupinfo"></span>
+							</div>
+							<span class="font-mono text-zinc-400">game-01</span>
 						</div>
 					</div>
-					<div class="mt-5 flex flex-wrap items-center gap-2 pt-4 border-t border-zinc-800/60">
-						<button type="button" data-on:click="@post('/server/restart')" class="rounded bg-amber-600/90 px-3 py-1.5 text-xs font-medium hover:bg-amber-500">Restart</button>
-						<button type="button" data-on:click="@post('/server/update')" title="Restarts the server — updates on boot" class="rounded bg-sky-700 px-3 py-1.5 text-xs font-medium hover:bg-sky-600">Update</button>
-						<button type="button" data-on:click="@post('/server/stop')" class="rounded bg-red-800/80 px-3 py-1.5 text-xs font-medium hover:bg-red-700">Stop</button>
-						<button type="button" data-on:click="@post('/server/start')" class="rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium hover:bg-emerald-600">Start</button>
-						<a href="/mods" class="ml-auto rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Manage Mods →</a>
+
+					<!-- Bottom: Quick Controls & Portal Link -->
+					<div class="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/80 pt-4">
+						<div class="flex flex-wrap items-center gap-1.5">
+							<button type="button" data-on:click="@post('/server/restart')" class="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white">Restart</button>
+							<button type="button" data-on:click="@post('/server/update')" title="Restarts the server — updates on boot" class="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-sky-300 hover:bg-zinc-700">Update</button>
+							<button type="button" data-on:click="@post('/server/stop')" class="rounded-lg border border-amber-800/50 bg-amber-950/20 px-2.5 py-1 text-xs font-medium text-amber-200 hover:bg-amber-900/40">Stop</button>
+							<button type="button" data-on:click="@post('/server/start')" class="rounded-lg bg-emerald-800/80 px-2.5 py-1 text-xs font-medium text-emerald-100 hover:bg-emerald-700">Start</button>
+						</div>
+						<a
+							href="/mods"
+							class="rounded-xl bg-emerald-700 px-4 py-1.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-600 transition"
+						>
+							Open Valheim Manager &rarr;
+						</a>
 					</div>
 				</div>
 
-				<!-- Minecraft NeoForge Card -->
-				<div class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-5 flex flex-col justify-between">
+				<!-- CARD 2: MINECRAFT WORLDS -->
+				<div class="flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 shadow-sm">
 					<div>
-						<div class="flex items-center justify-between pb-3 border-b border-zinc-800">
-							<div class="flex items-center gap-2.5">
-								<span class="h-2.5 w-2.5 rounded-full" data-class="{'bg-emerald-500 animate-pulse': $mc_state === 'Up', 'bg-amber-400 animate-pulse': $mc_state !== 'Up' && $mc_state !== 'Down' && $mc_state !== 'unknown', 'bg-red-500': $mc_state === 'Down' || $mc_state === 'unknown'}"></span>
-								<h2 class="text-lg font-semibold text-zinc-100" data-text="'Minecraft ' + ($mc_loader || 'Modded')">Minecraft Modded</h2>
+						<!-- Top: Icon, Title, Running Count, Status -->
+						<div class="flex items-start justify-between border-b border-zinc-800/80 pb-4">
+							<div class="flex items-center gap-3">
+								<div class="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-950/40 text-2xl text-emerald-400 ring-1 ring-emerald-800/40">
+									⛏️
+								</div>
+								<div>
+									<h2 class="text-base font-semibold text-zinc-100">Minecraft Worlds</h2>
+									<p class="font-mono text-xs text-zinc-400">{ fmt.Sprintf("%d / %d Worlds Saved", mcSummary.TotalInstances, mcSummary.MaxInstances) }</p>
+								</div>
 							</div>
-							<span class="rounded bg-emerald-950/80 border border-emerald-800/40 px-2 py-0.5 text-xs text-emerald-400 font-mono">nf.ykhi.xyz</span>
+							<div>
+								if mcSummary.RunningCount > 0 {
+									<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/80 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/50">
+										<span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+										{ fmt.Sprintf("%d Active", mcSummary.RunningCount) }
+									</span>
+								} else {
+									<span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-400">
+										<span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
+										Stopped
+									</span>
+								}
+							</div>
 						</div>
-						<div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+
+						<!-- Metrics 4-tile grid -->
+						<div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+							<div class="rounded-xl bg-zinc-950 p-3 border border-zinc-800/50">
+								<div class="text-[10px] uppercase tracking-wide text-zinc-500">Running</div>
+								<div class="mt-1 text-xl font-semibold text-zinc-100">{ fmt.Sprintf("%d / %d", mcSummary.RunningCount, mcSummary.MaxRunning) }</div>
+							</div>
+							<div class="rounded-xl bg-zinc-950 p-3 border border-zinc-800/50">
+								<div class="text-[10px] uppercase tracking-wide text-zinc-500">RAM Budget</div>
+								<div class="mt-1 text-xl font-semibold text-emerald-400">{ fmt.Sprintf("%dG", mcSummary.UsedGiB) }<span class="text-xs text-zinc-500 font-normal"> / { fmt.Sprintf("%dG", mcSummary.TotalBudgetGiB) }</span></div>
+							</div>
 							@tile("Players", "mc_players")
-							@tile("CPU", "mc_cpu")
-							@tile("Memory", "mc_mem")
-							@tile("Uptime", "mc_uptime")
+							<div class="rounded-xl bg-zinc-950 p-3 border border-zinc-800/50">
+								<div class="text-[10px] uppercase tracking-wide text-zinc-500">Capacity</div>
+								<div class="mt-1 text-xl font-semibold text-zinc-100">{ fmt.Sprintf("%d / %d", mcSummary.TotalInstances, mcSummary.MaxInstances) }</div>
+							</div>
 						</div>
-						<div class="mt-3 flex items-center justify-between text-xs text-zinc-500">
-							<div>
-								Engine: <span class="text-zinc-300 font-medium" data-text="$mc_loader || 'NeoForge'">NeoForge</span> · MC <span class="font-mono text-emerald-400">1.21.1</span> · Node <span class="text-zinc-300">game-01</span>
-							</div>
-							<div>
-								State: <span class="text-zinc-300 font-medium" data-text="$mc_state"></span>
-							</div>
+
+						<!-- Active World Spotlight or Prompt -->
+						<div class="mt-4 flex items-center justify-between text-xs text-zinc-500">
+							if len(mcSummary.ActiveInstances) > 0 {
+								<div class="truncate flex items-center gap-2">
+									<span class="text-zinc-400">Active:</span>
+									for idx, act := range mcSummary.ActiveInstances {
+										if idx > 0 {
+											<span class="text-zinc-600">·</span>
+										}
+										<span>
+											<a href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d", act.Number)) } class="text-zinc-200 font-semibold hover:underline">{ act.Name }</a>
+											<span class="ml-1 font-mono text-emerald-400">{ act.LBIP }:25565</span>
+										</span>
+									}
+								</div>
+							} else if mcSummary.ActiveInstance != nil {
+								<div class="truncate">
+									Active: <a href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d", mcSummary.ActiveInstance.Number)) } class="text-zinc-200 font-semibold hover:underline">{ mcSummary.ActiveInstance.Name }</a>
+									<span class="ml-1.5 font-mono text-emerald-400">{ mcSummary.ActiveInstance.LBIP }:25565</span>
+								</div>
+							} else {
+								<div>All worlds currently idle. Up to 2 can run concurrently.</div>
+							}
+							<span class="font-mono text-zinc-400">game-01</span>
 						</div>
 					</div>
-					<div class="mt-5 flex flex-wrap items-center gap-2 pt-4 border-t border-zinc-800/60">
-						<button type="button" data-on:click="@post('/minecraft/server/restart')" class="rounded bg-amber-600/90 px-3 py-1.5 text-xs font-medium hover:bg-amber-500">Restart</button>
-						<button type="button" data-on:click="@post('/minecraft/server/stop')" class="rounded bg-red-800/80 px-3 py-1.5 text-xs font-medium hover:bg-red-700">Stop</button>
-						<button type="button" data-on:click="@post('/minecraft/server/start')" class="rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium hover:bg-emerald-600">Start</button>
-						<a href="/minecraft/mods" class="ml-auto rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium hover:bg-emerald-600">Mods →</a>
-						<a href="/minecraft/configs" class="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Configs</a>
-						<a href="/minecraft/access" class="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Access</a>
-						if grafanaURL != "" {
-							<a href={ templ.SafeURL(grafanaURL) } target="_blank" class="text-xs text-zinc-500 hover:text-zinc-300">Grafana ↗</a>
-						}
+
+					<!-- Bottom: Quick Controls & Portal Link -->
+					<div class="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/80 pt-4">
+						<div class="flex flex-wrap items-center gap-1.5">
+							if mcSummary.ActiveInstance != nil {
+								<button
+									type="button"
+									data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/restart')", mcSummary.ActiveInstance.Number) }
+									class="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
+								>
+									Restart
+								</button>
+								<button
+									type="button"
+									data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", mcSummary.ActiveInstance.Number) }
+									class="rounded-lg border border-amber-800/50 bg-amber-950/20 px-2.5 py-1 text-xs font-medium text-amber-200 hover:bg-amber-900/40"
+								>
+									Stop
+								</button>
+								<a
+									href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/configs", mcSummary.ActiveInstance.Number)) }
+									class="rounded-lg border border-zinc-800 bg-zinc-800/50 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+								>
+									Configs
+								</a>
+							} else {
+								<a
+									href="/minecraft/create"
+									class="rounded-lg bg-zinc-800 px-3 py-1 text-xs font-medium text-emerald-400 hover:bg-zinc-700"
+								>
+									+ Create World
+								</a>
+							}
+							<a
+								href="/minecraft/access"
+								class="rounded-lg border border-zinc-800 bg-zinc-800/50 px-2.5 py-1 text-xs text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+							>
+								Access
+							</a>
+						</div>
+						<a
+							href="/minecraft"
+							class="rounded-xl bg-emerald-700 px-4 py-1.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-600 transition"
+						>
+							Open Minecraft Manager &rarr;
+						</a>
 					</div>
 				</div>
 			</div>
-
-			<!-- Live Logs Section -->
-			<section data-signals="{logServer: 'valheim'}" data-effect="@get('/sse/logs?server=' + $logServer)">
-				<div class="mb-2 flex items-center justify-between">
-					<h2 class="text-sm font-medium text-zinc-400">Live Server Logs</h2>
-					<div class="flex items-center gap-1 rounded bg-zinc-900 p-0.5 text-xs">
-						<button
-							type="button"
-							data-on:click="$logServer = 'valheim'; document.getElementById('logs').innerHTML = ''"
-							data-class="{'bg-zinc-800 text-zinc-100 shadow-sm': $logServer === 'valheim', 'text-zinc-400 hover:text-zinc-200': $logServer !== 'valheim'}"
-							class="rounded px-2.5 py-1 font-medium transition"
-						>Valheim</button>
-						<button
-							type="button"
-							data-on:click="$logServer = 'minecraft'; document.getElementById('logs').innerHTML = ''"
-							data-class="{'bg-zinc-800 text-zinc-100 shadow-sm': $logServer === 'minecraft', 'text-zinc-400 hover:text-zinc-200': $logServer !== 'minecraft'}"
-							class="rounded px-2.5 py-1 font-medium transition"
-						>
-							<span data-text="'Minecraft (' + ($mc_loader || 'NeoForge') + ')'">Minecraft</span>
-						</button>
-					</div>
-				</div>
-				<pre id="logs" class="h-64 overflow-auto rounded bg-black/60 p-4 font-mono text-xs text-zinc-300"></pre>
-			</section>
 		</div>
 	}
 }
 
 templ tile(label, signal string) {
-	<div class="rounded bg-zinc-950 p-3 border border-zinc-800/50">
+	<div class="rounded-xl bg-zinc-950 p-3 border border-zinc-800/50">
 		<div class="text-[10px] uppercase tracking-wide text-zinc-500">{ label }</div>
-		<div class="mt-1 text-xl font-semibold" data-text={ "$" + signal }></div>
+		<div class="mt-1 text-xl font-semibold text-zinc-100" data-text={ "$" + signal }></div>
 	</div>
 }

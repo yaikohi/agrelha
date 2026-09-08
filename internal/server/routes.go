@@ -14,6 +14,7 @@ import (
 	efs "agrelha/cmd/web"
 	"agrelha/cmd/web/pages"
 	"agrelha/internal/metrics"
+	"agrelha/internal/minecraft"
 )
 
 func (s *FiberServer) RegisterFiberRoutes() {
@@ -39,7 +40,44 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		fk, fm := takeFlash(c)
-		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL, fk, fm))
+		mcSummary := pages.MinecraftSummaryUI{
+			MaxInstances:   4,
+			MaxRunning:     2,
+			TotalBudgetGiB: 24,
+		}
+		if s.mcInstances != nil {
+			if insts, err := s.mcInstances.ListInstances(c.UserContext()); err == nil {
+				budget := s.mcInstances.Budget(insts)
+				mcSummary.TotalInstances = budget.TotalInstances
+				mcSummary.RunningCount = budget.RunningCount
+				mcSummary.MaxInstances = budget.MaxInstances
+				mcSummary.MaxRunning = budget.MaxRunning
+				mcSummary.UsedGiB = budget.UsedGiB
+				mcSummary.TotalBudgetGiB = budget.TotalBudgetGiB
+
+				for _, inst := range insts {
+					if inst.State == minecraft.StateRunning {
+						uinst := pages.InstanceUI{
+							Number:    inst.Number,
+							Name:      inst.Name,
+							Slug:      inst.Slug,
+							Loader:    string(inst.Loader),
+							Source:    string(inst.Source),
+							MCVersion: inst.MCVersion,
+							Tier:      string(inst.Tier),
+							MemoryGiB: inst.MemoryGiB(),
+							State:     string(inst.State),
+							LBIP:      inst.LBIP,
+						}
+						mcSummary.ActiveInstances = append(mcSummary.ActiveInstances, uinst)
+						if mcSummary.ActiveInstance == nil {
+							mcSummary.ActiveInstance = &uinst
+						}
+					}
+				}
+			}
+		}
+		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL, mcSummary, fk, fm))
 	})
 	app.Get("/sse", s.sseMain)
 	app.Get("/sse/logs", s.sseLogs)

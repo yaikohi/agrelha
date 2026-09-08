@@ -124,3 +124,40 @@ func TestMinecraftServerControlSSEToast(t *testing.T) {
 		t.Fatalf("audit rows = %d, want 1", n)
 	}
 }
+
+func TestRootDashboard(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	s := &FiberServer{
+		App:   fiber.New(),
+		cfg:   &config.Config{GrafanaDashboardURL: "https://grafana.example.com"},
+		store: st,
+	}
+	s.RegisterFiberRoutes()
+
+	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodGet, "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	content := string(body)
+	if !strings.Contains(content, "Game Server Hub") {
+		t.Errorf("expected 'Game Server Hub' in body")
+	}
+	if !strings.Contains(content, "Valheim Dedicated") {
+		t.Errorf("expected 'Valheim Dedicated' in body")
+	}
+	if !strings.Contains(content, "Minecraft Worlds") {
+		t.Errorf("expected 'Minecraft Worlds' in body")
+	}
+	if !strings.Contains(content, "Open Minecraft Manager") {
+		t.Errorf("expected 'Open Minecraft Manager' in body")
+	}
+}

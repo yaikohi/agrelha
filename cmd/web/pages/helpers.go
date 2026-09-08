@@ -155,6 +155,17 @@ type BudgetUI struct {
 	MaxInstances   int
 }
 
+type MinecraftSummaryUI struct {
+	TotalInstances  int
+	RunningCount    int
+	MaxInstances    int
+	MaxRunning      int
+	UsedGiB         int
+	TotalBudgetGiB  int
+	ActiveInstance  *InstanceUI
+	ActiveInstances []InstanceUI
+}
+
 // SlotEngine describes a slot the way the domain does: the loader is what runs,
 // and the source (with its provider) is how the content got there. CurseForge is
 // a distributor, never an engine.
