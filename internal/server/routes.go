@@ -27,7 +27,13 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	}))
 
 	if s.auth != nil {
-		s.App.Get("/login", func(c *fiber.Ctx) error { return render(c, pages.Login()) })
+		s.App.Get("/login", func(c *fiber.Ctx) error {
+			target := "/auth/login"
+			if q := c.Request().URI().QueryString(); len(q) > 0 {
+				target += "?" + string(q)
+			}
+			return c.Redirect(target, fiber.StatusFound)
+		})
 		s.App.Get("/auth/login", s.auth.Login)
 		s.App.Get("/auth/callback", s.auth.Callback)
 		s.App.Get("/auth/logout", s.auth.Logout)

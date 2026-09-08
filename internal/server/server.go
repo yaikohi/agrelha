@@ -136,10 +136,14 @@ func New(cfg *config.Config) *FiberServer {
 
 	if cfg.OIDCIssuer != "" {
 		if a, err := auth.New(context.Background(), cfg); err != nil {
-			slog.Warn("oidc unavailable (dev?)", "err", err)
+			slog.Warn("oidc unavailable, falling back to local dev auth", "err", err)
+			s.auth = auth.NewDev(cfg)
 		} else {
 			s.auth = a
 		}
+	} else {
+		slog.Info("oidc unset: running with local dev authenticator (click 'Admin Sign In' to authenticate)")
+		s.auth = auth.NewDev(cfg)
 	}
 
 	return s

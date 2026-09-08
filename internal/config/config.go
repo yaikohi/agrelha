@@ -16,8 +16,9 @@ type Config struct {
 	OIDCIssuer       string
 	OIDCClientID     string
 	OIDCClientSecret string
-	OIDCRedirectURL  string
-	AllowedEmail     string
+	OIDCRedirectURL   string
+	OIDCPostLogoutURL string
+	AllowedEmail      string
 
 	// Declarative plane (git)
 	GitRepoURL      string
@@ -86,8 +87,9 @@ func Load() *Config {
 		OIDCIssuer:       env("OIDC_ISSUER", ""),
 		OIDCClientID:     env("OIDC_CLIENT_ID", ""),
 		OIDCClientSecret: env("OIDC_CLIENT_SECRET", ""),
-		OIDCRedirectURL:  env("OIDC_REDIRECT_URL", ""),
-		AllowedEmail:     env("ALLOWED_EMAIL", ""),
+		OIDCRedirectURL:   env("OIDC_REDIRECT_URL", ""),
+		OIDCPostLogoutURL: env("OIDC_POST_LOGOUT_URL", ""),
+		AllowedEmail:      env("ALLOWED_EMAIL", ""),
 
 		GitRepoURL:      env("GIT_REPO_URL", ""),
 		GitBranch:       env("GIT_BRANCH", "main"),

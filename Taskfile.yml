@@ -81,10 +81,24 @@ tasks:
       - air
 
   test:
-    desc: "Run Go tests"
+    desc: "Run Go tests with race detection and statement coverage"
+    deps: [setup]
+    cmds:
+      - go test -race -covermode=atomic -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out | tail -n 1
+
+  test:fast:
+    desc: "Run quick Go tests without race detector or coverage profiling"
     deps: [setup]
     cmds:
       - go test ./...
+
+  test:html:
+    desc: "Generate HTML coverage report (coverage.html)"
+    cmds:
+      - task: test
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "HTML coverage report generated at coverage.html"
 
   # --- Image ---
   build:image:
@@ -98,5 +112,5 @@ tasks:
   clean:
     desc: "Remove build artifacts"
     cmds:
-      - rm -f {{.GO_BINARY}} {{.CSS_OUT}}
+      - rm -f {{.GO_BINARY}} {{.CSS_OUT}} coverage.out coverage.html
       - rm -rf node_modules bun.lock tmp

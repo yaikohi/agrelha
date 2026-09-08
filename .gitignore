@@ -2,6 +2,8 @@
 /main
 tmp/
 build-errors.log
+coverage.out
+coverage.html
 
 # generated
 *_templ.go
