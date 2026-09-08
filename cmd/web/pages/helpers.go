@@ -115,17 +115,6 @@ func HistoryBadge(source, kind string) string {
 	}
 }
 
-type SlotUI struct {
-	Slot         string
-	Loader       string
-	Source       string
-	Pack         string
-	PackProvider string
-	MCVersion    string
-	Active       bool
-	LastUsed     string
-}
-
 type InstanceUI struct {
 	Number             int
 	Name               string
@@ -169,34 +158,6 @@ type MinecraftSummaryUI struct {
 	ActiveInstances []InstanceUI
 }
 
-// SlotEngine describes a slot the way the domain does: the loader is what runs,
-// and the source (with its provider) is how the content got there. CurseForge is
-// a distributor, never an engine.
-func SlotEngine(loader, source, provider string) string {
-	name := "NeoForge"
-	if loader == "fabric" {
-		name = "Fabric"
-	}
-	switch source {
-	case "modpack":
-		if provider != "" {
-			return fmt.Sprintf("%s · %s pack", name, provider)
-		}
-		return name + " · modpack"
-	case "vanilla":
-		return "Vanilla"
-	default:
-		return name + " · mod list"
-	}
-}
-
-func slotRowStyle(active bool) string {
-	if active {
-		return "border-emerald-800/50 bg-emerald-950/20"
-	}
-	return "border-zinc-800 bg-zinc-950"
-}
-
 // ServerRowUI is one connectable server. Valheim renders exactly one; Minecraft
 // renders one per running world. Same functionality => same markup, so the two
 // cards match by construction instead of by hand.
@@ -219,6 +180,12 @@ type ServerRowUI struct {
 	OnlineSignal  string
 	PlayersSignal string
 	UptimeSignal  string
+}
+
+// PackDefined mirrors minecraft.Instance.PackDefined so the UI can render
+// pack-owned fields as facts instead of editable settings.
+func (i InstanceUI) PackDefined() bool {
+	return i.Source == "modpack" && (i.Pack != "" || i.PackRef != "")
 }
 
 func (r ServerRowUI) CopyScript() string {
@@ -462,4 +429,39 @@ func MinecraftActions(mc MinecraftSummaryUI) CardActionsUI {
 		}
 	}
 	return a
+}
+
+// NavGroupUI is one game's nav cluster. Both games expose the same sub-pages
+// (mods, configs, access), so the group renders from data and the two cannot
+// drift apart or use different words for the same thing.
+type NavGroupUI struct {
+	Label string
+	Href  string
+	Links []ActionUI
+}
+
+// ValheimNav points at the console/logs page, mirroring how the Minecraft entry
+// points at its instance list; mods moves to its own sub-link.
+func ValheimNav() NavGroupUI {
+	return NavGroupUI{
+		Label: "Valheim",
+		Href:  "/valheim",
+		Links: []ActionUI{
+			{Label: "mods", Href: "/mods"},
+			{Label: "configs", Href: "/configs"},
+			{Label: "access", Href: "/admins"},
+		},
+	}
+}
+
+func MinecraftNav() NavGroupUI {
+	return NavGroupUI{
+		Label: "Minecraft",
+		Href:  "/minecraft",
+		Links: []ActionUI{
+			{Label: "mods", Href: "/minecraft/mods"},
+			{Label: "configs", Href: "/minecraft/configs"},
+			{Label: "access", Href: "/minecraft/access"},
+		},
+	}
 }

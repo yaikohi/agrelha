@@ -215,7 +215,34 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 
 			<!-- TAB 2: MODS -->
 			if d.ActiveTab == "mods" {
-				<div class="space-y-6">
+				<div class="space-y-6" data-signals="{addslug:''}">
+					if !d.PackDefined() {
+						<!-- Adding a mod is not "changing what the Instance runs" (CONTEXT.md),
+						     so it must not require recreating the Instance. Pack-defined
+						     Instances are excluded: the Pack manages their mod set. -->
+						<form
+							class="flex flex-wrap items-end gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
+							data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/mods/install', {slug: $addslug}); $addslug = ''", d.Number) }
+						>
+							<div class="min-w-0 flex-1">
+								<label class="block text-xs font-medium text-zinc-300">Add a mod</label>
+								<input
+									type="text"
+									data-bind="addslug"
+									placeholder="Modrinth slug, e.g. sodium or journeymap"
+									class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+								/>
+								<p class="mt-1 text-[11px] text-zinc-500">
+									Required dependencies are resolved automatically. Browse slugs on
+									<a href="https://modrinth.com/mods" target="_blank" rel="noopener noreferrer" class="text-zinc-400 underline hover:text-zinc-200">Modrinth</a>.
+								</p>
+							</div>
+							<button
+								type="submit"
+								class="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-600"
+							>Install</button>
+						</form>
+					}
 					<div class="flex items-center justify-between">
 						<div>
 							<h2 class="text-base font-semibold text-zinc-100">Installed Mods</h2>
@@ -649,12 +676,27 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 							</div>
 							<div>
 								<label class="block text-xs font-medium text-zinc-300">Minecraft Version</label>
-								<input
-									type="text"
-									name="mc_version"
-									value={ d.MCVersion }
-									class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
-								/>
+								if d.PackDefined() {
+									<!-- The Pack decides this. Rendering it editable would offer to
+									     break the instance, so it is shown as the fact it is. -->
+									<input
+										type="text"
+										value={ d.MCVersion }
+										readonly
+										disabled
+										class="mt-1 w-full cursor-not-allowed rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-400"
+									/>
+									<p class="mt-1 text-[11px] text-zinc-500">
+										Set by the { d.PackProvider } pack <span class="text-zinc-300">{ d.Pack }</span>. To run a different version, create a new instance.
+									</p>
+								} else {
+									<input
+										type="text"
+										name="mc_version"
+										value={ d.MCVersion }
+										class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+									/>
+								}
 							</div>
 						</div>
 

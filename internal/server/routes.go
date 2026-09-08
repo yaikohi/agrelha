@@ -99,6 +99,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 		app.Use(s.auth.Middleware())
 	}
 	app.Get("/sse/logs", s.sseLogs)
+	app.Get("/valheim", s.valheimConsole)
 
 	app.Post("/server/restart", s.guard("restart", "Restart triggered — the server is rolling.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
 	app.Post("/server/update", s.guard("update", "Update triggered — restarting; the image installs any Valheim update on boot.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
@@ -149,9 +150,8 @@ func (s *FiberServer) RegisterFiberRoutes() {
 				return c.Redirect(fmt.Sprintf("/minecraft/%d/mods", insts[0].Number), fiber.StatusTemporaryRedirect)
 			}
 		}
-		return s.mcModsPage(c)
+		return c.Redirect("/minecraft", fiber.StatusTemporaryRedirect)
 	})
-	app.Get("/minecraft/mods/export", s.mcModpackExport)
 	app.Get("/minecraft/access", s.mcAccessPage)
 	app.Get("/minecraft/configs", func(c *fiber.Ctx) error {
 		if s.mcInstances != nil {
@@ -159,28 +159,18 @@ func (s *FiberServer) RegisterFiberRoutes() {
 				return c.Redirect(fmt.Sprintf("/minecraft/%d/configs", insts[0].Number), fiber.StatusTemporaryRedirect)
 			}
 		}
-		return s.mcConfigsPage(c)
+		return c.Redirect("/minecraft", fiber.StatusTemporaryRedirect)
 	})
 	app.Get("/minecraft/configs/new", s.mcConfigNew)
 	app.Get("/minecraft/configs/edit", s.mcConfigEdit)
 	app.Post("/minecraft/configs/save", s.mcConfigSave)
 	app.Post("/minecraft/configs/delete", s.mcConfigDelete)
 
-	app.Get("/api/minecraft/mods/search", s.mcModsSearch)
-	app.Post("/api/minecraft/mods/install", s.mcModsInstall)
-	app.Post("/api/minecraft/mods/remove", s.mcModsRemove)
-	app.Post("/api/minecraft/version/set", s.mcVersionSet)
-	app.Post("/api/minecraft/slot/switch", s.mcSlotSwitch)
 	app.Post("/api/minecraft/access/op", s.mcAccessGrantOp)
 	app.Post("/api/minecraft/access/deop", s.mcAccessRevokeOp)
 	app.Post("/api/minecraft/access/whitelist/add", s.mcAccessAddWhitelist)
 	app.Post("/api/minecraft/access/whitelist/remove", s.mcAccessRemoveWhitelist)
 	app.Post("/api/minecraft/access/whitelist/toggle", s.mcAccessWhitelistToggle)
-	app.Get("/api/minecraft/players", s.mcOnlinePlayers)
-	app.Get("/api/minecraft/modpacks/search", s.mcModpacksSearch)
-	app.Get("/api/minecraft/modpacks/:id", s.mcModpackGet)
-	app.Post("/api/minecraft/modpacks/switch", s.mcModpackSwitch)
-	app.Post("/api/minecraft/loader/switch", s.mcLoaderSwitch)
 
 	app.Post("/minecraft/server/restart", s.guardMC("mc-restart", "Minecraft restart triggered — server is rolling.", func(ctx context.Context) error { return s.mck8s.Restart(ctx) }))
 	app.Post("/minecraft/server/stop", s.guardMC("mc-stop", "Stopping Minecraft server — scaling to 0.", func(ctx context.Context) error { return s.mck8s.Scale(ctx, 0) }))
@@ -199,6 +189,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Get("/api/minecraft/:num<int>/backups/download", s.mcInstanceBackupDownload)
 	app.Post("/api/minecraft/:num<int>/backups/delete", s.mcInstanceBackupDelete)
 	app.Post("/api/minecraft/:num<int>/settings", s.mcInstanceSettingsSave)
+	app.Post("/api/minecraft/:num<int>/mods/install", s.mcInstanceModsInstall)
 	app.Post("/api/minecraft/:num<int>/mods/remove", s.mcInstanceModsRemove)
 	app.Get("/api/minecraft/:num<int>/configs/file", s.mcInstanceConfigGet)
 	app.Post("/api/minecraft/:num<int>/configs/save", s.mcInstanceConfigSave)

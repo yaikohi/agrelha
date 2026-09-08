@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"agrelha/internal/mcversions"
 	"agrelha/internal/minecraft"
 	"agrelha/internal/modpack"
+	"agrelha/internal/modpackindex"
 	"agrelha/internal/sse"
 )
 
@@ -267,6 +269,7 @@ func (s *FiberServer) mcWizardCreate(c *fiber.Ctx) error {
 		PackName     string `json:"pack_name" form:"pack_name"`
 		PackRef      string `json:"pack_ref" form:"pack_ref"`
 		PackProvider string `json:"pack_provider" form:"pack_provider"`
+		PackID       string `json:"pack_id" form:"pack_id"`
 		RawMods      string `json:"raw_mods" form:"raw_mods"`
 		Cart         any    `json:"cart" form:"cart"`
 	}
@@ -348,6 +351,28 @@ func (s *FiberServer) mcWizardCreate(c *fiber.Ctx) error {
 					}
 				}
 				break
+			}
+		}
+	}
+
+	// A Pack owns its Instance's Loader (see CONTEXT.md). Derive it from the
+	// pack's own mods instead of trusting the form — trusting the form is how a
+	// NeoForge-only pack was created on a Fabric instance, leaving 32 of its
+	// mods unable to load.
+	if source == "modpack" && s.mpi != nil {
+		packID := strings.TrimSpace(req.PackID)
+		if packID == "" {
+			packID = strings.TrimSpace(c.FormValue("pack_id"))
+		}
+		if id, err := strconv.Atoi(packID); err == nil && id > 0 {
+			if mods, err := s.mpi.GetModpackMods(c.UserContext(), id); err == nil && len(mods) > 0 {
+				if best := modpackindex.BestLoader(mods); best != "" && best != loader {
+					fit := modpackindex.AnalyzeLoader(mods, loader)
+					slog.Warn("wizard: loader corrected from pack contents",
+						"pack", packName, "requested", loader, "derived", best,
+						"would_not_load", len(fit.Blocking))
+					loader = best
+				}
 			}
 		}
 	}

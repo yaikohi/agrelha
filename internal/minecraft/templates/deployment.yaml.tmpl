@@ -56,7 +56,7 @@ spec:
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
-                name: {{ .SlotCMName }}
+                name: {{ .ConfigCMName }}
           env:
             - name: EULA
               value: "TRUE"

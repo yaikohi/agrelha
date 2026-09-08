@@ -34,10 +34,10 @@ func (c *Committer) ReplaceData(ctx context.Context, relPath string, data map[st
 	})
 }
 
-// ReplaceSlot rewrites a ConfigMap's data map AND its metadata.annotations in a
+// ReplaceConfigMap rewrites a ConfigMap's data map AND its metadata.annotations in a
 // single commit, so domain intent (annotations) and derived output (data) can
 // never disagree in git.
-func (c *Committer) ReplaceSlot(ctx context.Context, relPath string, data, annotations map[string]string, commitMsg string) (bool, error) {
+func (c *Committer) ReplaceConfigMap(ctx context.Context, relPath string, data, annotations map[string]string, commitMsg string) (bool, error) {
 	return c.mutateDoc(ctx, relPath, commitMsg, func(root *yaml.Node) (bool, error) {
 		dataNode := mapValue(root, "data")
 		if dataNode == nil {

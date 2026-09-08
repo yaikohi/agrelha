@@ -41,7 +41,6 @@ type FiberServer struct {
 	mcv         *mcversions.Client
 	mcMods      *minecraft.ModManager
 	fabMods     *minecraft.ModManager
-	mcSlot      *minecraft.SlotManager
 	mcAccess    *minecraft.AccessManager
 	mcRcon      *minecraft.RconClient
 	mcRconPool  *minecraft.RconPool
@@ -106,7 +105,6 @@ func New(cfg *config.Config) *FiberServer {
 		s.admins = admins.New(committer, cfg.AdminsPath)
 		s.mcMods = minecraft.NewModManager(committer, cfg.MinecraftModsPath)
 		s.fabMods = minecraft.NewFabricModManager(committer, cfg.FabricModsPath)
-		s.mcSlot = minecraft.NewSlotManager(committer, cfg.MinecraftSlotPath, cfg.MinecraftModsPath)
 		s.mcAccess = minecraft.NewAccessManager(committer, cfg.MinecraftAccessPath, s.mcRcon)
 	} else {
 		slog.Warn("git token unset: declarative plane (mods/admins) disabled")

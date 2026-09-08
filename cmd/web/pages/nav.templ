@@ -28,16 +28,7 @@ templ nav(admin ...bool) {
 				</a>
 
 				if isAdmin {
-					<!-- Valheim Section -->
-					<div class="relative flex items-center gap-1 rounded-lg bg-zinc-900/60 px-2 py-0.5 border border-zinc-800/60">
-						<a
-							href="/mods"
-							class="font-medium text-zinc-300 hover:text-white transition px-1 py-0.5"
-						>
-							Valheim
-						</a>
-						<a href="/configs" class="text-[11px] text-zinc-500 hover:text-zinc-300 px-1 py-0.5 transition">configs</a>
-						<a href="/admins" class="text-[11px] text-zinc-500 hover:text-zinc-300 px-1 py-0.5 transition">admins</a>
+					@navGroup(ValheimNav()) {
 
 						<!-- Valheim Updates Trigger Button -->
 						<button
@@ -88,18 +79,10 @@ templ nav(admin ...bool) {
 								>Update all</button>
 							</div>
 						</div>
-					</div>
+					}
 
-					<!-- Minecraft Section -->
-					<div class="flex items-center gap-1 rounded-lg bg-zinc-900/60 px-2 py-0.5 border border-zinc-800/60">
-						<a
-							href="/minecraft"
-							class="font-medium text-zinc-300 hover:text-white transition px-1 py-0.5"
-						>
-							Minecraft
-						</a>
-						<a href="/minecraft/access" class="text-[11px] text-zinc-500 hover:text-zinc-300 px-1 py-0.5 transition">access</a>
-					</div>
+					@navGroup(MinecraftNav()) {
+					}
 
 					<!-- History -->
 					<a
@@ -131,4 +114,24 @@ templ nav(admin ...bool) {
 			}
 		</div>
 	</nav>
+}
+
+// navGroup renders one game's nav cluster: the game entry plus its sub-pages.
+// Children carry anything game-specific (e.g. Valheim's mod-update popover).
+templ navGroup(g NavGroupUI) {
+	<div class="relative flex items-center gap-1 rounded-lg border border-zinc-800/60 bg-zinc-900/60 px-2 py-0.5">
+		<a
+			href={ templ.SafeURL(g.Href) }
+			class="px-1 py-0.5 font-medium text-zinc-300 transition hover:text-white"
+		>
+			{ g.Label }
+		</a>
+		for _, l := range g.Links {
+			<a
+				href={ templ.SafeURL(l.Href) }
+				class="px-1 py-0.5 text-[11px] text-zinc-500 transition hover:text-zinc-300"
+			>{ l.Label }</a>
+		}
+		{ children... }
+	</div>
 }

@@ -125,7 +125,10 @@ func (inst Instance) PVCName() string {
 	return fmt.Sprintf("mc-instance-%02d-data", inst.Number)
 }
 
-func (inst Instance) SlotCMName() string {
+// ConfigCMName is the Instance's config ConfigMap. The "-slot" suffix in the
+// object name is legacy (CONTEXT.md: Slot is retired) and is kept only because
+// renaming it would recreate the ConfigMap and restart every Instance.
+func (inst Instance) ConfigCMName() string {
 	return fmt.Sprintf("mc-%s-%02d-slot", inst.Slug, inst.Number)
 }
 
@@ -139,6 +142,20 @@ func (inst Instance) ConfigsCMName() string {
 
 func (inst Instance) PackDefined() bool {
 	return inst.Source == SourceModpack && inst.Pack != nil
+}
+
+// CanSetLoader and CanSetVersion encode the core invariant: when an Instance is
+// defined by a Pack, its Loader and Minecraft version are FACTS READ FROM THE
+// PACK, not settings. Offering to change them is offering to break the Instance
+// — which is exactly how the Ducktopia pack was silently replaced by a bare
+// Fabric server.
+func (inst Instance) CanSetLoader() bool  { return !inst.PackDefined() }
+func (inst Instance) CanSetVersion() bool { return !inst.PackDefined() }
+
+// PackOwnedFieldErr explains why a pack-defined field cannot be changed.
+func (inst Instance) PackOwnedFieldErr(field string) error {
+	return fmt.Errorf("%s is defined by the %s pack %q: the pack decides it, so it cannot be changed here — create a new instance to run different content",
+		field, inst.Pack.Provider, inst.Pack.Name)
 }
 
 func (inst Instance) MemoryGiB() int {
@@ -169,8 +186,7 @@ func (inst Instance) HeapInitMemoryGiB() int {
 
 func (inst Instance) Env() map[string]string {
 	env := map[string]string{
-		"WORLD_SLOT": inst.Slug,
-		"LEVEL":      inst.Slug,
+		"LEVEL": inst.Slug,
 	}
 	if inst.MOTD != "" {
 		env["MOTD"] = inst.MOTD

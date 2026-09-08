@@ -208,3 +208,48 @@ func TestActionRolesStyleIdentically(t *testing.T) {
 		}
 	}
 }
+
+func renderNav(t *testing.T, g NavGroupUI) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := navGroup(g).Render(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+// Both games expose mods, configs and access pages, so both nav groups must
+// offer all three using the SAME words. Valheim previously said "admins" where
+// Minecraft said "access" for the same thing.
+func TestNavGroupsOfferTheSameSubPages(t *testing.T) {
+	valheim := renderNav(t, ValheimNav())
+	minecraft := renderNav(t, MinecraftNav())
+
+	for _, link := range []string{"mods", "configs", "access"} {
+		if !strings.Contains(valheim, ">"+link+"<") {
+			t.Errorf("Valheim nav missing %q", link)
+		}
+		if !strings.Contains(minecraft, ">"+link+"<") {
+			t.Errorf("Minecraft nav missing %q", link)
+		}
+	}
+	if strings.Contains(valheim, ">admins<") {
+		t.Error(`Valheim nav still says "admins"; both games must call it "access"`)
+	}
+}
+
+// The game entry itself leads to the server view (console/logs for Valheim,
+// instance list for Minecraft) — not to mods, which now has its own link.
+func TestNavGameEntriesLeadToServerViews(t *testing.T) {
+	if got := ValheimNav().Href; got != "/valheim" {
+		t.Fatalf("Valheim nav entry = %q, want /valheim (console & logs)", got)
+	}
+	if got := MinecraftNav().Href; got != "/minecraft" {
+		t.Fatalf("Minecraft nav entry = %q, want /minecraft (instances)", got)
+	}
+	for _, g := range []NavGroupUI{ValheimNav(), MinecraftNav()} {
+		if g.Href == g.Links[0].Href {
+			t.Fatalf("%s: game entry and mods link point at the same page", g.Label)
+		}
+	}
+}

@@ -1,0 +1,44 @@
+package pages
+
+// ValheimConsole mirrors the Minecraft instance "Console & Logs" tab. Valheim
+// has no RCON endpoint, so this is a read-only log stream — the command bar is
+// deliberately absent rather than present-but-broken.
+templ ValheimConsole(isAdmin bool, flashKind, flashMsg string) {
+	@Layout("Valheim · Console & Logs") {
+		@nav(isAdmin)
+		@flashBanner(flashKind, flashMsg)
+		<div class="space-y-4" data-effect="@get('/sse/logs?server=valheim')">
+			<div class="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+				<div>
+					<h1 class="text-xl font-semibold tracking-tight text-zinc-100">Valheim · Console &amp; Logs</h1>
+					<p class="mt-0.5 text-xs text-zinc-400">Live container log stream from the dedicated server.</p>
+				</div>
+				<span
+					class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+					data-class="{'bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-800/50': $online, 'bg-zinc-800 text-zinc-400': !$online}"
+				>
+					<span
+						class="h-1.5 w-1.5 rounded-full"
+						data-class="{'bg-emerald-400 animate-pulse': $online, 'bg-zinc-500': !$online}"
+					></span>
+					<span data-text="$online ? 'Online' : 'Offline'"></span>
+				</span>
+			</div>
+
+			<div
+				id="logs"
+				class="h-96 w-full space-y-1 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-relaxed text-zinc-300 shadow-inner"
+			>
+				<p class="text-zinc-500">Connected to container logs…</p>
+			</div>
+
+			<p class="text-[11px] text-zinc-500">
+				Valheim's dedicated server exposes no RCON console, so commands cannot be sent from here — use in-game admin commands instead. Minecraft instances do have a command bar on their Console &amp; Logs tab.
+			</p>
+
+			if isAdmin {
+				@cardActions(ValheimActions())
+			}
+		</div>
+	}
+}

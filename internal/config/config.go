@@ -13,9 +13,9 @@ type Config struct {
 	DBPath     string
 
 	// Auth (Zitadel OIDC)
-	OIDCIssuer       string
-	OIDCClientID     string
-	OIDCClientSecret string
+	OIDCIssuer        string
+	OIDCClientID      string
+	OIDCClientSecret  string
 	OIDCRedirectURL   string
 	OIDCPostLogoutURL string
 	AllowedEmail      string
@@ -40,7 +40,6 @@ type Config struct {
 
 	// Minecraft Modded (NeoForge & Fabric)
 	MinecraftModsPath     string
-	MinecraftSlotPath     string
 	FabricModsPath        string
 	MinecraftAccessPath   string
 	MinecraftConfigsPath  string
@@ -84,9 +83,9 @@ func Load() *Config {
 		ListenAddr: env("LISTEN_ADDR", ":8080"),
 		DBPath:     env("DB_PATH", "/data/agrelha.db"),
 
-		OIDCIssuer:       env("OIDC_ISSUER", ""),
-		OIDCClientID:     env("OIDC_CLIENT_ID", ""),
-		OIDCClientSecret: env("OIDC_CLIENT_SECRET", ""),
+		OIDCIssuer:        env("OIDC_ISSUER", ""),
+		OIDCClientID:      env("OIDC_CLIENT_ID", ""),
+		OIDCClientSecret:  env("OIDC_CLIENT_SECRET", ""),
 		OIDCRedirectURL:   env("OIDC_REDIRECT_URL", ""),
 		OIDCPostLogoutURL: env("OIDC_POST_LOGOUT_URL", ""),
 		AllowedEmail:      env("ALLOWED_EMAIL", ""),
@@ -108,7 +107,6 @@ func Load() *Config {
 		BackupsDir:        env("BACKUPS_DIR", ""),
 
 		MinecraftModsPath:     env("MINECRAFT_MODS_PATH", "manifests/minecraft-modded/mods.yaml"),
-		MinecraftSlotPath:     env("MINECRAFT_SLOT_PATH", "manifests/minecraft-modded/slot.yaml"),
 		FabricModsPath:        env("FABRIC_MODS_PATH", "manifests/minecraft-modded/mods.yaml"),
 		MinecraftAccessPath:   env("MINECRAFT_ACCESS_PATH", "manifests/minecraft-modded/access.yaml"),
 		MinecraftConfigsPath:  env("MINECRAFT_CONFIGS_PATH", "manifests/minecraft-modded/configs.yaml"),

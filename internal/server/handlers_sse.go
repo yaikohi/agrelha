@@ -198,13 +198,16 @@ func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
 	}
 
 	if s.mck8s != nil {
-		if data, ann, err := s.mck8s.ConfigMapMeta(ctx, slotConfigMap); err == nil {
-			sl := minecraft.SlotFromAnnotations(ann, data)
-			if sl.Loader == minecraft.LoaderFabric {
-				sig["mc_loader"] = "Fabric"
-			}
-			if sl.PackDefined() && sl.Pack.Name != "" {
-				sig["mc_pack"] = sl.Pack.Name
+		// Derived from Instances; the old slot ConfigMap no longer exists.
+		if s.mcInstances != nil {
+			if insts, err := s.mcInstances.ListInstances(ctx); err == nil && len(insts) > 0 {
+				inst := insts[0]
+				if inst.Loader == minecraft.LoaderFabric {
+					sig["mc_loader"] = "Fabric"
+				}
+				if inst.PackDefined() && inst.Pack.Name != "" {
+					sig["mc_pack"] = inst.Pack.Name
+				}
 			}
 		}
 	}

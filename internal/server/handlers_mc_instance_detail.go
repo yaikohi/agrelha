@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -470,7 +471,13 @@ func (s *FiberServer) mcInstanceSettingsSave(c *fiber.Ctx) error {
 	}
 	inst.MOTD = motd
 	inst.Tier = minecraft.NormalizeTier(tierStr)
-	if mcVer != "" {
+
+	// The Minecraft version belongs to the Pack when there is one. Refuse rather
+	// than silently writing a version the pack was never built for.
+	if mcVer != "" && mcVer != inst.MCVersion {
+		if !inst.CanSetVersion() {
+			return sseToast(c, "err", inst.PackOwnedFieldErr("Minecraft version").Error(), nil)
+		}
 		inst.MCVersion = mcVer
 	}
 
@@ -691,4 +698,69 @@ func (s *FiberServer) mcInstanceConfigDelete(c *fiber.Ctx) error {
 		return sseToast(c, "ok", fmt.Sprintf("Deleted %s — committed to git.", fileName), nil)
 	}
 	return sseToast(c, "ok", fmt.Sprintf("%s was not present.", fileName), nil)
+}
+
+// mcInstanceModsInstall adds a Modrinth mod to one Instance's mods.txt,
+// resolving required dependencies first. The per-instance counterpart to
+// mcInstanceModsRemove — without it, adding a mod would require recreating the
+// Instance, which our own rules reserve for changing the Pack or Loader.
+func (s *FiberServer) mcInstanceModsInstall(c *fiber.Ctx) error {
+	if s.mcInstances == nil {
+		return sseToast(c, "err", "Instance manager unconfigured.", nil)
+	}
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return sseToast(c, "err", "Invalid instance number.", nil)
+	}
+	slug := strings.TrimSpace(c.FormValue("slug"))
+	if slug == "" {
+		return sseToast(c, "err", "Mod slug required.", nil)
+	}
+	if s.git == nil {
+		return sseToast(c, "err", "GitOps plane disabled — no Codeberg token configured.", nil)
+	}
+
+	inst, err := s.mcInstances.GetInstance(c.UserContext(), num)
+	if err != nil || inst == nil {
+		return sseToast(c, "err", "Instance not found.", nil)
+	}
+
+	wanted := []string{slug}
+	if s.mr != nil {
+		deps, err := s.mr.ResolveRequiredDependencies(c.UserContext(), slug, inst.MCVersion, string(inst.Loader))
+		if err != nil {
+			slog.Warn("could not resolve all mod dependencies", "slug", slug, "instance", num, "err", err)
+		}
+		wanted = append(wanted, deps...)
+	}
+
+	modsPath := fmt.Sprintf("manifests/minecraft-modded/instance-%02d/mods.yaml", num)
+	msg := fmt.Sprintf("mc: install %s into instance #%02d", slug, num)
+	_, err = s.git.Patch(c.UserContext(), modsPath, "mods.txt", msg, func(cur string) (string, error) {
+		present := map[string]bool{}
+		for _, l := range strings.Split(cur, "\n") {
+			if t := strings.TrimSpace(strings.TrimSuffix(l, "?")); t != "" && !strings.HasPrefix(t, "#") {
+				present[t] = true
+			}
+		}
+		body := strings.TrimRight(cur, "\n")
+		added := 0
+		for _, w := range wanted {
+			if w = strings.TrimSpace(w); w != "" && !present[w] {
+				body += "\n" + w
+				present[w] = true
+				added++
+			}
+		}
+		if added == 0 {
+			return cur, nil
+		}
+		return strings.TrimLeft(body, "\n") + "\n", nil
+	})
+	if err != nil {
+		return sseToast(c, "err", "Install failed: "+err.Error(), nil)
+	}
+
+	_ = s.store.RecordAudit(s.actor(c), "mc-mod-install", fmt.Sprintf("Installed %s into #%02d", slug, num))
+	return sseToast(c, "ok", fmt.Sprintf("Installed %s (+%d deps). Updating...", slug, len(wanted)-1), nil)
 }
