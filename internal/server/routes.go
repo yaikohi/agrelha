@@ -33,13 +33,10 @@ func (s *FiberServer) RegisterFiberRoutes() {
 		s.App.Get("/auth/logout", s.auth.Logout)
 	}
 
-	app := s.App.Group("/")
-	if s.auth != nil {
-		app.Use(s.auth.Middleware())
-	}
-
-	app.Get("/", func(c *fiber.Ctx) error {
+	// Public routes (LAN / WireGuard players)
+	s.App.Get("/", func(c *fiber.Ctx) error {
 		fk, fm := takeFlash(c)
+		isAdmin := s.isAdmin(c)
 		mcSummary := pages.MinecraftSummaryUI{
 			MaxInstances:   4,
 			MaxRunning:     2,
@@ -77,11 +74,19 @@ func (s *FiberServer) RegisterFiberRoutes() {
 				}
 			}
 		}
-		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL, mcSummary, fk, fm))
+		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL, mcSummary, isAdmin, fk, fm))
 	})
-	app.Get("/sse", s.sseMain)
+	s.App.Get("/sse", s.sseMain)
+	s.App.Get("/img", s.imageProxy)
+	s.App.Get("/mods/export", s.modpackExport)
+	s.App.Get("/api/minecraft/:num<int>/mods/export", s.mcInstanceExport)
+
+	// Protected routes (admin authentication required)
+	app := s.App.Group("/")
+	if s.auth != nil {
+		app.Use(s.auth.Middleware())
+	}
 	app.Get("/sse/logs", s.sseLogs)
-	app.Get("/img", s.imageProxy)
 
 	app.Post("/server/restart", s.guard("restart", "Restart triggered — the server is rolling.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
 	app.Post("/server/update", s.guard("update", "Update triggered — restarting; the image installs any Valheim update on boot.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
@@ -89,7 +94,6 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/server/start", s.guard("start", "Starting the server — scaling to 1.", func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
 
 	app.Get("/mods", s.modsPage)
-	app.Get("/mods/export", s.modpackExport)
 	app.Get("/mods/:namespace/:name", s.modDetail)
 	app.Post("/mods/install", s.modsInstall)
 	app.Post("/mods/remove", s.modsRemove)
@@ -184,7 +188,6 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/api/minecraft/:num<int>/backups/delete", s.mcInstanceBackupDelete)
 	app.Post("/api/minecraft/:num<int>/settings", s.mcInstanceSettingsSave)
 	app.Post("/api/minecraft/:num<int>/mods/remove", s.mcInstanceModsRemove)
-	app.Get("/api/minecraft/:num<int>/mods/export", s.mcInstanceExport)
 	app.Get("/api/minecraft/:num<int>/configs/file", s.mcInstanceConfigGet)
 	app.Post("/api/minecraft/:num<int>/configs/save", s.mcInstanceConfigSave)
 	app.Post("/api/minecraft/:num<int>/configs/delete", s.mcInstanceConfigDelete)

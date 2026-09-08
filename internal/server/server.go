@@ -144,3 +144,10 @@ func New(cfg *config.Config) *FiberServer {
 
 	return s
 }
+
+func (s *FiberServer) isAdmin(c *fiber.Ctx) bool {
+	if s.auth == nil {
+		return true
+	}
+	return s.auth.IsAuthenticated(c)
+}

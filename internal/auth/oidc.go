@@ -215,11 +215,19 @@ func (a *Authenticator) Logout(c *fiber.Ctx) error {
 	return c.Redirect(u.String(), fiber.StatusFound)
 }
 
+func (a *Authenticator) IsAuthenticated(c *fiber.Ctx) bool {
+	if a == nil {
+		return true
+	}
+	_, ok := a.readSession(c)
+	return ok
+}
+
 func (a *Authenticator) Middleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		s, ok := a.readSession(c)
 		if !ok {
-			return c.Redirect("/login", fiber.StatusFound)
+			return c.Redirect("/auth/login", fiber.StatusFound)
 		}
 		c.Locals("actor", s.Email)
 		return c.Next()

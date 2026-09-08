@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"agrelha/internal/auth"
 	"agrelha/internal/config"
 	"agrelha/internal/k8s"
 	"agrelha/internal/store"
@@ -161,3 +162,65 @@ func TestRootDashboard(t *testing.T) {
 		t.Errorf("expected 'Open Minecraft Manager' in body")
 	}
 }
+
+func TestGuestRootDashboardAndAuthProtection(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	s := &FiberServer{
+		App:   fiber.New(),
+		cfg:   &config.Config{},
+		store: st,
+		auth:  &auth.Authenticator{},
+	}
+	s.RegisterFiberRoutes()
+
+	// 1. Guest visits / -> 200 OK (Public player portal view)
+	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodGet, "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET / status = %d, want 200", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	content := string(body)
+	if !strings.Contains(content, "Community Game Servers") {
+		t.Errorf("expected 'Community Game Servers' in guest body")
+	}
+	if !strings.Contains(content, "Admin Sign In") {
+		t.Errorf("expected 'Admin Sign In' button in guest nav")
+	}
+	if !strings.Contains(content, "Download Modpack") {
+		t.Errorf("expected 'Download Modpack' in guest view")
+	}
+	if strings.Contains(content, "Open Valheim Manager") {
+		t.Errorf("guest view should NOT have 'Open Valheim Manager'")
+	}
+	if strings.Contains(content, "Open Minecraft Manager") {
+		t.Errorf("guest view should NOT have 'Open Minecraft Manager'")
+	}
+	if strings.Contains(content, "Sign out") {
+		t.Errorf("guest view should NOT have 'Sign out'")
+	}
+
+	// 2. Protected admin routes require login -> redirect to /auth/login
+	for _, path := range []string{"/minecraft", "/mods", "/configs", "/admins", "/history"} {
+		req := httptest.NewRequest(fiber.MethodGet, path, nil)
+		r, err := s.App.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != fiber.StatusFound {
+			t.Fatalf("GET %s status = %d, want 302", path, r.StatusCode)
+		}
+		loc := r.Header.Get("Location")
+		if loc != "/auth/login" {
+			t.Fatalf("GET %s redirect location = %q, want /auth/login", path, loc)
+		}
+	}
+}
+
