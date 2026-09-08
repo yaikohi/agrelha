@@ -347,4 +347,3 @@ func TestDevAuthenticatorLifecycle(t *testing.T) {
 		t.Fatalf("expected logout to redirect to /, got status %d loc %s", logoutResp.StatusCode, logoutResp.Header.Get("Location"))
 	}
 }
-

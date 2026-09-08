@@ -28,25 +28,26 @@ import (
 type FiberServer struct {
 	*fiber.App
 
-	cfg      *config.Config
-	store    *store.Store
-	k8s      *k8s.Client
-	auth     *auth.Authenticator
-	mods     *mods.Manager
-	admins   *admins.Manager
-	git      *gitops.Committer
-	ts       *thunderstore.Client
-	mr       *modrinth.Client
-	mpi      *modpackindex.Client
-	mcv      *mcversions.Client
-	mcMods   *minecraft.ModManager
-	fabMods  *minecraft.ModManager
+	cfg         *config.Config
+	store       *store.Store
+	k8s         *k8s.Client
+	auth        *auth.Authenticator
+	mods        *mods.Manager
+	admins      *admins.Manager
+	git         *gitops.Committer
+	ts          *thunderstore.Client
+	mr          *modrinth.Client
+	mpi         *modpackindex.Client
+	mcv         *mcversions.Client
+	mcMods      *minecraft.ModManager
+	fabMods     *minecraft.ModManager
 	mcSlot      *minecraft.SlotManager
 	mcAccess    *minecraft.AccessManager
 	mcRcon      *minecraft.RconClient
 	mcRconPool  *minecraft.RconPool
 	mck8s       *k8s.Client
 	mcInstances *minecraft.InstanceManager
+	instStats   instanceStatsCache
 
 	bkMu   sync.Mutex
 	bkInfo backups.Info

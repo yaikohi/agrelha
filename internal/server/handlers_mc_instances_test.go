@@ -362,5 +362,3 @@ func TestMCSettingsSave(t *testing.T) {
 		t.Errorf("got tier %s, want medium", updated.Tier)
 	}
 }
-
-

@@ -157,24 +157,28 @@ func (a *AccessManager) OnlinePlayers() ([]string, error) {
 		return nil, err
 	}
 
-	// Output format typically: "There are X of a max of Y players online: player1, player2"
+	return ParsePlayerList(res), nil
+}
+
+// ParsePlayerList extracts player names from an RCON "/list" response, which
+// reads "There are X of a max of Y players online: player1, player2".
+func ParsePlayerList(res string) []string {
 	parts := strings.Split(res, ":")
 	if len(parts) < 2 {
-		return nil, nil
+		return nil
 	}
-	rawPlayers := strings.TrimSpace(parts[1])
-	if rawPlayers == "" {
-		return nil, nil
+	raw := strings.TrimSpace(parts[1])
+	if raw == "" {
+		return nil
 	}
 
 	var players []string
-	for _, p := range strings.Split(rawPlayers, ",") {
-		name := strings.TrimSpace(p)
-		if name != "" {
+	for _, p := range strings.Split(raw, ",") {
+		if name := strings.TrimSpace(p); name != "" {
 			players = append(players, name)
 		}
 	}
-	return players, nil
+	return players
 }
 
 // WhitelistEnforced checks if the whitelist is currently enabled in-game via RCON.

@@ -50,6 +50,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 		}
 		if s.mcInstances != nil {
 			if insts, err := s.mcInstances.ListInstances(c.UserContext()); err == nil {
+				stats := s.instanceStats(c.UserContext(), insts)
 				budget := s.mcInstances.Budget(insts)
 				mcSummary.TotalInstances = budget.TotalInstances
 				mcSummary.RunningCount = budget.RunningCount
@@ -71,6 +72,11 @@ func (s *FiberServer) RegisterFiberRoutes() {
 							MemoryGiB: inst.MemoryGiB(),
 							State:     string(inst.State),
 							LBIP:      inst.LBIP,
+						}
+						if st, ok := stats[inst.Number]; ok {
+							uinst.Players = st.Players
+							uinst.PlayersKnown = st.PlayersKnown
+							uinst.Uptime = st.Uptime
 						}
 						mcSummary.ActiveInstances = append(mcSummary.ActiveInstances, uinst)
 						if mcSummary.ActiveInstance == nil {

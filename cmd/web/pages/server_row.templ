@@ -1,0 +1,182 @@
+package pages
+
+import "fmt"
+
+// serverRow renders one connectable server. Both game cards use this, so
+// address, status, stats and the modpack download are pixel-identical between
+// them; only the values differ.
+templ serverRow(r ServerRowUI) {
+	<div class="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
+		<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+			<div class="min-w-0">
+				<div class="flex flex-wrap items-center gap-2">
+					<span class="font-semibold text-zinc-100">{ r.Name }</span>
+					if r.StateSignal != "" {
+						<span
+							class="rounded px-1.5 py-0.5 text-[10px] font-medium"
+							data-class={ fmt.Sprintf("{'bg-emerald-950 border border-emerald-800/60 text-emerald-300': $%s === 'running', 'bg-zinc-800 text-zinc-400': $%s !== 'running'}", r.StateSignal, r.StateSignal) }
+						>
+							<span data-text={ fmt.Sprintf("$%s === 'running' ? 'Online' : 'Offline'", r.StateSignal) }></span>
+						</span>
+					} else if r.Online {
+						<span class="rounded bg-emerald-950 border border-emerald-800/60 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">Online</span>
+					} else {
+						<span class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">Offline</span>
+					}
+					if r.VersionBadge != "" {
+						<span class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">{ r.VersionBadge }</span>
+					}
+				</div>
+				<div class="mt-1 flex items-center gap-2 font-mono text-xs text-zinc-400">
+					<span>{ r.Address }</span>
+					<button
+						type="button"
+						data-on:click={ r.CopyScript() }
+						class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-sans text-zinc-400 transition hover:bg-zinc-700 hover:text-zinc-200"
+					>
+						Copy
+					</button>
+				</div>
+			</div>
+			if r.DownloadURL != "" {
+				<a
+					href={ templ.SafeURL(r.DownloadURL) }
+					download
+					class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-emerald-600"
+				>
+					📥 Download Modpack
+					if r.DownloadFmt != "" {
+						<span class="rounded bg-emerald-900/70 px-1.5 py-0.5 font-mono text-[10px] text-emerald-200">{ r.DownloadFmt }</span>
+					}
+				</a>
+			}
+		</div>
+
+		<div class="mt-3 grid grid-cols-2 gap-3 border-t border-zinc-800/60 pt-3">
+			<div>
+				<div class="text-[10px] uppercase tracking-wide text-zinc-500">Online Players</div>
+				if r.PlayersSignal != "" {
+					<div class="mt-0.5 text-lg font-semibold text-zinc-100" data-text={ "$" + r.PlayersSignal }></div>
+				} else {
+					<div class="mt-0.5 text-lg font-semibold text-zinc-100">{ r.PlayersText() }</div>
+				}
+			</div>
+			<div>
+				<div class="text-[10px] uppercase tracking-wide text-zinc-500">Uptime</div>
+				if r.UptimeSignal != "" {
+					<div class="mt-0.5 text-lg font-semibold text-zinc-100" data-text={ "$" + r.UptimeSignal }></div>
+				} else {
+					<div class="mt-0.5 text-lg font-semibold text-zinc-100">{ r.UptimeText() }</div>
+				}
+			</div>
+		</div>
+
+		if len(r.Launchers) > 0 {
+			<p class="mt-3 text-[11px] leading-relaxed text-zinc-400">
+				Import into
+				for i, l := range r.Launchers {
+					if i > 0 {
+						<span> or </span>
+					}
+					<span class="font-medium text-zinc-200">{ l }</span>
+				}
+				if r.ImportSteps != "" {
+					<span> ({ r.ImportSteps })</span>
+				}
+				<span> to install all required mods and configs.</span>
+			</p>
+		}
+	</div>
+}
+
+// gameExtras is the one place the two cards are allowed to differ: anything
+// specific to a single game lands here, visually marked, so everything above it
+// stays identical.
+templ gameExtras(accent string, items []string) {
+	if len(items) > 0 {
+		<div class={ "mt-4 rounded-xl border px-3.5 py-2.5 " + extrasStyle(accent) }>
+			<div class={ "text-[10px] font-semibold uppercase tracking-wide " + extrasLabelStyle(accent) }>
+				Server specifics
+			</div>
+			<div class="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-400">
+				for _, it := range items {
+					<span>{ it }</span>
+				}
+			</div>
+		</div>
+	}
+}
+
+// gameCard is the shared shell for both games: identical header, rows, extras
+// and access notice. Admin controls are passed as children so the layout above
+// them stays the same in both views.
+templ gameCard(g GameCardUI) {
+	<div class="flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 shadow-sm">
+		<div>
+			<div class="flex items-start justify-between border-b border-zinc-800/80 pb-4">
+				<div class="flex items-center gap-3">
+					<div class={ "flex h-11 w-11 items-center justify-center rounded-xl text-2xl " + iconStyle(g.Accent) }>
+						{ g.Icon }
+					</div>
+					<div>
+						<div class="flex items-center gap-2">
+							<h2 class="text-base font-semibold text-zinc-100">{ g.Title }</h2>
+							if g.AccessPill != "" {
+								<span class="rounded-full border border-zinc-700/50 bg-zinc-800/80 px-2 py-0.5 text-[10px] font-medium text-zinc-400">{ g.AccessPill }</span>
+							}
+						</div>
+						if g.Subtitle != "" {
+							<p class="mt-0.5 text-xs text-zinc-400">{ g.Subtitle }</p>
+						}
+					</div>
+				</div>
+				<div>
+					if g.StateSignal != "" {
+						<span
+							class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+							data-class={ fmt.Sprintf("{'bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-800/50': $%s === 'running', 'bg-zinc-800 text-zinc-400': $%s !== 'running'}", g.StateSignal, g.StateSignal) }
+						>
+							<span
+								class="h-1.5 w-1.5 rounded-full"
+								data-class={ fmt.Sprintf("{'bg-emerald-400 animate-pulse': $%s === 'running', 'bg-zinc-500': $%s !== 'running'}", g.StateSignal, g.StateSignal) }
+							></span>
+							<span data-text={ fmt.Sprintf("$%s === 'running' ? '1 online' : 'Offline'", g.StateSignal) }></span>
+						</span>
+					} else if g.OnlineCount() > 0 {
+						<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/80 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/50">
+							<span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+							{ ServersOnlineLabel(g.OnlineCount()) }
+						</span>
+					} else {
+						<span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-400">
+							<span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
+							{ ServersOnlineLabel(0) }
+						</span>
+					}
+				</div>
+			</div>
+
+			if len(g.Rows) > 0 {
+				<div class="mt-5 space-y-3">
+					for _, r := range g.Rows {
+						@serverRow(r)
+					}
+				</div>
+			} else {
+				<div class="mt-5 rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-5 text-center">
+					<p class="text-sm font-medium text-zinc-300">{ g.EmptyText }</p>
+					if g.EmptyHint != "" {
+						<p class="mt-1 text-xs text-zinc-500">{ g.EmptyHint }</p>
+					}
+				</div>
+			}
+
+			@gameExtras(g.Accent, g.Extras)
+
+			if g.AccessNote != "" {
+				<div class="mt-3 text-[11px] text-zinc-500">{ g.AccessNote }</div>
+			}
+		</div>
+		{ children... }
+	</div>
+}

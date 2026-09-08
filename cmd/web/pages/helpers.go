@@ -141,6 +141,9 @@ type InstanceUI struct {
 	MemoryGiB          int
 	State              string
 	MOTD               string
+	Players            int
+	PlayersKnown       bool
+	Uptime             string
 	LBIP               string
 	CanStart           bool
 	StartBlockedReason string
@@ -192,4 +195,180 @@ func slotRowStyle(active bool) string {
 		return "border-emerald-800/50 bg-emerald-950/20"
 	}
 	return "border-zinc-800 bg-zinc-950"
+}
+
+// ServerRowUI is one connectable server. Valheim renders exactly one; Minecraft
+// renders one per running world. Same functionality => same markup, so the two
+// cards match by construction instead of by hand.
+//
+// Stats arrive two different ways: Valheim's are live Datastar signals, while
+// Minecraft's are server-rendered per instance. When a *Signal field is set the
+// row binds to it; otherwise it prints the static value.
+type ServerRowUI struct {
+	Name          string
+	Address       string
+	VersionBadge  string
+	DownloadURL   string
+	DownloadFmt   string
+	Launchers     []string
+	ImportSteps   string
+	Online        bool
+	Players       int
+	PlayersKnown  bool
+	Uptime        string
+	StateSignal   string
+	PlayersSignal string
+	UptimeSignal  string
+}
+
+func (r ServerRowUI) CopyScript() string {
+	return fmt.Sprintf(
+		"navigator.clipboard.writeText('%s'); $toast = 'Copied %s address (%s) to clipboard!'; $toastkind = 'ok'",
+		r.Address, r.Name, r.Address,
+	)
+}
+
+func (r ServerRowUI) PlayersText() string {
+	if !r.PlayersKnown {
+		return "—"
+	}
+	return fmt.Sprintf("%d", r.Players)
+}
+
+func (r ServerRowUI) UptimeText() string {
+	if r.Uptime == "" {
+		return "—"
+	}
+	return r.Uptime
+}
+
+// ServersOnlineLabel is the card header pill: identical wording on both cards.
+func ServersOnlineLabel(online int) string {
+	if online == 0 {
+		return "Offline"
+	}
+	return fmt.Sprintf("%d online", online)
+}
+
+func extrasStyle(accent string) string {
+	if accent == "orange" {
+		return "border-orange-900/40 bg-orange-950/15"
+	}
+	return "border-emerald-900/40 bg-emerald-950/15"
+}
+
+func extrasLabelStyle(accent string) string {
+	if accent == "orange" {
+		return "text-orange-300/80"
+	}
+	return "text-emerald-300/80"
+}
+
+// GameCardUI is one game's card. Both cards render through the same component,
+// so anything that differs has to be data — not markup.
+type GameCardUI struct {
+	Icon       string
+	Accent     string
+	Title      string
+	AccessPill string
+	Subtitle   string
+	Rows       []ServerRowUI
+	Extras     []string
+	AccessNote string
+	EmptyText  string
+	EmptyHint  string
+	// StateSignal binds the header pill to a live Datastar signal instead of a
+	// server-rendered count, so a single-server card reports its real state
+	// rather than assuming a rendered row means "up".
+	StateSignal string
+}
+
+// OnlineCount counts server-rendered rows only; signal-driven cards report
+// their state through StateSignal.
+func (g GameCardUI) OnlineCount() int {
+	n := 0
+	for _, r := range g.Rows {
+		if r.Online {
+			n++
+		}
+	}
+	return n
+}
+
+func iconStyle(accent string) string {
+	if accent == "orange" {
+		return "bg-orange-950/40 text-orange-400 ring-1 ring-orange-800/40"
+	}
+	return "bg-emerald-950/40 text-emerald-400 ring-1 ring-emerald-800/40"
+}
+
+// ValheimCard builds the Valheim card. Its stats are live Datastar signals, so
+// the row and header pill bind rather than print.
+func ValheimCard(addr string, isAdmin bool) GameCardUI {
+	g := GameCardUI{
+		Icon:        "\u2694\ufe0f",
+		Accent:      "orange",
+		Title:       "Valheim Dedicated",
+		AccessPill:  "\U0001f512 Password",
+		Subtitle:    "Dedicated survival server",
+		StateSignal: "state",
+		AccessNote:  "Password required — ask the host on Discord / WireGuard.",
+		Rows: []ServerRowUI{{
+			Name:          "Valheim Dedicated",
+			Address:       addr,
+			DownloadURL:   "/mods/export",
+			DownloadFmt:   ".r2z",
+			Launchers:     []string{"r2modman", "Thunderstore Mod Manager"},
+			ImportSteps:   "Import → From file",
+			StateSignal:   "state",
+			PlayersSignal: "players",
+			UptimeSignal:  "uptime",
+		}},
+	}
+	// Both cards always carry an extras strip, so the guest layouts stay
+	// symmetric; Valheim's parallels Minecraft's "N of M worlds saved".
+	g.Extras = []string{"Single persistent world"}
+	if isAdmin {
+		g.Extras = append(g.Extras, "Node game-01")
+	}
+	return g
+}
+
+// MinecraftCard builds the Minecraft card from the running instances.
+func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
+	g := GameCardUI{
+		Icon:       "\u26cf\ufe0f",
+		Accent:     "emerald",
+		Title:      "Minecraft Worlds",
+		AccessPill: "\U0001f6e1\ufe0f Whitelist",
+		Subtitle:   "Dedicated multi-world cluster",
+		AccessNote: "Whitelist required — ask the host on Discord / WireGuard to get added.",
+		EmptyText:  "All Minecraft worlds are currently offline.",
+		EmptyHint:  "Ask the server host on Discord / WireGuard to start a world!",
+	}
+
+	for _, inst := range mc.ActiveInstances {
+		g.Rows = append(g.Rows, ServerRowUI{
+			Name:         inst.Name,
+			Address:      fmt.Sprintf("%s:25565", inst.LBIP),
+			VersionBadge: fmt.Sprintf("%s · %s", inst.MCVersion, inst.Loader),
+			DownloadURL:  fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number),
+			DownloadFmt:  ".mrpack",
+			Launchers:    []string{"Prism Launcher", "Modrinth App"},
+			ImportSteps:  "Add Instance → Import from zip",
+			Online:       true,
+			Players:      inst.Players,
+			PlayersKnown: inst.PlayersKnown,
+			Uptime:       inst.Uptime,
+		})
+	}
+
+	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", mc.TotalInstances, mc.MaxInstances)}
+	if isAdmin {
+		g.Extras = append(g.Extras,
+			fmt.Sprintf("%d of %d running", mc.RunningCount, mc.MaxRunning),
+			fmt.Sprintf("RAM %dG of %dG", mc.UsedGiB, mc.TotalBudgetGiB),
+		)
+	}
+	return g
 }
