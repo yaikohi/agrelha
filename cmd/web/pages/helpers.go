@@ -372,3 +372,94 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 	}
 	return g
 }
+
+// ActionUI is one control in a card footer. Kind drives the styling so the same
+// role (destructive, go, secondary…) always looks the same on both cards.
+type ActionUI struct {
+	Label  string
+	Script string
+	Href   string
+	Kind   string
+}
+
+// CardActionsUI is the shared admin footer. Both games have the same action
+// set — lifecycle, configs, access, manager — so only Special differs, and it
+// gets the marked slot.
+type CardActionsUI struct {
+	Lifecycle []ActionUI
+	Special   []ActionUI
+	Links     []ActionUI
+	Manager   ActionUI
+}
+
+func actionStyle(kind string) string {
+	switch kind {
+	case "danger":
+		return "border border-amber-800/50 bg-amber-950/20 text-amber-200 hover:bg-amber-900/40"
+	case "go":
+		return "bg-emerald-800/80 text-emerald-100 hover:bg-emerald-700"
+	case "special":
+		return "border border-dashed border-sky-800/60 bg-sky-950/20 text-sky-300 hover:bg-sky-900/30"
+	case "link":
+		return "border border-zinc-800 bg-zinc-800/50 text-zinc-300 hover:bg-zinc-700"
+	default:
+		return "bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white"
+	}
+}
+
+// ValheimActions is Valheim's footer. Update is Valheim-specific and therefore
+// sits in the marked Special slot.
+func ValheimActions() CardActionsUI {
+	return CardActionsUI{
+		Lifecycle: []ActionUI{
+			{Label: "Restart", Script: "@post('/server/restart')"},
+			{Label: "Stop", Script: "@post('/server/stop')", Kind: "danger"},
+			{Label: "Start", Script: "@post('/server/start')", Kind: "go"},
+		},
+		Special: []ActionUI{
+			{Label: "Update", Script: "@post('/server/update')", Kind: "special"},
+		},
+		Links: []ActionUI{
+			{Label: "Configs", Href: "/configs", Kind: "link"},
+			{Label: "Access", Href: "/admins", Kind: "link"},
+		},
+		Manager: ActionUI{Label: "Open Valheim Manager →", Href: "/mods"},
+	}
+}
+
+// Primary is the instance the card footer acts on. The summary carries both a
+// slice and a legacy pointer for the same fact; reading them separately let the
+// footer and the rows disagree, so everything goes through here.
+func (m MinecraftSummaryUI) Primary() *InstanceUI {
+	if len(m.ActiveInstances) > 0 {
+		return &m.ActiveInstances[0]
+	}
+	return m.ActiveInstance
+}
+
+// MinecraftActions mirrors ValheimActions. Creating a world is Minecraft-only,
+// so it takes the Special slot when nothing is running.
+func MinecraftActions(mc MinecraftSummaryUI) CardActionsUI {
+	a := CardActionsUI{
+		Links: []ActionUI{
+			{Label: "Access", Href: "/minecraft/access", Kind: "link"},
+		},
+		Manager: ActionUI{Label: "Open Minecraft Manager →", Href: "/minecraft"},
+	}
+
+	if inst := mc.Primary(); inst != nil {
+		a.Lifecycle = []ActionUI{
+			{Label: "Restart", Script: fmt.Sprintf("@post('/api/minecraft/instances/%d/restart')", inst.Number)},
+			{Label: "Stop", Script: fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", inst.Number), Kind: "danger"},
+			{Label: "Start", Script: fmt.Sprintf("@post('/api/minecraft/instances/%d/start')", inst.Number), Kind: "go"},
+		}
+		a.Links = append([]ActionUI{
+			{Label: "Configs", Href: fmt.Sprintf("/minecraft/%d/configs", inst.Number), Kind: "link"},
+		}, a.Links...)
+	} else {
+		a.Special = []ActionUI{
+			{Label: "+ Create World", Href: "/minecraft/create", Kind: "special"},
+		}
+	}
+	return a
+}

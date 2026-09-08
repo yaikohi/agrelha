@@ -147,3 +147,64 @@ func TestValheimBindsToOnlineBooleanNotStateString(t *testing.T) {
 		t.Fatal("row status badge must read from $online")
 	}
 }
+
+func renderActions(t *testing.T, a CardActionsUI) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := cardActions(a).Render(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+// Both games have the same action set (both have configs and access pages, and
+// both have start/stop/restart endpoints), so the footers must offer the same
+// controls in the same order.
+func TestBothFootersOfferTheSameActions(t *testing.T) {
+	valheim := renderActions(t, ValheimActions())
+	minecraft := renderActions(t, MinecraftActions(sampleMinecraft()))
+
+	for _, label := range []string{"Restart", "Stop", "Start", "Configs", "Access", "Manager"} {
+		if !strings.Contains(valheim, label) {
+			t.Errorf("Valheim footer missing %q", label)
+		}
+		if !strings.Contains(minecraft, label) {
+			t.Errorf("Minecraft footer missing %q", label)
+		}
+	}
+}
+
+// Game-specific controls belong in the marked Special slot, not mixed in.
+func TestGameSpecificActionsAreMarked(t *testing.T) {
+	valheim := renderActions(t, ValheimActions())
+	if !strings.Contains(valheim, "Update") {
+		t.Fatal("Valheim should still offer Update")
+	}
+	if !strings.Contains(valheim, "border-dashed") {
+		t.Fatal("Update is Valheim-only and must use the marked Special styling")
+	}
+
+	idle := renderActions(t, MinecraftActions(MinecraftSummaryUI{MaxInstances: 4}))
+	if !strings.Contains(idle, "Create World") || !strings.Contains(idle, "border-dashed") {
+		t.Fatal("Create World is Minecraft-only and must use the marked Special styling")
+	}
+	if strings.Contains(idle, "Restart") {
+		t.Fatal("with no instance running there is nothing to restart")
+	}
+}
+
+// Same role => same styling on both cards, so colour always means one thing.
+func TestActionRolesStyleIdentically(t *testing.T) {
+	valheim := renderActions(t, ValheimActions())
+	minecraft := renderActions(t, MinecraftActions(sampleMinecraft()))
+
+	for _, cls := range []string{
+		actionStyle("danger"), // Stop
+		actionStyle("go"),     // Start
+		actionStyle("link"),   // Configs / Access
+	} {
+		if !strings.Contains(valheim, cls) || !strings.Contains(minecraft, cls) {
+			t.Fatalf("role styling %q is not shared by both footers", cls)
+		}
+	}
+}

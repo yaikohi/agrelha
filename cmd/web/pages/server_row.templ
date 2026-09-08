@@ -180,3 +180,51 @@ templ gameCard(g GameCardUI) {
 		{ children... }
 	</div>
 }
+
+// cardActions is the shared admin footer for both games: same groups, same
+// order, same styling per role. Game-specific controls live in the Special
+// group so they read as deliberate exceptions rather than random extras.
+templ cardActions(a CardActionsUI) {
+	<div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800/80 pt-4">
+		<div class="flex flex-wrap items-center gap-1.5">
+			for _, act := range a.Lifecycle {
+				<button
+					type="button"
+					data-on:click={ act.Script }
+					class={ "rounded-lg px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
+				>{ act.Label }</button>
+			}
+			for _, act := range a.Special {
+				if act.Href != "" {
+					<a
+						href={ templ.SafeURL(act.Href) }
+						title="Only available for this game"
+						class={ "rounded-lg px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
+					>{ act.Label }</a>
+				} else {
+					<button
+						type="button"
+						data-on:click={ act.Script }
+						title="Only available for this game"
+						class={ "rounded-lg px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
+					>{ act.Label }</button>
+				}
+			}
+			if len(a.Links) > 0 {
+				<span class="mx-1 h-4 w-px bg-zinc-800"></span>
+				for _, l := range a.Links {
+					<a
+						href={ templ.SafeURL(l.Href) }
+						class={ "rounded-lg px-2.5 py-1 text-xs " + actionStyle(l.Kind) }
+					>{ l.Label }</a>
+				}
+			}
+		</div>
+		if a.Manager.Href != "" {
+			<a
+				href={ templ.SafeURL(a.Manager.Href) }
+				class="rounded-xl bg-emerald-700 px-4 py-1.5 text-xs font-semibold text-white shadow-md transition hover:bg-emerald-600"
+			>{ a.Manager.Label }</a>
+		}
+	</div>
+}

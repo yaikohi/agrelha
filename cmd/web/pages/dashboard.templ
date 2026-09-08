@@ -1,7 +1,5 @@
 package pages
 
-import "fmt"
-
 templ Dashboard(grafanaURL string, mcSummary MinecraftSummaryUI, isAdmin bool, flashKind, flashMsg string) {
 	@Layout("Agrelha · Game Server Portal") {
 		@nav(isAdmin)
@@ -48,43 +46,12 @@ templ Dashboard(grafanaURL string, mcSummary MinecraftSummaryUI, isAdmin bool, f
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				@gameCard(ValheimCard("192.168.20.224:2456", isAdmin)) {
 					if isAdmin {
-						<div class="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/80 pt-4">
-							<div class="flex flex-wrap items-center gap-1.5">
-								<button type="button" data-on:click="@post('/server/restart')" class="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white">Restart</button>
-								<button type="button" data-on:click="@post('/server/update')" title="Restarts the server — updates on boot" class="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-sky-300 hover:bg-zinc-700">Update</button>
-								<button type="button" data-on:click="@post('/server/stop')" class="rounded-lg border border-amber-800/50 bg-amber-950/20 px-2.5 py-1 text-xs font-medium text-amber-200 hover:bg-amber-900/40">Stop</button>
-								<button type="button" data-on:click="@post('/server/start')" class="rounded-lg bg-emerald-800/80 px-2.5 py-1 text-xs font-medium text-emerald-100 hover:bg-emerald-700">Start</button>
-							</div>
-							<a href="/mods" class="rounded-xl bg-emerald-700 px-4 py-1.5 text-xs font-semibold text-white shadow-md transition hover:bg-emerald-600">Open Valheim Manager &rarr;</a>
-						</div>
+						@cardActions(ValheimActions())
 					}
 				}
 				@gameCard(MinecraftCard(mcSummary, isAdmin)) {
 					if isAdmin {
-						<div class="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/80 pt-4">
-							<div class="flex flex-wrap items-center gap-1.5">
-								if mcSummary.ActiveInstance != nil {
-									<button
-										type="button"
-										data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/restart')", mcSummary.ActiveInstance.Number) }
-										class="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
-									>Restart</button>
-									<button
-										type="button"
-										data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", mcSummary.ActiveInstance.Number) }
-										class="rounded-lg border border-amber-800/50 bg-amber-950/20 px-2.5 py-1 text-xs font-medium text-amber-200 hover:bg-amber-900/40"
-									>Stop</button>
-									<a
-										href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/configs", mcSummary.ActiveInstance.Number)) }
-										class="rounded-lg border border-zinc-800 bg-zinc-800/50 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
-									>Configs</a>
-								} else {
-									<a href="/minecraft/create" class="rounded-lg bg-zinc-800 px-3 py-1 text-xs font-medium text-emerald-400 hover:bg-zinc-700">+ Create World</a>
-								}
-								<a href="/minecraft/access" class="rounded-lg border border-zinc-800 bg-zinc-800/50 px-2.5 py-1 text-xs text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200">Access</a>
-							</div>
-							<a href="/minecraft" class="rounded-xl bg-emerald-700 px-4 py-1.5 text-xs font-semibold text-white shadow-md transition hover:bg-emerald-600">Open Minecraft Manager &rarr;</a>
-						</div>
+						@cardActions(MinecraftActions(mcSummary))
 					}
 				}
 			</div>
