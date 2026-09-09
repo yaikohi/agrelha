@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"agrelha/internal/modrinth"
+	"agrelha/internal/infra/content/modrinth"
 )
 
 type mockModrinth struct {

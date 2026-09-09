@@ -61,29 +61,42 @@ and the Thunderstore mod index + README cache.
 
 ## Layout
 
+Layered: `domain` knows nothing, `ports` declares every seam, and dependencies
+point inward. Enforced by an architecture test (see
+`docs/architecture-cleanup-plan.md`).
+
 ```
-cmd/api/main.go          entrypoint (graceful shutdown, slog setup)
-cmd/web/                 embedded assets + templ pages
-  pages/*.templ          Layout, nav, Dashboard, Mods, ModDetail, Configs,
-                         ConfigEdit, Admins, History, Login, flash, UpdateList
+cmd/agrelha/             composition root: config -> adapters -> services -> routes
+internal/domain/         entities, value objects, invariants. Imports nothing.
+internal/ports/          the interfaces: StateStore, Reconciler, Runtime,
+                         InstanceRepository, ContentProvider, Game, Auth
+internal/app/            application services
+  mods/                  Valheim mod list
+  admins/                Valheim operators
+  games/                 per-game behaviour (Valheim, Minecraft)
+  ingest/                log-tailing -> player roster/presence
+internal/infra/          adapters. Swap these, not the layers above.
+  store/                 SQLite schema + queries (roster, audit, mod index)
+  kube/                  client-go: restart/scale/status/metrics/logs
+  gitops/                go-git clone -> edit YAML -> commit/push
+  state/                 StateStore: git | local | unconfigured
+  reconcile/             Reconciler: argocd | compose
+  runtime/               Runtime: k8s | docker
+  content/               modrinth | thunderstore | modpackindex | mcversions
+  auth/                  oidc | local users
+  backups/               NAS backup dir stat
+internal/web/            delivery
+  pages/*.templ          Layout, nav, dashboards, mods, configs, access, wizard
+  handlers/              per-feature HTTP handlers
+  shared/                actor, flash, format, render, SSE helpers
+  sse/                   hand-written Datastar frames (patch-signals/elements)
+  mdrender/              README markdown -> sanitised HTML + image proxy
+  metrics/               Prometheus collectors
   assets/                css (Tailwind v4) + js (vendored Datastar v1.0.2)
-internal/config          env -> Config
-internal/server          Fiber server, routes, SSE handlers, render, metrics mw
-internal/auth            Zitadel OIDC (login/callback/middleware, signed cookies)
-internal/k8s             imperative plane (restart/scale/status/metrics/logs)
-internal/gitops          go-git clone -> edit ConfigMap YAML -> commit/push
-internal/mods            mods.txt install/remove/replace
-internal/admins          admin-list grant/revoke
-internal/thunderstore    package index (streamed + cached), dependency resolve
-internal/modpack         .r2z export builder
-internal/ingest          log-tailing goroutine -> player roster/presence
-internal/store           SQLite schema + queries (roster/audit/events/mod index)
-internal/backups         NAS backup dir stat
-internal/sse             hand-written Datastar SSE frames (patch-signals/elements)
-internal/mdrender        README markdown -> sanitized HTML + image proxy rewrite
-internal/metrics         Prometheus collectors
-internal/logging         slog handler setup
-internal/valheim         status.json parsing (A2S; superseded by log presence)
+internal/platform/       cross-cutting: config, logging, build info
+internal/minecraft/      Minecraft instances (being split across the layers above)
+internal/modpack/        .mrpack / .r2z pack builders
+internal/server/         Fiber wiring (being dissolved into cmd/ and web/)
 ```
 
 ## Dev
@@ -111,3 +124,14 @@ task build:image TAG=0.8.7      # docker build + push to registry.ykhi.xyz/agrel
 ```
 
 See `plan.md` for the full feature/version changelog and remaining work.
+
+## Licence
+
+AGPL-3.0-only. Copyright (C) 2026 ykhi <agrelha@ykhi.xyz>. See [LICENSE](LICENSE).
+
+If you modify agrelha and let other people use it over a network, section 13
+obliges you to offer them your source. agrelha ships a footer link for exactly
+that — point `SOURCE_URL` at your own repository and you are covered.
+
+Embedded third-party assets and their notices are listed in
+[third_party/](third_party/README.md).

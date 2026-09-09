@@ -1,8 +1,7 @@
 package minecraft
 
 import (
-	"regexp"
-	"strings"
+	"agrelha/internal/domain"
 )
 
 // Content vocabulary shared by every Minecraft server model. See CONTEXT.md:
@@ -10,20 +9,22 @@ import (
 // distributes a Pack. They are deliberately orthogonal — conflating them into
 // itzg's single TYPE is what once let a CurseForge pack be treated as a "type"
 // of server and silently destroyed.
-type Source string
-type Provider string
-type Loader string
+type Source = domain.Source
+type Provider = domain.Provider
+type Loader = domain.Loader
 
 const (
-	SourceModpack Source = "modpack"
-	SourceModlist Source = "modlist"
-	SourceVanilla Source = "vanilla"
+	SourceModpack = domain.SourceModpack
+	SourceModlist = domain.SourceModlist
+	SourceVanilla = domain.SourceVanilla
 
-	ProviderCurseForge Provider = "curseforge"
-	ProviderModrinth   Provider = "modrinth"
+	ProviderCurseForge   = domain.ProviderCurseForge
+	ProviderModrinth     = domain.ProviderModrinth
+	ProviderThunderstore = domain.ProviderThunderstore
 
-	LoaderFabric   Loader = "fabric"
-	LoaderNeoForge Loader = "neoforge"
+	LoaderFabric   = domain.LoaderFabric
+	LoaderNeoForge = domain.LoaderNeoForge
+	LoaderVanilla  = domain.LoaderVanilla
 
 	// Annotation namespace. These are write-only documentation for humans
 	// reading the manifests in git — Instance state is rebuilt from the store,
@@ -35,44 +36,19 @@ const (
 	DefaultModsPath = "manifests/minecraft-modded/mods.yaml"
 )
 
-var slugUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
-
 // Pack is a published, versioned mod collection. When a server has one, the Pack
 // decides its Loader and Minecraft version.
-type Pack struct {
-	Provider Provider
-	Ref      string
-	Name     string
-}
+type Pack = domain.Pack
 
 // SlotName sanitises a display name into a stable identifier.
 func SlotName(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = slugUnsafe.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
-	if len(s) > 40 {
-		s = strings.Trim(s[:40], "-")
-	}
-	if s == "" {
-		return "default"
-	}
-	return s
+	return domain.Slugify(s)
 }
 
 func NormalizeLoader(l string) Loader {
-	if strings.EqualFold(strings.TrimSpace(l), string(LoaderFabric)) {
-		return LoaderFabric
-	}
-	return LoaderNeoForge
+	return domain.NormalizeLoader(l)
 }
 
 func NormalizeSource(s string) Source {
-	switch Source(strings.ToLower(strings.TrimSpace(s))) {
-	case SourceModpack:
-		return SourceModpack
-	case SourceVanilla:
-		return SourceVanilla
-	default:
-		return SourceModlist
-	}
+	return domain.NormalizeSource(s)
 }

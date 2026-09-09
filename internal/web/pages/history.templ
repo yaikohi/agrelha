@@ -1,0 +1,31 @@
+package pages
+
+import "agrelha/internal/infra/store"
+
+templ History(entries []store.HistoryEntry) {
+	@Layout("History") {
+		@nav()
+		<h1 class="mb-2 text-2xl font-semibold">History</h1>
+		<p class="mb-6 text-xs text-zinc-500">Recent actions (who did what) and server events (joins, backups, crashes). Times are UTC.</p>
+		if len(entries) == 0 {
+			<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No activity recorded yet.</p>
+		} else {
+			<ul class="divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900">
+				for _, h := range entries {
+					<li class="flex items-center gap-3 px-4 py-2.5 text-sm">
+						<span class="w-24 flex-none text-xs text-zinc-500">{ h.At.Format("Jan 2 15:04") }</span>
+						<span class={ "flex-none rounded px-2 py-0.5 text-xs " + HistoryBadge(h.Source, h.Kind) }>{ HistoryLabel(h.Kind) }</span>
+						<span class="min-w-0 flex-1 truncate text-zinc-300">
+							if h.Detail != "" {
+								{ h.Detail }
+							}
+						</span>
+						if h.Actor != "" {
+							<span class="flex-none text-xs text-zinc-500">{ h.Actor }</span>
+						}
+					</li>
+				}
+			</ul>
+		}
+	}
+}

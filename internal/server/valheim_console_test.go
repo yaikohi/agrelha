@@ -9,8 +9,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"agrelha/internal/config"
-	"agrelha/internal/store"
+	"agrelha/internal/infra/store"
+	"agrelha/internal/platform/config"
 )
 
 func TestValheimConsolePage(t *testing.T) {

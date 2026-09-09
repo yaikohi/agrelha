@@ -18,10 +18,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"agrelha/internal/config"
-	"agrelha/internal/k8s"
+	"agrelha/internal/infra/kube"
+	k8sruntime "agrelha/internal/infra/runtime/k8s"
+	"agrelha/internal/infra/store"
 	"agrelha/internal/minecraft"
-	"agrelha/internal/store"
+	"agrelha/internal/platform/config"
 )
 
 func setupTestMCServer(t *testing.T) (*FiberServer, *store.Store, *minecraft.InstanceManager) {
@@ -49,7 +50,7 @@ func setupTestMCServer(t *testing.T) (*FiberServer, *store.Store, *minecraft.Ins
 	)
 
 	mck8s := k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded")
-	mgr := minecraft.NewInstanceManager(st, nil, mck8s, 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", "ykhi.xyz/gameserver=true", "minecraft-modded")
+	mgr := minecraft.NewInstanceManager(store.NewInstanceRepo(st), nil, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", "ykhi.xyz/gameserver=true", "minecraft-modded")
 
 	s := &FiberServer{
 		App:         fiber.New(),

@@ -1,28 +1,31 @@
 # agrelha — plan & status
 
-Valheim gameserver control panel (Go + Fiber + templ + Tailwind + Datastar), deployed
-to the `yaya` Talos cluster via GitOps from `yaya-ops`, image in the self-hosted Zot
-registry (`registry.ykhi.xyz/agrelha`). Reached at `https://agrelha.ykhi.xyz`
-(WireGuard-only, behind Zitadel OIDC).
+Multi-game server control panel (Go + Fiber + templ + Tailwind + Datastar) supporting
+**Valheim** and **Minecraft Modded** (NeoForge & Fabric multi-instance). Deployable to
+Kubernetes via GitOps (`yaya-ops`) and self-hostable via Docker / Docker Compose.
+Image hosted in self-hosted Zot registry (`registry.ykhi.xyz/agrelha`) and reach at
+`https://agrelha.ykhi.xyz` (WireGuard-only, Zitadel OIDC or local auth).
 
-**Current version: `0.8.4`** (P1 in `0.7.0`; `0.7.1` History; `0.7.2` presence;
-`0.7.3` mod `.cfg` editing; `0.7.4` "Update now" + backup tiles — **P2 complete**;
-`0.8.0` modpack export; `0.8.1` toast attempt (superseded); `0.8.2` control buttons
-= plain forms + structured logging; `0.8.3` Prometheus `/metrics` + Grafana dashboard;
-`0.8.4` promoted the modpack export to a prominent "Download modpack" button + r2modman hint;
-`0.8.5` mod update detection + "Update all/selected" (Datastar `data-on:click` — colon syntax
-was the real dead-buttons cause; SSE badge/popover/toast everywhere, full re-resolve, auto-restart)
-+ retrofitted the dashboard control buttons (Restart/Update/Stop/Start) from forms to
-`data-on:click` @post returning SSE toasts (no reload);
-`0.8.6` update UX: server-tracked "pending" state (committed set vs live ConfigMap, 6m TTL)
-broadcast as `$updatePending` over SSE → amber "Updating…" badge/popup + disabled Update
-buttons + double-submit guard, so the stale red dot during the ArgoCD-sync gap is now clearly
-"in progress" instead of "still available");
-`0.8.7` modpack export now injects `denikson/BepInExPack_Valheim` as mod #1 (server's mods.txt
-omits it since lloesche installs BepInEx itself, but an r2modman profile without the loader is
-unlaunchable — doorstop target undefined → "[object Object]" crash). Version = latest from
-Thunderstore, fallback 5.4.2333).
-Build+push `0.8.7` to ship it.
+**Current version:** `0.23.6` (Cluster runs `0.23.4`; local HEAD contains Phase 0–8 modularization complete).
+
+### Modularization Plan Status (2026-09-09)
+Following [docs/modularization-plan.md](docs/modularization-plan.md):
+- **Phase 0 (Hygiene)** ✅: Config sanitized, personal values removed, fallback to old keys preserved.
+- **Phase 1 (Runtime Port)** ✅: `ports.Runtime` defined; k8s and docker runtime adapters created.
+- **Phase 2 (Test Coverage)** ✅: Critical path behavior tests across gitops, store, k8s runtime, minecraft invariants, and config.
+- **Phase 3 (State + Reconciler)** ✅: `ports.StateStore` and `ports.Reconciler` defined; outward infrastructure dependencies inverted.
+- **Phase 4 (Domain Extraction)** ✅: `internal/domain` pure package (Instance, Game, Pack, Budget, Access, Tier).
+- **Phase 5 (Game Interface)** ✅: `ports.Game` defined; `internal/games/valheim` and `internal/games/minecraft` engines implemented.
+- **Phase 6 (Auth Port)** ✅: `ports.Auth` defined; OIDC and Argon2id local user authenticator adapters.
+- **Phase 7 (HTTP Split)** ✅: Monolith `internal/server` (5,453 LOC) split into 7 feature packages under `internal/http/` (shared, access, backups, console, dashboard, content, instances).
+- **Phase 8 (Docker Adapter)** ✅: Implemented `adapters/state/local` (files + SQLite history/rollback), `adapters/reconcile/compose` (synchronous convergence + YAML render), `adapters/runtime/docker` (REST API over unix socket), and server auto-boot wiring.
+- **Phase 9 (Packaging)** ✅: `deploy/docker-compose.yml` (only `RUNTIME: docker` required) and `deploy/helm/agrelha` (lints clean; renders with zero values and with a full git+OIDC+ingress+NFS-backups values file). RBAC is per-namespace, never cluster-wide. Config surface audited: **every key has a default**, so the required set is `RUNTIME` alone, and only when off Kubernetes — documented in `docs/configuration.md`, install paths in `deploy/README.md`.
+  - A git-less Kubernetes install used to leave `stateStore` nil, so opening the mods page would have nil-panicked. Added `adapters/state/unconfigured`: reads return empty documents, writes return `ErrUnconfigured`. The declarative plane is now gated on `GIT_REPO_URL && GIT_TOKEN` (a token with no repo URL was previously accepted).
+- **Quality & Verification** (re-verified 2026-09-10 at `6bace47`): 176 test
+  functions across 43 packages (31 have tests); `go build`, `go vet` and
+  `go test -race` all clean; coverage **33.6%**.
+
+---
 
 > Self-metrics + Grafana dashboard (`0.8.3`). agrelha exposes an unauthenticated
 > Prometheus `/metrics` (registered outside the auth group, next to `/healthz`) via
@@ -83,7 +86,7 @@ Build+push `0.8.7` to ship it.
 
 > README styling: this Tailwind v4 build has no Typography plugin, so the `prose`
 > classes were dead. README now uses a `.md` scope with hand-written markdown CSS
-> in `cmd/web/assets/css/input.css` (rebuild `output.css` via `task tailwind:build`
+> in `internal/web/assets/css/input.css` (rebuild `output.css` via `task tailwind:build`
 > / the CLI when it changes).
 >
 > README images: the grilled "CDN-only images" rule stripped every body image
@@ -149,7 +152,7 @@ live cluster edits get reverted):
 ### P1 — correctness / it-bugs-me — DONE (0.7.0)
 
 - [x] **Session persistence.** Sessions are now stateless HMAC-SHA256-signed cookies
-      (`internal/auth`): payload `{email, idToken, exp}` signed with a key derived
+      (now `internal/adapters/auth/oidc`): payload `{email, idToken, exp}` signed with a key derived
       `sha256("agrelha-session-v1:"+OIDCClientSecret)` (stable across restarts, no new
       secret to seed, no server-side store). Survives deploys; no re-login. Verified
       tamper/garbage/wrong-key all rejected.
@@ -285,7 +288,7 @@ for now in favor of the split.)
 
 1. **rqlite StatefulSet** manifests (3 replicas, headless Service, per-pod PVC, join via
    the headless DNS) in yaya-ops; ArgoCD app. Right-size for the small VMs.
-2. **Port `internal/store`** from modernc `database/sql` → `gorqlite` (pure-Go). SQL is
+2. **Port `internal/adapters/store`** from modernc `database/sql` → `gorqlite` (pure-Go). SQL is
    ~all compatible (it's SQLite). Rework the spots that assume a local file / interactive
    transactions:
    - `SaveModIndex` uses an interactive `BEGIN`+prepared-stmt loop → rqlite wants a single
@@ -425,20 +428,37 @@ kubectl -n agrelha rollout status deploy/agrelha
 ## Layout
 
 ```
-cmd/api/main.go          entrypoint
-cmd/web/pages/*.templ    Layout, nav, Login, Dashboard, Mods, Admins
-cmd/web/assets/          Tailwind (output.css) + vendored Datastar (datastar.js)
-internal/config          env -> Config
-internal/server          Fiber server, routes, SSE + mod/admin handlers, applyAfterSync
-internal/auth            Zitadel OIDC (login/callback/logout/middleware)
-internal/k8s             restart/scale/status/logs/metrics/configmaps
-internal/ingest          log tail -> player roster
-internal/store           SQLite schema + queries
-internal/gitops          go-git commit-a-ConfigMap-data-key
-internal/mods            install/remove -> mods.txt
-internal/admins          grant/revoke -> ADMINLIST_IDS
-internal/thunderstore    search index (streamed, persisted) + deps + readme fetch
-internal/mdrender        goldmark + bluemonday README sanitizer; rewrites imgs to /img proxy
-internal/server          also hosts GET /img (auth-gated SSRF-guarded image proxy)
-internal/sse             Datastar v1.0 SSE frame writers
+cmd/api/main.go                 entrypoint
+cmd/web/pages/*.templ           templ templates for Valheim, Minecraft, Admin, Wizard, Login
+internal/web/assets/                 Tailwind CSS + vendored Datastar JS
+internal/domain/                pure domain models (Instance, Game, Pack, Budget, Access, Tier)
+internal/ports/                 technology-agnostic interfaces (Runtime, StateStore, Reconciler, Auth, Game)
+internal/adapters/              technology implementations:
+  runtime/k8s/                  Kubernetes client adapter
+  runtime/docker/               Docker Engine REST API & socket client adapter
+  state/git/                    GitOps (go-git) declarative state committer adapter
+  state/local/                  Local filesystem & SQLite history/rollback state adapter
+  reconcile/argocd/             ArgoCD asynchronous convergence adapter
+  reconcile/compose/            Docker Compose synchronous convergence adapter & YAML renderer
+  auth/oidc/                    Zitadel OIDC authenticator adapter
+  auth/local/                   Argon2id local user authenticator adapter
+internal/games/                 in-tree game engines:
+  valheim/                      Valheim engine & .r2z exporter
+  minecraft/                    Minecraft engine & .mrpack exporter
+internal/http/                  feature HTTP handlers:
+  shared/                       render, flash, format, actor, logging, sse
+  dashboard/                    landing page & live Datastar tile signals
+  access/                       whitelisting, ops, admission, audit history
+  backups/                      backup status, snapshots, restore, download
+  console/                      log streaming, RCON interactive terminal
+  content/                      mods, configs, updates, export, img proxy
+  instances/                    Minecraft lifecycle, detail, configs, wizard cart, backup scheduler
+internal/server/                Fiber server routing, middleware, and delegating shims
+  store/                        SQLite DB + InstanceRepo (players, audit, mod_index, users, state_history)
+  kube/                         raw Kubernetes client (wrapped by runtime/k8s)
+  gitops/                       raw go-git committer (wrapped by state/git)
+  backups/                      NAS backup directory stat
+  content/                      thunderstore, modrinth, modpackindex, mcversions
+internal/app/                   application services (backup scheduler, log ingest)
+internal/config/                runtime configuration loader
 ```

@@ -11,10 +11,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 
-	efs "agrelha/cmd/web"
-	"agrelha/cmd/web/pages"
-	"agrelha/internal/metrics"
-	"agrelha/internal/minecraft"
+	"agrelha/internal/web"
+	"agrelha/internal/web/metrics"
 )
 
 func (s *FiberServer) RegisterFiberRoutes() {
@@ -22,7 +20,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	s.App.Get("/healthz", func(c *fiber.Ctx) error { return c.SendString("ok") })
 	s.App.Get("/metrics", adaptor.HTTPHandler(metrics.Handler()))
 	s.App.Use("/assets", filesystem.New(filesystem.Config{
-		Root:       http.FS(efs.Files),
+		Root:       http.FS(web.Files),
 		PathPrefix: "assets",
 	}))
 
@@ -35,60 +33,18 @@ func (s *FiberServer) RegisterFiberRoutes() {
 			return c.Redirect(target, fiber.StatusFound)
 		})
 		s.App.Get("/auth/login", s.auth.Login)
+		s.App.Post("/auth/login", s.auth.Login)
 		s.App.Get("/auth/callback", s.auth.Callback)
 		s.App.Get("/auth/logout", s.auth.Logout)
 	}
 
 	// Public routes (LAN / WireGuard players)
 	s.App.Get("/", func(c *fiber.Ctx) error {
-		fk, fm := takeFlash(c)
-		isAdmin := s.isAdmin(c)
-		mcSummary := pages.MinecraftSummaryUI{
-			MaxInstances:   4,
-			MaxRunning:     2,
-			TotalBudgetGiB: 24,
-		}
-		if s.mcInstances != nil {
-			if insts, err := s.mcInstances.ListInstances(c.UserContext()); err == nil {
-				stats := s.instanceStats(c.UserContext(), insts)
-				budget := s.mcInstances.Budget(insts)
-				mcSummary.TotalInstances = budget.TotalInstances
-				mcSummary.RunningCount = budget.RunningCount
-				mcSummary.MaxInstances = budget.MaxInstances
-				mcSummary.MaxRunning = budget.MaxRunning
-				mcSummary.UsedGiB = budget.UsedGiB
-				mcSummary.TotalBudgetGiB = budget.TotalBudgetGiB
-
-				for _, inst := range insts {
-					if inst.State == minecraft.StateRunning {
-						uinst := pages.InstanceUI{
-							Number:    inst.Number,
-							Name:      inst.Name,
-							Slug:      inst.Slug,
-							Loader:    string(inst.Loader),
-							Source:    string(inst.Source),
-							MCVersion: inst.MCVersion,
-							Tier:      string(inst.Tier),
-							MemoryGiB: inst.MemoryGiB(),
-							State:     string(inst.State),
-							LBIP:      inst.LBIP,
-						}
-						if st, ok := stats[inst.Number]; ok {
-							uinst.Players = st.Players
-							uinst.PlayersKnown = st.PlayersKnown
-							uinst.Uptime = st.Uptime
-						}
-						mcSummary.ActiveInstances = append(mcSummary.ActiveInstances, uinst)
-						if mcSummary.ActiveInstance == nil {
-							mcSummary.ActiveInstance = &uinst
-						}
-					}
-				}
-			}
-		}
-		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL, s.cfg.ValheimAddress, s.cfg.GameNodeName, mcSummary, isAdmin, fk, fm))
+		return s.ensureDashboardHandler().DashboardPage(c)
 	})
-	s.App.Get("/sse", s.sseMain)
+	s.App.Get("/sse", func(c *fiber.Ctx) error {
+		return s.ensureDashboardHandler().SSEMain(c)
+	})
 	s.App.Get("/img", s.imageProxy)
 	s.App.Get("/mods/export", s.modpackExport)
 	s.App.Get("/api/minecraft/:num<int>/mods/export", s.mcInstanceExport)

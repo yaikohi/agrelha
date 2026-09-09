@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"agrelha/internal/modrinth"
+	"agrelha/internal/infra/content/modrinth"
 )
 
 type MrpackIndex struct {

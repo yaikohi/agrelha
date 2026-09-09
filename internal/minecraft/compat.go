@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"agrelha/internal/modrinth"
+	"agrelha/internal/infra/content/modrinth"
 )
 
 type CartCompatibility struct {

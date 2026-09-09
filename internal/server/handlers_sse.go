@@ -1,307 +1,42 @@
 package server
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"fmt"
-	"html"
-	"log/slog"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 
-	"agrelha/cmd/web/pages"
-	"agrelha/internal/backups"
-	"agrelha/internal/metrics"
-	"agrelha/internal/minecraft"
-	"agrelha/internal/sse"
+	"agrelha/internal/infra/backups"
+	"agrelha/internal/web/shared"
 )
 
 // sseMain streams tile signals + the available-updates badge/list (every 5s)
-// over one SSE connection. Mounted on the shared layout, so every page gets the
-// live tiles + update indicator. The log tail is a separate stream (sseLogs)
-// opened only by the dashboard. Uses Fiber's native stream writer (fasthttp).
+// over one SSE connection.
 func (s *FiberServer) sseMain(c *fiber.Ctx) error {
-	c.Set("Content-Type", "text/event-stream")
-	c.Set("Cache-Control", "no-cache")
-	c.Set("Connection", "keep-alive")
-
-	id := rid(c)
-	actor := s.actor(c)
-	slog.Info("sse open", "rid", id, "actor", actor, "stream", "main")
-
-	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		metrics.SSEActive.Inc()
-		metrics.SSEOpened.Inc()
-		start := time.Now()
-		var tiles int
-		reason := "loop-exit"
-		defer func() {
-			metrics.SSEActive.Dec()
-			metrics.SSEClosed.WithLabelValues(reason).Inc()
-			slog.Info("sse close", "rid", id, "actor", actor, "stream", "main",
-				"reason", reason, "tiles", tiles, "dur_ms", time.Since(start).Milliseconds())
-		}()
-
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-
-		lastListSig := "\x00"
-		push := func() bool {
-			ups := s.modUpdates(ctx)
-			sig := s.tileSignals(ctx)
-			sig["updates"] = len(ups)
-			sig["updatePending"] = s.pendingActive(ctx)
-			if err := sse.PatchSignals(w, sig); err != nil {
-				reason = "client-gone"
-				slog.Debug("sse write failed", "rid", id, "frame", "signals", "err", err)
-				return false
-			}
-			tiles++
-			metrics.SSEFrames.WithLabelValues("signals").Inc()
-
-			if listSig := updatesSignature(ups); listSig != lastListSig {
-				var buf bytes.Buffer
-				if err := pages.UpdateList(ups).Render(ctx, &buf); err == nil {
-					if err := sse.InnerElement(w, "#update-list", buf.String()); err != nil {
-						reason = "client-gone"
-						slog.Debug("sse write failed", "rid", id, "frame", "update-list", "err", err)
-						return false
-					}
-					metrics.SSEFrames.WithLabelValues("update-list").Inc()
-					lastListSig = listSig
-				}
-			}
-			return true
-		}
-
-		if !push() {
-			return
-		}
-		for range ticker.C {
-			if !push() {
-				return
-			}
-		}
-	})
-	return nil
-}
-
-func updatesSignature(ups []pages.ModUpdate) string {
-	var b bytes.Buffer
-	for _, u := range ups {
-		b.WriteString(u.Key)
-		b.WriteByte('@')
-		b.WriteString(u.Latest)
-		b.WriteByte(';')
-	}
-	return b.String()
+	return s.ensureDashboardHandler().SSEMain(c)
 }
 
 // sseLogs streams only the live log tail into #logs. Supports ?server=valheim (default) or ?server=minecraft.
 func (s *FiberServer) sseLogs(c *fiber.Ctx) error {
-	c.Set("Content-Type", "text/event-stream")
-	c.Set("Cache-Control", "no-cache")
-	c.Set("Connection", "keep-alive")
-
-	server := c.Query("server", "valheim")
-	id := rid(c)
-	actor := s.actor(c)
-	slog.Info("sse open", "rid", id, "actor", actor, "stream", "logs", "server", server)
-
-	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		metrics.SSEActive.Inc()
-		metrics.SSEOpened.Inc()
-		start := time.Now()
-		var logLines int
-		reason := "loop-exit"
-		defer func() {
-			metrics.SSEActive.Dec()
-			metrics.SSEClosed.WithLabelValues(reason).Inc()
-			slog.Info("sse close", "rid", id, "actor", actor, "stream", "logs", "server", server,
-				"reason", reason, "log_lines", logLines, "dur_ms", time.Since(start).Milliseconds())
-		}()
-
-		client := s.k8s
-		if server == "minecraft" {
-			client = s.mck8s
-		}
-		if client == nil {
-			return
-		}
-		rc, err := client.StreamLogs(ctx, 50)
-		if err != nil {
-			slog.Warn("sse log stream unavailable", "rid", id, "server", server, "err", err)
-			return
-		}
-		defer rc.Close()
-		sc := bufio.NewScanner(rc)
-		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-		for sc.Scan() {
-			el := fmt.Sprintf(`<div class="whitespace-pre-wrap">%s</div>`, html.EscapeString(sc.Text()))
-			if err := sse.AppendElement(w, "#logs", el); err != nil {
-				reason = "client-gone"
-				slog.Debug("sse write failed", "rid", id, "frame", "log", "server", server, "err", err)
-				return
-			}
-			logLines++
-			metrics.SSEFrames.WithLabelValues("log").Inc()
-		}
-	})
-	return nil
+	return s.ensureConsoleHandler().SSELogs(c)
 }
 
 func (s *FiberServer) tileSignals(ctx context.Context) map[string]any {
-	sig := map[string]any{
-		"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "online": false, "backup": "—", "backupinfo": "",
-		"mc_players": "—", "mc_cpu": "—", "mc_mem": "—", "mc_uptime": "—", "mc_state": "unknown", "mc_loader": "NeoForge",
-	}
-
-	if s.store != nil {
-		if n, err := s.store.CountOnline(); err == nil {
-			sig["players"] = n
-		}
-	}
-	if s.cfg.BackupsDir != "" {
-		if bi, ok := s.backupInfo(); ok && bi.Count > 0 {
-			sig["backup"] = humanAgo(bi.LatestAt)
-			sig["backupinfo"] = fmt.Sprintf("%d backups · %s total · latest %s",
-				bi.Count, humanSize(bi.TotalSize), humanSize(bi.LatestSize))
-		}
-	}
-	if s.k8s != nil {
-		if ps, err := s.k8s.PodStatus(ctx); err == nil {
-			if ps.Ready {
-				sig["state"] = "Up"
-			} else {
-				sig["state"] = ps.Phase
-			}
-			// Normalised for the UI: "state" is a human label ("Up", or a pod
-			// phase), while Minecraft instances use "running". Binding the card
-			// to a boolean keeps the two vocabularies out of the template.
-			sig["online"] = ps.Ready
-			if !ps.StartedAt.IsZero() {
-				sig["uptime"] = humanDuration(time.Since(ps.StartedAt))
-			}
-		}
-		if cpu, mem, err := s.k8s.PodMetrics(ctx); err == nil {
-			sig["cpu"] = fmt.Sprintf("%dm", cpu)
-			sig["mem"] = fmt.Sprintf("%d Mi", mem)
-		}
-	}
-
-	if s.mck8s != nil {
-		// Derived from Instances; the old slot ConfigMap no longer exists.
-		if s.mcInstances != nil {
-			if insts, err := s.mcInstances.ListInstances(ctx); err == nil && len(insts) > 0 {
-				inst := insts[0]
-				if inst.Loader == minecraft.LoaderFabric {
-					sig["mc_loader"] = "Fabric"
-				}
-				if inst.PackDefined() && inst.Pack.Name != "" {
-					sig["mc_pack"] = inst.Pack.Name
-				}
-			}
-		}
-	}
-
-	if s.mcAccess != nil {
-		if pl, err := s.mcAccess.OnlinePlayers(); err == nil {
-			sig["mc_players"] = len(pl)
-		}
-	}
-	if s.mck8s != nil {
-		if ps, err := s.mck8s.PodStatus(ctx); err == nil {
-			if ps.Ready {
-				sig["mc_state"] = "Up"
-			} else {
-				sig["mc_state"] = ps.Phase
-			}
-			if !ps.StartedAt.IsZero() {
-				sig["mc_uptime"] = humanDuration(time.Since(ps.StartedAt))
-			}
-		}
-		if cpu, mem, err := s.mck8s.PodMetrics(ctx); err == nil {
-			sig["mc_cpu"] = fmt.Sprintf("%dm", cpu)
-			sig["mc_mem"] = fmt.Sprintf("%d Mi", mem)
-		}
-	}
-
-	return sig
+	return s.ensureDashboardHandler().TileSignals(ctx)
 }
 
 func (s *FiberServer) backupInfo() (backups.Info, bool) {
-	s.bkMu.Lock()
-	if !s.bkAt.IsZero() && time.Since(s.bkAt) < time.Minute {
-		i, ok := s.bkInfo, s.bkOK
-		s.bkMu.Unlock()
-		return i, ok
-	}
-	s.bkAt = time.Now()
-	s.bkMu.Unlock()
-
-	type res struct {
-		i  backups.Info
-		ok bool
-	}
-	ch := make(chan res, 1)
-	go func() {
-		i, err := backups.Stat(s.cfg.BackupsDir)
-		ch <- res{i, err == nil}
-	}()
-	var out res
-	select {
-	case out = <-ch:
-	case <-time.After(3 * time.Second):
-	}
-
-	s.bkMu.Lock()
-	s.bkInfo, s.bkOK = out.i, out.ok
-	s.bkMu.Unlock()
-	return out.i, out.ok
+	return s.ensureBackupsHandler().BackupInfo()
 }
 
 func humanAgo(t time.Time) string {
-	if t.IsZero() {
-		return "—"
-	}
-	d := time.Since(t)
-	if d < time.Minute {
-		return "just now"
-	}
-	return humanDuration(d) + " ago"
+	return shared.HumanAgo(t)
 }
 
 func humanSize(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+	return shared.HumanSize(b)
 }
 
 func humanDuration(d time.Duration) string {
-	d = d.Round(time.Minute)
-	days := int(d.Hours()) / 24
-	h := int(d.Hours()) % 24
-	m := int(d.Minutes()) % 60
-	if days > 0 {
-		return fmt.Sprintf("%dd %dh", days, h)
-	}
-	if h > 0 {
-		return fmt.Sprintf("%dh %dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
+	return shared.HumanDuration(d)
 }

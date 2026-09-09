@@ -1,12 +1,13 @@
 version: "3"
 
 vars:
-  CSS_IN: cmd/web/assets/css/input.css
-  CSS_OUT: cmd/web/assets/css/output.css
-  DATASTAR_JS: cmd/web/assets/js/datastar.js
+  CSS_IN: internal/web/assets/css/input.css
+  CSS_OUT: internal/web/assets/css/output.css
+  DATASTAR_JS: internal/web/assets/js/datastar.js
   DATASTAR_VERSION: 1.0.2 # must match datastar-go protocol (PatchElements/PatchSignals)
-  GO_MAIN: cmd/api/main.go
+  GO_MAIN: cmd/agrelha/main.go
   GO_BINARY: main
+  VERSION: dev
   IMAGE: registry.ykhi.xyz/agrelha
 
 tasks:
@@ -35,7 +36,7 @@ tasks:
     deps: [tailwind:build, assets:datastar]
     cmds:
       - templ generate
-      - go build -o {{.GO_BINARY}} {{.GO_MAIN}}
+      - go build -ldflags "-X agrelha/internal/platform/build.Version={{.VERSION}}" -o {{.GO_BINARY}} {{.GO_MAIN}}
     sources:
       - "**/*.go"
       - "**/*.templ"
@@ -87,6 +88,12 @@ tasks:
       - go test -race -covermode=atomic -coverprofile=coverage.out ./...
       - go tool cover -func=coverage.out | tail -n 1
 
+  test:cover:
+    desc: "Run Go tests and print per-package coverage summary"
+    deps: [setup]
+    cmds:
+      - go test -cover ./...
+
   test:fast:
     desc: "Run quick Go tests without race detector or coverage profiling"
     deps: [setup]
@@ -106,7 +113,7 @@ tasks:
     vars:
       TAG: '{{.TAG | default "dev"}}'
     cmds:
-      - docker build -t {{.IMAGE}}:{{.TAG}} .
+      - docker build --build-arg VERSION={{.TAG}} -t {{.IMAGE}}:{{.TAG}} .
       - docker push {{.IMAGE}}:{{.TAG}}
 
   clean:

@@ -1,5 +1,7 @@
 # Agrelha Developer & Agent Guidelines
 
+Before editing any file, read it first. Before modifying a function, grep for all callers. Research before you edit
+
 ## Tooling & Command Execution
 - Always prefix shell commands with `rtk` (e.g. `rtk go test ./...`, `rtk git status`, `rtk kubectl ...`).
 
@@ -15,7 +17,7 @@
 
 ## Minecraft Access & RCON Protocol Notes
 - **In-Game Whitelist Status:**
-  - Modern Minecraft (1.13 through 1.21+) **does not support `/whitelist status`**. Attempting this command returns an error.
+  - Modern Minecraft (1.13 through 26.2.X) **does not support `/whitelist status`**. Attempting this command returns an error.
   - To probe whether whitelist is enforced without modifying state:
     - Send `/whitelist on`.
     - If output contains `"already"`, the whitelist was already active (return `true`).

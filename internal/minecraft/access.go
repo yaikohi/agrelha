@@ -5,20 +5,20 @@ import (
 	"fmt"
 	"strings"
 
-	"agrelha/internal/gitops"
+	"agrelha/internal/ports"
 )
 
 type AccessManager struct {
-	committer *gitops.Committer
-	path      string      // relPath of neoforge-access.yaml in yaya-ops
-	rcon      *RconClient // live RCON client (can be nil if unset)
+	store ports.StateStore
+	path  string      // relPath of neoforge-access.yaml in yaya-ops
+	rcon  *RconClient // live RCON client (can be nil if unset)
 }
 
-func NewAccessManager(c *gitops.Committer, path string, rcon *RconClient) *AccessManager {
+func NewAccessManager(store ports.StateStore, path string, rcon *RconClient) *AccessManager {
 	if path == "" {
 		path = "manifests/neoforge-access.yaml"
 	}
-	return &AccessManager{committer: c, path: path, rcon: rcon}
+	return &AccessManager{store: store, path: path, rcon: rcon}
 }
 
 // ParseUsers extracts clean usernames from ops.txt or whitelist.txt.
@@ -39,14 +39,25 @@ func (a *AccessManager) GrantOp(ctx context.Context, username string) (bool, err
 	username = strings.TrimSpace(username)
 	msg := fmt.Sprintf("mc-access: op %s", username)
 
-	changed, err := a.committer.Patch(ctx, a.path, "ops.txt", msg, func(cur string) (string, error) {
+	if a.store == nil {
+		return false, ports.ErrNotImplemented
+	}
+	changed, err := a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
+		cur := ""
+		if doc.Data != nil {
+			cur = doc.Data["ops.txt"]
+		}
 		for _, u := range ParseUsers(cur) {
 			if strings.EqualFold(u, username) {
-				return cur, nil
+				return false, nil
 			}
 		}
 		body := strings.TrimRight(cur, "\n")
-		return strings.TrimLeft(body+"\n"+username, "\n") + "\n", nil
+		if doc.Data == nil {
+			doc.Data = make(map[string]string)
+		}
+		doc.Data["ops.txt"] = strings.TrimLeft(body+"\n"+username, "\n") + "\n"
+		return true, nil
 	})
 	if err != nil {
 		return false, err
@@ -64,7 +75,14 @@ func (a *AccessManager) RevokeOp(ctx context.Context, username string) (bool, er
 	username = strings.TrimSpace(username)
 	msg := fmt.Sprintf("mc-access: deop %s", username)
 
-	changed, err := a.committer.Patch(ctx, a.path, "ops.txt", msg, func(cur string) (string, error) {
+	if a.store == nil {
+		return false, ports.ErrNotImplemented
+	}
+	changed, err := a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
+		cur := ""
+		if doc.Data != nil {
+			cur = doc.Data["ops.txt"]
+		}
 		var lines []string
 		found := false
 		for _, line := range strings.Split(cur, "\n") {
@@ -76,9 +94,13 @@ func (a *AccessManager) RevokeOp(ctx context.Context, username string) (bool, er
 			lines = append(lines, line)
 		}
 		if !found {
-			return cur, nil
+			return false, nil
 		}
-		return strings.Join(lines, "\n"), nil
+		if doc.Data == nil {
+			doc.Data = make(map[string]string)
+		}
+		doc.Data["ops.txt"] = strings.Join(lines, "\n")
+		return true, nil
 	})
 	if err != nil {
 		return false, err
@@ -95,14 +117,25 @@ func (a *AccessManager) AddWhitelist(ctx context.Context, username string) (bool
 	username = strings.TrimSpace(username)
 	msg := fmt.Sprintf("mc-access: whitelist add %s", username)
 
-	changed, err := a.committer.Patch(ctx, a.path, "whitelist.txt", msg, func(cur string) (string, error) {
+	if a.store == nil {
+		return false, ports.ErrNotImplemented
+	}
+	changed, err := a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
+		cur := ""
+		if doc.Data != nil {
+			cur = doc.Data["whitelist.txt"]
+		}
 		for _, u := range ParseUsers(cur) {
 			if strings.EqualFold(u, username) {
-				return cur, nil
+				return false, nil
 			}
 		}
 		body := strings.TrimRight(cur, "\n")
-		return strings.TrimLeft(body+"\n"+username, "\n") + "\n", nil
+		if doc.Data == nil {
+			doc.Data = make(map[string]string)
+		}
+		doc.Data["whitelist.txt"] = strings.TrimLeft(body+"\n"+username, "\n") + "\n"
+		return true, nil
 	})
 	if err != nil {
 		return false, err
@@ -120,7 +153,14 @@ func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string) (b
 	username = strings.TrimSpace(username)
 	msg := fmt.Sprintf("mc-access: whitelist remove %s", username)
 
-	changed, err := a.committer.Patch(ctx, a.path, "whitelist.txt", msg, func(cur string) (string, error) {
+	if a.store == nil {
+		return false, ports.ErrNotImplemented
+	}
+	changed, err := a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
+		cur := ""
+		if doc.Data != nil {
+			cur = doc.Data["whitelist.txt"]
+		}
 		var lines []string
 		found := false
 		for _, line := range strings.Split(cur, "\n") {
@@ -132,9 +172,13 @@ func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string) (b
 			lines = append(lines, line)
 		}
 		if !found {
-			return cur, nil
+			return false, nil
 		}
-		return strings.Join(lines, "\n"), nil
+		if doc.Data == nil {
+			doc.Data = make(map[string]string)
+		}
+		doc.Data["whitelist.txt"] = strings.Join(lines, "\n")
+		return true, nil
 	})
 	if err != nil {
 		return false, err

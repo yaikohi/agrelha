@@ -10,9 +10,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"agrelha/internal/config"
-	"agrelha/internal/k8s"
-	"agrelha/internal/thunderstore"
+	"agrelha/internal/infra/content/thunderstore"
+	"agrelha/internal/infra/kube"
+	"agrelha/internal/platform/config"
 )
 
 func TestVersionNewer(t *testing.T) {

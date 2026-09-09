@@ -7,8 +7,8 @@ coverage.html
 
 # generated
 *_templ.go
-cmd/web/assets/css/output.css
-cmd/web/assets/js/datastar.js
+internal/web/assets/css/output.css
+internal/web/assets/js/datastar.js
 
 # node / bun
 node_modules/
@@ -20,3 +20,6 @@ bun.lockb
 *.db
 *.db-wal
 *.db-shm
+
+# generated artefacts (repo snapshot, coverage reports)
+repomix-output.xml

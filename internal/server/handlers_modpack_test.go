@@ -14,9 +14,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"agrelha/internal/config"
-	"agrelha/internal/k8s"
-	"agrelha/internal/store"
+	"agrelha/internal/infra/kube"
+	"agrelha/internal/infra/store"
+	"agrelha/internal/platform/config"
 )
 
 func TestModpackExportEndpoint(t *testing.T) {

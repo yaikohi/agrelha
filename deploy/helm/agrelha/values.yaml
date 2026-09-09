@@ -1,0 +1,120 @@
+# agrelha Helm values.
+#
+# A default `helm install` gives you a working panel with NO required values:
+# it runs read-only against the cluster, uses local accounts, and stores state
+# on a PVC. Enable git and OIDC when you want the declarative plane and SSO.
+
+image:
+  repository: ghcr.io/OWNER/agrelha
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Namespaces agrelha manages game servers in. RBAC is granted per namespace —
+# agrelha is never given cluster-wide permissions.
+gameNamespaces:
+  - valheim
+  - minecraft-modded
+
+service:
+  type: ClusterIP
+  port: 8080
+
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClass: ""   # "" uses the cluster default
+  # Existing claim to use instead of creating one.
+  existingClaim: ""
+
+# Declarative plane. Needs both repoURL and a token; with either missing, mods,
+# configs and access are read-only and everything else still works.
+git:
+  repoURL: ""
+  branch: main
+  authorName: agrelha
+  authorEmail: agrelha@localhost
+  # Secret holding GIT_USERNAME and GIT_TOKEN. Created for you if `token` is set.
+  existingSecret: ""
+  username: ""
+  token: ""
+
+# Authentication. With oidc.enabled=false agrelha uses local accounts; the very
+# first start with no users falls back to a passwordless dev login, so create an
+# account before exposing the panel.
+oidc:
+  enabled: false
+  issuer: ""
+  clientID: ""
+  redirectURL: ""
+  postLogoutURL: ""
+  existingSecret: ""  # must contain OIDC_CLIENT_SECRET
+  clientSecret: ""
+# Comma-separated list of emails allowed to sign in (OIDC only).
+allowedEmail: ""
+
+# Where game workloads are scheduled. Empty means "anywhere", which is correct
+# for a cluster we know nothing about.
+gameNodeSelector: ""   # e.g. "gameserver=true"
+gameNodeName: ""       # cosmetic, shown in the UI
+
+minecraft:
+  namespace: minecraft-modded
+  instancesPath: manifests/minecraft-modded
+  lbBaseIP: ""         # empty: let the LoadBalancer allocate
+  maxInstances: 4
+  maxRunning: 2
+  totalBudgetGiB: 24
+
+valheim:
+  namespace: valheim
+  deployment: valheim
+  address: ""          # connect address shown to players, e.g. "10.0.0.10:2456"
+  statusURL: ""        # lloesche status sidecar, if you run one
+
+# Optional NFS mount for backup tiles. An nfs volume whose export path does not
+# exist BLOCKS pod start, so only enable this once the export exists.
+backups:
+  enabled: false
+  server: ""
+  path: ""
+
+# AGPL section 13: if you modify agrelha and host it for others, point this at
+# YOUR repository so its footer offers your users the source they are owed.
+sourceURL: ""
+
+logging:
+  level: info          # debug|info|warn|error
+  format: text         # text|json
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+# Gateway API HTTPRoute (agrelha's own setup) — set ingress.enabled for the
+# classic Ingress instead.
+httpRoute:
+  enabled: false
+  hostnames: []
+  parentRefs: []
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+  tls: []
+
+# Anything else from the environment reference, verbatim.
+# e.g. { INFLUXDB_URL: "http://influxdb:8086", GRAFANA_DASHBOARD_URL: "..." }
+extraEnv: {}
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

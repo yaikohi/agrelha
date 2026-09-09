@@ -1,0 +1,73 @@
+package pages
+
+import "agrelha/internal/platform/build"
+
+// Base HTML shell. Datastar drives interactivity over SSE (vendored at
+// /assets/js/datastar.js — see Taskfile `assets:datastar`). Tailwind output at
+// /assets/css/output.css.
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en" class="h-full">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title } · agrelha</title>
+			<link rel="stylesheet" href="/assets/css/output.css"/>
+			<script type="module" src="/assets/js/datastar.js"></script>
+		</head>
+		<body
+			class="h-full bg-zinc-950 text-zinc-100 antialiased"
+			data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',online:false,backup:'—',backupinfo:'',updates:0,showUpdates:false,updatesDismissed:false,updatePending:false,selected:{},toast:'',toastkind:'',mc_players:'—',mc_cpu:'—',mc_mem:'—',mc_uptime:'—',mc_state:'unknown'}"
+			data-effect="@get('/sse')"
+		>
+			<main class="mx-auto max-w-5xl overflow-x-hidden px-6 py-8">
+				{ children... }
+			</main>
+			@siteFooter()
+			<div
+				data-show="$updates > 0 && !$updatePending && !$updatesDismissed && !$showUpdates"
+				class="fixed bottom-4 right-4 z-30 flex items-center gap-3 rounded-lg border border-emerald-700 bg-zinc-900 px-4 py-3 text-sm shadow-xl"
+			>
+				<span class="text-emerald-200"><span data-text="$updates"></span> Valheim mod update(s) available</span>
+				<button type="button" data-on:click="$showUpdates = true; $updatesDismissed = true" class="rounded bg-emerald-700 px-2.5 py-1 text-xs font-medium hover:bg-emerald-600">View</button>
+				<button type="button" data-on:click="$updatesDismissed = true" class="text-zinc-500 hover:text-zinc-200">✕</button>
+			</div>
+			<div
+				data-show="$updatePending"
+				class="fixed bottom-4 right-4 z-30 flex items-center gap-3 rounded-lg border border-amber-600 bg-zinc-900 px-4 py-3 text-sm shadow-xl"
+			>
+				<span class="h-2.5 w-2.5 animate-pulse rounded-full bg-amber-400"></span>
+				<span class="text-amber-200">Updating Valheim mods — the server restarts once ArgoCD syncs…</span>
+			</div>
+			<div
+				data-show="$toast != ''"
+				data-class="{'border-red-700 text-red-200': $toastkind == 'err', 'border-emerald-700 text-emerald-200': $toastkind != 'err'}"
+				class="fixed bottom-4 left-4 z-30 flex items-center gap-3 rounded-lg border bg-zinc-900 px-4 py-3 text-sm shadow-xl"
+			>
+				<span data-text="$toast"></span>
+				<button type="button" data-on:click="$toast = ''" class="text-zinc-500 hover:text-zinc-200">✕</button>
+			</div>
+			<script>
+				(function () {
+					var el = document.getElementById("logs");
+					if (!el) return;
+					new MutationObserver(function () {
+						while (el.childElementCount > 500) el.removeChild(el.firstElementChild);
+						el.scrollTop = el.scrollHeight;
+					}).observe(el, { childList: true });
+				})();
+			</script>
+		</body>
+	</html>
+}
+
+// AGPL section 13: anyone running a modified agrelha over a network owes its
+// users the corresponding source. SOURCE_URL lets a fork point at its own.
+templ siteFooter() {
+	<footer class="mx-auto max-w-5xl px-6 pb-8 text-xs text-zinc-600">
+		<div class="flex items-center justify-between border-t border-zinc-900 pt-4">
+			<span>agrelha { build.Version } · AGPL-3.0-only</span>
+			<a href={ templ.URL(build.SourceURL) } rel="noopener" target="_blank" class="hover:text-zinc-400">Source</a>
+		</div>
+	</footer>
+}

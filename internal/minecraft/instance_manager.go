@@ -6,15 +6,14 @@ import (
 	"sort"
 	"strings"
 
-	"agrelha/internal/gitops"
-	"agrelha/internal/k8s"
-	"agrelha/internal/store"
+	"agrelha/internal/domain"
+	"agrelha/internal/ports"
 )
 
 type InstanceManager struct {
-	store            *store.Store
-	committer        *gitops.Committer
-	k8sClient        *k8s.Client
+	repo             ports.InstanceRepository
+	stateStore       ports.StateStore
+	runtime          ports.Runtime
 	totalBudgetGiB   int
 	maxInstances     int
 	maxRunning       int
@@ -25,9 +24,9 @@ type InstanceManager struct {
 }
 
 func NewInstanceManager(
-	st *store.Store,
-	c *gitops.Committer,
-	k *k8s.Client,
+	repo ports.InstanceRepository,
+	stateStore ports.StateStore,
+	rt ports.Runtime,
 	totalBudgetGiB, maxInstances, maxRunning int,
 	instancesRelPath string,
 	lbBaseIP string,
@@ -50,9 +49,9 @@ func NewInstanceManager(
 		lbBaseIP = DefaultLBBaseIP
 	}
 	return &InstanceManager{
-		store:            st,
-		committer:        c,
-		k8sClient:        k,
+		repo:             repo,
+		stateStore:       stateStore,
+		runtime:          rt,
 		totalBudgetGiB:   totalBudgetGiB,
 		maxInstances:     maxInstances,
 		maxRunning:       maxRunning,
@@ -67,29 +66,39 @@ func (m *InstanceManager) TotalBudgetGiB() int { return m.totalBudgetGiB }
 func (m *InstanceManager) MaxInstances() int   { return m.maxInstances }
 func (m *InstanceManager) MaxRunning() int     { return m.maxRunning }
 
+// serverRef addresses one Instance in whatever runtime is configured.
+func (m *InstanceManager) serverRef(inst Instance) ports.ServerRef {
+	return ports.ServerRef{Name: inst.DeploymentName(), Scope: m.namespace}
+}
+
+// stateFromStatus maps the runtime's Lifecycle/Available pair onto the
+// Instance lifecycle. Available means players can connect; Lifecycle running
+// without Available means it is still coming up.
+func stateFromStatus(st ports.Status) InstanceState {
+	switch {
+	case st.Available:
+		return StateRunning
+	case st.Lifecycle == ports.LifecycleStopped:
+		return StateStopped
+	default:
+		return StateProvisioning
+	}
+}
+
 func (m *InstanceManager) ListInstances(ctx context.Context) ([]Instance, error) {
-	records, err := m.store.ListInstances()
+	records, err := m.repo.List()
 	if err != nil {
 		return nil, fmt.Errorf("list instances: %w", err)
 	}
 
 	instances := make([]Instance, 0, len(records))
 	for _, r := range records {
-		inst := InstanceFromRecord(r)
-		if m.k8sClient != nil {
-			desired, ready, err := m.k8sClient.DeploymentReplicas(ctx, inst.DeploymentName())
-			if err == nil {
-				var newState InstanceState
-				if ready > 0 {
-					newState = StateRunning
-				} else if desired == 0 {
-					newState = StateStopped
-				} else {
-					newState = StateProvisioning
-				}
-				if inst.State != newState {
+		inst := r
+		if m.runtime != nil {
+			if st, err := m.runtime.Status(ctx, m.serverRef(inst)); err == nil {
+				if newState := stateFromStatus(st); inst.State != newState {
 					inst.State = newState
-					_ = m.store.UpdateInstanceState(inst.Number, string(newState))
+					_ = m.repo.UpdateState(inst.Number, newState)
 				}
 			}
 		}
@@ -103,28 +112,19 @@ func (m *InstanceManager) ListInstances(ctx context.Context) ([]Instance, error)
 }
 
 func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*Instance, error) {
-	rec, err := m.store.GetInstance(num)
+	rec, err := m.repo.Get(num)
 	if err != nil {
 		return nil, fmt.Errorf("get instance %d: %w", num, err)
 	}
 	if rec == nil {
 		return nil, nil
 	}
-	inst := InstanceFromRecord(*rec)
-	if m.k8sClient != nil {
-		desired, ready, err := m.k8sClient.DeploymentReplicas(ctx, inst.DeploymentName())
-		if err == nil {
-			var newState InstanceState
-			if ready > 0 {
-				newState = StateRunning
-			} else if desired == 0 {
-				newState = StateStopped
-			} else {
-				newState = StateProvisioning
-			}
-			if inst.State != newState {
+	inst := *rec
+	if m.runtime != nil {
+		if st, err := m.runtime.Status(ctx, m.serverRef(inst)); err == nil {
+			if newState := stateFromStatus(st); inst.State != newState {
 				inst.State = newState
-				_ = m.store.UpdateInstanceState(inst.Number, string(newState))
+				_ = m.repo.UpdateState(inst.Number, newState)
 			}
 		}
 	}
@@ -132,12 +132,18 @@ func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*Instance, 
 }
 
 func (m *InstanceManager) CreateInstance(ctx context.Context, inst Instance, modsTxt string) (*Instance, error) {
-	existing, err := m.store.ListInstances()
+	existing, err := m.repo.List()
 	if err != nil {
 		return nil, err
 	}
-	if len(existing) >= m.maxInstances {
-		return nil, fmt.Errorf("cannot create instance: maximum limit of %d instances reached", m.maxInstances)
+	existingInstances := make([]Instance, 0, len(existing))
+	for _, e := range existing {
+		existingInstances = append(existingInstances, e)
+	}
+
+	budget := domain.CalculateBudget(existingInstances, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
+	if err := budget.CanCreate(); err != nil {
+		return nil, err
 	}
 
 	usedNumbers := make(map[int]bool)
@@ -173,13 +179,17 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst Instance, mod
 	dirRel := fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, inst.Number)
 	commitMsg := fmt.Sprintf("mc: create instance %02d (%s)", inst.Number, inst.Name)
 
-	if m.committer != nil {
-		if _, err := m.committer.WriteDirectory(ctx, dirRel, files, commitMsg); err != nil {
-			return nil, fmt.Errorf("gitops write instance manifests: %w", err)
+	if m.stateStore != nil {
+		docs := make(map[string]ports.Document, len(files))
+		for fname, content := range files {
+			docs[fname] = ports.Document{Raw: content}
+		}
+		if err := m.stateStore.PutTree(ctx, dirRel, docs, commitMsg); err != nil {
+			return nil, fmt.Errorf("state store write instance manifests: %w", err)
 		}
 	}
 
-	if err := m.store.UpsertInstance(inst.ToRecord()); err != nil {
+	if err := m.repo.Upsert(inst); err != nil {
 		return nil, fmt.Errorf("save instance record: %w", err)
 	}
 
@@ -203,32 +213,26 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int) error {
 		return err
 	}
 
-	usedGiB := 0
-	runningCount := 0
+	var others []Instance
 	for _, other := range instances {
-		if other.Number != num && other.State == StateRunning {
-			runningCount++
-			usedGiB += other.MemoryGiB()
+		if other.Number != num {
+			others = append(others, other)
 		}
 	}
 
-	if runningCount >= m.maxRunning {
-		return fmt.Errorf("cannot start instance: maximum of %d running instances reached (please stop another world first)", m.maxRunning)
+	budget := domain.CalculateBudget(others, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
+	if err := budget.CanStart(*inst); err != nil {
+		return err
 	}
 
-	if usedGiB+inst.MemoryGiB() > m.totalBudgetGiB {
-		return fmt.Errorf("cannot start instance: RAM budget exceeded (%d GiB in use, requires %d GiB, total budget is %d GiB)",
-			usedGiB, inst.MemoryGiB(), m.totalBudgetGiB)
-	}
-
-	if m.k8sClient != nil {
-		if err := m.k8sClient.ScaleDeployment(ctx, inst.DeploymentName(), 1); err != nil {
-			return fmt.Errorf("scale up deployment %s: %w", inst.DeploymentName(), err)
+	if m.runtime != nil {
+		if err := m.runtime.Start(ctx, m.serverRef(*inst)); err != nil {
+			return fmt.Errorf("start instance %d: %w", inst.Number, err)
 		}
 	}
 
 	inst.State = StateRunning
-	return m.store.UpdateInstanceState(num, string(StateRunning))
+	return m.repo.UpdateState(num, StateRunning)
 }
 
 func (m *InstanceManager) StopInstance(ctx context.Context, num int) error {
@@ -240,14 +244,14 @@ func (m *InstanceManager) StopInstance(ctx context.Context, num int) error {
 		return fmt.Errorf("instance %d not found", num)
 	}
 
-	if m.k8sClient != nil {
-		if err := m.k8sClient.ScaleDeployment(ctx, inst.DeploymentName(), 0); err != nil {
-			return fmt.Errorf("scale down deployment %s: %w", inst.DeploymentName(), err)
+	if m.runtime != nil {
+		if err := m.runtime.Stop(ctx, m.serverRef(*inst)); err != nil {
+			return fmt.Errorf("stop instance %d: %w", inst.Number, err)
 		}
 	}
 
 	inst.State = StateStopped
-	return m.store.UpdateInstanceState(num, string(StateStopped))
+	return m.repo.UpdateState(num, StateStopped)
 }
 
 func (m *InstanceManager) DeleteInstance(ctx context.Context, num int) error {
@@ -259,9 +263,9 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int) error {
 		return fmt.Errorf("instance %d not found", num)
 	}
 
-	if m.k8sClient != nil {
-		desired, ready, err := m.k8sClient.DeploymentReplicas(ctx, inst.DeploymentName())
-		if err == nil && (desired > 0 || ready > 0) {
+	if m.runtime != nil {
+		st, err := m.runtime.Status(ctx, m.serverRef(*inst))
+		if err == nil && (st.Lifecycle == ports.LifecycleRunning || st.Available) {
 			return fmt.Errorf("instance %d (%s) must be stopped before it can be deleted", num, inst.Name)
 		}
 	}
@@ -269,39 +273,17 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int) error {
 	dirRel := fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, num)
 	commitMsg := fmt.Sprintf("mc: delete instance %02d (%s)", num, inst.Name)
 
-	if m.committer != nil {
-		if _, err := m.committer.DeleteDirectory(ctx, dirRel, commitMsg); err != nil {
-			return fmt.Errorf("gitops delete instance manifests: %w", err)
+	if m.stateStore != nil {
+		if err := m.stateStore.Delete(ctx, dirRel, commitMsg); err != nil {
+			return fmt.Errorf("state store delete instance manifests: %w", err)
 		}
 	}
 
-	return m.store.DeleteInstance(num)
+	return m.repo.Delete(num)
 }
 
-type BudgetInfo struct {
-	UsedGiB        int
-	TotalBudgetGiB int
-	RunningCount   int
-	MaxRunning     int
-	TotalInstances int
-	MaxInstances   int
-}
+type BudgetInfo = domain.Budget
 
 func (m *InstanceManager) Budget(instances []Instance) BudgetInfo {
-	usedGiB := 0
-	runningCount := 0
-	for _, inst := range instances {
-		if inst.State == StateRunning {
-			usedGiB += inst.MemoryGiB()
-			runningCount++
-		}
-	}
-	return BudgetInfo{
-		UsedGiB:        usedGiB,
-		TotalBudgetGiB: m.totalBudgetGiB,
-		RunningCount:   runningCount,
-		MaxRunning:     m.maxRunning,
-		TotalInstances: len(instances),
-		MaxInstances:   m.maxInstances,
-	}
+	return domain.CalculateBudget(instances, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
 }

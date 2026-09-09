@@ -1,0 +1,64 @@
+# agrelha — Docker / Compose deployment
+#
+#   docker compose up -d      then open http://localhost:8080
+#
+# RUNTIME=docker is the only variable that must be set: it selects the Docker
+# runtime, the local (file + SQLite) state store and the Compose reconciler.
+# Everything else below is optional and shown with its default so you can see
+# what you are changing.
+services:
+  agrelha:
+    image: ghcr.io/OWNER/agrelha:latest
+    container_name: agrelha
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # --- required ---
+      RUNTIME: docker
+
+      # --- optional: where state lives inside the container ---
+      DB_PATH: /data/agrelha.db
+      LOCAL_STATE_DIR: /data/state
+      COMPOSE_DIR: /data/compose
+
+      # --- optional: authentication ---
+      # With no OIDC configured agrelha uses local accounts. The first start
+      # with no users falls back to a passwordless dev login, so DO NOT expose
+      # this to the internet before creating an account.
+      # OIDC_ISSUER: https://id.example.com
+      # OIDC_CLIENT_ID: agrelha
+      # OIDC_CLIENT_SECRET: change-me
+      # OIDC_REDIRECT_URL: https://agrelha.example.com/auth/callback
+      # OIDC_POST_LOGOUT_URL: https://agrelha.example.com/login
+      # ALLOWED_EMAIL: you@example.com,mate@example.com
+
+      # --- optional: game server connection details shown to players ---
+      # VALHEIM_ADDRESS: "10.0.0.10:2456"
+
+      # --- optional: your source, if you modified agrelha ---
+      # AGPL section 13: hosting a modified agrelha for other people obliges you
+      # to offer them the corresponding source. Point this at your repository
+      # and the panel footer links it for you.
+      # SOURCE_URL: https://example.com/you/agrelha
+
+      # --- optional: observability ---
+      # LOG_LEVEL: info      # debug|info|warn|error
+      # LOG_FORMAT: text     # text|json
+    volumes:
+      # Panel state: SQLite database, declarative state, rendered compose files.
+      - agrelha-data:/data
+      # agrelha starts and stops game-server containers through the Docker API,
+      # so it needs the socket. This grants control of the Docker daemon —
+      # equivalent to root on the host. Run agrelha only on a host you trust it
+      # with, or put a socket proxy in front restricted to containers/exec.
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  agrelha-data:

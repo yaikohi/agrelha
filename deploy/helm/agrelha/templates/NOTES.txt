@@ -1,0 +1,24 @@
+agrelha {{ .Chart.AppVersion }} installed as {{ include "agrelha.fullname" . }}.
+
+Reach it with:
+{{- if .Values.ingress.enabled }}
+  https://{{ .Values.ingress.host }}
+{{- else if .Values.httpRoute.enabled }}
+  https://{{ index .Values.httpRoute.hostnames 0 }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "agrelha.fullname" . }} 8080:{{ .Values.service.port }}
+  http://localhost:8080
+{{- end }}
+
+{{ if not .Values.oidc.enabled }}
+WARNING: OIDC is off, so agrelha uses local accounts. With no account yet it
+accepts a passwordless dev login — create your account before exposing the panel
+beyond port-forward.
+{{- end }}
+{{- if not (and .Values.git.repoURL (or .Values.git.token .Values.git.existingSecret)) }}
+No git repo and token configured: mods, configs and access are read-only.
+Start/stop, logs and metrics work as normal.
+{{- end }}
+
+agrelha can act on these namespaces: {{ join ", " .Values.gameNamespaces }}.
+They must already exist — the chart binds a Role in each, it does not create them.

@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agrelha.fullname" . }}-config
+  labels: {{- include "agrelha.labels" . | nindent 4 }}
+data:
+  LISTEN_ADDR: ":8080"
+  DB_PATH: "/data/agrelha.db"
+  RUNTIME: "k8s"
+  {{- with .Values.sourceURL }}
+  SOURCE_URL: {{ . | quote }}
+  {{- end }}
+  LOG_LEVEL: {{ .Values.logging.level | quote }}
+  LOG_FORMAT: {{ .Values.logging.format | quote }}
+  {{- with .Values.git.repoURL }}
+  GIT_REPO_URL: {{ . | quote }}
+  GIT_BRANCH: {{ $.Values.git.branch | quote }}
+  GIT_AUTHOR_NAME: {{ $.Values.git.authorName | quote }}
+  GIT_AUTHOR_EMAIL: {{ $.Values.git.authorEmail | quote }}
+  {{- end }}
+  {{- if .Values.oidc.enabled }}
+  OIDC_ISSUER: {{ .Values.oidc.issuer | quote }}
+  OIDC_CLIENT_ID: {{ .Values.oidc.clientID | quote }}
+  OIDC_REDIRECT_URL: {{ .Values.oidc.redirectURL | quote }}
+  {{- with .Values.oidc.postLogoutURL }}
+  OIDC_POST_LOGOUT_URL: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- with .Values.allowedEmail }}
+  ALLOWED_EMAIL: {{ . | quote }}
+  {{- end }}
+  VALHEIM_NAMESPACE: {{ .Values.valheim.namespace | quote }}
+  VALHEIM_DEPLOYMENT: {{ .Values.valheim.deployment | quote }}
+  {{- with .Values.valheim.address }}
+  VALHEIM_ADDRESS: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.valheim.statusURL }}
+  VALHEIM_STATUS_URL: {{ . | quote }}
+  {{- end }}
+  MINECRAFT_NAMESPACE: {{ .Values.minecraft.namespace | quote }}
+  MC_INSTANCES_PATH: {{ .Values.minecraft.instancesPath | quote }}
+  MAX_INSTANCES: {{ .Values.minecraft.maxInstances | quote }}
+  MAX_RUNNING: {{ .Values.minecraft.maxRunning | quote }}
+  TOTAL_BUDGET_GIB: {{ .Values.minecraft.totalBudgetGiB | quote }}
+  {{- with .Values.minecraft.lbBaseIP }}
+  MC_LB_BASE_IP: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.gameNodeSelector }}
+  GAME_NODE_SELECTOR: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.gameNodeName }}
+  GAME_NODE_NAME: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.backups.enabled }}
+  BACKUPS_DIR: "/backups"
+  {{- end }}
+  {{- range $k, $v := .Values.extraEnv }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
