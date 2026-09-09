@@ -6,21 +6,14 @@ import (
 	"context"
 	"io"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
 
+	"agrelha/internal/app/mods"
 	"agrelha/internal/domain"
-	"agrelha/internal/infra/content/thunderstore"
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
-	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 )
 
@@ -46,13 +39,10 @@ func TestVersionNewer(t *testing.T) {
 
 func TestPendingActive(t *testing.T) {
 	mk := func(modsTxt string) *Handler {
-		cs := fake.NewSimpleClientset(&corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: "valheim-mods", Namespace: "valheim"},
-			Data:       map[string]string{"mods.txt": modsTxt},
-		})
 		return New(Config{
-			Cfg: &config.Config{},
-			K8s: k8s.NewWithClientset(cs, "valheim", "valheim"),
+			InstalledMods: func(context.Context) ([]string, error) {
+				return mods.Parse(modsTxt), nil
+			},
 		})
 	}
 	committed := []string{"ValheimModding/Jotunn/2.25.0", "denikson/BepInExPack_Valheim/5.4.2202"}
@@ -85,25 +75,47 @@ func TestPendingActive(t *testing.T) {
 	}
 }
 
-func TestModUpdates(t *testing.T) {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "valheim-mods", Namespace: "valheim"},
-		Data: map[string]string{"mods.txt": "# server\n" +
-			"denikson/BepInExPack_Valheim/5.4.2202\n" +
-			"ValheimModding/Jotunn/2.24.3\n"},
-	}
-	cs := fake.NewSimpleClientset(cm)
+type fakeCatalog struct {
+	items map[string]domain.ModSearchResult
+}
 
-	ts := thunderstore.New("https://example.invalid")
-	ts.Preload([]thunderstore.SearchResult{
-		{Owner: "denikson", Name: "BepInExPack_Valheim", Version: "5.4.2202"},
-		{Owner: "ValheimModding", Name: "Jotunn", Version: "2.25.0"},
-	}, time.Now())
+func (f *fakeCatalog) Get(fullName string) (domain.ModSearchResult, bool) {
+	m, ok := f.items[fullName]
+	return m, ok
+}
+func (f *fakeCatalog) Search(ctx context.Context, query string, limit int) ([]domain.ModSearchResult, error) {
+	return nil, nil
+}
+func (f *fakeCatalog) Ready() bool { return true }
+func (f *fakeCatalog) LatestVersion(ctx context.Context, ns, name string) (string, []string, error) {
+	return "", nil, nil
+}
+func (f *fakeCatalog) Readme(ctx context.Context, ns, name, version string) (string, error) {
+	return "", nil
+}
+func (f *fakeCatalog) ResolveTree(ctx context.Context, ns, name string) ([]string, error) {
+	return nil, nil
+}
+
+type fakeAudit struct{}
+
+func (f *fakeAudit) RecordAudit(actor, action, detail string) error { return nil }
+
+func TestModUpdates(t *testing.T) {
+	cat := &fakeCatalog{
+		items: map[string]domain.ModSearchResult{
+			"denikson/BepInExPack_Valheim": {Owner: "denikson", Name: "BepInExPack_Valheim", Version: "5.4.2202"},
+			"ValheimModding/Jotunn":        {Owner: "ValheimModding", Name: "Jotunn", Version: "2.25.0"},
+		},
+	}
 
 	h := New(Config{
-		Cfg: &config.Config{},
-		K8s: k8s.NewWithClientset(cs, "valheim", "valheim"),
-		TS:  ts,
+		InstalledMods: func(context.Context) ([]string, error) {
+			return mods.Parse("# server\n" +
+				"denikson/BepInExPack_Valheim/5.4.2202\n" +
+				"ValheimModding/Jotunn/2.24.3\n"), nil
+		},
+		TS: cat,
 	})
 
 	ups := h.ModUpdates(context.Background())
@@ -120,27 +132,14 @@ func TestModUpdates(t *testing.T) {
 }
 
 func TestModpackExport(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	cm := func(name string, data map[string]string) *corev1.ConfigMap {
-		return &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "valheim"},
-			Data:       data,
-		}
-	}
-	cs := fake.NewSimpleClientset(
-		cm("valheim-mods", map[string]string{"mods.txt": "# my server\ndenikson/BepInExPack_Valheim/5.4.2202\nValheimModding/Jotunn/2.24.3\n"}),
-		cm("valheim-mod-configs", map[string]string{"com.jotunn.jotunn.cfg": "[General]\nEnabled = true\n"}),
-	)
-
 	h := New(Config{
-		Cfg:   &config.Config{},
-		Store: st,
-		K8s:   k8s.NewWithClientset(cs, "valheim", "valheim"),
+		Audit: &fakeAudit{},
+		InstalledMods: func(context.Context) ([]string, error) {
+			return mods.Parse("# my server\ndenikson/BepInExPack_Valheim/5.4.2202\nValheimModding/Jotunn/2.24.3\n"), nil
+		},
+		ConfigData: func(context.Context) (map[string]string, error) {
+			return map[string]string{"com.jotunn.jotunn.cfg": "[General]\nEnabled = true\n"}, nil
+		},
 	})
 
 	app := fiber.New()
@@ -202,20 +201,6 @@ func TestPublicHost(t *testing.T) {
 	}
 	if PublicHost("") {
 		t.Errorf("expected empty host to not be public")
-	}
-}
-
-func TestModIndexConversion(t *testing.T) {
-	res := []thunderstore.SearchResult{
-		{Owner: "author", Name: "coolmod", Version: "1.0.0", Description: "A cool mod"},
-	}
-	rows := ResultsToRows(res)
-	if len(rows) != 1 || rows[0].Name != "coolmod" || rows[0].Namespace != "author" {
-		t.Fatalf("unexpected rows: %+v", rows)
-	}
-	back := RowsToResults(rows)
-	if len(back) != 1 || back[0].Name != "coolmod" || back[0].Owner != "author" {
-		t.Fatalf("unexpected back conversion: %+v", back)
 	}
 }
 

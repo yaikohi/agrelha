@@ -11,7 +11,10 @@ The web layer contains driving (inbound / primary) presentation adapters. It han
 - **May import `internal/domain`, `internal/ports`, and `internal/app`.**
 - Must **never** import `internal/infra` (keeps presentation decoupled from physical databases or cloud APIs).
 
-## Subpackages
+## Subpackages & Entry Points
+- `routes.go`: Top-level HTTP routing entry points:
+  - `New(cfg ServerConfig) *fiber.App`: Constructs and returns the configured Fiber app.
+  - `RegisterRoutes(app *fiber.App, cfg ServerConfig)`: Mounts public routes, auth group, protected routes, metrics, and static asset filesystem.
 - `handlers/`: Feature-sliced HTTP delivery controllers:
   - `access/`: Admission (whitelist, ops, passwords) endpoints.
   - `instances/`: Instance list, details, and controls.

@@ -1,10 +1,6 @@
-package server
+package wiring_test
 
 import (
-	"agrelha/internal/app/instances"
-	"agrelha/internal/domain"
-	"agrelha/internal/infra/manifests"
-	"agrelha/internal/infra/rcon"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -22,13 +18,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
 	"agrelha/internal/infra/kube"
+	"agrelha/internal/infra/manifests"
+	"agrelha/internal/infra/rcon"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
+	"agrelha/internal/wiring"
 )
 
-func setupTestMCServer(t *testing.T) (*FiberServer, *store.Store, *instances.InstanceManager) {
+func setupTestMCServer(t *testing.T) (*fiber.App, *store.Store, *instances.InstanceManager, wiring.Deps, *config.Config) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -55,24 +56,27 @@ func setupTestMCServer(t *testing.T) (*FiberServer, *store.Store, *instances.Ins
 	mck8s := k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded")
 	mgr := instances.NewInstanceManager(store.NewInstanceRepo(st), nil, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded")
 
-	s := &FiberServer{
-		App:         fiber.New(),
-		cfg:         &config.Config{},
-		store:       st,
-		mck8s:       mck8s,
-		mcInstances: mgr,
-		mcRconPool:  rcon.NewPool("testpass", 3*time.Second),
+	cfg := &config.Config{
+		MinecraftNamespace:  "minecraft-modded",
+		MinecraftDeployment: "minecraft-modded",
 	}
-	s.RegisterFiberRoutes()
-	return s, st, mgr
+
+	d := wiring.Deps{
+		Store:       st,
+		MCK8s:       mck8s,
+		MCInstances: mgr,
+		MCRconPool:  rcon.NewPool("testpass", 3*time.Second),
+	}
+	app := wiring.BuildServer(context.Background(), cfg, d)
+	return app, st, mgr, d, cfg
 }
 
 func TestMCDashboardEmpty(t *testing.T) {
-	s, st, _ := setupTestMCServer(t)
+	app, st, _, _, _ := setupTestMCServer(t)
 	defer st.Close()
 
 	req := httptest.NewRequest(fiber.MethodGet, "/minecraft", nil)
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -90,11 +94,11 @@ func TestMCDashboardEmpty(t *testing.T) {
 }
 
 func TestMCWizardPage(t *testing.T) {
-	s, st, _ := setupTestMCServer(t)
+	app, st, _, _, _ := setupTestMCServer(t)
 	defer st.Close()
 
 	req := httptest.NewRequest(fiber.MethodGet, "/minecraft/create", nil)
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -124,7 +128,7 @@ func TestMCWizardPage(t *testing.T) {
 }
 
 func TestMCInstanceCreateAndDetail(t *testing.T) {
-	s, st, mgr := setupTestMCServer(t)
+	app, st, mgr, _, _ := setupTestMCServer(t)
 	defer st.Close()
 
 	// 1. Create instance via wizard endpoint
@@ -142,7 +146,7 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/create", bytes.NewReader(payloadBytes))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("wizard create request failed: %v", err)
 	}
@@ -164,7 +168,7 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 
 	// 3. Test Detail Overview
 	req = httptest.NewRequest(fiber.MethodGet, "/minecraft/1/overview", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("overview request failed: %v", err)
 	}
@@ -178,7 +182,7 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 
 	// 4. Test Detail Mods Tab
 	req = httptest.NewRequest(fiber.MethodGet, "/minecraft/1/mods", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("mods tab request failed: %v", err)
 	}
@@ -188,7 +192,7 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 
 	// 5. Test Detail Console Tab
 	req = httptest.NewRequest(fiber.MethodGet, "/minecraft/1/console", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("console tab request failed: %v", err)
 	}
@@ -198,7 +202,7 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 
 	// 6. Test Detail Backups Tab
 	req = httptest.NewRequest(fiber.MethodGet, "/minecraft/1/backups", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("backups tab request failed: %v", err)
 	}
@@ -208,7 +212,7 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 
 	// 7. Test Detail Settings Tab
 	req = httptest.NewRequest(fiber.MethodGet, "/minecraft/1/settings", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("settings tab request failed: %v", err)
 	}
@@ -225,7 +229,7 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 	}
 	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/settings", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("settings save request failed: %v", err)
 	}
@@ -243,42 +247,42 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 
 	// 9. Lifecycle: Stop & Start
 	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/instances/1/stop", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil || resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("stop instance failed: %v, status: %d", err, resp.StatusCode)
 	}
 
 	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/instances/1/start", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil || resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("start instance failed: %v, status: %d", err, resp.StatusCode)
 	}
 
 	// 10. Delete instance
 	req = httptest.NewRequest(fiber.MethodDelete, "/api/minecraft/instances/1", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil || resp.StatusCode != fiber.StatusOK {
 		t.Fatalf("delete instance failed: %v, status: %d", err, resp.StatusCode)
 	}
 
-	instances, err := mgr.ListInstances(context.Background())
+	instList, err := mgr.ListInstances(context.Background())
 	if err != nil {
 		t.Fatalf("list instances failed: %v", err)
 	}
-	if len(instances) != 0 {
-		t.Fatalf("expected 0 instances after delete, got %d", len(instances))
+	if len(instList) != 0 {
+		t.Fatalf("expected 0 instances after delete, got %d", len(instList))
 	}
 }
 
 func TestMCWizardSearchEndpoints(t *testing.T) {
-	s, st, _ := setupTestMCServer(t)
+	app, st, _, _, _ := setupTestMCServer(t)
 	defer st.Close()
 
 	// 1. Modpack search via POST (Datastar v1.0.2 style)
 	body, _ := json.Marshal(map[string]string{"packQuery": "fluxw"})
 	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/modpacks/search", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("modpack search POST failed: %v", err)
 	}
@@ -298,7 +302,7 @@ func TestMCWizardSearchEndpoints(t *testing.T) {
 	body, _ = json.Marshal(map[string]string{"modQuery": "jei", "mc_version": "1.21.1"})
 	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/mods/search", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("mods search POST failed: %v", err)
 	}
@@ -316,7 +320,7 @@ func TestMCWizardSearchEndpoints(t *testing.T) {
 
 	// 3. Modpack search via GET
 	req = httptest.NewRequest(fiber.MethodGet, "/api/minecraft/wizard/modpacks/search?q=fluxw", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("modpack search GET failed: %v", err)
 	}
@@ -326,7 +330,7 @@ func TestMCWizardSearchEndpoints(t *testing.T) {
 }
 
 func TestMCSettingsSave(t *testing.T) {
-	s, st, mgr := setupTestMCServer(t)
+	app, st, mgr, _, _ := setupTestMCServer(t)
 	defer st.Close()
 
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
@@ -347,7 +351,7 @@ func TestMCSettingsSave(t *testing.T) {
 	})
 	req := httptest.NewRequest(fiber.MethodPost, fmt.Sprintf("/api/minecraft/%d/settings", inst.Number), bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}

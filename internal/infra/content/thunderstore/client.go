@@ -10,7 +10,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"agrelha/internal/domain"
+	"agrelha/internal/ports"
 )
+
+var _ ports.PackageCatalog = (*Client)(nil)
 
 type Client struct {
 	v1URL  string
@@ -120,6 +125,9 @@ func (c *Client) ResolveTree(ctx context.Context, ns, name string) ([]string, er
 }
 
 func (c *Client) LatestVersion(ctx context.Context, ns, name string) (version string, deps []string, err error) {
+	if c == nil {
+		return "", nil, nil
+	}
 	var p expPackage
 	if err := c.getJSON(ctx, fmt.Sprintf("%s/package/%s/%s/", c.expURL, ns, name), &p); err != nil {
 		return "", nil, err
@@ -128,6 +136,9 @@ func (c *Client) LatestVersion(ctx context.Context, ns, name string) (version st
 }
 
 func (c *Client) Readme(ctx context.Context, ns, name, version string) (string, error) {
+	if c == nil {
+		return "", nil
+	}
 	var r struct {
 		Markdown string `json:"markdown"`
 	}
@@ -138,19 +149,7 @@ func (c *Client) Readme(ctx context.Context, ns, name, version string) (string, 
 	return r.Markdown, nil
 }
 
-type SearchResult struct {
-	Owner        string
-	Name         string
-	FullURL      string
-	Description  string
-	Icon         string
-	Version      string
-	Downloads    int64
-	IsDeprecated bool
-	UpdatedAt    time.Time
-}
-
-func (r SearchResult) FullName() string { return r.Owner + "/" + r.Name }
+type SearchResult = domain.ModSearchResult
 
 type rawPackage struct {
 	Name         string `json:"name"`

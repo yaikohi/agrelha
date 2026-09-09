@@ -73,16 +73,56 @@ Aligned with Hexagonal (Ports & Adapters) and Onion Architecture:
 - **`internal/web`** (Driving / Inbound Adapters): Presentation delivery (Fiber routing, thin handlers, templ components, Datastar SSE). Imports **`domain` + `ports` + `app`**. Never `infra`.
 - **`internal/platform`** (Bootstrap): Cross-cutting environment config for bootstrap.
 - **`internal/wiring`** (Composition Root): Pure dependency injection graph assembly.
-- **`internal/server`** (Transitional): Legacy monolith package holding routing and daunting handlers; slated for complete dissolution.
+- **`internal/server`**: Dissolved and removed. Routing lives in `internal/web/routes.go`, composition root in `internal/wiring`.
 
-- **Candidate 5: Package READMEs & Documentation** [In Progress]
-  - Create a structured `README.md` inside each of the 9 `internal/*` subdirectories explaining layer roles, permitted import directions, and package contents.
+- **Candidate 5: Package READMEs & Documentation** [Done]
+  - Created a structured `README.md` inside each of the `internal/*` subdirectories explaining layer roles, permitted import directions, and package contents.
 
-- **Candidate 6: Decompose Daunting Handlers & Dissolve `internal/server`** [Next]
-  - **Target Seams**: `internal/server` -> `internal/app/*` (orchestration) + `internal/web/handlers/*` (thin delivery) + `internal/web/routes.go` (routing).
-  - Move wizard/provisioning orchestration out of `handlers_mc_wizard.go` into `app/instances` or `app/wizard`.
-  - Invert remaining `server` handlers (`handlers_mc_backups`, `handlers_dashboard`, `handlers_mods`) to consume application services and ports.
-  - Migrate route registrations into `internal/web/routes.go`, move server assembly into `internal/wiring`, and completely delete `internal/server`, eliminating the final ratchet exceptions.
+- **Candidate 6: Decompose Daunting Handlers & Dissolve `internal/server`** [Done]
+  - **Target Seams**: `internal/server` -> `internal/app/*` (orchestration) + `internal/web/handlers/*` (thin delivery) + `internal/web/routes.go` (routing) + `internal/wiring/server.go` (composition root).
+  - Decomposed all handlers into thin HTTP controllers under `internal/web/handlers/*` (`access`, `backups`, `console`, `content`, `dashboard`, `instances`, `wizard`).
+  - Extracted route registrations into `internal/web/routes.go` (`web.New` / `web.RegisterRoutes`), keeping `web` free of direct infrastructure dependencies.
+  - Ported server assembly, background sync hooks (`applyAfterSync`, `applyMinecraftAfterSync`), and backup scheduling to `internal/wiring/server.go` (`wiring.BuildServer`).
+  - Completely removed directory `internal/server` and migrated integration tests to `internal/wiring`.
+  - Cleared all architecture exceptions in `internal/arch/arch_test.go`: **0 exceptions remaining**! Every architectural layer obeys pure hexagonal / onion invariants.
+
+---
+
+### Valheim Multi-Instance Roadmap (Mirroring Minecraft)
+
+- **Candidate 7: Multi-Game Domain, Engine Generalization & Valheim Manifests** [Planned]
+  - **Objective**: Generalize the instance management engine to natively orchestrate both `minecraft` and `valheim` workloads via pluggable spec renderers, independent resource budgets, and dedicated Cilium L2 LoadBalancer IPs.
+  - **Key Work Items**:
+    - Generalize `domain.Instance`: Ensure `GameID` (`valheim` vs `minecraft`) drives manifest generation, port specs, and memory tiers.
+    - Define Valheim memory tiers (Small: 4GiB, Medium: 6GiB, Large: 8GiB) and validation.
+    - Add configuration keys to `internal/platform/config`: `VALHEIM_LB_BASE_IP`, `VALHEIM_INSTANCES_PATH`, `VALHEIM_TOTAL_BUDGET_GIB`, `VALHEIM_MAX_INSTANCES`, `VALHEIM_MAX_RUNNING`.
+    - Extend `InstanceManager` to support game-scoped operations (`ListInstancesByGame`) and pluggable `SpecRenderer` (`ValheimManifestRenderer` vs `MinecraftManifestRenderer`).
+    - Create Valheim slot manifest templates in `internal/infra/manifests/valheim/`: `deployment.yaml.tmpl` (`lloesche/valheim-server`), `service.yaml.tmpl` (Cilium LB IP on UDP 2456-2457), `pvc.yaml.tmpl` (`valheim-instance-XX-data`), `mods.yaml.tmpl` (`mods.txt`), `configs.yaml.tmpl` (`.cfg` files).
+    - Implement migration logic to gracefully import the live Valheim deployment into slot #01 (`valheim-instance-01-data`), preserving existing worlds and configs.
+
+- **Candidate 8: Valheim Web Delivery, Handlers & 3-Step Wizard** [Planned]
+  - **Objective**: Provide full UI and API parity for Valheim under `/valheim`, mirroring Minecraft's instance dashboard, creation wizard, and tabbed instance view.
+  - **Key Work Items**:
+    - Implement a streamlined 3-step Valheim creation wizard at `/valheim/create`:
+      1. World & Server Details (Name, Password, Seed).
+      2. Content Choice (Vanilla BepInEx, Scratch Thunderstore mods, or import `.r2z` / `export.r2x` modpack).
+      3. Resource Tier (Small: 4GiB, Medium: 6GiB, Large: 8GiB).
+    - Build Valheim instance management controllers and routes:
+      - `/valheim` (Instances dashboard showing slot cards, memory budget, and running count).
+      - `/valheim/:num/{overview,mods,configs,console,settings}`.
+      - API routes under `/api/valheim/...` for lifecycle, Thunderstore mod management, and BepInEx configs.
+    - Create Templ components under `internal/web/pages` for Valheim instance tabs, reusing shared patterns.
+    - Add legacy backward-compatibility redirects: `/mods` -> `/valheim/1/mods`, `/configs` -> `/valheim/1/configs`.
+    - Register all routes in `internal/web/routes.go` and wire handlers in `internal/wiring/server.go`.
+
+- **Candidate 9: Valheim Backup Jobs, Restores & End-to-End Verification** [Planned]
+  - **Objective**: Implement on-demand and scheduled backup capabilities for Valheim worlds with in-place and clone restores, verifying full system integration.
+  - **Key Work Items**:
+    - Create Kubernetes Job template for Valheim world backups (`.tar.gz` snapshots of `/config/worlds_local`).
+    - Implement in-place restore (when stopped) and restore-as-new-world (slot clone) in `InstanceManager`.
+    - Integrate Valheim into the daily backup scheduler pass alongside Minecraft in `internal/wiring/server.go`.
+    - Build end-to-end integration tests in `internal/wiring` covering Valheim multi-instance provisioning, lifecycle actions, mod installs, and backup/restore workflows.
+    - Verify architecture ratchet remains at 0 exceptions via `rtk go test ./internal/arch/...` and full suite passes via `rtk go test ./...`.
 
 ---
 

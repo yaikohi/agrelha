@@ -39,3 +39,13 @@ type Game interface {
 	AdmissionModel() domain.AdmissionModel
 	OperatorIDKind() domain.OperatorIDKind
 }
+
+// PackageCatalog provides search, metadata, and dependency resolution for mod packages.
+type PackageCatalog interface {
+	Get(fullName string) (domain.ModSearchResult, bool)
+	Search(ctx context.Context, query string, limit int) ([]domain.ModSearchResult, error)
+	Ready() bool
+	LatestVersion(ctx context.Context, ns, name string) (string, []string, error)
+	Readme(ctx context.Context, ns, name, version string) (string, error)
+	ResolveTree(ctx context.Context, ns, name string) ([]string, error)
+}

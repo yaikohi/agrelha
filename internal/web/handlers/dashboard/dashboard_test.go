@@ -5,15 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"agrelha/internal/domain"
-	"agrelha/internal/infra/backups"
-	"agrelha/internal/infra/store"
-	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 	"agrelha/internal/web/pages"
 
@@ -21,21 +17,9 @@ import (
 )
 
 func TestDashboardPage(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "dash.db")
-	st, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	cfg := &config.Config{
+	h := New(Config{
 		GameNodeName:   "game-01",
 		ValheimAddress: "192.168.20.224:2456",
-	}
-
-	h := New(Config{
-		Cfg:   cfg,
-		Store: st,
 	})
 
 	app := fiber.New()
@@ -57,17 +41,9 @@ func TestDashboardPage(t *testing.T) {
 }
 
 func TestTileSignals(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "signals.db")
-	st, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
 	h := New(Config{
-		Store: st,
-		BackupInfo: func() (backups.Info, bool) {
-			return backups.Info{
+		BackupInfo: func() (BackupSummary, bool) {
+			return BackupSummary{
 				Count:      3,
 				TotalSize:  1024 * 1024 * 50,
 				LatestSize: 1024 * 1024 * 20,

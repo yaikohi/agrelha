@@ -90,3 +90,9 @@ type Console interface {
 type SpecRenderer interface {
 	Render(inst domain.Instance, modsTxt string) (map[string][]byte, error)
 }
+
+// JobRunner creates one-shot batch tasks such as backups and restores.
+type JobRunner interface {
+	CreateBackupJob(ctx context.Context, jobName, archiveName, sourcePVC, backupPVC string) error
+	CreateRestoreJob(ctx context.Context, jobName, archiveName, targetPVC, backupPVC string) error
+}

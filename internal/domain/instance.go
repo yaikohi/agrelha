@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -237,5 +238,21 @@ func FormatBackupFileName(slug string, num int, tag string) string {
 		return fmt.Sprintf("mc-%s-%02d-%s-%s.tar.gz", slug, num, tag, ts)
 	}
 	return fmt.Sprintf("mc-%s-%02d-%s.tar.gz", slug, num, ts)
+}
+
+// BackupSummary aggregates metadata for storage and backup health reporting.
+type BackupSummary struct {
+	Count      int
+	TotalSize  int64
+	LatestName string
+	LatestSize int64
+	LatestAt   time.Time
+}
+
+var safeBackupName = regexp.MustCompile(`^mc-[a-z0-9-]+-\d{2}-[a-zA-Z0-9_-]+\.tar\.gz$`)
+
+// IsSafeBackupFileName checks whether an archive name matches the standard instance backup pattern.
+func IsSafeBackupFileName(name string) bool {
+	return safeBackupName.MatchString(name)
 }
 

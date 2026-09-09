@@ -1,26 +1,41 @@
 package wizard
 
 import (
+	"context"
+
+	mccontent "agrelha/internal/app/content"
 	"agrelha/internal/app/instances"
 	"github.com/gofiber/fiber/v2"
-
-	"agrelha/internal/infra/content/mcversions"
-	"agrelha/internal/infra/content/modpackindex"
-	"agrelha/internal/infra/content/modrinth"
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
 )
 
-// Config is deliberately narrower than instances.Config: these seven fields are
-// everything the provisioning flow touches.
+// ModpackHit represents a search result from an external modpack index.
+type ModpackHit struct {
+	ID            int
+	Name          string
+	Summary       string
+	ThumbnailURL  string
+	DownloadCount int64
+	RefURL        string
+}
+
+// ModHit represents a single mod search result from an external repository.
+type ModHit struct {
+	Slug        string
+	Title       string
+	Description string
+	IconURL     string
+}
+
+// Config defines the narrow delivery dependencies for the Minecraft provisioning wizard.
 type Config struct {
-	Store       *store.Store
-	MCK8s       *k8s.Client
-	MCInstances *instances.InstanceManager
-	MCV         *mcversions.Client
-	MPI         *modpackindex.Client
-	MR          *modrinth.Client
-	Actor       func(*fiber.Ctx) string
+	MCInstances      *instances.InstanceManager
+	Actor            func(*fiber.Ctx) string
+	VersionReleases  func(ctx context.Context, limit int) []string
+	SearchModpacks   func(ctx context.Context, query string) ([]ModpackHit, error)
+	ResolvePackRef   func(ctx context.Context, packRef string) string
+	VerifyPackLoader func(ctx context.Context, packID int, packName, requestedLoader string) string
+	SearchMods       func(ctx context.Context, query, mcVersion string) ([]ModHit, error)
+	CheckCartCompat  func(ctx context.Context, slugs []string, mcVersion string) mccontent.CartCompatibility
 }
 
 type Handler struct {

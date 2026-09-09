@@ -13,11 +13,48 @@ import (
 )
 
 type Manager struct {
-	store ports.StateStore
-	path  string // relPath of valheim-mods.yaml in the repo
+	store     ports.StateStore
+	path      string // relPath of valheim-mods.yaml in the repo
+	modReader func(ctx context.Context) ([]string, error)
 }
 
-func New(store ports.StateStore, path string) *Manager { return &Manager{store: store, path: path} }
+type Option func(*Manager)
+
+// WithModReader configures an optional live reader for installed mods (e.g. from a live cluster ConfigMap).
+func WithModReader(fn func(ctx context.Context) ([]string, error)) Option {
+	return func(m *Manager) {
+		m.modReader = fn
+	}
+}
+
+func New(store ports.StateStore, path string, opts ...Option) *Manager {
+	m := &Manager{store: store, path: path}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// InstalledMods returns the list of currently installed mods either from the configured modReader or the StateStore.
+func (m *Manager) InstalledMods(ctx context.Context) ([]string, error) {
+	if m == nil {
+		return nil, nil
+	}
+	if m.modReader != nil {
+		return m.modReader(ctx)
+	}
+	if m.store == nil {
+		return nil, ports.ErrNotImplemented
+	}
+	doc, err := m.store.Get(ctx, m.path)
+	if err != nil {
+		return nil, err
+	}
+	if doc.Data == nil {
+		return nil, nil
+	}
+	return parse(doc.Data["mods.txt"]), nil
+}
 
 // Parse returns the current mod entries (skipping comments/blanks).
 func Parse(content string) []string { return parse(content) }

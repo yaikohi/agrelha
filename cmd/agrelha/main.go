@@ -15,7 +15,6 @@ import (
 	"agrelha/internal/platform/build"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/platform/logging"
-	"agrelha/internal/server"
 	"agrelha/internal/wiring"
 )
 
@@ -30,11 +29,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := server.New(cfg, deps)
-	srv.RegisterFiberRoutes()
+	app := wiring.BuildServer(context.Background(), cfg, deps)
 
 	go func() {
-		if err := srv.Listen(cfg.ListenAddr); err != nil {
+		if err := app.Listen(cfg.ListenAddr); err != nil {
 			slog.Error("http server error", "err", err)
 			os.Exit(1)
 		}
@@ -47,7 +45,7 @@ func main() {
 	slog.Info("shutting down")
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := srv.ShutdownWithContext(shutCtx); err != nil {
+	if err := app.ShutdownWithContext(shutCtx); err != nil {
 		slog.Error("forced shutdown", "err", err)
 		os.Exit(1)
 	}

@@ -50,9 +50,14 @@ type InstanceManager struct {
 	telemetryProvider   func(ctx context.Context, inst domain.Instance) (players int, known bool)
 	afterSyncHook       func(cm, dep, key string, want func(string) bool)
 	commandExecutor     func(ctx context.Context, inst domain.Instance, cmd string) (string, error)
+	jobRunner           ports.JobRunner
 }
 
 type Option func(*InstanceManager)
+
+func WithJobRunner(runner ports.JobRunner) Option {
+	return func(m *InstanceManager) { m.jobRunner = runner }
+}
 
 func WithCommandExecutor(fn func(ctx context.Context, inst domain.Instance, cmd string) (string, error)) Option {
 	return func(m *InstanceManager) { m.commandExecutor = fn }
@@ -865,6 +870,28 @@ func (m *InstanceManager) InstanceStats(ctx context.Context, insts []domain.Inst
 	return out
 }
 
+// ProvisioningStatus reports the current readiness phase ("syncing", "booting", "ready") of an instance during provisioning.
+func (m *InstanceManager) ProvisioningStatus(ctx context.Context, num int) (phase string, ready bool, err error) {
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil || inst == nil {
+		return "unknown", false, fmt.Errorf("instance not found")
+	}
+	if m.runtime == nil {
+		return "ready", true, nil
+	}
+	st, err := m.runtime.Status(ctx, m.serverRef(*inst))
+	if err != nil {
+		return "syncing", false, nil
+	}
+	if st.Available {
+		return "ready", true, nil
+	}
+	if st.Lifecycle == ports.LifecycleRunning {
+		return "booting", false, nil
+	}
+	return "syncing", false, nil
+}
+
 type BudgetInfo = domain.Budget
 
 func (m *InstanceManager) Budget(instances []domain.Instance) BudgetInfo {
@@ -897,3 +924,230 @@ func (m *InstanceManager) ExecuteCommand(ctx context.Context, num int, cmd strin
 	}
 	return m.commandExecutor(ctx, *inst, cmd)
 }
+
+// CreateBackup launches an asynchronous backup job for a specific instance.
+func (m *InstanceManager) CreateBackup(ctx context.Context, num int, actor ...string) (string, error) {
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil || inst == nil {
+		return "", fmt.Errorf("instance not found")
+	}
+
+	// Flush world save via command executor if running
+	if inst.State == domain.StateRunning && m.commandExecutor != nil {
+		_, _ = m.commandExecutor(ctx, *inst, "/save-off")
+		_, _ = m.commandExecutor(ctx, *inst, "/save-all flush")
+		defer func() {
+			_, _ = m.commandExecutor(ctx, *inst, "/save-on")
+		}()
+	}
+
+	backupName := domain.FormatBackupFileName(inst.Slug, inst.Number, "")
+	jobName := fmt.Sprintf("mc-bkp-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
+
+	if m.jobRunner != nil {
+		dataPVC := fmt.Sprintf("mc-instance-%02d-data", inst.Number)
+		backupsPVC := "minecraft-modded-backups"
+		if err := m.jobRunner.CreateBackupJob(ctx, jobName, backupName, dataPVC, backupsPVC); err != nil {
+			return "", fmt.Errorf("failed to launch backup Job: %w", err)
+		}
+	}
+
+	if m.backupsDir != "" {
+		_ = pruneBackups(m.backupsDir, inst.Slug, inst.Number, 5)
+	}
+
+	if m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-backup", fmt.Sprintf("Backup %s for instance #%02d", backupName, num))
+	}
+	if m.event != nil {
+		_ = m.event.RecordEvent("mc-backup", actorOrHyphen(actor))
+	}
+
+	return backupName, nil
+}
+
+func pruneBackups(backupsDir, slug string, num, keepCount int) error {
+	if backupsDir == "" || keepCount <= 0 {
+		return nil
+	}
+	pattern := filepath.Join(backupsDir, fmt.Sprintf("mc-%s-%02d-*.tar.gz", slug, num))
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return err
+	}
+	if len(matches) <= keepCount {
+		return nil
+	}
+	type fileInfo struct {
+		path    string
+		modTime time.Time
+	}
+	files := make([]fileInfo, 0, len(matches))
+	for _, match := range matches {
+		if fi, err := os.Stat(match); err == nil {
+			files = append(files, fileInfo{path: match, modTime: fi.ModTime()})
+		}
+	}
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].modTime.After(files[j].modTime)
+	})
+	for i := keepCount; i < len(files); i++ {
+		_ = os.Remove(files[i].path)
+	}
+	return nil
+}
+
+// RestoreInPlace uncompresses an archive back into an existing stopped instance PVC.
+func (m *InstanceManager) RestoreInPlace(ctx context.Context, num int, archive string, actor ...string) error {
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil || inst == nil {
+		return fmt.Errorf("instance not found")
+	}
+
+	if inst.State == domain.StateRunning {
+		return fmt.Errorf("Cannot restore while world is running. Please stop the server first.")
+	}
+
+	archiveName := filepath.Base(strings.TrimSpace(archive))
+	if archiveName == "" || archiveName == "." || !strings.HasSuffix(archiveName, ".tar.gz") {
+		return fmt.Errorf("valid backup archive name required")
+	}
+
+	if m.jobRunner != nil {
+		safetyArchive := domain.FormatBackupFileName(inst.Slug, inst.Number, "prerestore")
+		safetyJob := fmt.Sprintf("mc-bkp-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
+		_ = m.jobRunner.CreateBackupJob(ctx, safetyJob, safetyArchive, inst.PVCName(), "minecraft-modded-backups")
+
+		restoreJobName := fmt.Sprintf("mc-rst-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
+		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, inst.PVCName(), "minecraft-modded-backups"); err != nil {
+			return fmt.Errorf("failed to launch restore Job: %w", err)
+		}
+	}
+
+	if m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-backup-restore-inplace", fmt.Sprintf("Restored %s into #%02d", archiveName, num))
+	}
+	if m.event != nil {
+		_ = m.event.RecordEvent("mc-backup-restore-inplace", actorOrHyphen(actor))
+	}
+
+	return nil
+}
+
+// RestoreNew provisions a new instance initialized from an existing backup archive.
+func (m *InstanceManager) RestoreNew(ctx context.Context, num int, newName, tier, archive string, actor ...string) (*domain.Instance, error) {
+	srcInst, err := m.GetInstance(ctx, num)
+	if err != nil || srcInst == nil {
+		return nil, fmt.Errorf("source instance not found")
+	}
+
+	archiveName := filepath.Base(strings.TrimSpace(archive))
+	if archiveName == "" || archiveName == "." || !strings.HasSuffix(archiveName, ".tar.gz") {
+		return nil, fmt.Errorf("valid backup archive name required")
+	}
+
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		newName = fmt.Sprintf("%s Restored", srcInst.Name)
+	}
+
+	newTier := srcInst.Tier
+	if tier != "" {
+		newTier = domain.NormalizeTier(tier)
+	}
+
+	newInst := domain.Instance{
+		Name:       newName,
+		Seed:       srcInst.Seed,
+		Loader:     srcInst.Loader,
+		Source:     srcInst.Source,
+		Pack:       srcInst.Pack,
+		MCVersion:  srcInst.MCVersion,
+		Tier:       newTier,
+		MOTD:       fmt.Sprintf("%s (Restored)", newName),
+		Difficulty: srcInst.Difficulty,
+		Gamemode:   srcInst.Gamemode,
+		WorldType:  srcInst.WorldType,
+		State:      domain.StateStopped,
+	}
+
+	mods, _ := m.GetInstalledMods(ctx, srcInst.Number)
+	modsTxt := strings.Join(mods, "\n")
+
+	created, err := m.CreateInstance(ctx, newInst, modsTxt, actor...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new instance: %w", err)
+	}
+
+	if m.jobRunner != nil {
+		restoreJobName := fmt.Sprintf("mc-rst-%s-%d-%s", created.Slug, created.Number, time.Now().Format("150405"))
+		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, created.PVCName(), "minecraft-modded-backups"); err != nil {
+			return created, fmt.Errorf("instance created, but restore Job failed: %w", err)
+		}
+	}
+
+	if m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-backup-restore-new", fmt.Sprintf("Restored %s into new instance #%02d %q", archiveName, created.Number, created.Name))
+	}
+	if m.event != nil {
+		_ = m.event.RecordEvent("mc-backup-restore-new", actorOrHyphen(actor))
+	}
+
+	return created, nil
+}
+
+// DeleteBackup safely deletes a specific backup archive file from backupsDir.
+func (m *InstanceManager) DeleteBackup(ctx context.Context, num int, fileName string, actor ...string) error {
+	if m.backupsDir == "" {
+		return fmt.Errorf("backups directory unconfigured")
+	}
+
+	cleanName := filepath.Base(strings.TrimSpace(fileName))
+	if cleanName == "" || cleanName == "." {
+		return fmt.Errorf("file name required")
+	}
+	if !domain.IsSafeBackupFileName(cleanName) {
+		return fmt.Errorf("invalid or unauthorized backup file name %q", cleanName)
+	}
+
+	targetPath := filepath.Join(m.backupsDir, cleanName)
+	if err := os.Remove(targetPath); err != nil {
+		return fmt.Errorf("failed to delete backup: %w", err)
+	}
+
+	if m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-backup-delete", fmt.Sprintf("Deleted backup %s for #%02d", cleanName, num))
+	}
+
+	return nil
+}
+
+// BackupSummary aggregates metadata for storage and backup health reporting.
+func (m *InstanceManager) BackupSummary() (domain.BackupSummary, bool) {
+	if m.backupsDir == "" {
+		return domain.BackupSummary{}, false
+	}
+	entries, err := os.ReadDir(m.backupsDir)
+	if err != nil {
+		return domain.BackupSummary{}, false
+	}
+	var info domain.BackupSummary
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		fi, err := e.Info()
+		if err != nil {
+			continue
+		}
+		info.Count++
+		info.TotalSize += fi.Size()
+		if fi.ModTime().After(info.LatestAt) {
+			info.LatestAt = fi.ModTime()
+			info.LatestName = e.Name()
+			info.LatestSize = fi.Size()
+		}
+	}
+	return info, true
+}
+

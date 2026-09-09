@@ -1,7 +1,6 @@
-package server
+package wiring_test
 
 import (
-	"agrelha/internal/domain"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,10 +9,12 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+
+	"agrelha/internal/domain"
 )
 
 func TestWizardImportTxt(t *testing.T) {
-	s, st, _ := setupTestMCServer(t)
+	app, st, _, _, _ := setupTestMCServer(t)
 	defer st.Close()
 
 	body := &bytes.Buffer{}
@@ -29,7 +30,7 @@ func TestWizardImportTxt(t *testing.T) {
 	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/import", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +56,7 @@ func TestWizardImportTxt(t *testing.T) {
 }
 
 func TestLegacyRedirectsToActiveInstance(t *testing.T) {
-	s, st, mgr := setupTestMCServer(t)
+	app, st, mgr, _, _ := setupTestMCServer(t)
 	defer st.Close()
 
 	// Seed instance #01
@@ -71,7 +72,7 @@ func TestLegacyRedirectsToActiveInstance(t *testing.T) {
 
 	// GET /minecraft/configs should redirect to /minecraft/1/configs
 	req := httptest.NewRequest(fiber.MethodGet, "/minecraft/configs", nil)
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func TestLegacyRedirectsToActiveInstance(t *testing.T) {
 
 	// GET /minecraft/mods should redirect to /minecraft/1/mods
 	req2 := httptest.NewRequest(fiber.MethodGet, "/minecraft/mods", nil)
-	resp2, err := s.App.Test(req2)
+	resp2, err := app.Test(req2)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -79,15 +79,8 @@ func (h *Handler) PendingActive(ctx context.Context) bool {
 		h.ClearPending()
 		return false
 	}
-	if h.cfg.K8s == nil {
-		return true
-	}
-	data, err := h.cfg.K8s.ConfigMapData(ctx, "valheim-mods")
-	if err != nil {
-		return true
-	}
 	have := map[string]bool{}
-	for _, e := range mods.Parse(data["mods.txt"]) {
+	for _, e := range h.currentMods(ctx) {
 		have[e] = true
 	}
 	for e := range set {
@@ -108,15 +101,11 @@ func (h *Handler) ClearPending() {
 
 // ModUpdates computes the list of Valheim mods with newer versions available on Thunderstore.
 func (h *Handler) ModUpdates(ctx context.Context) []pages.ModUpdate {
-	if h.cfg.K8s == nil || h.cfg.TS == nil {
-		return nil
-	}
-	data, err := h.cfg.K8s.ConfigMapData(ctx, "valheim-mods")
-	if err != nil {
+	if h.cfg.TS == nil {
 		return nil
 	}
 	var out []pages.ModUpdate
-	for _, e := range mods.Parse(data["mods.txt"]) {
+	for _, e := range h.currentMods(ctx) {
 		key := pages.ModKey(e)
 		cur := EntryVersion(e)
 		m, ok := h.cfg.TS.Get(key)
@@ -176,16 +165,13 @@ func (h *Handler) ApplyUpdates(c *fiber.Ctx, targetKeys []string) error {
 		return shared.SSEToast(c, "ok", "An update is already in progress — the server will restart once ArgoCD syncs.", nil)
 	}
 
-	if h.cfg.K8s == nil {
-		return shared.SSEToast(c, "err", "Cluster client not available.", nil)
-	}
-	data, err := h.cfg.K8s.ConfigMapData(ctx, "valheim-mods")
-	if err != nil {
-		return shared.SSEToast(c, "err", "Couldn't read installed mods: "+err.Error(), nil)
+	current := h.currentMods(ctx)
+	if len(current) == 0 {
+		return shared.SSEToast(c, "err", "No installed mods found.", nil)
 	}
 
 	set := map[string]string{}
-	for _, e := range mods.Parse(data["mods.txt"]) {
+	for _, e := range current {
 		set[pages.ModKey(e)] = EntryVersion(e)
 	}
 
@@ -212,8 +198,8 @@ func (h *Handler) ApplyUpdates(c *fiber.Ctx, targetKeys []string) error {
 	if err != nil {
 		return shared.SSEToast(c, "err", "Update commit failed: "+err.Error(), nil)
 	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mod-update", strings.Join(targetKeys, ", "))
+	if h.cfg.Audit != nil {
+		_ = h.cfg.Audit.RecordAudit(h.cfg.Actor(c), "mod-update", strings.Join(targetKeys, ", "))
 	}
 	if !changed {
 		return shared.SSEToast(c, "ok", "Already up to date.", nil)

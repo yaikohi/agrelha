@@ -1,7 +1,6 @@
-package server
+package wiring_test
 
 import (
-	"agrelha/internal/domain"
 	"context"
 	"io"
 	"net/http/httptest"
@@ -12,10 +11,13 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"agrelha/internal/domain"
+	"agrelha/internal/wiring"
 )
 
 func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
-	s, st, mgr := setupTestMCServer(t)
+	app, st, mgr, d, _ := setupTestMCServer(t)
 	defer st.Close()
 
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
@@ -31,7 +33,7 @@ func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
 
 	// 1. GET /minecraft/1/configs renders configs list
 	req := httptest.NewRequest(fiber.MethodGet, "/minecraft/1/configs", nil)
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +47,7 @@ func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
 
 	// 2. GET /api/minecraft/1/configs/file?f=server.properties returns SSE with file content
 	req = httptest.NewRequest(fiber.MethodGet, "/api/minecraft/1/configs/file?f=server.properties", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +61,7 @@ func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
 
 	// 3. POST /api/minecraft/1/backups/create creates backup Job
 	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/create", nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +69,7 @@ func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
 		t.Fatalf("POST /api/minecraft/1/backups/create status = %d, want 200", resp.StatusCode)
 	}
 
-	jobs, err := s.mck8s.Clientset().BatchV1().Jobs("minecraft-modded").List(context.Background(), metav1.ListOptions{})
+	jobs, err := d.MCK8s.Clientset().BatchV1().Jobs("minecraft-modded").List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,11 +91,12 @@ func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
 }
 
 func TestMinecraftRestoreEndpoints(t *testing.T) {
-	s, st, mgr := setupTestMCServer(t)
+	app, st, mgr, d, cfg := setupTestMCServer(t)
 	defer st.Close()
 
 	backupsDir := t.TempDir()
-	s.cfg.BackupsDir = backupsDir
+	cfg.BackupsDir = backupsDir
+	app = wiring.BuildServer(context.Background(), cfg, d)
 
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		Name:      "Fluxweave",
@@ -116,7 +119,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	_ = st.UpdateInstanceState(inst.Number, string(domain.StateRunning))
 	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/restore-inplace", strings.NewReader(`{"archive":"`+backupFile+`"}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +132,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	_ = st.UpdateInstanceState(inst.Number, string(domain.StateStopped))
 	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/restore-inplace", strings.NewReader(`{"archive":"`+backupFile+`"}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +144,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	// 3. Restore as New World creates slot #02 and launches restore Job
 	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/restore-new", strings.NewReader(`{"name":"Fluxweave Clone","tier":"large","archive":"`+backupFile+`"}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +163,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 
 	// 4. Download backup file
 	req = httptest.NewRequest(fiber.MethodGet, "/api/minecraft/1/backups/download?f="+backupFile, nil)
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +178,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	// 5. Delete backup file
 	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/delete", strings.NewReader(`{"file":"`+backupFile+`"}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err = s.App.Test(req)
+	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}

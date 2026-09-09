@@ -14,23 +14,20 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/app/mods"
-	"agrelha/internal/infra/content/thunderstore"
-	"agrelha/internal/infra/gitops"
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
-	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 )
 
 // Config configures dependencies for the content management handler.
 type Config struct {
-	Cfg            *config.Config
-	Store          *store.Store
-	K8s            *k8s.Client
+	ModConfigsPath string
+	StateStore     ports.StateStore
+	Audit          ports.AuditRecorder
+	ReadmeCache    ports.ReadmeCache
 	ValheimGame    ports.Game
 	Mods           *mods.Manager
-	Git            *gitops.Committer
-	TS             *thunderstore.Client
+	TS             ports.PackageCatalog
+	InstalledMods  func(context.Context) ([]string, error)
+	ConfigData     func(context.Context) (map[string]string, error)
 	Actor          func(*fiber.Ctx) string
 	ApplyAfterSync func(cmName, key string, check func(string) bool)
 	PendingActive  func(context.Context) bool
@@ -64,12 +61,24 @@ func New(cfg Config) *Handler {
 
 // Register mounts content routes onto the provided Fiber router.
 func (h *Handler) Register(router fiber.Router) {
+	h.RegisterPublic(router)
+	h.RegisterProtected(router)
+}
+
+// RegisterPublic mounts unauthenticated content routes (e.g. image proxy and modpack download).
+func (h *Handler) RegisterPublic(router fiber.Router) {
 	router.Get("/img", h.ImageProxy)
 	router.Get("/mods/export", h.ModpackExport)
+}
+
+// RegisterProtected mounts authenticated content management routes.
+func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Get("/mods", h.ModsPage)
 	router.Get("/mods/:namespace/:name", h.ModDetail)
 	router.Post("/mods/install", h.ModsInstall)
 	router.Post("/mods/remove", h.ModsRemove)
+	router.Post("/mods/update", h.ModsUpdateSelected)
+	router.Post("/mods/update-all", h.ModsUpdateAll)
 	router.Post("/mods/update/all", h.ModsUpdateAll)
 	router.Post("/mods/update/selected", h.ModsUpdateSelected)
 	router.Get("/configs", h.ConfigsPage)
@@ -151,42 +160,30 @@ func PublicHost(host string) bool {
 	return true
 }
 
-// RowsToResults converts store ModIndexRows to thunderstore SearchResults.
-func RowsToResults(rows []store.ModIndexRow) []thunderstore.SearchResult {
-	out := make([]thunderstore.SearchResult, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, thunderstore.SearchResult{
-			Owner:        r.Owner,
-			Name:         r.Name,
-			FullURL:      r.PackageURL,
-			Description:  r.Description,
-			Icon:         r.Icon,
-			Version:      r.Version,
-			Downloads:    r.Downloads,
-			IsDeprecated: r.IsDeprecated,
-			UpdatedAt:    r.UpdatedAt,
-		})
+func (h *Handler) currentMods(ctx context.Context) []string {
+	if h.cfg.InstalledMods != nil {
+		if list, err := h.cfg.InstalledMods(ctx); err == nil {
+			return list
+		}
 	}
-	return out
+	if h.cfg.Mods != nil {
+		if list, err := h.cfg.Mods.InstalledMods(ctx); err == nil {
+			return list
+		}
+	}
+	return nil
 }
 
-// ResultsToRows converts thunderstore SearchResults to store ModIndexRows.
-func ResultsToRows(idx []thunderstore.SearchResult) []store.ModIndexRow {
-	out := make([]store.ModIndexRow, 0, len(idx))
-	for _, r := range idx {
-		out = append(out, store.ModIndexRow{
-			FullName:     r.FullName(),
-			Namespace:    r.Owner,
-			Name:         r.Name,
-			Owner:        r.Owner,
-			Version:      r.Version,
-			Description:  r.Description,
-			Icon:         r.Icon,
-			PackageURL:   r.FullURL,
-			Downloads:    r.Downloads,
-			IsDeprecated: r.IsDeprecated,
-			UpdatedAt:    r.UpdatedAt,
-		})
+func (h *Handler) configData(ctx context.Context) (map[string]string, error) {
+	if h.cfg.ConfigData != nil {
+		return h.cfg.ConfigData(ctx)
 	}
-	return out
+	if h.cfg.StateStore != nil && h.cfg.ModConfigsPath != "" {
+		doc, err := h.cfg.StateStore.Get(ctx, h.cfg.ModConfigsPath)
+		if err != nil {
+			return nil, err
+		}
+		return doc.Data, nil
+	}
+	return nil, nil
 }

@@ -2,6 +2,7 @@ package instances
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -55,8 +56,21 @@ func New(cfg Config) *Handler {
 
 // Register mounts all instance management routes onto the Fiber router.
 func (h *Handler) Register(router fiber.Router) {
+	h.RegisterPublic(router)
+	h.RegisterProtected(router)
+}
+
+// RegisterPublic mounts unauthenticated routes (e.g. modpack export).
+func (h *Handler) RegisterPublic(router fiber.Router) {
+	router.Get("/api/minecraft/:num<int>/mods/export", h.MCInstanceExport)
+}
+
+// RegisterProtected mounts authenticated instance management routes.
+func (h *Handler) RegisterProtected(router fiber.Router) {
 	// Dashboard (provisioning wizard routes live in internal/http/wizard)
 	router.Get("/minecraft", h.MCDashboard)
+	router.Get("/minecraft/mods", h.LegacyModsRedirect)
+	router.Get("/minecraft/configs", h.LegacyConfigsRedirect)
 
 	// Direct Instance lifecycle
 	router.Post("/api/minecraft/instances", h.MCInstanceCreate)
@@ -72,6 +86,9 @@ func (h *Handler) Register(router fiber.Router) {
 	router.Post("/minecraft/configs/delete", h.MCConfigDelete)
 
 	// Per-instance detail & controls
+	router.Get("/minecraft/:num<int>", func(c *fiber.Ctx) error {
+		return c.Redirect(fmt.Sprintf("/minecraft/%s/overview", c.Params("num")))
+	})
 	router.Get("/minecraft/:num<int>/:tab", h.MCInstancePage)
 	router.Post("/api/minecraft/:num<int>/settings", h.MCInstanceSettingsSave)
 	router.Post("/api/minecraft/:num<int>/mods/install", h.MCInstanceModsInstall)
@@ -79,7 +96,24 @@ func (h *Handler) Register(router fiber.Router) {
 	router.Get("/api/minecraft/:num<int>/configs/file", h.MCInstanceConfigGet)
 	router.Post("/api/minecraft/:num<int>/configs/save", h.MCInstanceConfigSave)
 	router.Post("/api/minecraft/:num<int>/configs/delete", h.MCInstanceConfigDelete)
-	router.Get("/api/minecraft/:num<int>/mods/export", h.MCInstanceExport)
+}
+
+func (h *Handler) LegacyModsRedirect(c *fiber.Ctx) error {
+	if h.cfg.MCInstances != nil {
+		if insts, err := h.cfg.MCInstances.ListInstances(c.UserContext()); err == nil && len(insts) > 0 {
+			return c.Redirect(fmt.Sprintf("/minecraft/%d/mods", insts[0].Number), fiber.StatusTemporaryRedirect)
+		}
+	}
+	return c.Redirect("/minecraft", fiber.StatusTemporaryRedirect)
+}
+
+func (h *Handler) LegacyConfigsRedirect(c *fiber.Ctx) error {
+	if h.cfg.MCInstances != nil {
+		if insts, err := h.cfg.MCInstances.ListInstances(c.UserContext()); err == nil && len(insts) > 0 {
+			return c.Redirect(fmt.Sprintf("/minecraft/%d/configs", insts[0].Number), fiber.StatusTemporaryRedirect)
+		}
+	}
+	return c.Redirect("/minecraft", fiber.StatusTemporaryRedirect)
 }
 
 // InstanceStats returns per-instance player counts and uptimes for running instances, cached for instanceStatsTTL.

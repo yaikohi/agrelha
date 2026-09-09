@@ -18,8 +18,6 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gofiber/fiber/v2"
-
-	"agrelha/internal/platform/config"
 )
 
 // mockIDP is an in-process, spec-compliant OIDC provider for tests.
@@ -210,14 +208,14 @@ func (idp *mockIDP) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
-func setupTestApp(t *testing.T, idp *mockIDP, allowedEmail string) (*fiber.App, *Authenticator, *config.Config) {
+func setupTestApp(t *testing.T, idp *mockIDP, allowedEmail string) (*fiber.App, *Authenticator, Config) {
 	t.Helper()
-	cfg := &config.Config{
-		OIDCIssuer:       idp.Issuer(),
-		OIDCClientID:     idp.clientID,
-		OIDCClientSecret: idp.clientSecret,
-		OIDCRedirectURL:  "http://localhost:8080/auth/callback",
-		AllowedEmail:     allowedEmail,
+	cfg := Config{
+		Issuer:       idp.Issuer(),
+		ClientID:     idp.clientID,
+		ClientSecret: idp.clientSecret,
+		RedirectURL:  "http://localhost:8080/auth/callback",
+		AllowedEmail: allowedEmail,
 	}
 
 	a, err := New(context.Background(), cfg)

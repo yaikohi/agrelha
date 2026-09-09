@@ -1,6 +1,7 @@
-package server
+package wiring_test
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
+	"agrelha/internal/wiring"
 )
 
 func TestServerControlSSEToast(t *testing.T) {
@@ -29,15 +31,12 @@ func TestServerControlSSEToast(t *testing.T) {
 	cs := fake.NewSimpleClientset(&appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "valheim", Namespace: "valheim"},
 	})
-	s := &FiberServer{
-		App:   fiber.New(),
-		cfg:   &config.Config{},
-		store: st,
-		k8s:   k8s.NewWithClientset(cs, "valheim", "valheim"),
-	}
-	s.RegisterFiberRoutes()
+	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{
+		Store: st,
+		K8s:   k8s.NewWithClientset(cs, "valheim", "valheim"),
+	})
 
-	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodPost, "/server/restart", nil))
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodPost, "/server/restart", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,10 +65,9 @@ func TestServerControlNoK8sNoAudit(t *testing.T) {
 	}
 	defer st.Close()
 
-	s := &FiberServer{App: fiber.New(), cfg: &config.Config{}, store: st}
-	s.RegisterFiberRoutes()
+	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{Store: st})
 
-	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodPost, "/server/stop", nil))
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodPost, "/server/stop", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,15 +98,16 @@ func TestMinecraftServerControlSSEToast(t *testing.T) {
 	cs := fake.NewSimpleClientset(&appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "minecraft-neoforge", Namespace: "minecraft-neoforge"},
 	})
-	s := &FiberServer{
-		App:   fiber.New(),
-		cfg:   &config.Config{},
-		store: st,
-		mck8s: k8s.NewWithClientset(cs, "minecraft-neoforge", "minecraft-neoforge"),
+	cfg := &config.Config{
+		MinecraftDeployment: "minecraft-neoforge",
+		MinecraftNamespace:  "minecraft-neoforge",
 	}
-	s.RegisterFiberRoutes()
+	app := wiring.BuildServer(context.Background(), cfg, wiring.Deps{
+		Store: st,
+		MCK8s: k8s.NewWithClientset(cs, "minecraft-neoforge", "minecraft-neoforge"),
+	})
 
-	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodPost, "/minecraft/server/restart", nil))
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodPost, "/minecraft/server/restart", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,14 +133,11 @@ func TestRootDashboard(t *testing.T) {
 	}
 	defer st.Close()
 
-	s := &FiberServer{
-		App:   fiber.New(),
-		cfg:   &config.Config{GrafanaDashboardURL: "https://grafana.example.com"},
-		store: st,
-	}
-	s.RegisterFiberRoutes()
+	app := wiring.BuildServer(context.Background(), &config.Config{GrafanaDashboardURL: "https://grafana.example.com"}, wiring.Deps{
+		Store: st,
+	})
 
-	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodGet, "/", nil))
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,16 +167,13 @@ func TestGuestRootDashboardAndAuthProtection(t *testing.T) {
 	}
 	defer st.Close()
 
-	s := &FiberServer{
-		App:   fiber.New(),
-		cfg:   &config.Config{},
-		store: st,
-		auth:  &auth.Authenticator{},
-	}
-	s.RegisterFiberRoutes()
+	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{
+		Store: st,
+		Auth:  &auth.Authenticator{},
+	})
 
 	// 1. Guest visits / -> 200 OK (Public player portal view)
-	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodGet, "/", nil))
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +204,7 @@ func TestGuestRootDashboardAndAuthProtection(t *testing.T) {
 	// 2. Protected admin routes require login -> redirect to /auth/login
 	for _, path := range []string{"/minecraft", "/mods", "/configs", "/admins", "/history"} {
 		req := httptest.NewRequest(fiber.MethodGet, path, nil)
-		r, err := s.App.Test(req)
+		r, err := app.Test(req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -226,7 +219,7 @@ func TestGuestRootDashboardAndAuthProtection(t *testing.T) {
 
 	// 3. /login redirects directly to /auth/login
 	loginReq := httptest.NewRequest(fiber.MethodGet, "/login", nil)
-	loginResp, err := s.App.Test(loginReq)
+	loginResp, err := app.Test(loginReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +232,7 @@ func TestGuestRootDashboardAndAuthProtection(t *testing.T) {
 
 	// 4. /auth/logout clears session cookies and redirects to /
 	logoutReq := httptest.NewRequest(fiber.MethodGet, "/auth/logout", nil)
-	logoutResp, err := s.App.Test(logoutReq)
+	logoutResp, err := app.Test(logoutReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,18 +266,17 @@ func TestDevAuthenticatorLifecycle(t *testing.T) {
 	cfg := &config.Config{
 		AllowedEmail: "ykhi@proton.me",
 	}
-	devAuth := auth.NewDev(cfg)
-	s := &FiberServer{
-		App:   fiber.New(),
-		cfg:   cfg,
-		store: st,
-		auth:  devAuth,
-	}
-	s.RegisterFiberRoutes()
+	devAuth := auth.NewDev(auth.Config{
+		AllowedEmail: cfg.AllowedEmail,
+	})
+	app := wiring.BuildServer(context.Background(), cfg, wiring.Deps{
+		Store: st,
+		Auth:  devAuth,
+	})
 
 	// 1. Initially guest
 	req := httptest.NewRequest(fiber.MethodGet, "/", nil)
-	resp, err := s.App.Test(req)
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +287,7 @@ func TestDevAuthenticatorLifecycle(t *testing.T) {
 
 	// 2. Protected admin route redirects to /auth/login
 	protReq := httptest.NewRequest(fiber.MethodGet, "/mods", nil)
-	protResp, err := s.App.Test(protReq)
+	protResp, err := app.Test(protReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +297,7 @@ func TestDevAuthenticatorLifecycle(t *testing.T) {
 
 	// 3. Sign in via dev login
 	loginReq := httptest.NewRequest(fiber.MethodGet, "/auth/login", nil)
-	loginResp, err := s.App.Test(loginReq)
+	loginResp, err := app.Test(loginReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +319,7 @@ func TestDevAuthenticatorLifecycle(t *testing.T) {
 	// 4. Visit / with session cookie -> Admin dashboard
 	adminReq := httptest.NewRequest(fiber.MethodGet, "/", nil)
 	adminReq.AddCookie(&http.Cookie{Name: "agrelha_session", Value: sessionCookieVal})
-	adminResp, err := s.App.Test(adminReq)
+	adminResp, err := app.Test(adminReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +331,7 @@ func TestDevAuthenticatorLifecycle(t *testing.T) {
 	// 5. Sign out
 	logoutReq := httptest.NewRequest(fiber.MethodGet, "/auth/logout", nil)
 	logoutReq.AddCookie(&http.Cookie{Name: "agrelha_session", Value: sessionCookieVal})
-	logoutResp, err := s.App.Test(logoutReq)
+	logoutResp, err := app.Test(logoutReq)
 	if err != nil {
 		t.Fatal(err)
 	}

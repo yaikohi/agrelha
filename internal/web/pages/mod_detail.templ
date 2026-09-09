@@ -3,10 +3,10 @@ package pages
 import (
 	"strconv"
 
-	"agrelha/internal/infra/content/thunderstore"
+	"agrelha/internal/domain"
 )
 
-templ ModDetail(ns, name string, e thunderstore.SearchResult, version string, deps []string, readmeHTML, tsURL string, installed, enabled bool) {
+templ ModDetail(ns, name string, e domain.ModSearchResult, version string, deps []string, readmeHTML, tsURL string, installed, enabled bool) {
 	@Layout(ns + "/" + name) {
 		@nav()
 		<div class="mb-6 flex items-start gap-4">

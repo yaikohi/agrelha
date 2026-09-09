@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
 
@@ -378,5 +379,19 @@ func TestUserStoreCRUD(t *testing.T) {
 	}
 	if len(afterDelete) != 1 || afterDelete[0].Username != "yaya" {
 		t.Fatalf("expected 1 user left, got %+v", afterDelete)
+	}
+}
+
+func TestModIndexConversion(t *testing.T) {
+	res := []domain.ModSearchResult{
+		{Owner: "author", Name: "coolmod", Version: "1.0.0", Description: "A cool mod"},
+	}
+	rows := ResultsToRows(res)
+	if len(rows) != 1 || rows[0].Name != "coolmod" || rows[0].Namespace != "author" {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+	back := RowsToResults(rows)
+	if len(back) != 1 || back[0].Name != "coolmod" || back[0].Owner != "author" {
+		t.Fatalf("unexpected back conversion: %+v", back)
 	}
 }

@@ -1,6 +1,7 @@
-package server
+package wiring_test
 
 import (
+	"context"
 	"io"
 	"net/http/httptest"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
+	"agrelha/internal/wiring"
 )
 
 func TestValheimConsolePage(t *testing.T) {
@@ -20,10 +22,11 @@ func TestValheimConsolePage(t *testing.T) {
 	}
 	defer st.Close()
 
-	s := &FiberServer{App: fiber.New(), cfg: &config.Config{}, store: st}
-	s.RegisterFiberRoutes()
+	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{
+		Store: st,
+	})
 
-	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodGet, "/valheim", nil))
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/valheim", nil))
 	if err != nil {
 		t.Fatal(err)
 	}

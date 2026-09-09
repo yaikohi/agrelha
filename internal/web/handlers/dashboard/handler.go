@@ -1,7 +1,6 @@
 package dashboard
 
 import (
-	mcaccess "agrelha/internal/app/access"
 	"agrelha/internal/app/instances"
 	"agrelha/internal/domain"
 	"bufio"
@@ -11,10 +10,6 @@ import (
 	"log/slog"
 	"time"
 
-	"agrelha/internal/infra/backups"
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
-	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 	"agrelha/internal/web/metrics"
 	"agrelha/internal/web/pages"
@@ -31,22 +26,28 @@ type InstanceStat struct {
 	Uptime       string
 }
 
+// BackupSummary aggregates metadata for storage and backup health reporting on the dashboard.
+type BackupSummary struct {
+	Count      int
+	TotalSize  int64
+	LatestSize int64
+	LatestAt   time.Time
+}
+
 // Config defines dependencies for the dashboard page and main SSE loop.
 type Config struct {
-	Cfg           *config.Config
-	Store         *store.Store
-	K8s           *k8s.Client
-	MCK8s         *k8s.Client
-	MCInstances   *instances.InstanceManager
-	MCAccess      *mcaccess.AccessManager
-	ValheimGame   ports.Game
-	MinecraftGame ports.Game
-	Auth          ports.Auth
-	Actor         func(*fiber.Ctx) string
-	BackupInfo    func() (backups.Info, bool)
-	ModUpdates    func(context.Context) []pages.ModUpdate
-	PendingActive func(context.Context) bool
-	InstanceStats func(context.Context, []domain.Instance) map[int]InstanceStat
+	GrafanaDashboardURL string
+	ValheimAddress      string
+	GameNodeName        string
+	MCInstances         *instances.InstanceManager
+	ValheimGame         ports.Game
+	MinecraftGame       ports.Game
+	Auth                ports.Auth
+	Actor               func(*fiber.Ctx) string
+	BackupInfo          func() (BackupSummary, bool)
+	ModUpdates          func(context.Context) []pages.ModUpdate
+	PendingActive       func(context.Context) bool
+	InstanceStats       func(context.Context, []domain.Instance) map[int]InstanceStat
 }
 
 // Handler serves the dashboard landing page and the continuous tile SSE stream.
@@ -127,12 +128,9 @@ func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 		}
 	}
 
-	grafanaURL, valheimAddr, nodeName := "", "", ""
-	if h.cfg.Cfg != nil {
-		grafanaURL = h.cfg.Cfg.GrafanaDashboardURL
-		valheimAddr = h.cfg.Cfg.ValheimAddress
-		nodeName = h.cfg.Cfg.GameNodeName
-	}
+	grafanaURL := h.cfg.GrafanaDashboardURL
+	valheimAddr := h.cfg.ValheimAddress
+	nodeName := h.cfg.GameNodeName
 
 	return shared.Render(c, pages.Dashboard(grafanaURL, valheimAddr, nodeName, mcSummary, isAdmin, fk, fm))
 }
@@ -259,29 +257,6 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 				sig["mem"] = tele.Memory
 			}
 		}
-	} else {
-		if h.cfg.Store != nil {
-			if n, err := h.cfg.Store.CountOnline(); err == nil {
-				sig["players"] = n
-			}
-		}
-		if h.cfg.K8s != nil {
-			if ps, err := h.cfg.K8s.PodStatus(ctx); err == nil {
-				if ps.Ready {
-					sig["state"] = "Up"
-				} else {
-					sig["state"] = ps.Phase
-				}
-				sig["online"] = ps.Ready
-				if !ps.StartedAt.IsZero() {
-					sig["uptime"] = shared.HumanDuration(time.Since(ps.StartedAt))
-				}
-			}
-			if cpu, mem, err := h.cfg.K8s.PodMetrics(ctx); err == nil {
-				sig["cpu"] = fmt.Sprintf("%dm", cpu)
-				sig["mem"] = fmt.Sprintf("%d Mi", mem)
-			}
-		}
 	}
 
 	if h.cfg.MinecraftGame != nil {
@@ -306,41 +281,6 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 			}
 			if tele.PackName != "" {
 				sig["mc_pack"] = tele.PackName
-			}
-		}
-	} else {
-		if h.cfg.MCK8s != nil {
-			if h.cfg.MCInstances != nil {
-				if insts, err := h.cfg.MCInstances.ListInstances(ctx); err == nil && len(insts) > 0 {
-					inst := insts[0]
-					if inst.Loader == domain.LoaderFabric {
-						sig["mc_loader"] = "Fabric"
-					}
-					if inst.PackDefined() && inst.Pack.Name != "" {
-						sig["mc_pack"] = inst.Pack.Name
-					}
-				}
-			}
-		}
-		if h.cfg.MCAccess != nil {
-			if pl, err := h.cfg.MCAccess.OnlinePlayers(); err == nil {
-				sig["mc_players"] = len(pl)
-			}
-		}
-		if h.cfg.MCK8s != nil {
-			if ps, err := h.cfg.MCK8s.PodStatus(ctx); err == nil {
-				if ps.Ready {
-					sig["mc_state"] = "Up"
-				} else {
-					sig["mc_state"] = ps.Phase
-				}
-				if !ps.StartedAt.IsZero() {
-					sig["mc_uptime"] = shared.HumanDuration(time.Since(ps.StartedAt))
-				}
-			}
-			if cpu, mem, err := h.cfg.MCK8s.PodMetrics(ctx); err == nil {
-				sig["mc_cpu"] = fmt.Sprintf("%dm", cpu)
-				sig["mc_mem"] = fmt.Sprintf("%d Mi", mem)
 			}
 		}
 	}

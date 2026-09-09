@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -22,8 +21,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/app/modpack"
-	"agrelha/internal/infra/content/mcversions"
-	"agrelha/internal/infra/content/modpackindex"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 	"agrelha/internal/web/sse"
@@ -51,11 +48,11 @@ func (h *Handler) MCWizardPage(c *fiber.Ctx) error {
 	}
 
 	var releases []string
-	if h.cfg.MCV != nil {
-		releases = h.cfg.MCV.Releases(c.UserContext(), 15)
+	if h.cfg.VersionReleases != nil {
+		releases = h.cfg.VersionReleases(c.UserContext(), 15)
 	}
 	if len(releases) == 0 {
-		releases = []string{mcversions.FallbackLatest, "1.21.1", "1.20.1"}
+		releases = []string{"1.21.1", "1.20.1"}
 	}
 
 	return shared.Render(c, pages.MinecraftWizard(releases, budgetUI))
@@ -74,7 +71,7 @@ func ssePatchElements(c *fiber.Ctx, selector, content string) error {
 
 // MCWizardModpacksSearch searches for modpacks via ModpackIndex.
 func (h *Handler) MCWizardModpacksSearch(c *fiber.Ctx) error {
-	if h.cfg.MPI == nil {
+	if h.cfg.SearchModpacks == nil {
 		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full text-xs text-red-400 py-6 text-center">Modpack Index unconfigured</div>`)
 	}
 
@@ -96,30 +93,19 @@ func (h *Handler) MCWizardModpacksSearch(c *fiber.Ctx) error {
 		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full py-8 text-center text-xs text-zinc-500">Type a modpack name above and click Search to browse available packs.</div>`)
 	}
 
-	res, err := h.cfg.MPI.SearchModpacks(c.UserContext(), q, "", 1)
+	res, err := h.cfg.SearchModpacks(c.UserContext(), q)
 	if err != nil {
 		return ssePatchElements(c, "#wizard-pack-results", fmt.Sprintf(`<div class="col-span-full text-xs text-red-400 py-6 text-center">Search error: %s</div>`, html.EscapeString(err.Error())))
 	}
-	if len(res.Data) == 0 {
+	if len(res) == 0 {
 		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full text-xs text-zinc-500 py-8 text-center">No modpacks found matching your search.</div>`)
 	}
 
 	var sb strings.Builder
-	for _, p := range res.Data {
+	for _, p := range res {
 		cleanJSName := strings.ReplaceAll(strings.ReplaceAll(p.Name, `\`, `\\`), `'`, `\'`)
 		cleanJSName = strings.ReplaceAll(cleanJSName, `"`, `&quot;`)
-
-		packRefURL := ""
-		if p.Links != nil && p.Links["curseforge"] != "" {
-			packRefURL = p.Links["curseforge"]
-		} else if strings.Contains(p.URL, "curseforge.com") {
-			packRefURL = p.URL
-		} else if p.URL != "" {
-			packRefURL = p.URL
-		} else {
-			packRefURL = p.PageURL
-		}
-		cleanRefURL := strings.ReplaceAll(packRefURL, `'`, `\'`)
+		cleanRefURL := strings.ReplaceAll(p.RefURL, `'`, `\'`)
 
 		sb.WriteString(fmt.Sprintf(`
 			<div class="flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-4">
@@ -147,10 +133,10 @@ func (h *Handler) MCWizardModpacksSearch(c *fiber.Ctx) error {
 	return ssePatchElements(c, "#wizard-pack-results", sb.String())
 }
 
-// MCWizardModsSearch searches for mods via Modrinth.
+// MCWizardModsSearch searches for mods via configured mod provider.
 func (h *Handler) MCWizardModsSearch(c *fiber.Ctx) error {
-	if h.cfg.MR == nil {
-		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-red-400 py-4 text-center">Modrinth client unconfigured</p>`)
+	if h.cfg.SearchMods == nil {
+		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-red-400 py-4 text-center">Mod search unconfigured</p>`)
 	}
 
 	var req struct {
@@ -184,16 +170,16 @@ func (h *Handler) MCWizardModsSearch(c *fiber.Ctx) error {
 		mcVersion = "1.21.1"
 	}
 
-	res, err := h.cfg.MR.Search(c.UserContext(), q, mcVersion, "", 20, 0)
+	res, err := h.cfg.SearchMods(c.UserContext(), q, mcVersion)
 	if err != nil {
 		return ssePatchElements(c, "#wizard-mod-results", fmt.Sprintf(`<p class="text-xs text-red-400 py-4 text-center">Search error: %s</p>`, html.EscapeString(err.Error())))
 	}
-	if len(res.Hits) == 0 {
+	if len(res) == 0 {
 		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-zinc-500 py-4 text-center">No mods found matching your search.</p>`)
 	}
 
 	var sb strings.Builder
-	for _, hit := range res.Hits {
+	for _, hit := range res {
 		cleanSlug := strings.ReplaceAll(hit.Slug, "'", "\\'")
 		sb.WriteString(fmt.Sprintf(`
 			<div class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
@@ -231,7 +217,12 @@ func (h *Handler) MCWizardCartCheck(c *fiber.Ctx) error {
 		req.MCVersion = c.FormValue("mc_version")
 	}
 
-	compat := mccontent.CheckCartCompatibility(c.UserContext(), h.cfg.MR, req.Cart, req.MCVersion)
+	var compat mccontent.CartCompatibility
+	if h.cfg.CheckCartCompat != nil {
+		compat = h.cfg.CheckCartCompat(c.UserContext(), req.Cart, req.MCVersion)
+	} else {
+		compat = mccontent.CartCompatibility{BestLoader: "neoforge"}
+	}
 
 	var cartHTML strings.Builder
 	for _, slug := range req.Cart {
@@ -348,39 +339,17 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		packProvider = strings.TrimSpace(c.FormValue("pack_provider"))
 	}
 
-	if h.cfg.MPI != nil && strings.Contains(packRef, "modpackindex.com/modpack/") {
-		parts := strings.Split(packRef, "/")
-		for i, part := range parts {
-			if part == "modpack" && i+1 < len(parts) {
-				if id, err := strconv.Atoi(parts[i+1]); err == nil && id > 0 {
-					if detail, err := h.cfg.MPI.GetModpack(c.UserContext(), id); err == nil && detail != nil {
-						if cfURL := detail.Links["curseforge"]; cfURL != "" {
-							packRef = cfURL
-						} else if detail.URL != "" && strings.Contains(detail.URL, "curseforge.com") {
-							packRef = detail.URL
-						}
-					}
-				}
-				break
-			}
-		}
+	if packRef != "" && h.cfg.ResolvePackRef != nil {
+		packRef = h.cfg.ResolvePackRef(c.UserContext(), packRef)
 	}
 
-	if source == "modpack" && h.cfg.MPI != nil {
+	if source == "modpack" && h.cfg.VerifyPackLoader != nil {
 		packID := strings.TrimSpace(req.PackID)
 		if packID == "" {
 			packID = strings.TrimSpace(c.FormValue("pack_id"))
 		}
 		if id, err := strconv.Atoi(packID); err == nil && id > 0 {
-			if mods, err := h.cfg.MPI.GetModpackMods(c.UserContext(), id); err == nil && len(mods) > 0 {
-				if best := modpackindex.BestLoader(mods); best != "" && best != loader {
-					fit := modpackindex.AnalyzeLoader(mods, loader)
-					slog.Warn("wizard: loader corrected from pack contents",
-						"pack", packName, "requested", loader, "derived", best,
-						"would_not_load", len(fit.Blocking))
-					loader = best
-				}
-			}
+			loader = h.cfg.VerifyPackLoader(c.UserContext(), id, packName, loader)
 		}
 	}
 
@@ -461,17 +430,12 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		inst.Loader = domain.NormalizeLoader(loader)
 	}
 
-	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, modsTxt)
+	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, modsTxt, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Failed to create world: "+err.Error(), nil)
 	}
 
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-instance-create", fmt.Sprintf("World #%02d %q", created.Number, created.Name))
-		_ = h.cfg.Store.RecordEvent("mc-instance-create", h.cfg.Actor(c))
-	}
-
-	_ = h.cfg.MCInstances.StartInstance(c.UserContext(), created.Number)
+	_ = h.cfg.MCInstances.StartInstance(c.UserContext(), created.Number, h.cfg.Actor(c))
 
 	redirectURL := fmt.Sprintf("/minecraft/provisioning/%d", created.Number)
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Created world %q! Redirecting...", created.Name), map[string]any{
@@ -515,7 +479,7 @@ func (h *Handler) MCProvisioningPage(c *fiber.Ctx) error {
 
 // MCProvisioningStream streams pod ready status during instance provisioning.
 func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
-	if h.cfg.MCInstances == nil || h.cfg.MCK8s == nil {
+	if h.cfg.MCInstances == nil {
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")
 		return c.SendString("event: datastar-patch-signals\ndata: signals {\"phase\":\"ready\",\"ready\":true}\n\n")
@@ -536,19 +500,11 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 	c.Set("Connection", "keep-alive")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		depName := inst.DeploymentName()
 		for range 60 {
-			desired, ready, err := h.cfg.MCK8s.DeploymentReplicas(context.Background(), depName)
-			phase := "syncing"
-			isReady := false
-
-			if err == nil {
-				if ready > 0 {
-					phase = "ready"
-					isReady = true
-				} else if desired > 0 {
-					phase = "booting"
-				}
+			phase, isReady, err := h.cfg.MCInstances.ProvisioningStatus(context.Background(), inst.Number)
+			if err != nil {
+				phase = "syncing"
+				isReady = false
 			}
 
 			_ = sse.PatchSignals(w, map[string]any{

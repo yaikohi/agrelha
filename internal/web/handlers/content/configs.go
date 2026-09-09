@@ -7,18 +7,16 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"agrelha/internal/ports"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 )
 
 var cfgNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*\.cfg$`)
 
-// ConfigsList returns the sorted list of mod config file names from the ConfigMap.
+// ConfigsList returns the sorted list of mod config file names from the ConfigMap or StateStore.
 func (h *Handler) ConfigsList(c *fiber.Ctx) ([]string, error) {
-	if h.cfg.K8s == nil {
-		return nil, nil
-	}
-	data, err := h.cfg.K8s.ConfigMapData(c.UserContext(), configsCM)
+	data, err := h.configData(c.UserContext())
 	if err != nil {
 		return nil, err
 	}
@@ -34,12 +32,12 @@ func (h *Handler) ConfigsList(c *fiber.Ctx) ([]string, error) {
 func (h *Handler) ConfigsPage(c *fiber.Ctx) error {
 	files, _ := h.ConfigsList(c)
 	fk, fm := shared.TakeFlash(c)
-	return shared.Render(c, pages.Configs(files, h.cfg.Git != nil, fk, fm))
+	return shared.Render(c, pages.Configs(files, h.cfg.StateStore != nil, fk, fm))
 }
 
 // ConfigNew renders the page to create a new config file.
 func (h *Handler) ConfigNew(c *fiber.Ctx) error {
-	return shared.Render(c, pages.ConfigEdit("", "", true, h.cfg.Git != nil))
+	return shared.Render(c, pages.ConfigEdit("", "", true, h.cfg.StateStore != nil))
 }
 
 // ConfigEdit renders the editor for an existing config file.
@@ -50,17 +48,15 @@ func (h *Handler) ConfigEdit(c *fiber.Ctx) error {
 		return c.Redirect("/configs", fiber.StatusSeeOther)
 	}
 	var content string
-	if h.cfg.K8s != nil {
-		if data, err := h.cfg.K8s.ConfigMapData(c.UserContext(), configsCM); err == nil {
-			content = data[name]
-		}
+	if data, err := h.configData(c.UserContext()); err == nil && data != nil {
+		content = data[name]
 	}
-	return shared.Render(c, pages.ConfigEdit(name, content, false, h.cfg.Git != nil))
+	return shared.Render(c, pages.ConfigEdit(name, content, false, h.cfg.StateStore != nil))
 }
 
 // ConfigSave handles creating or updating a mod config file.
 func (h *Handler) ConfigSave(c *fiber.Ctx) error {
-	if h.cfg.Git == nil || h.cfg.Cfg == nil {
+	if h.cfg.StateStore == nil || h.cfg.ModConfigsPath == "" {
 		shared.SetFlash(c, "err", "Declarative plane disabled — no Codeberg token configured.")
 		return c.Redirect("/configs", fiber.StatusSeeOther)
 	}
@@ -71,14 +67,23 @@ func (h *Handler) ConfigSave(c *fiber.Ctx) error {
 	}
 	content := strings.ReplaceAll(c.FormValue("content"), "\r\n", "\n")
 
-	changed, err := h.cfg.Git.SetData(c.UserContext(), h.cfg.Cfg.ModConfigsPath, file, content,
-		"agrelha: edit mod config "+file)
+	changed, err := h.cfg.StateStore.Patch(c.UserContext(), h.cfg.ModConfigsPath,
+		"agrelha: edit mod config "+file, func(doc *ports.Document) (bool, error) {
+			if doc.Data == nil {
+				doc.Data = make(map[string]string)
+			}
+			if doc.Data[file] == content {
+				return false, nil
+			}
+			doc.Data[file] = content
+			return true, nil
+		})
 	if err != nil {
 		shared.SetFlash(c, "err", "Save failed: "+err.Error())
 		return c.Redirect("/configs", fiber.StatusSeeOther)
 	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mod-config-edit", file)
+	if h.cfg.Audit != nil {
+		_ = h.cfg.Audit.RecordAudit(h.cfg.Actor(c), "mod-config-edit", file)
 	}
 	if changed {
 		h.cfg.ApplyAfterSync(configsCM, file, func(v string) bool { return v == content })
@@ -91,7 +96,7 @@ func (h *Handler) ConfigSave(c *fiber.Ctx) error {
 
 // ConfigDelete handles deleting a mod config file.
 func (h *Handler) ConfigDelete(c *fiber.Ctx) error {
-	if h.cfg.Git == nil || h.cfg.Cfg == nil {
+	if h.cfg.StateStore == nil || h.cfg.ModConfigsPath == "" {
 		shared.SetFlash(c, "err", "Declarative plane disabled — no Codeberg token configured.")
 		return c.Redirect("/configs", fiber.StatusSeeOther)
 	}
@@ -100,14 +105,23 @@ func (h *Handler) ConfigDelete(c *fiber.Ctx) error {
 		shared.SetFlash(c, "err", "Invalid config file name.")
 		return c.Redirect("/configs", fiber.StatusSeeOther)
 	}
-	changed, err := h.cfg.Git.DeleteData(c.UserContext(), h.cfg.Cfg.ModConfigsPath, file,
-		"agrelha: delete mod config "+file)
+	changed, err := h.cfg.StateStore.Patch(c.UserContext(), h.cfg.ModConfigsPath,
+		"agrelha: delete mod config "+file, func(doc *ports.Document) (bool, error) {
+			if doc.Data == nil {
+				return false, nil
+			}
+			if _, ok := doc.Data[file]; !ok {
+				return false, nil
+			}
+			delete(doc.Data, file)
+			return true, nil
+		})
 	if err != nil {
 		shared.SetFlash(c, "err", "Delete failed: "+err.Error())
 		return c.Redirect("/configs", fiber.StatusSeeOther)
 	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mod-config-delete", file)
+	if h.cfg.Audit != nil {
+		_ = h.cfg.Audit.RecordAudit(h.cfg.Actor(c), "mod-config-delete", file)
 	}
 	if changed {
 		h.cfg.ApplyAfterSync(configsCM, file, func(v string) bool { return v == "" })

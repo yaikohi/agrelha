@@ -9,7 +9,6 @@ import (
 
 	"agrelha/internal/app/games/valheim"
 	"agrelha/internal/app/modpack"
-	"agrelha/internal/app/mods"
 	"agrelha/internal/domain"
 	"agrelha/internal/web/shared"
 )
@@ -41,23 +40,15 @@ func (h *Handler) ModpackExport(c *fiber.Ctx) error {
 			shared.SetFlash(c, "err", "No mods are installed — nothing to export.")
 			return c.Redirect("/mods", fiber.StatusSeeOther)
 		}
-		if h.cfg.Store != nil {
-			_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "modpack-export", "")
+		if h.cfg.Audit != nil {
+			_ = h.cfg.Audit.RecordAudit(h.cfg.Actor(c), "modpack-export", "")
 		}
 		c.Set("Content-Type", bundle.ContentType)
 		c.Set("Content-Disposition", `attachment; filename="`+bundle.Filename+`"`)
 		return c.Send(bundle.Data)
 	}
 
-	if h.cfg.K8s == nil {
-		return fiber.NewError(fiber.StatusServiceUnavailable, "k8s client not available")
-	}
-
-	data, err := h.cfg.K8s.ConfigMapData(ctx, "valheim-mods")
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "read mods: "+err.Error())
-	}
-	entries := mods.Parse(data["mods.txt"])
+	entries := h.currentMods(ctx)
 	if len(entries) == 0 {
 		shared.SetFlash(c, "err", "No mods are installed — nothing to export.")
 		return c.Redirect("/mods", fiber.StatusSeeOther)
@@ -66,7 +57,7 @@ func (h *Handler) ModpackExport(c *fiber.Ctx) error {
 	entries = h.WithBepInEx(ctx, entries)
 
 	configs := map[string]string{}
-	if cfg, err := h.cfg.K8s.ConfigMapData(ctx, configsCM); err == nil {
+	if cfg, err := h.configData(ctx); err == nil && cfg != nil {
 		maps.Copy(configs, cfg)
 	}
 
@@ -75,8 +66,8 @@ func (h *Handler) ModpackExport(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "build modpack: "+err.Error())
 	}
 
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "modpack-export", "")
+	if h.cfg.Audit != nil {
+		_ = h.cfg.Audit.RecordAudit(h.cfg.Actor(c), "modpack-export", "")
 	}
 
 	name := "valheim-" + time.Now().Format("2006-01-02") + ".r2z"

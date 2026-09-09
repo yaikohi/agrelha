@@ -35,3 +35,9 @@ type HistoryReader interface {
 type PlayerReader interface {
 	ListPlayers() ([]domain.Player, error)
 }
+
+// ReadmeCache provides cached markdown readmes for content packages.
+type ReadmeCache interface {
+	GetReadme(fullName, version string) (markdown string, hit bool, err error)
+	PutReadme(fullName, version, markdown string) error
+}

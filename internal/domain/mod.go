@@ -51,3 +51,19 @@ type ModVersion struct {
 	Dependencies []VersionDependency `json:"dependencies"`
 	DatePub      time.Time           `json:"date_published"`
 }
+
+// ModSearchResult represents a summary search result for a mod package.
+type ModSearchResult struct {
+	Owner        string    `json:"owner"`
+	Name         string    `json:"name"`
+	FullURL      string    `json:"full_url"`
+	Description  string    `json:"description"`
+	Icon         string    `json:"icon"`
+	Version      string    `json:"version"`
+	Downloads    int64     `json:"downloads"`
+	IsDeprecated bool      `json:"is_deprecated"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// FullName returns owner/name identifier.
+func (r ModSearchResult) FullName() string { return r.Owner + "/" + r.Name }

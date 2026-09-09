@@ -37,15 +37,41 @@ import (
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
-	"agrelha/internal/server"
-	contenthttp "agrelha/internal/web/handlers/content"
 )
+
+// Deps bundles all constructed infrastructure adapters and application services.
+type Deps struct {
+	Store          *store.Store
+	K8s            *k8s.Client
+	MCK8s          *k8s.Client
+	Auth           ports.Auth
+	ValheimGame    ports.Game
+	MinecraftGame  ports.Game
+	ValheimRuntime ports.Runtime
+	ValheimRef     ports.ServerRef
+	MCRuntime      ports.Runtime
+	MCRef          ports.ServerRef
+	Mods           *mods.Manager
+	Admins         *admins.Manager
+	Git            *gitops.Committer
+	TS             *thunderstore.Client
+	MR             *modrinth.Client
+	MPI            *modpackindex.Client
+	MCV            *mcversions.Client
+	MCMods         *mcaccess.ModManager
+	MCAccess       *mcaccess.AccessManager
+	MCRcon         *rcon.Client
+	MCRconPool     *rcon.Pool
+	MCInstances    *instances.InstanceManager
+	StateStore     ports.StateStore
+	Reconciler     ports.Reconciler
+}
 
 // Build is the composition root: it is the only place that decides which
 // adapter satisfies which port. Everything it returns is already constructed,
-// so server.New performs no I/O and can be handed fakes in a test.
-func Build(ctx context.Context, cfg *config.Config) (server.Deps, error) {
-	var d server.Deps
+// so server handlers perform no I/O and can be handed fakes in a test.
+func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
+	var d Deps
 
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
@@ -130,6 +156,7 @@ func Build(ctx context.Context, cfg *config.Config) (server.Deps, error) {
 	}
 	if d.MCK8s != nil {
 		instOpts = append(instOpts,
+			instances.WithJobRunner(d.MCK8s),
 			instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
 				inst, err := d.MCInstances.GetInstance(ctx, num)
 				if err != nil {
@@ -278,12 +305,12 @@ func buildThunderstore(ctx context.Context, cfg *config.Config, st *store.Store)
 	if rows, fetchedAt, err := st.LoadModIndex(); err != nil {
 		slog.Warn("mod index load failed", "err", err)
 	} else if len(rows) > 0 {
-		ts.Preload(contenthttp.RowsToResults(rows), fetchedAt)
+		ts.Preload(store.RowsToResults(rows), fetchedAt)
 		slog.Info("thunderstore index preloaded from cache", "packages", len(rows))
 	}
 
 	ts.OnRefresh = func(idx []thunderstore.SearchResult) {
-		if err := st.SaveModIndex(contenthttp.ResultsToRows(idx), time.Now()); err != nil {
+		if err := st.SaveModIndex(store.ResultsToRows(idx), time.Now()); err != nil {
 			slog.Warn("mod index save failed", "err", err)
 		}
 	}
@@ -320,7 +347,7 @@ func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStor
 	return unconfigured.New(), argocd.New(), nil
 }
 
-func buildRuntime(cfg *config.Config, d *server.Deps) ports.Runtime {
+func buildRuntime(cfg *config.Config, d *Deps) ports.Runtime {
 	if cfg.Runtime == "docker" {
 		return dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket)))
 	}
@@ -335,11 +362,19 @@ func buildRuntime(cfg *config.Config, d *server.Deps) ports.Runtime {
 }
 
 func buildAuth(ctx context.Context, cfg *config.Config, st *store.Store) ports.Auth {
+	oidcCfg := oidc.Config{
+		Issuer:        cfg.OIDCIssuer,
+		ClientID:      cfg.OIDCClientID,
+		ClientSecret:  cfg.OIDCClientSecret,
+		RedirectURL:   cfg.OIDCRedirectURL,
+		PostLogoutURL: cfg.OIDCPostLogoutURL,
+		AllowedEmail:  cfg.AllowedEmail,
+	}
 	if cfg.OIDCIssuer != "" {
-		a, err := oidc.New(ctx, cfg)
+		a, err := oidc.New(ctx, oidcCfg)
 		if err != nil {
 			slog.Warn("oidc unavailable, falling back to local dev auth", "err", err)
-			return oidc.NewDev(cfg)
+			return oidc.NewDev(oidcCfg)
 		}
 		return a
 	}
@@ -351,5 +386,5 @@ func buildAuth(ctx context.Context, cfg *config.Config, st *store.Store) ports.A
 	}
 
 	slog.Info("oidc unset: running with local dev authenticator (click 'Admin Sign In' to authenticate)")
-	return oidc.NewDev(cfg)
+	return oidc.NewDev(oidcCfg)
 }

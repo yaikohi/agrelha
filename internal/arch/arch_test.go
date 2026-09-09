@@ -21,7 +21,6 @@ var layers = []struct{ prefix, layer string }{
 	{"internal/app", "app"},
 	{"internal/infra", "infra"},
 	{"internal/web", "web"},
-	{"internal/server", "web"},
 	{"internal/wiring", "root"},
 	{"cmd/", "root"},
 }
@@ -47,18 +46,7 @@ type exception struct {
 	phase    string
 }
 
-var exceptions = []exception{
-	{"internal/server", "infra", "E"},
-	{"internal/server", "config", "E"},
-	{"internal/infra/auth/oidc", "config", "I"},
-	{"internal/web/handlers/backups", "infra", "E"},
-	{"internal/web/handlers/content", "infra", "E"},
-	{"internal/web/handlers/content", "config", "I"},
-	{"internal/web/handlers/dashboard", "infra", "E"},
-	{"internal/web/handlers/dashboard", "config", "I"},
-	{"internal/web/handlers/wizard", "infra", "E"},
-	{"internal/web/pages", "infra", "H"},
-}
+var exceptions = []exception{}
 
 func layerFor(pkg string) (layer, prefix string) {
 	for _, l := range layers {

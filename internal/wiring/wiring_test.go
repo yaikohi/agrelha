@@ -14,18 +14,17 @@ import (
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
-	"agrelha/internal/server"
 	"agrelha/internal/wiring"
 )
 
-func build(t *testing.T, cfg *config.Config) *server.FiberServer {
+func build(t *testing.T, cfg *config.Config) *fiber.App {
 	t.Helper()
 	deps, err := wiring.Build(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("wiring.Build: %v", err)
 	}
 	t.Cleanup(func() { _ = deps.Store.Close() })
-	return server.New(cfg, deps)
+	return wiring.BuildServer(context.Background(), cfg, deps)
 }
 
 func TestLocalAuthFlow(t *testing.T) {
@@ -51,11 +50,10 @@ func TestLocalAuthFlow(t *testing.T) {
 	}
 	// New detects local users in store and configures local authenticator
 	s := build(t, cfg)
-	s.RegisterFiberRoutes()
 
 	// 1. Unauthenticated request to protected route redirects to /auth/login
 	protReq := httptest.NewRequest(fiber.MethodGet, "/minecraft", nil)
-	protResp, err := s.App.Test(protReq)
+	protResp, err := s.Test(protReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +63,7 @@ func TestLocalAuthFlow(t *testing.T) {
 
 	// 2. GET /auth/login serves HTML form
 	formReq := httptest.NewRequest(fiber.MethodGet, "/auth/login", nil)
-	formResp, err := s.App.Test(formReq)
+	formResp, err := s.Test(formReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +75,7 @@ func TestLocalAuthFlow(t *testing.T) {
 	badBody := strings.NewReader("username=localadmin&password=wrongpassword")
 	badReq := httptest.NewRequest(fiber.MethodPost, "/auth/login", badBody)
 	badReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	badResp, err := s.App.Test(badReq)
+	badResp, err := s.Test(badReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +87,7 @@ func TestLocalAuthFlow(t *testing.T) {
 	goodBody := strings.NewReader("username=localadmin&password=hunter2secret")
 	goodReq := httptest.NewRequest(fiber.MethodPost, "/auth/login?returnTo=/minecraft", goodBody)
 	goodReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	goodResp, err := s.App.Test(goodReq)
+	goodResp, err := s.Test(goodReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +110,7 @@ func TestLocalAuthFlow(t *testing.T) {
 	// 5. Protected route is accessible with session cookie
 	authedReq := httptest.NewRequest(fiber.MethodGet, "/minecraft", nil)
 	authedReq.AddCookie(&http.Cookie{Name: "agrelha_session", Value: sessionCookieVal})
-	authedResp, err := s.App.Test(authedReq)
+	authedResp, err := s.Test(authedReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +121,7 @@ func TestLocalAuthFlow(t *testing.T) {
 	// 6. Logout clears session
 	logoutReq := httptest.NewRequest(fiber.MethodGet, "/auth/logout", nil)
 	logoutReq.AddCookie(&http.Cookie{Name: "agrelha_session", Value: sessionCookieVal})
-	logoutResp, err := s.App.Test(logoutReq)
+	logoutResp, err := s.Test(logoutReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,12 +155,11 @@ func TestServer_DockerAdapterBootstrap(t *testing.T) {
 		t.Errorf("expected compose reconciler to be synchronous (Async() == false)")
 	}
 
-	s := server.New(cfg, deps)
-	s.RegisterFiberRoutes()
+	s := wiring.BuildServer(context.Background(), cfg, deps)
 
 	// Verify routes work
 	req := httptest.NewRequest(fiber.MethodGet, "/", nil)
-	resp, err := s.App.Test(req)
+	resp, err := s.Test(req)
 	if err != nil {
 		t.Fatalf("GET / failed: %v", err)
 	}

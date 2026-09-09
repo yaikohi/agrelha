@@ -8,7 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/app/mods"
-	"agrelha/internal/infra/content/thunderstore"
+	"agrelha/internal/domain"
 	"agrelha/internal/web/mdrender"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
@@ -16,13 +16,8 @@ import (
 
 // ModsPage renders the Valheim installed mods list and search results.
 func (h *Handler) ModsPage(c *fiber.Ctx) error {
-	var current []string
-	if h.cfg.K8s != nil {
-		if data, err := h.cfg.K8s.ConfigMapData(c.UserContext(), "valheim-mods"); err == nil {
-			current = mods.Parse(data["mods.txt"])
-		}
-	}
-	meta := map[string]thunderstore.SearchResult{}
+	current := h.currentMods(c.UserContext())
+	meta := map[string]domain.ModSearchResult{}
 	if h.cfg.TS != nil {
 		for _, e := range current {
 			key := pages.ModKey(e)
@@ -32,7 +27,7 @@ func (h *Handler) ModsPage(c *fiber.Ctx) error {
 		}
 	}
 	q := c.Query("q")
-	var results []thunderstore.SearchResult
+	var results []domain.ModSearchResult
 	indexing := false
 	if h.cfg.TS != nil {
 		if q != "" {
@@ -50,7 +45,7 @@ func (h *Handler) ModDetail(c *fiber.Ctx) error {
 	key := ns + "/" + name
 	ctx := c.UserContext()
 
-	var entry thunderstore.SearchResult
+	var entry domain.ModSearchResult
 	if h.cfg.TS != nil {
 		entry, _ = h.cfg.TS.Get(key)
 	}
@@ -73,12 +68,12 @@ func (h *Handler) ModDetail(c *fiber.Ctx) error {
 	}
 
 	var readmeHTML string
-	if version != "" && h.cfg.Store != nil {
-		md, hit, _ := h.cfg.Store.GetReadme(key, version)
+	if version != "" && h.cfg.ReadmeCache != nil {
+		md, hit, _ := h.cfg.ReadmeCache.GetReadme(key, version)
 		if !hit && h.cfg.TS != nil {
 			if fetched, err := h.cfg.TS.Readme(ctx, ns, name, version); err == nil {
 				md = fetched
-				_ = h.cfg.Store.PutReadme(key, version, md)
+				_ = h.cfg.ReadmeCache.PutReadme(key, version, md)
 			}
 		}
 		if md != "" {
@@ -87,14 +82,10 @@ func (h *Handler) ModDetail(c *fiber.Ctx) error {
 	}
 
 	installed := false
-	if h.cfg.K8s != nil {
-		if data, err := h.cfg.K8s.ConfigMapData(ctx, "valheim-mods"); err == nil {
-			for _, e := range mods.Parse(data["mods.txt"]) {
-				if pages.ModKey(e) == key {
-					installed = true
-					break
-				}
-			}
+	for _, e := range h.currentMods(ctx) {
+		if pages.ModKey(e) == key {
+			installed = true
+			break
 		}
 	}
 
@@ -148,8 +139,8 @@ func (h *Handler) ModsInstall(c *fiber.Ctx) error {
 		shared.SetFlash(c, "err", "Install commit failed: "+err.Error())
 		return c.Redirect("/mods", fiber.StatusSeeOther)
 	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mod-install", ns+"/"+name)
+	if h.cfg.Audit != nil {
+		_ = h.cfg.Audit.RecordAudit(h.cfg.Actor(c), "mod-install", ns+"/"+name)
 	}
 	if changed {
 		h.cfg.ApplyAfterSync("valheim-mods", "mods.txt", func(txt string) bool {
@@ -198,8 +189,8 @@ func (h *Handler) ModsRemove(c *fiber.Ctx) error {
 		shared.SetFlash(c, "err", "Remove commit failed: "+err.Error())
 		return c.Redirect("/mods", fiber.StatusSeeOther)
 	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mod-remove", nsName)
+	if h.cfg.Audit != nil {
+		_ = h.cfg.Audit.RecordAudit(h.cfg.Actor(c), "mod-remove", nsName)
 	}
 	if changed {
 		h.cfg.ApplyAfterSync("valheim-mods", "mods.txt", func(txt string) bool {

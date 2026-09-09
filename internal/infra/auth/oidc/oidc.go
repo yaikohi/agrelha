@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 
 	coreosOIDC "github.com/coreos/go-oidc/v3/oidc"
@@ -30,8 +29,18 @@ const (
 	loginTTL      = 10 * time.Minute
 )
 
+// Config holds configuration parameters for the OIDC authenticator.
+type Config struct {
+	Issuer        string
+	ClientID      string
+	ClientSecret  string
+	RedirectURL   string
+	PostLogoutURL string
+	AllowedEmail  string
+}
+
 type Authenticator struct {
-	cfg      *config.Config
+	cfg      Config
 	provider *coreosOIDC.Provider
 	verifier *coreosOIDC.IDTokenVerifier
 	oauth    oauth2.Config
@@ -50,8 +59,8 @@ type sessionData struct {
 	Exp     int64  `json:"exp"`
 }
 
-func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
-	provider, err := coreosOIDC.NewProvider(ctx, cfg.OIDCIssuer)
+func New(ctx context.Context, cfg Config) (*Authenticator, error) {
+	provider, err := coreosOIDC.NewProvider(ctx, cfg.Issuer)
 	if err != nil {
 		return nil, err
 	}
@@ -61,39 +70,37 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 	_ = provider.Claims(&disco)
 
 	postLogout := "/"
-	if cfg.OIDCPostLogoutURL != "" {
-		postLogout = cfg.OIDCPostLogoutURL
-	} else if u, err := url.Parse(cfg.OIDCRedirectURL); err == nil && u.Host != "" {
+	if cfg.PostLogoutURL != "" {
+		postLogout = cfg.PostLogoutURL
+	} else if u, err := url.Parse(cfg.RedirectURL); err == nil && u.Host != "" {
 		postLogout = u.Scheme + "://" + u.Host + "/"
 	}
 
-	sum := sha256.Sum256([]byte("agrelha-session-v1:" + cfg.OIDCClientSecret))
+	sum := sha256.Sum256([]byte("agrelha-session-v1:" + cfg.ClientSecret))
 
 	return &Authenticator{
 		cfg:        cfg,
 		provider:   provider,
-		verifier:   provider.Verifier(&coreosOIDC.Config{ClientID: cfg.OIDCClientID}),
+		verifier:   provider.Verifier(&coreosOIDC.Config{ClientID: cfg.ClientID}),
 		key:        sum[:],
 		endSession: disco.EndSession,
 		postLogout: postLogout,
 		oauth: oauth2.Config{
-			ClientID:     cfg.OIDCClientID,
-			ClientSecret: cfg.OIDCClientSecret,
-			RedirectURL:  cfg.OIDCRedirectURL,
+			ClientID:     cfg.ClientID,
+			ClientSecret: cfg.ClientSecret,
+			RedirectURL:  cfg.RedirectURL,
 			Endpoint:     provider.Endpoint(),
 			Scopes:       []string{coreosOIDC.ScopeOpenID, "email", "profile"},
 		},
 	}, nil
 }
 
-func NewDev(cfg *config.Config) *Authenticator {
+func NewDev(cfg Config) *Authenticator {
 	postLogout := "/"
-	if cfg != nil {
-		if cfg.OIDCPostLogoutURL != "" {
-			postLogout = cfg.OIDCPostLogoutURL
-		} else if u, err := url.Parse(cfg.OIDCRedirectURL); err == nil && u.Host != "" {
-			postLogout = u.Scheme + "://" + u.Host + "/"
-		}
+	if cfg.PostLogoutURL != "" {
+		postLogout = cfg.PostLogoutURL
+	} else if u, err := url.Parse(cfg.RedirectURL); err == nil && u.Host != "" {
+		postLogout = u.Scheme + "://" + u.Host + "/"
 	}
 	sum := sha256.Sum256([]byte("agrelha-dev-secret-key-v1"))
 	return &Authenticator{
@@ -183,7 +190,7 @@ func (a *Authenticator) Login(c *fiber.Ctx) error {
 	returnTo := sanitizeReturnTo(c.Query("returnTo"))
 	if a.isDev {
 		email := "admin@local.dev"
-		if a.cfg != nil && a.cfg.AllowedEmail != "" {
+		if a.cfg.AllowedEmail != "" {
 			for part := range strings.SplitSeq(a.cfg.AllowedEmail, ",") {
 				trimmed := strings.TrimSpace(part)
 				if trimmed != "" {
@@ -197,7 +204,7 @@ func (a *Authenticator) Login(c *fiber.Ctx) error {
 			IDToken: "dev-mock-id-token",
 			Exp:     time.Now().Add(sessionTTL).Unix(),
 		})
-		isSecure := a.cfg != nil && strings.HasPrefix(a.cfg.OIDCRedirectURL, "https://")
+		isSecure := strings.HasPrefix(a.cfg.RedirectURL, "https://")
 		c.Cookie(&fiber.Cookie{
 			Name:     sessionCookie,
 			Value:    a.sign(data),
@@ -212,7 +219,7 @@ func (a *Authenticator) Login(c *fiber.Ctx) error {
 	}
 
 	state, nonce := randHex(16), randHex(16)
-	isSecure := a.cfg == nil || !strings.HasPrefix(a.cfg.OIDCRedirectURL, "http://")
+	isSecure := !strings.HasPrefix(a.cfg.RedirectURL, "http://")
 	c.Cookie(&fiber.Cookie{
 		Name: oidcCookie, Value: a.sign([]byte(state + ":" + nonce + ":" + returnTo)),
 		HTTPOnly: true, Secure: isSecure, SameSite: "Lax", Path: "/",
@@ -228,7 +235,7 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	ctx := c.UserContext()
 
 	payload, ok := a.unsign(c.Cookies(oidcCookie))
-	isSecure := a.cfg == nil || !strings.HasPrefix(a.cfg.OIDCRedirectURL, "http://")
+	isSecure := !strings.HasPrefix(a.cfg.RedirectURL, "http://")
 	c.Cookie(&fiber.Cookie{
 		Name:     oidcCookie,
 		Value:    "",
@@ -302,7 +309,7 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 func (a *Authenticator) Logout(c *fiber.Ctx) error {
 	s, _ := a.readSession(c)
 
-	isSecure := a.cfg == nil || !strings.HasPrefix(a.cfg.OIDCRedirectURL, "http://")
+	isSecure := !strings.HasPrefix(a.cfg.RedirectURL, "http://")
 
 	c.Cookie(&fiber.Cookie{
 		Name:     sessionCookie,
@@ -334,7 +341,7 @@ func (a *Authenticator) Logout(c *fiber.Ctx) error {
 	}
 	q := u.Query()
 	q.Set("post_logout_redirect_uri", a.postLogout)
-	q.Set("client_id", a.cfg.OIDCClientID)
+	q.Set("client_id", a.cfg.ClientID)
 	if s.IDToken != "" {
 		q.Set("id_token_hint", s.IDToken)
 	}

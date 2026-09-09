@@ -1,6 +1,7 @@
-package server
+package wiring_test
 
 import (
+	"context"
 	"io"
 	"net/http/httptest"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
+	"agrelha/internal/wiring"
 )
 
 func TestMinecraftEndpoints(t *testing.T) {
@@ -45,13 +47,11 @@ func TestMinecraftEndpoints(t *testing.T) {
 		}),
 	)
 
-	s := &FiberServer{
-		App:   fiber.New(),
-		cfg:   &config.Config{},
-		store: st,
-		mck8s: k8s.NewWithClientset(cs, "minecraft-neoforge", "minecraft-neoforge"),
-	}
-	s.RegisterFiberRoutes()
+	cfg := &config.Config{}
+	app := wiring.BuildServer(context.Background(), cfg, wiring.Deps{
+		Store: st,
+		MCK8s: k8s.NewWithClientset(cs, "minecraft-neoforge", "minecraft-neoforge"),
+	})
 
 	tests := []struct {
 		name       string
@@ -128,7 +128,7 @@ func TestMinecraftEndpoints(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, tt.path, nil)
-			resp, err := s.App.Test(req)
+			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
@@ -150,15 +150,12 @@ func TestMinecraftWhitelistToggle(t *testing.T) {
 	}
 	defer st.Close()
 
-	s := &FiberServer{
-		App:   fiber.New(),
-		cfg:   &config.Config{},
-		store: st,
-	}
-	s.RegisterFiberRoutes()
+	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{
+		Store: st,
+	})
 
 	// 1. Without mcAccess configured, API returns 503
-	resp, err := s.App.Test(httptest.NewRequest(fiber.MethodPost, "/api/minecraft/access/whitelist/toggle", nil))
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodPost, "/api/minecraft/access/whitelist/toggle", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +166,7 @@ func TestMinecraftWhitelistToggle(t *testing.T) {
 	// 2. HTML form redirect when unconfigured
 	formReq := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
 	formReq.Header.Set("Accept", "text/html")
-	resp, err = s.App.Test(formReq)
+	resp, err = app.Test(formReq)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,7 +3,12 @@ package store
 import (
 	"database/sql"
 	"time"
+
+	"agrelha/internal/domain"
+	"agrelha/internal/ports"
 )
+
+var _ ports.ReadmeCache = (*Store)(nil)
 
 type ModIndexRow struct {
 	FullName     string
@@ -107,4 +112,44 @@ func (s *Store) PutReadme(fullName, version, markdown string) error {
 		ON CONFLICT(full_name,version) DO UPDATE SET markdown=excluded.markdown, fetched_at=CURRENT_TIMESTAMP`,
 		fullName, version, markdown)
 	return err
+}
+
+// RowsToResults converts store ModIndexRows to domain ModSearchResults.
+func RowsToResults(rows []ModIndexRow) []domain.ModSearchResult {
+	out := make([]domain.ModSearchResult, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.ModSearchResult{
+			Owner:        r.Owner,
+			Name:         r.Name,
+			FullURL:      r.PackageURL,
+			Description:  r.Description,
+			Icon:         r.Icon,
+			Version:      r.Version,
+			Downloads:    r.Downloads,
+			IsDeprecated: r.IsDeprecated,
+			UpdatedAt:    r.UpdatedAt,
+		})
+	}
+	return out
+}
+
+// ResultsToRows converts domain ModSearchResults to store ModIndexRows.
+func ResultsToRows(idx []domain.ModSearchResult) []ModIndexRow {
+	out := make([]ModIndexRow, 0, len(idx))
+	for _, r := range idx {
+		out = append(out, ModIndexRow{
+			FullName:     r.FullName(),
+			Namespace:    r.Owner,
+			Name:         r.Name,
+			Owner:        r.Owner,
+			Version:      r.Version,
+			Description:  r.Description,
+			Icon:         r.Icon,
+			PackageURL:   r.FullURL,
+			Downloads:    r.Downloads,
+			IsDeprecated: r.IsDeprecated,
+			UpdatedAt:    r.UpdatedAt,
+		})
+	}
+	return out
 }
