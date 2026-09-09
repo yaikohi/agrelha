@@ -29,10 +29,7 @@ func EntryVersion(entry string) string {
 func VersionNewer(a, b string) bool {
 	as := strings.Split(a, ".")
 	bs := strings.Split(b, ".")
-	n := len(as)
-	if len(bs) > n {
-		n = len(bs)
-	}
+	n := max(len(bs), len(as))
 	for i := 0; i < n; i++ {
 		var av, bv int
 		if i < len(as) {

@@ -24,7 +24,7 @@ func Parse(content string) []string { return parse(content) }
 
 func parse(content string) []string {
 	var out []string
-	for _, ln := range strings.Split(content, "\n") {
+	for ln := range strings.SplitSeq(content, "\n") {
 		t := strings.TrimSpace(ln)
 		if t == "" || strings.HasPrefix(t, "#") {
 			continue
@@ -51,14 +51,15 @@ func (m *Manager) Install(ctx context.Context, entries []string) (bool, error) {
 		for _, e := range parse(cur) {
 			present[e] = true
 		}
-		body := strings.TrimRight(cur, "\n")
+		var body strings.Builder
+		body.WriteString(strings.TrimRight(cur, "\n"))
 		added := 0
 		for _, e := range entries {
 			e = strings.TrimSpace(e)
 			if e == "" || present[e] {
 				continue
 			}
-			body += "\n" + e
+			body.WriteString("\n" + e)
 			present[e] = true
 			added++
 		}
@@ -68,7 +69,7 @@ func (m *Manager) Install(ctx context.Context, entries []string) (bool, error) {
 		if doc.Data == nil {
 			doc.Data = make(map[string]string)
 		}
-		doc.Data["mods.txt"] = body + "\n"
+		doc.Data["mods.txt"] = body.String() + "\n"
 		return true, nil
 	})
 }
@@ -124,7 +125,7 @@ func (m *Manager) Remove(ctx context.Context, nsName string) (bool, error) {
 		}
 		var kept []string
 		found := false
-		for _, ln := range strings.Split(strings.TrimRight(cur, "\n"), "\n") {
+		for ln := range strings.SplitSeq(strings.TrimRight(cur, "\n"), "\n") {
 			t := strings.TrimSpace(ln)
 			if t != "" && !strings.HasPrefix(t, "#") {
 				parts := strings.Split(t, "/")

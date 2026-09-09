@@ -74,7 +74,7 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 	if h.cfg.MCK8s != nil {
 		if data, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), inst.ModsCMName()); err == nil {
 			if modsTxt, ok := data["mods.txt"]; ok {
-				for _, line := range strings.Split(modsTxt, "\n") {
+				for line := range strings.SplitSeq(modsTxt, "\n") {
 					line = strings.TrimSpace(line)
 					if line != "" && !strings.HasPrefix(line, "#") {
 						d.InstalledMods = append(d.InstalledMods, strings.TrimSuffix(line, "?"))
@@ -253,16 +253,17 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 	msg := fmt.Sprintf("mc: install %s into instance #%02d", slug, num)
 	_, err = h.cfg.Git.Patch(c.UserContext(), modsPath, "mods.txt", msg, func(cur string) (string, error) {
 		present := map[string]bool{}
-		for _, l := range strings.Split(cur, "\n") {
+		for l := range strings.SplitSeq(cur, "\n") {
 			if t := strings.TrimSpace(strings.TrimSuffix(l, "?")); t != "" && !strings.HasPrefix(t, "#") {
 				present[t] = true
 			}
 		}
-		body := strings.TrimRight(cur, "\n")
+		var body strings.Builder
+		body.WriteString(strings.TrimRight(cur, "\n"))
 		added := 0
 		for _, w := range wanted {
 			if w = strings.TrimSpace(w); w != "" && !present[w] {
-				body += "\n" + w
+				body.WriteString("\n" + w)
 				present[w] = true
 				added++
 			}
@@ -270,7 +271,7 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 		if added == 0 {
 			return cur, nil
 		}
-		return strings.TrimLeft(body, "\n") + "\n", nil
+		return strings.TrimLeft(body.String(), "\n") + "\n", nil
 	})
 	if err != nil {
 		return shared.SSEToast(c, "err", "Install failed: "+err.Error(), nil)
@@ -302,7 +303,7 @@ func (h *Handler) MCInstanceExport(c *fiber.Ctx) error {
 	if h.cfg.MCK8s != nil {
 		if data, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), inst.ModsCMName()); err == nil {
 			if modsTxt, ok := data["mods.txt"]; ok {
-				for _, line := range strings.Split(modsTxt, "\n") {
+				for line := range strings.SplitSeq(modsTxt, "\n") {
 					line = strings.TrimSpace(line)
 					if line != "" && !strings.HasPrefix(line, "#") {
 						slugs = append(slugs, strings.TrimSuffix(line, "?"))

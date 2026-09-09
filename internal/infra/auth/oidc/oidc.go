@@ -170,7 +170,7 @@ func isEmailAllowed(allowedList, email string) bool {
 		return false
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
-	for _, part := range strings.Split(allowedList, ",") {
+	for part := range strings.SplitSeq(allowedList, ",") {
 		part = strings.ToLower(strings.TrimSpace(part))
 		if part != "" && part == email {
 			return true
@@ -184,7 +184,7 @@ func (a *Authenticator) Login(c *fiber.Ctx) error {
 	if a.isDev {
 		email := "admin@local.dev"
 		if a.cfg != nil && a.cfg.AllowedEmail != "" {
-			for _, part := range strings.Split(a.cfg.AllowedEmail, ",") {
+			for part := range strings.SplitSeq(a.cfg.AllowedEmail, ",") {
 				trimmed := strings.TrimSpace(part)
 				if trimmed != "" {
 					email = trimmed

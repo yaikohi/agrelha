@@ -4,6 +4,7 @@ package admins
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"agrelha/internal/ports"
@@ -28,10 +29,8 @@ func (m *Manager) Grant(ctx context.Context, steamID string) (bool, error) {
 		if doc.Data != nil {
 			cur = doc.Data["ADMINLIST_IDS"]
 		}
-		for _, id := range fields(cur) {
-			if id == steamID {
-				return false, nil
-			}
+		if slices.Contains(fields(cur), steamID) {
+			return false, nil
 		}
 		if doc.Data == nil {
 			doc.Data = make(map[string]string)

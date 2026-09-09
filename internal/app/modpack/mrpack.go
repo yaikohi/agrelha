@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"sort"
 	"strings"
@@ -276,9 +277,7 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 			}
 
 			hashes := make(map[string]string)
-			for k, v := range chosenFile.Hashes {
-				hashes[k] = v
-			}
+			maps.Copy(hashes, chosenFile.Hashes)
 
 			filesMu.Lock()
 			resolvedFiles = append(resolvedFiles, resolvedModFile{

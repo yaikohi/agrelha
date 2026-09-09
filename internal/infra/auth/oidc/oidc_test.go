@@ -81,7 +81,7 @@ func (idp *mockIDP) Issuer() string {
 }
 
 func (idp *mockIDP) handleDiscovery(w http.ResponseWriter, r *http.Request) {
-	disc := map[string]interface{}{
+	disc := map[string]any{
 		"issuer":                                idp.Issuer(),
 		"authorization_endpoint":                idp.Issuer() + "/auth",
 		"token_endpoint":                        idp.Issuer() + "/token",
@@ -163,7 +163,7 @@ func (idp *mockIDP) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	claims := map[string]interface{}{
+	claims := map[string]any{
 		"iss":   idp.Issuer(),
 		"sub":   "mock-user-sub-001",
 		"aud":   idp.clientID,
@@ -179,7 +179,7 @@ func (idp *mockIDP) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"access_token": "mock-access-token-xyz",
 		"token_type":   "Bearer",
 		"expires_in":   3600,
@@ -196,7 +196,7 @@ func (idp *mockIDP) handleUserInfo(w http.ResponseWriter, r *http.Request) {
 	idp.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"sub":   "mock-user-sub-001",
 		"email": email,
 	})

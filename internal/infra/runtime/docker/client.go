@@ -98,8 +98,8 @@ func WithBaseURL(u string) SocketClientOption {
 func NewSocketClient(socketPath string, opts ...SocketClientOption) *SocketClient {
 	if socketPath == "" {
 		if host := os.Getenv("DOCKER_HOST"); host != "" {
-			if strings.HasPrefix(host, "unix://") {
-				socketPath = strings.TrimPrefix(host, "unix://")
+			if after, ok := strings.CutPrefix(host, "unix://"); ok {
+				socketPath = after
 			}
 		}
 	}

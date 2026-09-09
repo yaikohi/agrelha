@@ -10,10 +10,10 @@ func mod(slug string, loaders ...string) Mod {
 // multi-loader, so a naive "does fabric appear?" tally would wrongly pass it.
 func fluxweaveLike() []Mod {
 	var mods []Mod
-	for i := 0; i < 117; i++ {
+	for range 117 {
 		mods = append(mods, mod("multi", "neoforge", "fabric"))
 	}
-	for i := 0; i < 31; i++ {
+	for range 31 {
 		mods = append(mods, mod("neo-only", "neoforge"))
 	}
 	mods = append(mods, mod("mystical-agriculture", "neoforge"))
@@ -73,7 +73,7 @@ func TestNaiveTallyWouldHavePassedIt(t *testing.T) {
 
 func TestFewStragglersTolerated(t *testing.T) {
 	var mods []Mod
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		mods = append(mods, mod("multi", "neoforge", "fabric"))
 	}
 	mods = append(mods, mod("neo-only", "neoforge"))

@@ -537,7 +537,7 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		depName := inst.DeploymentName()
-		for i := 0; i < 60; i++ {
+		for range 60 {
 			desired, ready, err := h.cfg.MCK8s.DeploymentReplicas(context.Background(), depName)
 			phase := "syncing"
 			isReady := false

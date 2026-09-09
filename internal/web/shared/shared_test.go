@@ -33,10 +33,10 @@ func TestFlashSetAndTake(t *testing.T) {
 	}
 
 	var cookieVal string
-	for _, p := range strings.Split(cookie, ";") {
+	for p := range strings.SplitSeq(cookie, ";") {
 		p = strings.TrimSpace(p)
-		if strings.HasPrefix(p, flashCookie+"=") {
-			cookieVal = strings.TrimPrefix(p, flashCookie+"=")
+		if after, ok := strings.CutPrefix(p, flashCookie+"="); ok {
+			cookieVal = after
 			break
 		}
 	}

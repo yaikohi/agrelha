@@ -86,10 +86,7 @@ func CheckLoader(mods []Mod, target string) (ok bool, best string, targetFit, be
 	// Tolerate a few stragglers (they are skipped with a warning), but refuse
 	// when a materially better loader exists.
 	margin := bestFit.Supported - targetFit.Supported
-	limit := targetFit.Known / 20
-	if limit < 5 {
-		limit = 5
-	}
+	limit := max(targetFit.Known/20, 5)
 	return margin < limit, best, targetFit, bestFit
 }
 

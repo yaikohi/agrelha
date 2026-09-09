@@ -182,10 +182,10 @@ func TestLocalAuthenticatorFlow(t *testing.T) {
 
 	// Extract cookie value
 	var cookieVal string
-	for _, part := range strings.Split(cookie, ";") {
+	for part := range strings.SplitSeq(cookie, ";") {
 		part = strings.TrimSpace(part)
-		if strings.HasPrefix(part, sessionCookie+"=") {
-			cookieVal = strings.TrimPrefix(part, sessionCookie+"=")
+		if after, ok := strings.CutPrefix(part, sessionCookie+"="); ok {
+			cookieVal = after
 			break
 		}
 	}

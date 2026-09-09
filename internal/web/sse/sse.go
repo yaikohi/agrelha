@@ -47,7 +47,7 @@ func InnerElement(w *bufio.Writer, selector, html string) error {
 		"event: datastar-patch-elements\ndata: mode inner\ndata: selector %s\n", selector); err != nil {
 		return err
 	}
-	for _, ln := range strings.Split(html, "\n") {
+	for ln := range strings.SplitSeq(html, "\n") {
 		if _, err := fmt.Fprintf(w, "data: elements %s\n", ln); err != nil {
 			return err
 		}

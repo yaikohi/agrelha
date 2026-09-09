@@ -2,6 +2,7 @@ package content
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -47,9 +48,7 @@ func (h *Handler) ModpackExport(c *fiber.Ctx) error {
 
 	configs := map[string]string{}
 	if cfg, err := h.cfg.K8s.ConfigMapData(ctx, configsCM); err == nil {
-		for k, v := range cfg {
-			configs[k] = v
-		}
+		maps.Copy(configs, cfg)
 	}
 
 	blob, err := modpack.Build("Valheim (ykhi)", entries, configs)

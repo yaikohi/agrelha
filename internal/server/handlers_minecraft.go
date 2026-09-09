@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -27,10 +28,8 @@ func (s *FiberServer) mcVersionChoices(ctx context.Context, current string) []st
 	if current == "" {
 		return out
 	}
-	for _, v := range out {
-		if v == current {
-			return out
-		}
+	if slices.Contains(out, current) {
+		return out
 	}
 	return append([]string{current}, out...)
 }

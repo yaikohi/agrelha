@@ -1,5 +1,7 @@
 package pages
 
+import "slices"
+
 import "fmt"
 
 import "strings"
@@ -34,12 +36,7 @@ func UpdateToken(key string) string {
 
 // Contains reports whether s is in ss.
 func Contains(ss []string, s string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ss, s)
 }
 
 func HistoryLabel(kind string) string {

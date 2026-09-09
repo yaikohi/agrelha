@@ -132,10 +132,10 @@ func ParsePrismZip(r io.ReaderAt, size int64) (*ImportedWorld, error) {
 			if err == nil {
 				buf := new(bytes.Buffer)
 				_, _ = buf.ReadFrom(rc)
-				for _, line := range strings.Split(buf.String(), "\n") {
+				for line := range strings.SplitSeq(buf.String(), "\n") {
 					line = strings.TrimSpace(line)
-					if strings.HasPrefix(line, "name=") {
-						world.Name = strings.TrimPrefix(line, "name=")
+					if after, ok := strings.CutPrefix(line, "name="); ok {
+						world.Name = after
 					}
 				}
 				rc.Close()
@@ -182,8 +182,8 @@ func ParseRawModList(text string) *ImportedWorld {
 		if line == "" {
 			continue
 		}
-		if strings.HasPrefix(line, "# Modpack:") {
-			world.Name = strings.TrimSpace(strings.TrimPrefix(line, "# Modpack:"))
+		if after, ok := strings.CutPrefix(line, "# Modpack:"); ok {
+			world.Name = strings.TrimSpace(after)
 			continue
 		}
 		if strings.HasPrefix(line, "#") {

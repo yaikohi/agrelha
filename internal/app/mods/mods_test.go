@@ -2,6 +2,7 @@ package mods
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"agrelha/internal/ports"
@@ -25,12 +26,8 @@ func (m *memoryStateStore) Patch(ctx context.Context, path string, msg string, m
 		Data:        make(map[string]string),
 		Annotations: make(map[string]string),
 	}
-	for k, v := range m.doc.Data {
-		docCopy.Data[k] = v
-	}
-	for k, v := range m.doc.Annotations {
-		docCopy.Annotations[k] = v
-	}
+	maps.Copy(docCopy.Data, m.doc.Data)
+	maps.Copy(docCopy.Annotations, m.doc.Annotations)
 	changed, err := mutate(&docCopy)
 	if err != nil || !changed {
 		return false, err

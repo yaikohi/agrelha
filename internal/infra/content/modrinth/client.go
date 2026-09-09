@@ -105,7 +105,7 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 	reqURL := c.baseURL + endpoint
 	const maxRetries = 4
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		if err != nil {
 			return err
@@ -200,10 +200,7 @@ func (c *Client) GetProjects(ctx context.Context, idsOrSlugs []string) ([]Projec
 	var all []Project
 	chunkSize := 100
 	for i := 0; i < len(idsOrSlugs); i += chunkSize {
-		end := i + chunkSize
-		if end > len(idsOrSlugs) {
-			end = len(idsOrSlugs)
-		}
+		end := min(i+chunkSize, len(idsOrSlugs))
 		chunk := idsOrSlugs[i:end]
 		idsJSON, err := json.Marshal(chunk)
 		if err != nil {

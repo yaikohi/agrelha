@@ -27,7 +27,7 @@ func NewModManager(store ports.StateStore, path string) *ModManager {
 // ParseMods parses the lines of mods.txt, filtering out comments and blank lines.
 func ParseMods(content string) []string {
 	var out []string
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
@@ -53,14 +53,15 @@ func (m *ModManager) Install(ctx context.Context, slugs []string) (bool, error) 
 			present[s] = true
 		}
 
-		body := strings.TrimRight(cur, "\n")
+		var body strings.Builder
+		body.WriteString(strings.TrimRight(cur, "\n"))
 		added := 0
 		for _, s := range slugs {
 			s = strings.TrimSpace(s)
 			if s == "" || present[s] {
 				continue
 			}
-			body += "\n" + s
+			body.WriteString("\n" + s)
 			present[s] = true
 			added++
 		}
@@ -71,7 +72,7 @@ func (m *ModManager) Install(ctx context.Context, slugs []string) (bool, error) 
 		if doc.Data == nil {
 			doc.Data = make(map[string]string)
 		}
-		doc.Data["mods.txt"] = strings.TrimLeft(body, "\n") + "\n"
+		doc.Data["mods.txt"] = strings.TrimLeft(body.String(), "\n") + "\n"
 		return true, nil
 	})
 }
@@ -90,7 +91,7 @@ func (m *ModManager) Uninstall(ctx context.Context, slug string) (bool, error) {
 		}
 		var lines []string
 		found := false
-		for _, line := range strings.Split(cur, "\n") {
+		for line := range strings.SplitSeq(cur, "\n") {
 			trimmed := strings.TrimSpace(line)
 			if trimmed == slug {
 				found = true

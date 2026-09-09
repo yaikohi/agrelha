@@ -24,7 +24,7 @@ func NewAccessManager(store ports.StateStore, path string, rcon ports.Console) *
 // ParseUsers extracts clean usernames from ops.txt or whitelist.txt.
 func ParseUsers(content string) []string {
 	var out []string
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
@@ -85,7 +85,7 @@ func (a *AccessManager) RevokeOp(ctx context.Context, username string) (bool, er
 		}
 		var lines []string
 		found := false
-		for _, line := range strings.Split(cur, "\n") {
+		for line := range strings.SplitSeq(cur, "\n") {
 			trimmed := strings.TrimSpace(line)
 			if strings.EqualFold(trimmed, username) {
 				found = true
@@ -163,7 +163,7 @@ func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string) (b
 		}
 		var lines []string
 		found := false
-		for _, line := range strings.Split(cur, "\n") {
+		for line := range strings.SplitSeq(cur, "\n") {
 			trimmed := strings.TrimSpace(line)
 			if strings.EqualFold(trimmed, username) {
 				found = true
@@ -217,7 +217,7 @@ func ParsePlayerList(res string) []string {
 	}
 
 	var players []string
-	for _, p := range strings.Split(raw, ",") {
+	for p := range strings.SplitSeq(raw, ",") {
 		if name := strings.TrimSpace(p); name != "" {
 			players = append(players, name)
 		}
