@@ -25,7 +25,14 @@ const (
 	LoaderFabric   Loader = "fabric"
 	LoaderNeoForge Loader = "neoforge"
 
-	annPrefix = "agrelha.ykhi.xyz/"
+	// Annotation namespace. These are write-only documentation for humans
+	// reading the manifests in git — Instance state is rebuilt from the store,
+	// never from annotations — so this can change without a migration.
+	annPrefix = "agrelha.dev/"
+
+	// DefaultModsPath is the fallback location of the shared mods.txt in the
+	// ops repo. Per-Instance mod lists live under instance-NN/mods.yaml.
+	DefaultModsPath = "manifests/minecraft-modded/mods.yaml"
 )
 
 var slugUnsafe = regexp.MustCompile(`[^a-z0-9]+`)

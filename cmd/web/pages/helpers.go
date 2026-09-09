@@ -271,7 +271,7 @@ func iconStyle(accent string) string {
 
 // ValheimCard builds the Valheim card. Its stats are live Datastar signals, so
 // the row and header pill bind rather than print.
-func ValheimCard(addr string, isAdmin bool) GameCardUI {
+func ValheimCard(addr, nodeName string, isAdmin bool) GameCardUI {
 	g := GameCardUI{
 		Icon:         "\u2694\ufe0f",
 		Accent:       "orange",
@@ -295,8 +295,8 @@ func ValheimCard(addr string, isAdmin bool) GameCardUI {
 	// Both cards always carry an extras strip, so the guest layouts stay
 	// symmetric; Valheim's parallels Minecraft's "N of M worlds saved".
 	g.Extras = []string{"Single persistent world"}
-	if isAdmin {
-		g.Extras = append(g.Extras, "Node game-01")
+	if isAdmin && nodeName != "" {
+		g.Extras = append(g.Extras, "Node "+nodeName)
 	}
 	return g
 }

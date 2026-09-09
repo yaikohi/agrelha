@@ -1,6 +1,6 @@
 package pages
 
-templ Dashboard(grafanaURL string, mcSummary MinecraftSummaryUI, isAdmin bool, flashKind, flashMsg string) {
+templ Dashboard(grafanaURL, valheimAddr, nodeName string, mcSummary MinecraftSummaryUI, isAdmin bool, flashKind, flashMsg string) {
 	@Layout("Agrelha · Game Server Portal") {
 		@nav(isAdmin)
 		@flashBanner(flashKind, flashMsg)
@@ -17,7 +17,7 @@ templ Dashboard(grafanaURL string, mcSummary MinecraftSummaryUI, isAdmin bool, f
 					</h1>
 					<p class="mt-1 text-xs text-zinc-400">
 						if isAdmin {
-							Manage dedicated game servers on node <code class="text-zinc-300 font-mono">game-01</code>.
+							Manage dedicated game servers.
 						} else {
 							Direct-connect addresses and client modpack downloads for dedicated servers on the network.
 						}
@@ -44,7 +44,7 @@ templ Dashboard(grafanaURL string, mcSummary MinecraftSummaryUI, isAdmin bool, f
 			<!-- Both cards render through the same component: anything that differs
 			     is DATA, not markup, so they cannot drift apart again. -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				@gameCard(ValheimCard("192.168.20.224:2456", isAdmin)) {
+				@gameCard(ValheimCard(valheimAddr, nodeName, isAdmin)) {
 					if isAdmin {
 						@cardActions(ValheimActions())
 					}

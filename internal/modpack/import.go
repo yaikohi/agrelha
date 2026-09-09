@@ -88,8 +88,8 @@ type mmcComponent struct {
 }
 
 type mmcPack struct {
-	Components []mmcComponent `json:"components"`
-	FormatVersion int         `json:"formatVersion"`
+	Components    []mmcComponent `json:"components"`
+	FormatVersion int            `json:"formatVersion"`
 }
 
 // ParsePrismZip reads a Prism/MultiMC instance zip archive.

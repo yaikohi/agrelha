@@ -32,7 +32,7 @@ func sampleMinecraft() MinecraftSummaryUI {
 // The two cards must expose the same functionality through the same markup.
 // This is the guard against them drifting apart again.
 func TestBothCardsShareTheSameSections(t *testing.T) {
-	valheim := render(t, ValheimCard("192.168.20.224:2456", false))
+	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false))
 	minecraft := render(t, MinecraftCard(sampleMinecraft(), false))
 
 	for _, section := range []string{
@@ -55,7 +55,7 @@ func TestBothCardsShareTheSameSections(t *testing.T) {
 // Regressions we specifically fixed: the labels and status wording used to
 // differ between the cards for identical functionality.
 func TestDivergentLabelsAreGone(t *testing.T) {
-	both := render(t, ValheimCard("192.168.20.224:2456", true)) +
+	both := render(t, ValheimCard("192.168.20.224:2456", "game-01", true)) +
 		render(t, MinecraftCard(sampleMinecraft(), true))
 
 	for _, gone := range []string{
@@ -70,7 +70,7 @@ func TestDivergentLabelsAreGone(t *testing.T) {
 }
 
 func TestFormatBadgesDifferButButtonDoesNot(t *testing.T) {
-	valheim := render(t, ValheimCard("192.168.20.224:2456", false))
+	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false))
 	minecraft := render(t, MinecraftCard(sampleMinecraft(), false))
 
 	if !strings.Contains(valheim, ".r2z") || !strings.Contains(minecraft, ".mrpack") {
@@ -83,7 +83,7 @@ func TestFormatBadgesDifferButButtonDoesNot(t *testing.T) {
 
 // Valheim is signal-driven, Minecraft is server-rendered. Both must work.
 func TestStatsRenderFromEitherSource(t *testing.T) {
-	valheim := render(t, ValheimCard("192.168.20.224:2456", false))
+	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false))
 	if !strings.Contains(valheim, `data-text="$players"`) || !strings.Contains(valheim, `data-text="$uptime"`) {
 		t.Fatal("Valheim row must bind stats to live signals")
 	}
@@ -127,7 +127,7 @@ func TestServersOnlineLabelWording(t *testing.T) {
 // a healthy server render as Offline. The card must bind to the normalised
 // boolean "online" signal instead, and never string-compare against a state.
 func TestValheimBindsToOnlineBooleanNotStateString(t *testing.T) {
-	out := render(t, ValheimCard("192.168.20.224:2456", false))
+	out := render(t, ValheimCard("192.168.20.224:2456", "game-01", false))
 
 	if !strings.Contains(out, "$online") {
 		t.Fatal("Valheim card must bind to the normalised $online signal")

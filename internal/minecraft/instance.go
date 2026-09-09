@@ -2,6 +2,7 @@ package minecraft
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,14 +77,32 @@ type Instance struct {
 	LastUsed   time.Time
 }
 
-func AssignLBIP(number int) string {
-	if number < 1 || number > 4 {
-		return "192.168.20.225"
+// DefaultLBBaseIP is only a fallback; operators set their own LB range.
+//
+// NOTE: an LB IP is a Kubernetes networking concept — Docker binds a host port
+// instead. Allocation belongs in the runtime adapter, not on the domain
+// Instance. See docs/modularization-plan.md phase 1.
+// Empty means "let the load balancer allocate an address", which is the right
+// default for a cluster we know nothing about.
+const DefaultLBBaseIP = ""
+
+// AssignLBIP gives Instance N the Nth address after base.
+func AssignLBIP(base string, number int) string {
+	if base == "" {
+		return ""
 	}
-	return fmt.Sprintf("192.168.20.%d", 224+number)
+	i := strings.LastIndex(base, ".")
+	if i < 0 || number < 1 {
+		return base
+	}
+	last, err := strconv.Atoi(base[i+1:])
+	if err != nil {
+		return base
+	}
+	return fmt.Sprintf("%s.%d", base[:i], last+number)
 }
 
-func (inst *Instance) EnsureDefaults() {
+func (inst *Instance) EnsureDefaults(lbBase string) {
 	if inst.Slug == "" {
 		inst.Slug = SlotName(inst.Name)
 	}
@@ -106,7 +125,7 @@ func (inst *Instance) EnsureDefaults() {
 		inst.WorldType = "default"
 	}
 	if inst.LBIP == "" && inst.Number > 0 {
-		inst.LBIP = AssignLBIP(inst.Number)
+		inst.LBIP = AssignLBIP(lbBase, inst.Number)
 	}
 	if inst.MOTD == "" {
 		inst.MOTD = fmt.Sprintf("%s (%s)", inst.Name, inst.LBIP)
@@ -291,7 +310,7 @@ func InstanceFromRecord(r store.InstanceRecord) Instance {
 			Name:     r.Pack,
 		}
 	}
-	inst.EnsureDefaults()
+	inst.EnsureDefaults("")
 	return inst
 }
 

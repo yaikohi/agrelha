@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ .PVCName }}
-  namespace: minecraft-modded
+  namespace: {{ .Namespace }}
   labels:
     app: {{ .DeploymentName }}
     instance: "{{ .Number }}"

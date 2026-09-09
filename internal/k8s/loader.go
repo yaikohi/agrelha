@@ -50,7 +50,7 @@ func (c *Client) SwitchLoader(ctx context.Context, target, neoforgeDep, fabricDe
 	}
 
 	if target == "fabric" {
-		// Stop neoforge first to free RAM/CPU on node game-01
+		// Stop neoforge first to free RAM/CPU on the game node
 		_ = c.ScaleDeployment(ctx, neoforgeDep, 0)
 		return c.ScaleDeployment(ctx, fabricDep, 1)
 	}

@@ -1,5 +1,5 @@
 // Package config loads agrelha's runtime configuration from the environment.
-// Non-secret keys come from the agrelha-config ConfigMap; secrets (CODEBERG_*,
+// Non-secret keys come from the agrelha-config ConfigMap; secrets (GIT_*,
 // OIDC_CLIENT_*) come from the agrelha-env Secret. See yaya-ops manifests/agrelha-*.
 package config
 
@@ -36,16 +36,16 @@ type Config struct {
 	ValheimNamespace  string
 	ValheimDeployment string
 	ValheimStatusURL  string
+	ValheimAddress    string
+	GameNodeName      string
 	BackupsDir        string
 
 	// Minecraft Modded (NeoForge & Fabric)
 	MinecraftModsPath     string
-	FabricModsPath        string
 	MinecraftAccessPath   string
 	MinecraftConfigsPath  string
 	MinecraftNamespace    string
 	MinecraftDeployment   string
-	FabricDeployment      string
 	MinecraftRconAddr     string
 	MinecraftRconPassword string
 	ModrinthAPI           string
@@ -54,6 +54,9 @@ type Config struct {
 	MCTotalBudgetGiB int
 	MCMaxInstances   int
 	MCMaxRunning     int
+	MCLBBaseIP       string
+	MCInstancesPath  string
+	GameNodeSelector string
 
 	// Observability
 	InfluxDBURL         string
@@ -92,10 +95,10 @@ func Load() *Config {
 
 		GitRepoURL:      env("GIT_REPO_URL", ""),
 		GitBranch:       env("GIT_BRANCH", "main"),
-		GitUsername:     env("CODEBERG_USERNAME", ""),
-		GitToken:        env("CODEBERG_TOKEN", ""),
+		GitUsername:     env("GIT_USERNAME", env("CODEBERG_USERNAME", "")),
+		GitToken:        env("GIT_TOKEN", env("CODEBERG_TOKEN", "")),
 		GitAuthorName:   env("GIT_AUTHOR_NAME", "agrelha"),
-		GitAuthorEmail:  env("GIT_AUTHOR_EMAIL", "agrelha@ykhi.xyz"),
+		GitAuthorEmail:  env("GIT_AUTHOR_EMAIL", "agrelha@localhost"),
 		ModsPath:        env("MODS_PATH", "manifests/valheim-mods.yaml"),
 		AdminsPath:      env("ADMINS_PATH", "manifests/valheim-admins.yaml"),
 		ModConfigsPath:  env("MOD_CONFIGS_PATH", "manifests/valheim-mod-configs.yaml"),
@@ -104,15 +107,15 @@ func Load() *Config {
 		ValheimNamespace:  env("VALHEIM_NAMESPACE", "valheim"),
 		ValheimDeployment: env("VALHEIM_DEPLOYMENT", "valheim"),
 		ValheimStatusURL:  env("VALHEIM_STATUS_URL", ""),
+		ValheimAddress:    env("VALHEIM_ADDRESS", ""),
+		GameNodeName:      env("GAME_NODE_NAME", ""),
 		BackupsDir:        env("BACKUPS_DIR", ""),
 
 		MinecraftModsPath:     env("MINECRAFT_MODS_PATH", "manifests/minecraft-modded/mods.yaml"),
-		FabricModsPath:        env("FABRIC_MODS_PATH", "manifests/minecraft-modded/mods.yaml"),
 		MinecraftAccessPath:   env("MINECRAFT_ACCESS_PATH", "manifests/minecraft-modded/access.yaml"),
 		MinecraftConfigsPath:  env("MINECRAFT_CONFIGS_PATH", "manifests/minecraft-modded/configs.yaml"),
 		MinecraftNamespace:    env("MINECRAFT_NAMESPACE", "minecraft-modded"),
 		MinecraftDeployment:   env("MINECRAFT_DEPLOYMENT", "minecraft-modded"),
-		FabricDeployment:      env("FABRIC_DEPLOYMENT", ""),
 		MinecraftRconAddr:     env("MINECRAFT_RCON_ADDR", "minecraft-modded.minecraft-modded.svc.cluster.local:25575"),
 		MinecraftRconPassword: env("MINECRAFT_RCON_PASSWORD", ""),
 		ModrinthAPI:           env("MODRINTH_API", "https://api.modrinth.com/v2"),
@@ -120,6 +123,9 @@ func Load() *Config {
 		MCTotalBudgetGiB: envInt("MC_TOTAL_BUDGET_GIB", 24),
 		MCMaxInstances:   envInt("MC_MAX_INSTANCES", 4),
 		MCMaxRunning:     envInt("MC_MAX_RUNNING", 2),
+		MCLBBaseIP:       env("MC_LB_BASE_IP", ""),
+		MCInstancesPath:  env("MC_INSTANCES_PATH", "manifests/minecraft-modded"),
+		GameNodeSelector: env("GAME_NODE_SELECTOR", ""),
 
 		InfluxDBURL:         env("INFLUXDB_URL", ""),
 		GrafanaDashboardURL: env("GRAFANA_DASHBOARD_URL", ""),

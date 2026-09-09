@@ -324,8 +324,8 @@ func TestBuildMrpackWithReportAndBatch(t *testing.T) {
 				t.Errorf("report should mention luckperms as server-only")
 			}
 			if !strings.Contains(content, "nonexistent-curseforge-mod") {
+			}
 		}
-	}
 	}
 
 	if !foundIndex {
@@ -391,7 +391,3 @@ func TestBuildMrpackLiveSample(t *testing.T) {
 		t.Errorf("missing index or report: index=%v, report=%v", foundIndex, foundReport)
 	}
 }
-
-
-
-

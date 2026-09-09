@@ -16,6 +16,10 @@ type RenderData struct {
 	Annotations map[string]string
 	Env         map[string]string
 	ModsTxt     string
+	// NodeSelector is "key=value"; empty means schedule anywhere.
+	NodeSelectorKey   string
+	NodeSelectorValue string
+	Namespace         string
 }
 
 func (rd RenderData) IndentModsTxt() string {
@@ -27,14 +31,24 @@ func (rd RenderData) IndentModsTxt() string {
 	return sb.String()
 }
 
-func RenderInstanceManifests(inst Instance, modsTxt string) (map[string][]byte, error) {
-	inst.EnsureDefaults()
+// RenderInstanceManifests renders an Instance to Kubernetes objects. nodeSelector
+// is "key=value" and may be empty, in which case the workload schedules anywhere.
+func RenderInstanceManifests(inst Instance, modsTxt, nodeSelector, namespace string) (map[string][]byte, error) {
+	inst.EnsureDefaults("")
 
 	data := RenderData{
 		Instance:    inst,
 		Annotations: inst.Annotations(),
 		Env:         inst.Env(),
 		ModsTxt:     modsTxt,
+		Namespace:   namespace,
+	}
+	if data.Namespace == "" {
+		data.Namespace = "minecraft-modded"
+	}
+	if k, v, ok := strings.Cut(nodeSelector, "="); ok && strings.TrimSpace(k) != "" {
+		data.NodeSelectorKey = strings.TrimSpace(k)
+		data.NodeSelectorValue = strings.TrimSpace(v)
 	}
 
 	funcMap := template.FuncMap{

@@ -17,16 +17,9 @@ type ModManager struct {
 
 func NewModManager(c *gitops.Committer, path string) *ModManager {
 	if path == "" {
-		path = "manifests/minecraft-modded-neoforge-mods.yaml"
+		path = DefaultModsPath
 	}
 	return &ModManager{committer: c, path: path, loaderKey: "NEOFORGE_VERSION"}
-}
-
-func NewFabricModManager(c *gitops.Committer, path string) *ModManager {
-	if path == "" {
-		path = "manifests/minecraft-modded-fabric-mods.yaml"
-	}
-	return &ModManager{committer: c, path: path, loaderKey: "FABRIC_VERSION"}
 }
 
 // ParseMods parses the lines of mods.txt, filtering out comments and blank lines.

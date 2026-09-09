@@ -86,7 +86,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 				}
 			}
 		}
-		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL, mcSummary, isAdmin, fk, fm))
+		return render(c, pages.Dashboard(s.cfg.GrafanaDashboardURL, s.cfg.ValheimAddress, s.cfg.GameNodeName, mcSummary, isAdmin, fk, fm))
 	})
 	s.App.Get("/sse", s.sseMain)
 	s.App.Get("/img", s.imageProxy)

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .DeploymentName }}
-  namespace: minecraft-modded
+  namespace: {{ .Namespace }}
   labels:
     app: {{ .DeploymentName }}
     role: mc-instance
@@ -23,8 +23,10 @@ spec:
         instance: "{{ .Number }}"
         world: "{{ .Slug }}"
     spec:
+{{- if .NodeSelectorKey }}
       nodeSelector:
-        ykhi.xyz/gameserver: "true"
+        {{ .NodeSelectorKey }}: "{{ .NodeSelectorValue }}"
+{{- end }}
       tolerations:
         - key: "dedicated"
           operator: "Equal"

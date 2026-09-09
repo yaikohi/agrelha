@@ -49,7 +49,7 @@ func setupTestMCServer(t *testing.T) (*FiberServer, *store.Store, *minecraft.Ins
 	)
 
 	mck8s := k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded")
-	mgr := minecraft.NewInstanceManager(st, nil, mck8s, 24, 4, 2, "manifests/minecraft-modded")
+	mgr := minecraft.NewInstanceManager(st, nil, mck8s, 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", "ykhi.xyz/gameserver=true", "minecraft-modded")
 
 	s := &FiberServer{
 		App:         fiber.New(),

@@ -19,6 +19,9 @@ type InstanceManager struct {
 	maxInstances     int
 	maxRunning       int
 	instancesRelPath string
+	lbBaseIP         string
+	nodeSelector     string
+	namespace        string
 }
 
 func NewInstanceManager(
@@ -27,6 +30,9 @@ func NewInstanceManager(
 	k *k8s.Client,
 	totalBudgetGiB, maxInstances, maxRunning int,
 	instancesRelPath string,
+	lbBaseIP string,
+	nodeSelector string,
+	namespace string,
 ) *InstanceManager {
 	if totalBudgetGiB <= 0 {
 		totalBudgetGiB = TotalBudgetGiB
@@ -40,6 +46,9 @@ func NewInstanceManager(
 	if instancesRelPath == "" {
 		instancesRelPath = "manifests/minecraft-modded"
 	}
+	if lbBaseIP == "" {
+		lbBaseIP = DefaultLBBaseIP
+	}
 	return &InstanceManager{
 		store:            st,
 		committer:        c,
@@ -48,6 +57,9 @@ func NewInstanceManager(
 		maxInstances:     maxInstances,
 		maxRunning:       maxRunning,
 		instancesRelPath: instancesRelPath,
+		lbBaseIP:         lbBaseIP,
+		nodeSelector:     nodeSelector,
+		namespace:        namespace,
 	}
 }
 
@@ -151,9 +163,9 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst Instance, mod
 	if strings.TrimSpace(inst.Name) == "" {
 		inst.Name = fmt.Sprintf("World %02d", inst.Number)
 	}
-	inst.EnsureDefaults()
+	inst.EnsureDefaults(m.lbBaseIP)
 
-	files, err := RenderInstanceManifests(inst, modsTxt)
+	files, err := RenderInstanceManifests(inst, modsTxt, m.nodeSelector, m.namespace)
 	if err != nil {
 		return nil, fmt.Errorf("render manifests: %w", err)
 	}

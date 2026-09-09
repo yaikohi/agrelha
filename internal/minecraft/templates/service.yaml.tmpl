@@ -2,15 +2,19 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .ServiceName }}
-  namespace: minecraft-modded
+  namespace: {{ .Namespace }}
   labels:
     app: {{ .DeploymentName }}
     instance: "{{ .Number }}"
+{{- if .LBIP }}
   annotations:
     io.cilium/lb-ipam-ips: "{{ .LBIP }}"
+{{- end }}
 spec:
   type: LoadBalancer
+{{- if .LBIP }}
   loadBalancerIP: {{ .LBIP }}
+{{- end }}
   selector:
     app: {{ .DeploymentName }}
   ports:

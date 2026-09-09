@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .ConfigCMName }}
-  namespace: minecraft-modded
+  namespace: {{ .Namespace }}
   labels:
     app: {{ .DeploymentName }}
     instance: "{{ .Number }}"

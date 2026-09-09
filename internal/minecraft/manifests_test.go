@@ -18,9 +18,12 @@ func TestRenderInstanceManifests(t *testing.T) {
 		State:      StateRunning,
 		Difficulty: "hard",
 		Gamemode:   "survival",
+		// Explicit: with no MC_LB_BASE_IP configured, agrelha pins no address
+		// and lets the load balancer allocate one.
+		LBIP: "192.168.20.225",
 	}
 
-	files, err := RenderInstanceManifests(inst, "jei\nappleskin\n")
+	files, err := RenderInstanceManifests(inst, "jei\nappleskin\n", "ykhi.xyz/gameserver=true", "minecraft-modded")
 	if err != nil {
 		t.Fatalf("unexpected error rendering manifests: %v", err)
 	}

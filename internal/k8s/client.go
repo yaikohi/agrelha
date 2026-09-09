@@ -7,6 +7,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -18,10 +19,28 @@ import (
 )
 
 type Client struct {
-	cs            kubernetes.Interface
-	namespace     string
-	deployment    string
-	altDeployment string
+	cs         kubernetes.Interface
+	namespace  string
+	deployment string
+	// nodeSelector is "key=value" applied to Jobs this client creates; empty
+	// means schedule anywhere. Set with SetNodeSelector.
+	nodeSelectorKey   string
+	nodeSelectorValue string
+}
+
+// SetNodeSelector configures where one-shot Jobs (backup/restore) are scheduled.
+func (c *Client) SetNodeSelector(sel string) {
+	if k, v, ok := strings.Cut(sel, "="); ok && strings.TrimSpace(k) != "" {
+		c.nodeSelectorKey = strings.TrimSpace(k)
+		c.nodeSelectorValue = strings.TrimSpace(v)
+	}
+}
+
+func (c *Client) jobNodeSelector() map[string]string {
+	if c.nodeSelectorKey == "" {
+		return nil
+	}
+	return map[string]string{c.nodeSelectorKey: c.nodeSelectorValue}
 }
 
 func New(namespace, deployment string) (*Client, error) {
@@ -45,20 +64,7 @@ func (c *Client) Clientset() kubernetes.Interface {
 	return c.cs
 }
 
-// SetAltDeployment configures an alternate deployment (e.g. fabric vs neoforge) in the same namespace.
-func (c *Client) SetAltDeployment(alt string) {
-	c.altDeployment = alt
-}
-
 func (c *Client) activeDeploymentName(ctx context.Context) string {
-	if c.altDeployment == "" {
-		return c.deployment
-	}
-	if d, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, c.altDeployment, metav1.GetOptions{}); err == nil {
-		if (d.Spec.Replicas != nil && *d.Spec.Replicas > 0) || d.Status.ReadyReplicas > 0 {
-			return c.altDeployment
-		}
-	}
 	return c.deployment
 }
 
@@ -73,7 +79,7 @@ func (c *Client) RestartDeployment(ctx context.Context, depName string) error {
 		depName = c.activeDeploymentName(ctx)
 	}
 	patch := fmt.Sprintf(
-		`{"spec":{"template":{"metadata":{"annotations":{"agrelha.ykhi.xyz/restartedAt":%q}}}}}`,
+		`{"spec":{"template":{"metadata":{"annotations":{"agrelha.dev/restartedAt":%q}}}}}`,
 		time.Now().UTC().Format(time.RFC3339),
 	)
 	_, err := c.cs.AppsV1().Deployments(c.namespace).Patch(
@@ -130,9 +136,7 @@ func (c *Client) CreateBackupJob(ctx context.Context, jobName, archiveName, data
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
-					NodeSelector: map[string]string{
-						"ykhi.xyz/gameserver": "true",
-					},
+					NodeSelector:  c.jobNodeSelector(),
 					Tolerations: []corev1.Toleration{
 						{
 							Key:      "dedicated",
@@ -214,9 +218,7 @@ func (c *Client) CreateRestoreJob(ctx context.Context, jobName, archiveName, dat
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
-					NodeSelector: map[string]string{
-						"ykhi.xyz/gameserver": "true",
-					},
+					NodeSelector:  c.jobNodeSelector(),
 					Tolerations: []corev1.Toleration{
 						{
 							Key:      "dedicated",

@@ -127,4 +127,3 @@ func TestModrinthRetry429(t *testing.T) {
 		t.Errorf("unexpected project: %+v", p)
 	}
 }
-

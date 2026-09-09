@@ -24,8 +24,8 @@ type RconClient struct {
 	password string
 	timeout  time.Duration
 
-	mu   sync.Mutex
-	conn net.Conn
+	mu    sync.Mutex
+	conn  net.Conn
 	reqID int32
 }
 
