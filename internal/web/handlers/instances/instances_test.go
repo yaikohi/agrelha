@@ -1,6 +1,9 @@
 package instances
 
 import (
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/manifests"
 	"context"
 	"net/http/httptest"
 	"path/filepath"
@@ -14,11 +17,10 @@ import (
 	"agrelha/internal/infra/kube"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/platform/config"
 )
 
-func setupTestInstancesHandler(t *testing.T) (*Handler, *store.Store, *k8s.Client, *minecraft.InstanceManager) {
+func setupTestInstancesHandler(t *testing.T) (*Handler, *store.Store, *k8s.Client, *instances.InstanceManager) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -43,8 +45,8 @@ func setupTestInstancesHandler(t *testing.T) (*Handler, *store.Store, *k8s.Clien
 	)
 
 	mck8s := k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded")
-	mgr := minecraft.NewInstanceManager(
-		store.NewInstanceRepo(st), nil, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", "ykhi.xyz/gameserver=true", "minecraft-modded")
+	mgr := instances.NewInstanceManager(
+		store.NewInstanceRepo(st), nil, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded")
 
 	h := New(Config{
 		Cfg:         &config.Config{BackupsDir: t.TempDir()},
@@ -61,12 +63,12 @@ func TestMCDashboardEndpoint(t *testing.T) {
 	defer st.Close()
 
 	// Seed instance
-	_, err := mgr.CreateInstance(context.Background(), minecraft.Instance{
+	_, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		Name:      "Ducktopia",
 		MCVersion: "1.21.1",
-		Loader:    minecraft.LoaderNeoForge,
-		Tier:      minecraft.TierMedium,
-		State:     minecraft.StateStopped,
+		Loader:    domain.LoaderNeoForge,
+		Tier:      domain.TierMedium,
+		State:     domain.StateStopped,
 	}, "")
 	if err != nil {
 		t.Fatal(err)
@@ -88,12 +90,12 @@ func TestMCInstanceLifecycleEndpoints(t *testing.T) {
 	h, st, _, mgr := setupTestInstancesHandler(t)
 	defer st.Close()
 
-	inst, err := mgr.CreateInstance(context.Background(), minecraft.Instance{
+	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		Name:      "Ducktopia",
 		MCVersion: "1.21.1",
-		Loader:    minecraft.LoaderNeoForge,
-		Tier:      minecraft.TierMedium,
-		State:     minecraft.StateStopped,
+		Loader:    domain.LoaderNeoForge,
+		Tier:      domain.TierMedium,
+		State:     domain.StateStopped,
 	}, "")
 	if err != nil {
 		t.Fatal(err)
@@ -139,8 +141,8 @@ func TestInstanceStatsCaching(t *testing.T) {
 	h, st, _, _ := setupTestInstancesHandler(t)
 	defer st.Close()
 
-	insts := []minecraft.Instance{
-		{Number: 1, Name: "Test", State: minecraft.StateRunning},
+	insts := []domain.Instance{
+		{Number: 1, Name: "Test", State: domain.StateRunning},
 	}
 
 	stats := h.InstanceStats(context.Background(), insts)

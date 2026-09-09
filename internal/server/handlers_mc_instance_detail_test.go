@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agrelha/internal/domain"
 	"context"
 	"io"
 	"net/http/httptest"
@@ -11,20 +12,18 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"agrelha/internal/minecraft"
 )
 
 func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
 	s, st, mgr := setupTestMCServer(t)
 	defer st.Close()
 
-	inst, err := mgr.CreateInstance(context.Background(), minecraft.Instance{
+	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		Name:      "Ducktopia",
-		Loader:    minecraft.LoaderNeoForge,
-		Source:    minecraft.SourceModpack,
+		Loader:    domain.LoaderNeoForge,
+		Source:    domain.SourceModpack,
 		MCVersion: "1.21.1",
-		Tier:      minecraft.TierLarge,
+		Tier:      domain.TierLarge,
 	}, "")
 	if err != nil {
 		t.Fatal(err)
@@ -96,12 +95,12 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	backupsDir := t.TempDir()
 	s.cfg.BackupsDir = backupsDir
 
-	inst, err := mgr.CreateInstance(context.Background(), minecraft.Instance{
+	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		Name:      "Fluxweave",
-		Loader:    minecraft.LoaderNeoForge,
-		Source:    minecraft.SourceModlist,
+		Loader:    domain.LoaderNeoForge,
+		Source:    domain.SourceModlist,
 		MCVersion: "1.21.1",
-		Tier:      minecraft.TierMedium,
+		Tier:      domain.TierMedium,
 	}, "jei\n")
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +113,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	}
 
 	// 1. In-place restore should fail when instance is running
-	_ = st.UpdateInstanceState(inst.Number, string(minecraft.StateRunning))
+	_ = st.UpdateInstanceState(inst.Number, string(domain.StateRunning))
 	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/restore-inplace", strings.NewReader(`{"archive":"`+backupFile+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.App.Test(req)
@@ -127,7 +126,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	}
 
 	// 2. In-place restore should succeed when instance is stopped
-	_ = st.UpdateInstanceState(inst.Number, string(minecraft.StateStopped))
+	_ = st.UpdateInstanceState(inst.Number, string(domain.StateStopped))
 	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/1/backups/restore-inplace", strings.NewReader(`{"archive":"`+backupFile+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = s.App.Test(req)
@@ -155,7 +154,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	if err != nil || newInst == nil {
 		t.Fatal("expected instance #02 to exist after restore-new")
 	}
-	if newInst.Tier != minecraft.TierLarge {
+	if newInst.Tier != domain.TierLarge {
 		t.Errorf("new instance tier = %s, want large", newInst.Tier)
 	}
 

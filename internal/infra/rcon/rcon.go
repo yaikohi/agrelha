@@ -1,4 +1,4 @@
-package minecraft
+package rcon
 
 import (
 	"bytes"
@@ -19,7 +19,9 @@ const (
 	packetTypeResponse     int32 = 0
 )
 
-type RconClient struct {
+var ErrNotConfigured = errors.New("rcon: no password configured")
+
+type Client struct {
 	addr     string
 	password string
 	timeout  time.Duration
@@ -29,11 +31,11 @@ type RconClient struct {
 	reqID int32
 }
 
-func NewRconClient(addr, password string, timeout time.Duration) *RconClient {
+func NewClient(addr, password string, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	return &RconClient{
+	return &Client{
 		addr:     addr,
 		password: password,
 		timeout:  timeout,
@@ -41,7 +43,7 @@ func NewRconClient(addr, password string, timeout time.Duration) *RconClient {
 	}
 }
 
-func (c *RconClient) connect() error {
+func (c *Client) connect() error {
 	if c.conn != nil {
 		return nil
 	}
@@ -75,7 +77,7 @@ func (c *RconClient) connect() error {
 	return nil
 }
 
-func (c *RconClient) writePacket(id, typ int32, body string) error {
+func (c *Client) writePacket(id, typ int32, body string) error {
 	payload := []byte(body)
 	length := int32(4 + 4 + len(payload) + 2) // ID (4) + Type (4) + body + 2 null bytes
 
@@ -92,7 +94,7 @@ func (c *RconClient) writePacket(id, typ int32, body string) error {
 	return err
 }
 
-func (c *RconClient) readPacket() (int32, int32, string, error) {
+func (c *Client) readPacket() (int32, int32, string, error) {
 	_ = c.conn.SetDeadline(time.Now().Add(c.timeout))
 
 	var length int32
@@ -118,7 +120,10 @@ func (c *RconClient) readPacket() (int32, int32, string, error) {
 }
 
 // Execute sends an RCON command to the server and returns the console response.
-func (c *RconClient) Execute(cmd string) (string, error) {
+func (c *Client) Execute(cmd string) (string, error) {
+	if c == nil {
+		return "", ErrNotConfigured
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -143,7 +148,10 @@ func (c *RconClient) Execute(cmd string) (string, error) {
 	return response, nil
 }
 
-func (c *RconClient) Close() error {
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn != nil {
@@ -154,28 +162,28 @@ func (c *RconClient) Close() error {
 	return nil
 }
 
-type RconPool struct {
+type Pool struct {
 	password string
 	timeout  time.Duration
 	mu       sync.Mutex
-	clients  map[string]*RconClient
+	clients  map[string]*Client
 }
 
-func NewRconPool(password string, timeout time.Duration) *RconPool {
-	return &RconPool{
+func NewPool(password string, timeout time.Duration) *Pool {
+	return &Pool{
 		password: password,
 		timeout:  timeout,
-		clients:  make(map[string]*RconClient),
+		clients:  make(map[string]*Client),
 	}
 }
 
-func (p *RconPool) ClientFor(addr string) *RconClient {
+func (p *Pool) ClientFor(addr string) *Client {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if c, ok := p.clients[addr]; ok {
 		return c
 	}
-	c := NewRconClient(addr, p.password, p.timeout)
+	c := NewClient(addr, p.password, p.timeout)
 	p.clients[addr] = c
 	return c
 }

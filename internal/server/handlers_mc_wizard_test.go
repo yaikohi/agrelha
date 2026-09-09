@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agrelha/internal/domain"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,8 +10,6 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
-
-	"agrelha/internal/minecraft"
 )
 
 func TestWizardImportTxt(t *testing.T) {
@@ -60,7 +59,7 @@ func TestLegacyRedirectsToActiveInstance(t *testing.T) {
 	defer st.Close()
 
 	// Seed instance #01
-	_, err := mgr.CreateInstance(context.Background(), minecraft.Instance{
+	_, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		Name:      "Ducktopia",
 		MCVersion: "1.21.1",
 		Loader:    "neoforge",

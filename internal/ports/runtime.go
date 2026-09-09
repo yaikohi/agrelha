@@ -8,6 +8,7 @@
 package ports
 
 import (
+	"agrelha/internal/domain"
 	"context"
 	"errors"
 	"io"
@@ -79,4 +80,12 @@ type Runtime interface {
 	Status(ctx context.Context, ref ServerRef) (Status, error)
 	Metrics(ctx context.Context, ref ServerRef) (Metrics, error)
 	Logs(ctx context.Context, ref ServerRef, opts LogOptions) (io.ReadCloser, error)
+}
+
+type Console interface {
+	Execute(cmd string) (string, error)
+}
+
+type SpecRenderer interface {
+	Render(inst domain.Instance, modsTxt string) (map[string][]byte, error)
 }

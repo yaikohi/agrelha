@@ -1,10 +1,10 @@
 package access
 
 import (
+	mcaccess "agrelha/internal/app/access"
 	"fmt"
 	"strings"
 
-	"agrelha/internal/minecraft"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 
@@ -27,8 +27,8 @@ func (h *Handler) MCAccessPage(c *fiber.Ctx) error {
 			data, err = h.cfg.MCK8s.ConfigMapData(c.UserContext(), "minecraft-neoforge-access")
 		}
 		if err == nil {
-			ops = minecraft.ParseUsers(data["ops.txt"])
-			whitelist = minecraft.ParseUsers(data["whitelist.txt"])
+			ops = mcaccess.ParseUsers(data["ops.txt"])
+			whitelist = mcaccess.ParseUsers(data["whitelist.txt"])
 		}
 	}
 

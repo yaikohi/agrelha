@@ -18,12 +18,30 @@ Following [docs/modularization-plan.md](docs/modularization-plan.md):
 - **Phase 5 (Game Interface)** ✅: `ports.Game` defined; `internal/games/valheim` and `internal/games/minecraft` engines implemented.
 - **Phase 6 (Auth Port)** ✅: `ports.Auth` defined; OIDC and Argon2id local user authenticator adapters.
 - **Phase 7 (HTTP Split)** ✅: Monolith `internal/server` (5,453 LOC) split into 7 feature packages under `internal/http/` (shared, access, backups, console, dashboard, content, instances).
-- **Phase 8 (Docker Adapter)** ✅: Implemented `adapters/state/local` (files + SQLite history/rollback), `adapters/reconcile/compose` (synchronous convergence + YAML render), `adapters/runtime/docker` (REST API over unix socket), and server auto-boot wiring.
+- **Phase 8 (Docker Adapter)** ⚠️ **adapters only, NOT end-to-end**: Implemented `infra/state/local` (files + SQLite history/rollback), `infra/reconcile/compose` (synchronous convergence + YAML render), `infra/runtime/docker` (443 LOC of real Docker Engine API over the unix socket, incl. log demuxing). All three are real code and the app boots and serves under `RUNTIME=docker`. **But nothing connects them** — audited 2026-09-09:
+  - `compose.RenderCompose` and `compose.WriteAndConverge` have **zero callers**; nothing ever writes a `docker-compose.yml`, and `Converge` runs `docker compose up -d` in a directory that must already contain one.
+  - `wiring.Build` passes the Kubernetes `manifests.New(...)` renderer **unconditionally**, so creating an instance under Docker writes k8s YAML that compose cannot read. `ports.SpecRenderer` has exactly one implementation.
+  - `Reconciler.Converge` is never invoked anywhere, on either the ArgoCD or the compose side.
+  - Valheim's control routes call `s.k8s.Restart`/`Scale` directly in `routes.go`, bypassing `ports.Runtime`; under Docker `K8s` is nil, so Valheim control is dead.
+  - **Root cause:** `compose.RenderCompose` consumes a `domain.RuntimeSpec`, and the only producers are the dead `ports.Game` implementations. Docker support is blocked on the Game abstraction — i.e. on **architecture-cleanup phase G**, not on phase E. The claim "Audience 2 can install" is not true today.
 - **Phase 9 (Packaging)** ✅: `deploy/docker-compose.yml` (only `RUNTIME: docker` required) and `deploy/helm/agrelha` (lints clean; renders with zero values and with a full git+OIDC+ingress+NFS-backups values file). RBAC is per-namespace, never cluster-wide. Config surface audited: **every key has a default**, so the required set is `RUNTIME` alone, and only when off Kubernetes — documented in `docs/configuration.md`, install paths in `deploy/README.md`.
   - A git-less Kubernetes install used to leave `stateStore` nil, so opening the mods page would have nil-panicked. Added `adapters/state/unconfigured`: reads return empty documents, writes return `ErrUnconfigured`. The declarative plane is now gated on `GIT_REPO_URL && GIT_TOKEN` (a token with no repo URL was previously accepted).
-- **Quality & Verification** (re-verified 2026-09-10 at `6bace47`): 176 test
-  functions across 43 packages (31 have tests); `go build`, `go vet` and
-  `go test -race` all clean; coverage **33.6%**.
+### Architecture Cleanup Status (2026-09-09)
+Following [docs/architecture-cleanup-plan.md](docs/architecture-cleanup-plan.md).
+An audit after phase 9 found nine layering violations; that document holds the
+evidence, the decisions and the full phase table. Progress:
+
+- **Phase A (Layout move)** ✅: whole tree relocated to `domain / ports / app / infra / web / platform`, `cmd/api`→`cmd/agrelha`, `pages` out of `cmd/`. Pure move, no behaviour change. Closed violation #6 (`internal` → `cmd`).
+- **Phase B (Architecture test)** ✅: `internal/arch/arch_test.go`, pure stdlib, runs in `go test ./...`. A **ratchet**: the edge table is the spec, `exceptions` lists today's violations tagged by the phase that removes each. Fails on a new forbidden edge, a stale exception, an unclassified package, or a stale layer prefix. All four failure modes verified by deliberately triggering them.
+- **Phase C (Split `minecraft` + `modpack`)** ✅: both packages gone. `instance.go`/`content.go` turned out to be pure re-export shims, so the work was rewriting ~120 call sites, not writing domain code. Three dependencies **inverted**: `ports.SpecRenderer`, `ports.Console`, and a local `ingest.presenceStore`.
+- **Phase D (Composition root)** ✅: `internal/wiring` (**not** `cmd`, because Go forbids importing `package main` and two real tests exercise the wiring decisions). `wiring.Build` returns an error where the old code called `os.Exit(1)`. `server.New(cfg, Deps)` now constructs no adapters and does no I/O. No `os.Exit` anywhere under `internal/`.
+- **Phases E–I** remain. **Ledger: 19 known violations** (was 20). Done means `exceptions` is empty and the `layers` table no longer mentions `internal/server`.
+
+- **Quality & Verification** (2026-09-09, after cleanup phase D): `go build`,
+  `go vet`, `go test ./...` and `gofmt` all clean; the binary was smoke-run
+  (`/healthz` 200, `/` 200, `/sse` 200, `/minecraft` 302, clean shutdown).
+  Coverage last measured **33.6%**; phase E is what makes handler tests
+  writable, so expect it to move only from there.
 
 ---
 

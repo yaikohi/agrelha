@@ -7,8 +7,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/app/games/valheim"
+	"agrelha/internal/app/modpack"
 	"agrelha/internal/app/mods"
-	"agrelha/internal/modpack"
 	"agrelha/internal/web/shared"
 )
 

@@ -1,10 +1,10 @@
 package access
 
 import (
+	mcaccess "agrelha/internal/app/access"
 	"agrelha/internal/app/admins"
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 
@@ -14,7 +14,7 @@ import (
 // Config defines dependencies for access management HTTP handlers.
 type Config struct {
 	Admins         *admins.Manager
-	MCAccess       *minecraft.AccessManager
+	MCAccess       *mcaccess.AccessManager
 	Store          *store.Store
 	K8s            *k8s.Client
 	MCK8s          *k8s.Client

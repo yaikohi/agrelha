@@ -1,6 +1,8 @@
-package minecraft
+package instances
 
 import (
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/manifests"
 	"context"
 	"io"
 	"path/filepath"
@@ -62,12 +64,12 @@ func TestManagerDrivesAnyRuntime(t *testing.T) {
 
 	rt := newFakeRuntime()
 	mgr := NewInstanceManager(
-		store.NewInstanceRepo(st), nil, rt, 24, 4, 2, "manifests/minecraft-modded", "", "", "minecraft-modded")
+		store.NewInstanceRepo(st), nil, rt, 24, 4, 2, "manifests/minecraft-modded", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
 	ctx := context.Background()
 
-	inst, err := mgr.CreateInstance(ctx, Instance{
-		Name: "portcheck", Loader: LoaderNeoForge, Source: SourceModlist,
-		MCVersion: "1.21.1", Tier: TierSmall,
+	inst, err := mgr.CreateInstance(ctx, domain.Instance{
+		Name: "portcheck", Loader: domain.LoaderNeoForge, Source: domain.SourceModlist,
+		MCVersion: "1.21.1", Tier: domain.TierSmall,
 	}, "jei\n")
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -85,7 +87,7 @@ func TestManagerDrivesAnyRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.State != StateRunning {
+	if got.State != domain.StateRunning {
 		t.Fatalf("state = %q, want running (derived from the port's Status)", got.State)
 	}
 
@@ -95,7 +97,7 @@ func TestManagerDrivesAnyRuntime(t *testing.T) {
 	if len(rt.stopped) != 1 {
 		t.Fatalf("runtime was not asked to stop the instance: %v", rt.stopped)
 	}
-	if got, _ := mgr.GetInstance(ctx, inst.Number); got.State != StateStopped {
+	if got, _ := mgr.GetInstance(ctx, inst.Number); got.State != domain.StateStopped {
 		t.Fatalf("state = %q, want stopped", got.State)
 	}
 }
@@ -107,12 +109,12 @@ func TestStateFromStatusSeparatesLifecycleAndAvailability(t *testing.T) {
 	cases := []struct {
 		name string
 		in   ports.Status
-		want InstanceState
+		want domain.InstanceState
 	}{
-		{"reachable", ports.Status{Lifecycle: ports.LifecycleRunning, Available: true}, StateRunning},
-		{"asked to run, not reachable yet", ports.Status{Lifecycle: ports.LifecycleRunning}, StateProvisioning},
-		{"stopped", ports.Status{Lifecycle: ports.LifecycleStopped}, StateStopped},
-		{"unknown runtime", ports.Status{Lifecycle: ports.LifecycleUnknown}, StateProvisioning},
+		{"reachable", ports.Status{Lifecycle: ports.LifecycleRunning, Available: true}, domain.StateRunning},
+		{"asked to run, not reachable yet", ports.Status{Lifecycle: ports.LifecycleRunning}, domain.StateProvisioning},
+		{"stopped", ports.Status{Lifecycle: ports.LifecycleStopped}, domain.StateStopped},
+		{"unknown runtime", ports.Status{Lifecycle: ports.LifecycleUnknown}, domain.StateProvisioning},
 	}
 	for _, c := range cases {
 		if got := stateFromStatus(c.in); got != c.want {

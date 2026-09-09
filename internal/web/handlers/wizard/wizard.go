@@ -5,6 +5,8 @@
 package wizard
 
 import (
+	mccontent "agrelha/internal/app/content"
+	"agrelha/internal/domain"
 	"bufio"
 	"bytes"
 	"context"
@@ -19,10 +21,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"agrelha/internal/app/modpack"
 	"agrelha/internal/infra/content/mcversions"
 	"agrelha/internal/infra/content/modpackindex"
-	"agrelha/internal/minecraft"
-	"agrelha/internal/modpack"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 	"agrelha/internal/web/sse"
@@ -230,7 +231,7 @@ func (h *Handler) MCWizardCartCheck(c *fiber.Ctx) error {
 		req.MCVersion = c.FormValue("mc_version")
 	}
 
-	compat := minecraft.CheckCartCompatibility(c.UserContext(), h.cfg.MR, req.Cart, req.MCVersion)
+	compat := mccontent.CheckCartCompatibility(c.UserContext(), h.cfg.MR, req.Cart, req.MCVersion)
 
 	var cartHTML strings.Builder
 	for _, slug := range req.Cart {
@@ -312,7 +313,7 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 	if tierStr == "" {
 		tierStr = c.FormValue("tier")
 	}
-	tier := minecraft.NormalizeTier(tierStr)
+	tier := domain.NormalizeTier(tierStr)
 	seed := strings.TrimSpace(req.Seed)
 	if seed == "" {
 		seed = strings.TrimSpace(c.FormValue("seed"))
@@ -425,7 +426,7 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		modsTxt = sb.String()
 	}
 
-	inst := minecraft.Instance{
+	inst := domain.Instance{
 		Name:       name,
 		Seed:       seed,
 		MCVersion:  mcVersion,
@@ -434,30 +435,30 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		Difficulty: difficulty,
 		Gamemode:   gamemode,
 		WorldType:  worldType,
-		State:      minecraft.StateRunning,
+		State:      domain.StateRunning,
 	}
 
 	switch source {
 	case "vanilla":
-		inst.Source = minecraft.SourceVanilla
+		inst.Source = domain.SourceVanilla
 		inst.Loader = ""
 	case "modpack":
-		inst.Source = minecraft.SourceModpack
-		inst.Loader = minecraft.NormalizeLoader(loader)
+		inst.Source = domain.SourceModpack
+		inst.Loader = domain.NormalizeLoader(loader)
 		if packName != "" || packRef != "" {
-			provider := minecraft.ProviderCurseForge
+			provider := domain.ProviderCurseForge
 			if packProvider == "modrinth" {
-				provider = minecraft.ProviderModrinth
+				provider = domain.ProviderModrinth
 			}
-			inst.Pack = &minecraft.Pack{
+			inst.Pack = &domain.Pack{
 				Name:     packName,
 				Ref:      packRef,
 				Provider: provider,
 			}
 		}
 	default:
-		inst.Source = minecraft.SourceModlist
-		inst.Loader = minecraft.NormalizeLoader(loader)
+		inst.Source = domain.SourceModlist
+		inst.Loader = domain.NormalizeLoader(loader)
 	}
 
 	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, modsTxt)

@@ -1,6 +1,8 @@
-package minecraft
+package manifests
 
 import (
+	"agrelha/internal/domain"
+
 	"bytes"
 	"embed"
 	"fmt"
@@ -11,8 +13,8 @@ import (
 //go:embed templates/*
 var templateFS embed.FS
 
-type RenderData struct {
-	Instance
+type Data struct {
+	domain.Instance
 	Annotations map[string]string
 	Env         map[string]string
 	ModsTxt     string
@@ -22,7 +24,7 @@ type RenderData struct {
 	Namespace         string
 }
 
-func (rd RenderData) IndentModsTxt() string {
+func (rd Data) IndentModsTxt() string {
 	lines := strings.Split(strings.TrimRight(rd.ModsTxt, "\n"), "\n")
 	var sb strings.Builder
 	for _, l := range lines {
@@ -31,12 +33,25 @@ func (rd RenderData) IndentModsTxt() string {
 	return sb.String()
 }
 
-// RenderInstanceManifests renders an Instance to Kubernetes objects. nodeSelector
+// Render renders an Instance to Kubernetes objects. nodeSelector
 // is "key=value" and may be empty, in which case the workload schedules anywhere.
-func RenderInstanceManifests(inst Instance, modsTxt, nodeSelector, namespace string) (map[string][]byte, error) {
+type Renderer struct {
+	nodeSelector string
+	namespace    string
+}
+
+func New(nodeSelector, namespace string) *Renderer {
+	return &Renderer{nodeSelector: nodeSelector, namespace: namespace}
+}
+
+func (r *Renderer) Render(inst domain.Instance, modsTxt string) (map[string][]byte, error) {
+	return Render(inst, modsTxt, r.nodeSelector, r.namespace)
+}
+
+func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[string][]byte, error) {
 	inst.EnsureDefaults("")
 
-	data := RenderData{
+	data := Data{
 		Instance:    inst,
 		Annotations: inst.Annotations(),
 		Env:         inst.Env(),
@@ -94,7 +109,7 @@ func RenderInstanceManifests(inst Instance, modsTxt, nodeSelector, namespace str
 	}
 	files["configs.yaml"] = cfgBuf.Bytes()
 
-	if inst.Source != SourceVanilla || strings.TrimSpace(modsTxt) != "" {
+	if inst.Source != domain.SourceVanilla || strings.TrimSpace(modsTxt) != "" {
 		if strings.TrimSpace(data.ModsTxt) == "" {
 			data.ModsTxt = fmt.Sprintf("# Mod list for %s\n", inst.Name)
 		}

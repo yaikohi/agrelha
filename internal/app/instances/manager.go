@@ -1,4 +1,4 @@
-package minecraft
+package instances
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"agrelha/internal/ports"
 )
 
+const defaultLBBaseIP = ""
+
 type InstanceManager struct {
 	repo             ports.InstanceRepository
 	stateStore       ports.StateStore
@@ -19,7 +21,7 @@ type InstanceManager struct {
 	maxRunning       int
 	instancesRelPath string
 	lbBaseIP         string
-	nodeSelector     string
+	renderer         ports.SpecRenderer
 	namespace        string
 }
 
@@ -30,23 +32,23 @@ func NewInstanceManager(
 	totalBudgetGiB, maxInstances, maxRunning int,
 	instancesRelPath string,
 	lbBaseIP string,
-	nodeSelector string,
+	renderer ports.SpecRenderer,
 	namespace string,
 ) *InstanceManager {
 	if totalBudgetGiB <= 0 {
-		totalBudgetGiB = TotalBudgetGiB
+		totalBudgetGiB = domain.DefaultTotalBudgetGiB
 	}
 	if maxInstances <= 0 {
-		maxInstances = MaxInstances
+		maxInstances = domain.DefaultMaxInstances
 	}
 	if maxRunning <= 0 {
-		maxRunning = MaxRunning
+		maxRunning = domain.DefaultMaxRunning
 	}
 	if instancesRelPath == "" {
 		instancesRelPath = "manifests/minecraft-modded"
 	}
 	if lbBaseIP == "" {
-		lbBaseIP = DefaultLBBaseIP
+		lbBaseIP = defaultLBBaseIP
 	}
 	return &InstanceManager{
 		repo:             repo,
@@ -57,7 +59,7 @@ func NewInstanceManager(
 		maxRunning:       maxRunning,
 		instancesRelPath: instancesRelPath,
 		lbBaseIP:         lbBaseIP,
-		nodeSelector:     nodeSelector,
+		renderer:         renderer,
 		namespace:        namespace,
 	}
 }
@@ -67,31 +69,31 @@ func (m *InstanceManager) MaxInstances() int   { return m.maxInstances }
 func (m *InstanceManager) MaxRunning() int     { return m.maxRunning }
 
 // serverRef addresses one Instance in whatever runtime is configured.
-func (m *InstanceManager) serverRef(inst Instance) ports.ServerRef {
+func (m *InstanceManager) serverRef(inst domain.Instance) ports.ServerRef {
 	return ports.ServerRef{Name: inst.DeploymentName(), Scope: m.namespace}
 }
 
 // stateFromStatus maps the runtime's Lifecycle/Available pair onto the
 // Instance lifecycle. Available means players can connect; Lifecycle running
 // without Available means it is still coming up.
-func stateFromStatus(st ports.Status) InstanceState {
+func stateFromStatus(st ports.Status) domain.InstanceState {
 	switch {
 	case st.Available:
-		return StateRunning
+		return domain.StateRunning
 	case st.Lifecycle == ports.LifecycleStopped:
-		return StateStopped
+		return domain.StateStopped
 	default:
-		return StateProvisioning
+		return domain.StateProvisioning
 	}
 }
 
-func (m *InstanceManager) ListInstances(ctx context.Context) ([]Instance, error) {
+func (m *InstanceManager) ListInstances(ctx context.Context) ([]domain.Instance, error) {
 	records, err := m.repo.List()
 	if err != nil {
 		return nil, fmt.Errorf("list instances: %w", err)
 	}
 
-	instances := make([]Instance, 0, len(records))
+	instances := make([]domain.Instance, 0, len(records))
 	for _, r := range records {
 		inst := r
 		if m.runtime != nil {
@@ -111,7 +113,7 @@ func (m *InstanceManager) ListInstances(ctx context.Context) ([]Instance, error)
 	return instances, nil
 }
 
-func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*Instance, error) {
+func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*domain.Instance, error) {
 	rec, err := m.repo.Get(num)
 	if err != nil {
 		return nil, fmt.Errorf("get instance %d: %w", num, err)
@@ -131,12 +133,12 @@ func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*Instance, 
 	return &inst, nil
 }
 
-func (m *InstanceManager) CreateInstance(ctx context.Context, inst Instance, modsTxt string) (*Instance, error) {
+func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instance, modsTxt string) (*domain.Instance, error) {
 	existing, err := m.repo.List()
 	if err != nil {
 		return nil, err
 	}
-	existingInstances := make([]Instance, 0, len(existing))
+	existingInstances := make([]domain.Instance, 0, len(existing))
 	for _, e := range existing {
 		existingInstances = append(existingInstances, e)
 	}
@@ -171,7 +173,7 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst Instance, mod
 	}
 	inst.EnsureDefaults(m.lbBaseIP)
 
-	files, err := RenderInstanceManifests(inst, modsTxt, m.nodeSelector, m.namespace)
+	files, err := m.renderer.Render(inst, modsTxt)
 	if err != nil {
 		return nil, fmt.Errorf("render manifests: %w", err)
 	}
@@ -204,7 +206,7 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int) error {
 	if inst == nil {
 		return fmt.Errorf("instance %d not found", num)
 	}
-	if inst.State == StateRunning {
+	if inst.State == domain.StateRunning {
 		return nil
 	}
 
@@ -213,7 +215,7 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int) error {
 		return err
 	}
 
-	var others []Instance
+	var others []domain.Instance
 	for _, other := range instances {
 		if other.Number != num {
 			others = append(others, other)
@@ -231,8 +233,8 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int) error {
 		}
 	}
 
-	inst.State = StateRunning
-	return m.repo.UpdateState(num, StateRunning)
+	inst.State = domain.StateRunning
+	return m.repo.UpdateState(num, domain.StateRunning)
 }
 
 func (m *InstanceManager) StopInstance(ctx context.Context, num int) error {
@@ -250,8 +252,8 @@ func (m *InstanceManager) StopInstance(ctx context.Context, num int) error {
 		}
 	}
 
-	inst.State = StateStopped
-	return m.repo.UpdateState(num, StateStopped)
+	inst.State = domain.StateStopped
+	return m.repo.UpdateState(num, domain.StateStopped)
 }
 
 func (m *InstanceManager) DeleteInstance(ctx context.Context, num int) error {
@@ -284,6 +286,6 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int) error {
 
 type BudgetInfo = domain.Budget
 
-func (m *InstanceManager) Budget(instances []Instance) BudgetInfo {
+func (m *InstanceManager) Budget(instances []domain.Instance) BudgetInfo {
 	return domain.CalculateBudget(instances, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
 }

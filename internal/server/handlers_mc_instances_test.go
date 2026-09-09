@@ -1,6 +1,10 @@
 package server
 
 import (
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/manifests"
+	"agrelha/internal/infra/rcon"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -21,11 +25,10 @@ import (
 	"agrelha/internal/infra/kube"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/platform/config"
 )
 
-func setupTestMCServer(t *testing.T) (*FiberServer, *store.Store, *minecraft.InstanceManager) {
+func setupTestMCServer(t *testing.T) (*FiberServer, *store.Store, *instances.InstanceManager) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -50,7 +53,7 @@ func setupTestMCServer(t *testing.T) (*FiberServer, *store.Store, *minecraft.Ins
 	)
 
 	mck8s := k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded")
-	mgr := minecraft.NewInstanceManager(store.NewInstanceRepo(st), nil, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", "ykhi.xyz/gameserver=true", "minecraft-modded")
+	mgr := instances.NewInstanceManager(store.NewInstanceRepo(st), nil, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded")
 
 	s := &FiberServer{
 		App:         fiber.New(),
@@ -58,7 +61,7 @@ func setupTestMCServer(t *testing.T) (*FiberServer, *store.Store, *minecraft.Ins
 		store:       st,
 		mck8s:       mck8s,
 		mcInstances: mgr,
-		mcRconPool:  minecraft.NewRconPool("testpass", 3*time.Second),
+		mcRconPool:  rcon.NewPool("testpass", 3*time.Second),
 	}
 	s.RegisterFiberRoutes()
 	return s, st, mgr
@@ -234,7 +237,7 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get updated instance failed: %v", err)
 	}
-	if updated.Name != "Ducktopia Remastered" || updated.Tier != minecraft.TierMedium {
+	if updated.Name != "Ducktopia Remastered" || updated.Tier != domain.TierMedium {
 		t.Fatalf("expected updated settings, got: %+v", updated)
 	}
 
@@ -326,10 +329,10 @@ func TestMCSettingsSave(t *testing.T) {
 	s, st, mgr := setupTestMCServer(t)
 	defer st.Close()
 
-	inst, err := mgr.CreateInstance(context.Background(), minecraft.Instance{
+	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		Name:      "OldName",
 		MCVersion: "1.21.1",
-		Tier:      minecraft.TierSmall,
+		Tier:      domain.TierSmall,
 	}, "")
 	if err != nil {
 		t.Fatal(err)
@@ -359,7 +362,7 @@ func TestMCSettingsSave(t *testing.T) {
 	if updated.Name != "NewNameJSON" {
 		t.Errorf("got name %q, want NewNameJSON", updated.Name)
 	}
-	if updated.Tier != minecraft.TierMedium {
+	if updated.Tier != domain.TierMedium {
 		t.Errorf("got tier %s, want medium", updated.Tier)
 	}
 }

@@ -1,6 +1,9 @@
 package backups
 
 import (
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/rcon"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,7 +15,6 @@ import (
 	"agrelha/internal/infra/backups"
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/web/shared"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,9 +23,9 @@ import (
 // Config holds dependencies for backup HTTP handlers.
 type Config struct {
 	BackupsDir  string
-	MCInstances *minecraft.InstanceManager
+	MCInstances *instances.InstanceManager
 	MCK8s       *k8s.Client
-	RconPool    *minecraft.RconPool
+	RconPool    *rcon.Pool
 	Store       *store.Store
 	Actor       func(*fiber.Ctx) string
 }
@@ -109,7 +111,7 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	}
 
 	// Flush world save via RCON if running
-	if inst.State == minecraft.StateRunning && h.cfg.RconPool != nil {
+	if inst.State == domain.StateRunning && h.cfg.RconPool != nil {
 		addr := fmt.Sprintf("%s.minecraft-modded.svc.cluster.local:25575", inst.ServiceName())
 		client := h.cfg.RconPool.ClientFor(addr)
 		_, _ = client.Execute("/save-off")
@@ -132,7 +134,7 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	}
 
 	if h.cfg.BackupsDir != "" {
-		_ = minecraft.PruneBackups(h.cfg.BackupsDir, inst.Slug, inst.Number, 5)
+		_ = backups.PruneBackups(h.cfg.BackupsDir, inst.Slug, inst.Number, 5)
 	}
 
 	if h.cfg.Store != nil {
@@ -159,7 +161,7 @@ func (h *Handler) RestoreInPlace(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance not found.", nil)
 	}
 
-	if inst.State == minecraft.StateRunning {
+	if inst.State == domain.StateRunning {
 		return shared.SSEToast(c, "err", "Cannot restore while world is running. Please stop the server first.", nil)
 	}
 
@@ -173,7 +175,7 @@ func (h *Handler) RestoreInPlace(c *fiber.Ctx) error {
 	}
 
 	// 1. Take pre-restore safety snapshot
-	safetyArchive := minecraft.FormatBackupFileName(inst.Slug, inst.Number, "prerestore")
+	safetyArchive := backups.FormatBackupFileName(inst.Slug, inst.Number, "prerestore")
 	safetyJob := fmt.Sprintf("mc-bkp-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
 	_ = h.cfg.MCK8s.CreateBackupJob(c.UserContext(), safetyJob, safetyArchive, inst.PVCName(), "minecraft-modded-backups")
 
@@ -225,10 +227,10 @@ func (h *Handler) RestoreNew(c *fiber.Ctx) error {
 
 	newTier := srcInst.Tier
 	if req.Tier != "" {
-		newTier = minecraft.NormalizeTier(req.Tier)
+		newTier = domain.NormalizeTier(req.Tier)
 	}
 
-	newInst := minecraft.Instance{
+	newInst := domain.Instance{
 		Name:       newName,
 		Seed:       srcInst.Seed,
 		Loader:     srcInst.Loader,
@@ -240,7 +242,7 @@ func (h *Handler) RestoreNew(c *fiber.Ctx) error {
 		Difficulty: srcInst.Difficulty,
 		Gamemode:   srcInst.Gamemode,
 		WorldType:  srcInst.WorldType,
-		State:      minecraft.StateStopped,
+		State:      domain.StateStopped,
 	}
 
 	modsTxt := ""
@@ -304,7 +306,7 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "File name required.", nil)
 	}
 
-	if err := minecraft.DeleteBackup(h.cfg.BackupsDir, fileName); err != nil {
+	if err := backups.DeleteBackup(h.cfg.BackupsDir, fileName); err != nil {
 		return shared.SSEToast(c, "err", "Failed to delete backup: "+err.Error(), nil)
 	}
 

@@ -1,21 +1,22 @@
-package minecraft
+package manifests
 
 import (
+	"agrelha/internal/domain"
 	"strings"
 	"testing"
 )
 
 func TestRenderInstanceManifests(t *testing.T) {
-	inst := Instance{
+	inst := domain.Instance{
 		Number:     1,
 		Name:       "Fluxweave",
 		Slug:       "fluxweave",
 		Seed:       "123456789",
-		Loader:     LoaderNeoForge,
-		Source:     SourceModlist,
+		Loader:     domain.LoaderNeoForge,
+		Source:     domain.SourceModlist,
 		MCVersion:  "1.21.1",
-		Tier:       TierMedium,
-		State:      StateRunning,
+		Tier:       domain.TierMedium,
+		State:      domain.StateRunning,
 		Difficulty: "hard",
 		Gamemode:   "survival",
 		// Explicit: with no MC_LB_BASE_IP configured, agrelha pins no address
@@ -23,7 +24,7 @@ func TestRenderInstanceManifests(t *testing.T) {
 		LBIP: "192.168.20.225",
 	}
 
-	files, err := RenderInstanceManifests(inst, "jei\nappleskin\n", "ykhi.xyz/gameserver=true", "minecraft-modded")
+	files, err := Render(inst, "jei\nappleskin\n", "ykhi.xyz/gameserver=true", "minecraft-modded")
 	if err != nil {
 		t.Fatalf("unexpected error rendering manifests: %v", err)
 	}

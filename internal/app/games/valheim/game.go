@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"agrelha/internal/app/modpack"
 	"agrelha/internal/domain"
-	"agrelha/internal/modpack"
 	"agrelha/internal/ports"
 )
 

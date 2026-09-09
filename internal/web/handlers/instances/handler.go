@@ -1,6 +1,10 @@
 package instances
 
 import (
+	mcaccess "agrelha/internal/app/access"
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/rcon"
 	"context"
 	"sync"
 	"time"
@@ -13,7 +17,6 @@ import (
 	"agrelha/internal/infra/gitops"
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/web/shared"
 )
@@ -39,8 +42,8 @@ type Config struct {
 	Store                   *store.Store
 	Git                     *gitops.Committer
 	MCK8s                   *k8s.Client
-	MCInstances             *minecraft.InstanceManager
-	MCRconPool              *minecraft.RconPool
+	MCInstances             *instances.InstanceManager
+	MCRconPool              *rcon.Pool
 	MCV                     *mcversions.Client
 	MPI                     *modpackindex.Client
 	MR                      *modrinth.Client
@@ -100,7 +103,7 @@ func (h *Handler) Register(router fiber.Router) {
 }
 
 // InstanceStats returns per-instance player counts and uptimes for running instances, cached for instanceStatsTTL.
-func (h *Handler) InstanceStats(ctx context.Context, insts []minecraft.Instance) map[int]InstanceStat {
+func (h *Handler) InstanceStats(ctx context.Context, insts []domain.Instance) map[int]InstanceStat {
 	h.instStats.mu.Lock()
 	defer h.instStats.mu.Unlock()
 
@@ -110,7 +113,7 @@ func (h *Handler) InstanceStats(ctx context.Context, insts []minecraft.Instance)
 
 	out := make(map[int]InstanceStat, len(insts))
 	for _, inst := range insts {
-		if inst.State != minecraft.StateRunning {
+		if inst.State != domain.StateRunning {
 			continue
 		}
 		st := InstanceStat{}
@@ -122,7 +125,7 @@ func (h *Handler) InstanceStats(ctx context.Context, insts []minecraft.Instance)
 		}
 		if h.cfg.MCRconPool != nil && inst.LBIP != "" {
 			if res, err := h.cfg.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute("/list"); err == nil {
-				st.Players = len(minecraft.ParsePlayerList(res))
+				st.Players = len(mcaccess.ParsePlayerList(res))
 				st.PlayersKnown = true
 			}
 		}

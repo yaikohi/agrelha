@@ -1,9 +1,8 @@
 package server
 
 import (
+	"agrelha/internal/domain"
 	"context"
-
-	"agrelha/internal/minecraft"
 )
 
 type instanceStat struct {
@@ -12,7 +11,7 @@ type instanceStat struct {
 	Uptime       string
 }
 
-func (s *FiberServer) instanceStats(ctx context.Context, insts []minecraft.Instance) map[int]instanceStat {
+func (s *FiberServer) instanceStats(ctx context.Context, insts []domain.Instance) map[int]instanceStat {
 	raw := s.ensureInstancesHandler().InstanceStats(ctx, insts)
 	out := make(map[int]instanceStat, len(raw))
 	for k, v := range raw {

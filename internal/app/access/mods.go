@@ -1,5 +1,5 @@
 // Package minecraft provides mod and access management for the NeoForge Minecraft server.
-package minecraft
+package access
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 
 	"agrelha/internal/ports"
 )
+
+const DefaultModsPath = "manifests/minecraft-modded/mods.yaml"
 
 type ModManager struct {
 	store     ports.StateStore

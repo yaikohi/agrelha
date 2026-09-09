@@ -1,6 +1,7 @@
 package wizard
 
 import (
+	"agrelha/internal/app/instances"
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/infra/content/mcversions"
@@ -8,7 +9,6 @@ import (
 	"agrelha/internal/infra/content/modrinth"
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 )
 
 // Config is deliberately narrower than instances.Config: these seven fields are
@@ -16,7 +16,7 @@ import (
 type Config struct {
 	Store       *store.Store
 	MCK8s       *k8s.Client
-	MCInstances *minecraft.InstanceManager
+	MCInstances *instances.InstanceManager
 	MCV         *mcversions.Client
 	MPI         *modpackindex.Client
 	MR          *modrinth.Client

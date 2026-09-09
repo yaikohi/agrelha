@@ -16,6 +16,7 @@ import (
 	"agrelha/internal/platform/config"
 	"agrelha/internal/platform/logging"
 	"agrelha/internal/server"
+	"agrelha/internal/wiring"
 )
 
 func main() {
@@ -23,7 +24,13 @@ func main() {
 	logging.Setup(cfg.LogLevel, cfg.LogFormat)
 	build.SourceURL = cfg.SourceURL
 
-	srv := server.New(cfg)
+	deps, err := wiring.Build(context.Background(), cfg)
+	if err != nil {
+		slog.Error("startup failed", "err", err)
+		os.Exit(1)
+	}
+
+	srv := server.New(cfg, deps)
 	srv.RegisterFiberRoutes()
 
 	go func() {

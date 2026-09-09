@@ -1,6 +1,9 @@
 package dashboard
 
 import (
+	mcaccess "agrelha/internal/app/access"
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
 	"bufio"
 	"bytes"
 	"context"
@@ -11,7 +14,6 @@ import (
 	"agrelha/internal/infra/backups"
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 	"agrelha/internal/web/metrics"
@@ -35,14 +37,14 @@ type Config struct {
 	Store         *store.Store
 	K8s           *k8s.Client
 	MCK8s         *k8s.Client
-	MCInstances   *minecraft.InstanceManager
-	MCAccess      *minecraft.AccessManager
+	MCInstances   *instances.InstanceManager
+	MCAccess      *mcaccess.AccessManager
 	Auth          ports.Auth
 	Actor         func(*fiber.Ctx) string
 	BackupInfo    func() (backups.Info, bool)
 	ModUpdates    func(context.Context) []pages.ModUpdate
 	PendingActive func(context.Context) bool
-	InstanceStats func(context.Context, []minecraft.Instance) map[int]InstanceStat
+	InstanceStats func(context.Context, []domain.Instance) map[int]InstanceStat
 }
 
 // Handler serves the dashboard landing page and the continuous tile SSE stream.
@@ -94,7 +96,7 @@ func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 			mcSummary.TotalBudgetGiB = budget.TotalBudgetGiB
 
 			for _, inst := range insts {
-				if inst.State == minecraft.StateRunning {
+				if inst.State == domain.StateRunning {
 					uinst := pages.InstanceUI{
 						Number:    inst.Number,
 						Name:      inst.Name,
@@ -262,7 +264,7 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 		if h.cfg.MCInstances != nil {
 			if insts, err := h.cfg.MCInstances.ListInstances(ctx); err == nil && len(insts) > 0 {
 				inst := insts[0]
-				if inst.Loader == minecraft.LoaderFabric {
+				if inst.Loader == domain.LoaderFabric {
 					sig["mc_loader"] = "Fabric"
 				}
 				if inst.PackDefined() && inst.Pack.Name != "" {

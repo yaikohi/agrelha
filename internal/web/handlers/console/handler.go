@@ -1,12 +1,13 @@
 package console
 
 import (
+	"agrelha/internal/app/instances"
+	"agrelha/internal/infra/rcon"
 	"context"
 	"time"
 
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/ports"
 	"agrelha/internal/web/metrics"
 	"agrelha/internal/web/shared"
@@ -18,8 +19,8 @@ import (
 type Config struct {
 	K8s         *k8s.Client
 	MCK8s       *k8s.Client
-	MCInstances *minecraft.InstanceManager
-	MCRconPool  *minecraft.RconPool
+	MCInstances *instances.InstanceManager
+	MCRconPool  *rcon.Pool
 	Store       *store.Store
 	Auth        ports.Auth
 	Actor       func(*fiber.Ctx) string

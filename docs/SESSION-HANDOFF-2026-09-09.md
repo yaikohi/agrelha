@@ -1,5 +1,13 @@
 # Session handoff — 2026-09-09 (modularization phases 0–8)
 
+> **SUPERSEDED** by [SESSION-HANDOFF-2026-09-09-b.md](SESSION-HANDOFF-2026-09-09-b.md),
+> which covers phase 9, the AGPL-3.0-only licence decision, and architecture
+> cleanup phases A–D. Paths in this document predate the layout move: `internal/adapters`
+> is now `internal/infra`, `internal/http` is `internal/web/handlers`, `cmd/web/pages`
+> is `internal/web/pages`, and `internal/minecraft` / `internal/modpack` no longer
+> exist. Its Phase 8 "Docker adapter ✅" claim is **wrong** — see plan.md.
+> Read this only for history.
+
 Continues from `SESSION-HANDOFF-2026-09-07.md`. Work follows
 [docs/modularization-plan.md](modularization-plan.md); vocabulary follows
 [CONTEXT.md](../CONTEXT.md). **Verify with `git status` before trusting this.**

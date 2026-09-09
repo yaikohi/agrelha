@@ -1,6 +1,8 @@
-package minecraft
+package instances
 
 import (
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/manifests"
 	"context"
 	"path/filepath"
 	"strings"
@@ -11,19 +13,19 @@ import (
 
 func TestResourceTiersMemoryMapping(t *testing.T) {
 	cases := []struct {
-		tier         ResourceTier
+		tier         domain.ResourceTier
 		wantMem      int
 		wantLimit    int
 		wantHeapInit int
 	}{
-		{TierSmall, 4, 6, 3},
-		{TierMedium, 8, 10, 6},
-		{TierLarge, 12, 16, 10},
-		{ResourceTier("unknown"), 8, 10, 6}, // fallback to medium
+		{domain.TierSmall, 4, 6, 3},
+		{domain.TierMedium, 8, 10, 6},
+		{domain.TierLarge, 12, 16, 10},
+		{domain.ResourceTier("unknown"), 8, 10, 6}, // fallback to medium
 	}
 
 	for _, tc := range cases {
-		inst := Instance{Tier: tc.tier}
+		inst := domain.Instance{Tier: tc.tier}
 		if got := inst.MemoryGiB(); got != tc.wantMem {
 			t.Errorf("tier %s MemoryGiB = %d, want %d", tc.tier, got, tc.wantMem)
 		}
@@ -36,23 +38,23 @@ func TestResourceTiersMemoryMapping(t *testing.T) {
 	}
 
 	// NormalizeTier checks
-	if got := NormalizeTier("small"); got != TierSmall {
-		t.Errorf("NormalizeTier(small) = %s, want %s", got, TierSmall)
+	if got := domain.NormalizeTier("small"); got != domain.TierSmall {
+		t.Errorf("NormalizeTier(small) = %s, want %s", got, domain.TierSmall)
 	}
-	if got := NormalizeTier("  LARGE  "); got != TierLarge {
-		t.Errorf("NormalizeTier(LARGE) = %s, want %s", got, TierLarge)
+	if got := domain.NormalizeTier("  LARGE  "); got != domain.TierLarge {
+		t.Errorf("NormalizeTier(LARGE) = %s, want %s", got, domain.TierLarge)
 	}
-	if got := NormalizeTier("custom"); got != TierMedium {
-		t.Errorf("NormalizeTier(custom) = %s, want %s", got, TierMedium)
+	if got := domain.NormalizeTier("custom"); got != domain.TierMedium {
+		t.Errorf("NormalizeTier(custom) = %s, want %s", got, domain.TierMedium)
 	}
 }
 
 func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 	t.Run("curseforge_pack", func(t *testing.T) {
-		inst := Instance{
-			Number: 1, Name: "CF Pack", Slug: "cf-pack",
-			Source: SourceModpack,
-			Pack:   &Pack{Provider: ProviderCurseForge, Ref: "https://curseforge.com/pack", Name: "ATM9"},
+		inst := domain.Instance{
+			Number: 1, Name: "CF domain.Pack", Slug: "cf-pack",
+			Source: domain.SourceModpack,
+			Pack:   &domain.Pack{Provider: domain.ProviderCurseForge, Ref: "https://curseforge.com/pack", Name: "ATM9"},
 		}
 		env := inst.Env()
 		if env["TYPE"] != "AUTO_CURSEFORGE" {
@@ -70,10 +72,10 @@ func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 	})
 
 	t.Run("modrinth_pack", func(t *testing.T) {
-		inst := Instance{
-			Number: 2, Name: "MR Pack", Slug: "mr-pack",
-			Source: SourceModpack,
-			Pack:   &Pack{Provider: ProviderModrinth, Ref: "mr-pack-slug", Name: "Fabulously Optimized"},
+		inst := domain.Instance{
+			Number: 2, Name: "MR domain.Pack", Slug: "mr-pack",
+			Source: domain.SourceModpack,
+			Pack:   &domain.Pack{Provider: domain.ProviderModrinth, Ref: "mr-pack-slug", Name: "Fabulously Optimized"},
 		}
 		env := inst.Env()
 		if env["TYPE"] != "MODRINTH" {
@@ -91,9 +93,9 @@ func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 	})
 
 	t.Run("vanilla", func(t *testing.T) {
-		inst := Instance{
+		inst := domain.Instance{
 			Number: 3, Name: "Vanilla", Slug: "vanilla",
-			Source: SourceVanilla, MCVersion: "1.21.4",
+			Source: domain.SourceVanilla, MCVersion: "1.21.4",
 		}
 		env := inst.Env()
 		if env["TYPE"] != "VANILLA" {
@@ -120,9 +122,9 @@ func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 	})
 
 	t.Run("modlist_fabric", func(t *testing.T) {
-		inst := Instance{
+		inst := domain.Instance{
 			Number: 4, Name: "Fabric Modded", Slug: "fabric-modded",
-			Source: SourceModlist, Loader: LoaderFabric, MCVersion: "1.21.1",
+			Source: domain.SourceModlist, Loader: domain.LoaderFabric, MCVersion: "1.21.1",
 		}
 		env := inst.Env()
 		if env["TYPE"] != "FABRIC" {
@@ -140,9 +142,9 @@ func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 	})
 
 	t.Run("modlist_neoforge", func(t *testing.T) {
-		inst := Instance{
+		inst := domain.Instance{
 			Number: 5, Name: "NeoForge Modded", Slug: "neoforge-modded",
-			Source: SourceModlist, Loader: LoaderNeoForge, MCVersion: "1.21.1",
+			Source: domain.SourceModlist, Loader: domain.LoaderNeoForge, MCVersion: "1.21.1",
 		}
 		env := inst.Env()
 		if env["TYPE"] != "NEOFORGE" {
@@ -170,26 +172,26 @@ func TestBudgetRejectsRAMOvercommit(t *testing.T) {
 
 	// Budget configured for 16 GiB total, allowing up to 3 running instances
 	mgr := NewInstanceManager(
-		store.NewInstanceRepo(st), nil, nil, 16, 4, 3, "manifests/mc", "", "", "minecraft-modded")
+		store.NewInstanceRepo(st), nil, nil, 16, 4, 3, "manifests/mc", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
 	ctx := context.Background()
 
 	// Instance 1: Large (12 GiB)
-	_, err = mgr.CreateInstance(ctx, Instance{
+	_, err = mgr.CreateInstance(ctx, domain.Instance{
 		Name:      "Heavy Server",
-		Source:    SourceVanilla,
+		Source:    domain.SourceVanilla,
 		MCVersion: "1.21.4",
-		Tier:      TierLarge, // 12 GiB
+		Tier:      domain.TierLarge, // 12 GiB
 	}, "")
 	if err != nil {
 		t.Fatalf("create inst1: %v", err)
 	}
 
 	// Instance 2: Medium (8 GiB)
-	_, err = mgr.CreateInstance(ctx, Instance{
+	_, err = mgr.CreateInstance(ctx, domain.Instance{
 		Name:      "Medium Server",
-		Source:    SourceVanilla,
+		Source:    domain.SourceVanilla,
 		MCVersion: "1.21.4",
-		Tier:      TierMedium, // 8 GiB
+		Tier:      domain.TierMedium, // 8 GiB
 	}, "")
 	if err != nil {
 		t.Fatalf("create inst2: %v", err)
@@ -220,20 +222,20 @@ func TestMaxInstancesLimit(t *testing.T) {
 
 	// Max instances = 2
 	mgr := NewInstanceManager(
-		store.NewInstanceRepo(st), nil, nil, 24, 2, 2, "manifests/mc", "", "", "minecraft-modded")
+		store.NewInstanceRepo(st), nil, nil, 24, 2, 2, "manifests/mc", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
 	ctx := context.Background()
 
-	_, err = mgr.CreateInstance(ctx, Instance{Name: "One", Source: SourceVanilla, MCVersion: "1.21.4"}, "")
+	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "One", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, "")
 	if err != nil {
 		t.Fatalf("create One: %v", err)
 	}
-	_, err = mgr.CreateInstance(ctx, Instance{Name: "Two", Source: SourceVanilla, MCVersion: "1.21.4"}, "")
+	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Two", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, "")
 	if err != nil {
 		t.Fatalf("create Two: %v", err)
 	}
 
 	// Third creation must be rejected
-	_, err = mgr.CreateInstance(ctx, Instance{Name: "Three", Source: SourceVanilla, MCVersion: "1.21.4"}, "")
+	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Three", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, "")
 	if err == nil {
 		t.Fatalf("expected error when exceeding max instances limit of 2, got nil")
 	}

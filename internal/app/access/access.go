@@ -1,4 +1,4 @@
-package minecraft
+package access
 
 import (
 	"context"
@@ -10,11 +10,11 @@ import (
 
 type AccessManager struct {
 	store ports.StateStore
-	path  string      // relPath of neoforge-access.yaml in yaya-ops
-	rcon  *RconClient // live RCON client (can be nil if unset)
+	path  string // relPath of neoforge-access.yaml in yaya-ops
+	rcon  ports.Console
 }
 
-func NewAccessManager(store ports.StateStore, path string, rcon *RconClient) *AccessManager {
+func NewAccessManager(store ports.StateStore, path string, rcon ports.Console) *AccessManager {
 	if path == "" {
 		path = "manifests/neoforge-access.yaml"
 	}

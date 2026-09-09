@@ -164,8 +164,8 @@ Each compiles, passes tests and deploys. A bad step is one revert.
 |---|---|---|
 | **A. Layout move** ✅ | Relocate whole packages, rewrite imports, `cmd/api`→`cmd/agrelha`, `pages` out of `cmd/`. No behaviour change. | Build + full suite green; diff is renames only |
 | **B. Architecture test** ✅ | Encode the edge table as a Go test over the parsed import graph. | It runs, and its failure list matches the audit above |
-| **C. Split `minecraft` + `modpack`** | Per the file table. `Instance` rules to domain, managers to app, RCON and manifests to infra. | `app` and `domain` no longer hold infrastructure |
-| **D. Composition root** | Wiring leaves `server.New` for `cmd/agrelha`. No `os.Exit` outside `main`. `internal/web` becomes routing only. | `server.New` no longer constructs adapters |
+| **C. Split `minecraft` + `modpack`** ✅ | Per the file table. `Instance` rules to domain, managers to app, RCON and manifests to infra. | `app` and `domain` no longer hold infrastructure |
+| **D. Composition root** ✅ | Wiring leaves `server.New` for `cmd/agrelha`. No `os.Exit` outside `main`. `internal/web` becomes routing only. | `server.New` no longer constructs adapters |
 | **E. Invert the HTTP boundary** | Handler `Config`s take ports, not `*store.Store` / `*k8s.Client` / concrete managers. Tests land WITH each inversion. | `web` no longer imports `infra`; handlers testable with fakes |
 | **F. Content provider port** | Widen `ContentProvider` to what `app/content` needs; its DTOs become domain types. | `modrinth` is imported only by `infra` and `cmd` |
 | **G. Game abstraction, rebuilt** | Valheim mods+access slice through a Game port, reshape, then Minecraft. Delete what neither demanded. | Handlers dispatch through `ports.Game`; no dead methods |
@@ -250,3 +250,138 @@ Two design notes:
 
 **Done means `exceptions` is empty and the `layers` table has no entry for
 `internal/minecraft`, `internal/modpack` or `internal/server`.**
+
+### Phase C — done (2026-09-09)
+
+`internal/minecraft` and `internal/modpack` no longer exist. Ledger: **20 → 19**,
+and the app layer is clean apart from the two content packages phase F owns.
+
+Where the 1,258 lines went:
+
+| Was | Now | Note |
+|---|---|---|
+| `instance.go`, `content.go` | *deleted* | Both were pure re-export shims — every symbol already existed in `domain`. No new domain code was written; the work was rewriting ~120 call sites across 22 files |
+| `instance_manager.go` | `app/instances` | |
+| `mods.go`, `access.go` | `app/access` | |
+| `compat.go` | `app/content` | Still imports modrinth — the violation moved, it did not vanish. Phase F |
+| `manifests.go` + `templates/` | `infra/manifests` | |
+| `rcon.go` | `infra/rcon` | `RconClient`→`Client`, `RconPool`→`Pool` (no `rcon.RconClient` stutter) |
+| `backup.go` | `infra/backups` | Filesystem operations, so infra — not `app/backups` as the plan said |
+| `internal/modpack` | `app/modpack` | |
+| `internal/app/backups.go` | `app/backups/` | |
+
+**Three dependencies were inverted rather than moved**, because moving alone
+would have left `app` importing `infra`:
+
+- `ports.SpecRenderer` — `InstanceManager` rendered Kubernetes YAML directly. It
+  now takes a renderer, and `nodeSelector` moved off the manager onto the
+  adapter where it belongs. A Docker adapter renders compose files through the
+  same seam.
+- `ports.Console` — `AccessManager` held a `*RconClient`; it now takes an
+  interface with `Execute`.
+- `ingest.presenceStore` — a four-method consumer-side interface, matching the
+  `logStreamer` interface already in that file. Local rather than in `ports`:
+  one consumer, and it keeps the file internally consistent.
+
+**Deviations from the plan, with reasons:**
+
+- `backup.go` went to `infra/backups`, not `app/backups`. It is `os.Remove` and
+  `filepath.Glob` — infrastructure. Merging it into the existing package also
+  avoided a name collision.
+- `internal/modpack` was **not** split two ways. All three files are content
+  assembly, and the thing that actually needs separating is the modrinth
+  coupling, which is phase F's job. Splitting it here would have been motion
+  without progress.
+- `app/backups` kept its `infra` exception, re-tagged from phase C to E. It
+  creates Kubernetes Jobs, and `RunTask` was deliberately left out of
+  `ports.Runtime` because its only implementation takes PVC claim names. It
+  needs the volume model, not a move.
+
+**A mistake worth recording:** the bulk symbol rewrite qualified identifiers
+inside comments and struct field names too, turning `Pack:` into `domain.Pack:`
+and prose into "A domain.Pack owns its domain.Instance's domain.Loader". The
+compiler caught the field names; the comments it could not, and they needed a
+separate pass. Bulk-renaming by regex needs a comment-and-field guard.
+
+### Phase C regression — typed nil in an interface (2026-09-09)
+
+Inverting `AccessManager`'s RCON dependency introduced a runtime panic that the
+whole test suite passed straight through. Found by running the app, not by CI.
+
+`AccessManager.rcon` went from `*RconClient` to `ports.Console`. Every guard in
+that file is `if a.rcon != nil`. When RCON is unconfigured, `server.New` passed
+`s.mcRcon` — a **nil `*rcon.Client`** — into the interface parameter, producing an
+interface value that holds a type and a nil pointer. Such a value is **not**
+`nil`, so every guard passed and `Execute` dereferenced a nil receiver:
+
+```
+panic: runtime error: invalid memory address or nil pointer dereference
+agrelha/internal/infra/rcon.(*Client).Execute(0x0, ...)
+agrelha/internal/app/access.(*AccessManager).OnlinePlayers(...)
+agrelha/internal/web/handlers/dashboard.(*Handler).TileSignals(...)
+```
+
+It fired on the dashboard SSE tile refresh, so the panic hit on first page load
+with no RCON password set — the default configuration for a new install.
+
+Fixed in two places:
+
+- **The wiring**: `server.New` now builds an explicitly nil `ports.Console` when
+  there is no client, instead of stuffing a typed nil into the interface.
+- **The adapter**: `Client.Execute` and `Client.Close` guard `c == nil`, matching
+  the `r == nil || r.c == nil` pattern the k8s runtime adapter already used.
+
+Two regression tests, both verified to fail before the fix — the typed-nil one
+reproduces the exact panic.
+
+**The lesson for the phases still to come:** every remaining phase replaces a
+concrete pointer with an interface, and every one of them can hit this. When
+inverting a dependency whose concrete value is allowed to be nil, the nil check
+must move to the construction site, or the adapter must be nil-receiver safe.
+Prefer both.
+
+### Phase D — done (2026-09-09)
+
+`server.New` constructs no adapters and there is no `os.Exit` anywhere under
+`internal/` any more. Ledger unchanged at **19** — phase D is about testability,
+not about edges.
+
+**`internal/wiring` is the composition root**, not `cmd/agrelha`. The plan said
+`cmd`, and that was wrong: two existing tests
+(`TestLocalAuthFlow`, `TestServer_DockerAdapterBootstrap`) exercise the wiring
+*decisions* — which authenticator, which state store, which reconciler — and Go
+forbids importing `package main`. Putting the root in `cmd` would have deleted
+two real tests to satisfy a diagram. `cmd/agrelha/main.go` is now nine lines of
+`config.Load` → `wiring.Build` → `server.New` → `Listen`.
+
+- `wiring.Build(ctx, cfg) (server.Deps, error)` — **returns an error** where the
+  old code called `os.Exit(1)` on a failed store open, which is what made the
+  path untestable.
+- Split into `buildThunderstore`, `buildDeclarativePlane`, `buildRuntime`,
+  `buildAuth`, so each decision reads as one function instead of a 120-line
+  straight line.
+- `server.New(cfg, Deps)` assigns fields and builds handlers. The unused
+  `WithAuth` / `WithStateStore` / `WithReconciler` options were deleted — `Deps`
+  makes them redundant, and nothing outside the package used them.
+- `internal/server/modindex.go` deleted: it was a two-function forwarder to
+  `contenthttp.RowsToResults`, which `wiring` now calls directly.
+- The moved tests improved on the way: `TestServer_DockerAdapterBootstrap` used
+  to reach into unexported `s.stateStore` / `s.reconciler`. It now asserts on the
+  `Deps` that `wiring.Build` returns, which is what it was actually testing.
+
+**A new layer, `root`**, covers `cmd/` and `internal/wiring`: it may import
+everything, and it is the only layer allowed to import `platform/config`. That
+last rule is what will drive phase I.
+
+`internal/server` keeps its `infra` and `config` exceptions, re-tagged D→E:
+`Deps` still declares concrete types (`*store.Store`, `*k8s.Client`). Phase E
+turns those into ports.
+
+**Verified by running it**, not only by the suite: `/healthz` 200, `/` 200,
+`/sse` 200 with no panic on the tile-refresh path that failed in phase C,
+`/minecraft` 302 to `/auth/login`, clean shutdown.
+
+**Naming trap found:** the directory `internal/infra/kube` contains
+`package k8s`. Every import of it must be written `"agrelha/internal/infra/kube"`
+and referenced as `k8s.`. Worth reconciling, but renaming it is churn for its own
+sake — noted rather than done.

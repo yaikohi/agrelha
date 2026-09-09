@@ -1,6 +1,7 @@
 package access
 
 import (
+	mcaccess "agrelha/internal/app/access"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +12,6 @@ import (
 
 	"agrelha/internal/app/admins"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/ports"
 
 	"github.com/gofiber/fiber/v2"
@@ -181,7 +181,7 @@ func TestAccessMinecraftUnconfigured(t *testing.T) {
 func TestAccessConfiguredFlow(t *testing.T) {
 	state := newMemStateStore()
 	adm := admins.New(state, "valheim-admins.yaml")
-	mcAcc := minecraft.NewAccessManager(state, "neoforge-access.yaml", nil)
+	mcAcc := mcaccess.NewAccessManager(state, "neoforge-access.yaml", nil)
 
 	dbPath := filepath.Join(t.TempDir(), "access_test2.db")
 	st, err := store.Open(dbPath)

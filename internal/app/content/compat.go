@@ -1,4 +1,4 @@
-package minecraft
+package content
 
 import (
 	"context"

@@ -1,6 +1,8 @@
 package instances
 
 import (
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/backups"
 	"fmt"
 	"strconv"
 	"strings"
@@ -8,7 +10,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"agrelha/internal/minecraft"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 )
@@ -31,7 +32,7 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 		canStart := true
 		blockedReason := ""
 
-		if inst.State == minecraft.StateRunning {
+		if inst.State == domain.StateRunning {
 			canStart = false
 		} else if budget.RunningCount >= budget.MaxRunning {
 			canStart = false
@@ -100,24 +101,24 @@ func (h *Handler) MCInstanceCreate(c *fiber.Ctx) error {
 	if mcVersion == "" {
 		mcVersion = "1.21.1"
 	}
-	tier := minecraft.NormalizeTier(c.FormValue("tier"))
+	tier := domain.NormalizeTier(c.FormValue("tier"))
 	seed := strings.TrimSpace(c.FormValue("seed"))
 	mods := c.FormValue("mods")
 
-	inst := minecraft.Instance{
+	inst := domain.Instance{
 		Name:      name,
 		Seed:      seed,
 		MCVersion: mcVersion,
 		Tier:      tier,
-		State:     minecraft.StateRunning,
+		State:     domain.StateRunning,
 	}
 
 	if loaderStr == "vanilla" {
-		inst.Source = minecraft.SourceVanilla
+		inst.Source = domain.SourceVanilla
 		inst.Loader = ""
 	} else {
-		inst.Source = minecraft.SourceModlist
-		inst.Loader = minecraft.NormalizeLoader(loaderStr)
+		inst.Source = domain.SourceModlist
+		inst.Loader = domain.NormalizeLoader(loaderStr)
 	}
 
 	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, mods)
@@ -170,7 +171,7 @@ func (h *Handler) MCInstanceStop(c *fiber.Ctx) error {
 	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
 	if err == nil && inst != nil {
 		// 1. RCON save-all flush if active (with 250ms deadline so unreachable RCON does not hang)
-		if h.cfg.MCRconPool != nil && inst.State == minecraft.StateRunning {
+		if h.cfg.MCRconPool != nil && inst.State == domain.StateRunning {
 			addr := fmt.Sprintf("%s.minecraft-modded.svc.cluster.local:25575", inst.ServiceName())
 			client := h.cfg.MCRconPool.ClientFor(addr)
 			done := make(chan struct{})
@@ -187,13 +188,13 @@ func (h *Handler) MCInstanceStop(c *fiber.Ctx) error {
 		// 2. Pre-stop auto-backup
 		if h.cfg.MCK8s != nil {
 			jobName := fmt.Sprintf("mc-backup-%s-%02d-stop-%d", inst.Slug, inst.Number, time.Now().Unix())
-			archiveName := minecraft.FormatBackupFileName(inst.Slug, inst.Number, "stop")
+			archiveName := backups.FormatBackupFileName(inst.Slug, inst.Number, "stop")
 			_ = h.cfg.MCK8s.CreateBackupJob(c.UserContext(), jobName, archiveName, inst.PVCName(), "minecraft-modded-backups")
 		}
 
 		// 3. Prune older backups
 		if h.cfg.Cfg != nil && h.cfg.Cfg.BackupsDir != "" {
-			_ = minecraft.PruneBackups(h.cfg.Cfg.BackupsDir, inst.Slug, inst.Number, 5)
+			_ = backups.PruneBackups(h.cfg.Cfg.BackupsDir, inst.Slug, inst.Number, 5)
 		}
 	}
 
@@ -223,7 +224,7 @@ func (h *Handler) MCInstanceDelete(c *fiber.Ctx) error {
 	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
 	if err == nil && inst != nil && h.cfg.MCK8s != nil {
 		jobName := fmt.Sprintf("mc-backup-%s-%02d-final-%d", inst.Slug, inst.Number, time.Now().Unix())
-		archiveName := minecraft.FormatBackupFileName(inst.Slug, inst.Number, "final")
+		archiveName := backups.FormatBackupFileName(inst.Slug, inst.Number, "final")
 		_ = h.cfg.MCK8s.CreateBackupJob(c.UserContext(), jobName, archiveName, inst.PVCName(), "minecraft-modded-backups")
 	}
 

@@ -182,7 +182,7 @@ type ServerRowUI struct {
 	UptimeSignal  string
 }
 
-// PackDefined mirrors minecraft.Instance.PackDefined so the UI can render
+// PackDefined mirrors domain.Instance.PackDefined so the UI can render
 // pack-owned fields as facts instead of editable settings.
 func (i InstanceUI) PackDefined() bool {
 	return i.Source == "modpack" && (i.Pack != "" || i.PackRef != "")

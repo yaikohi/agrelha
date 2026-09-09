@@ -4,9 +4,13 @@
 //
 // This is the layer a JVM codebase would call `application`. See
 // docs/modularization-plan.md §7.
-package app
+package backups
 
 import (
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/backups"
+	"agrelha/internal/infra/rcon"
 	"context"
 	"fmt"
 	"log/slog"
@@ -14,7 +18,6 @@ import (
 
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/platform/config"
 )
 
@@ -23,9 +26,9 @@ import (
 type BackupScheduler struct {
 	Cfg        *config.Config
 	Store      *store.Store
-	Instances  *minecraft.InstanceManager
+	Instances  *instances.InstanceManager
 	K8s        *k8s.Client
-	RconPool   *minecraft.RconPool
+	RconPool   *rcon.Pool
 	Namespace  string
 	BackupsPVC string
 	Keep       int
@@ -91,7 +94,7 @@ func (s *BackupScheduler) RunDaily(ctx context.Context) {
 	}
 
 	for _, inst := range instances {
-		if inst.State != minecraft.StateRunning {
+		if inst.State != domain.StateRunning {
 			continue
 		}
 		s.backupOne(ctx, inst)
@@ -103,7 +106,7 @@ func (s *BackupScheduler) RunDaily(ctx context.Context) {
 // stayed in save-off until the whole run finished — and stayed that way
 // permanently if the process died mid-run. A per-instance function makes the
 // defer fire per instance, which is what was intended.
-func (s *BackupScheduler) backupOne(ctx context.Context, inst minecraft.Instance) {
+func (s *BackupScheduler) backupOne(ctx context.Context, inst domain.Instance) {
 	slog.Info("scheduler: starting daily backup", "instance", inst.Name, "num", inst.Number)
 
 	if s.RconPool != nil {
@@ -115,7 +118,7 @@ func (s *BackupScheduler) backupOne(ctx context.Context, inst minecraft.Instance
 	}
 
 	jobName := fmt.Sprintf("mc-backup-%s-%02d-daily-%d", inst.Slug, inst.Number, time.Now().Unix())
-	archiveName := minecraft.FormatBackupFileName(inst.Slug, inst.Number, "daily")
+	archiveName := backups.FormatBackupFileName(inst.Slug, inst.Number, "daily")
 
 	if err := s.K8s.CreateBackupJob(ctx, jobName, archiveName, inst.PVCName(), s.backupsPVC()); err != nil {
 		slog.Error("scheduler: failed to create daily backup job", "instance", inst.Name, "err", err)
@@ -123,7 +126,7 @@ func (s *BackupScheduler) backupOne(ctx context.Context, inst minecraft.Instance
 	}
 
 	if s.Cfg != nil && s.Cfg.BackupsDir != "" {
-		_ = minecraft.PruneBackups(s.Cfg.BackupsDir, inst.Slug, inst.Number, s.keep())
+		_ = backups.PruneBackups(s.Cfg.BackupsDir, inst.Slug, inst.Number, s.keep())
 	}
 	if s.Store != nil {
 		_ = s.Store.RecordAudit("system", "mc-backup-daily", fmt.Sprintf("Daily backup created: %s", archiveName))

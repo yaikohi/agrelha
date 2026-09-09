@@ -1,6 +1,9 @@
-package app
+package backups
 
 import (
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/manifests"
 	"context"
 	"path/filepath"
 	"testing"
@@ -9,20 +12,19 @@ import (
 
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/minecraft"
 	"agrelha/internal/platform/config"
 )
 
-func newScheduler(t *testing.T) (*BackupScheduler, *minecraft.InstanceManager, *store.Store) {
+func newScheduler(t *testing.T) (*BackupScheduler, *instances.InstanceManager, *store.Store) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	kc := k8s.NewWithClientset(fake.NewSimpleClientset(), "minecraft-modded", "mc")
-	mgr := minecraft.NewInstanceManager(
+	mgr := instances.NewInstanceManager(
 		store.NewInstanceRepo(st), nil, nil, 24, 4, 2,
-		"manifests/minecraft-modded", "", "", "minecraft-modded",
+		"manifests/minecraft-modded", "", manifests.New("", "minecraft-modded"), "minecraft-modded",
 	)
 	return &BackupScheduler{
 		Cfg:       &config.Config{},
@@ -37,10 +39,10 @@ func TestRunDailyBacksUpRunningInstances(t *testing.T) {
 	s, mgr, st := newScheduler(t)
 	defer st.Close()
 
-	if _, err := mgr.CreateInstance(context.Background(), minecraft.Instance{
+	if _, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		Name: "ActiveWorld", MCVersion: "1.21.1",
-		Loader: minecraft.LoaderNeoForge, Tier: minecraft.TierMedium,
-		State: minecraft.StateRunning,
+		Loader: domain.LoaderNeoForge, Tier: domain.TierMedium,
+		State: domain.StateRunning,
 	}, ""); err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package instances
 
 import (
+	"agrelha/internal/domain"
 	"agrelha/internal/infra/store"
 	"fmt"
 	"log/slog"
@@ -12,8 +13,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"agrelha/internal/minecraft"
-	"agrelha/internal/modpack"
+	"agrelha/internal/app/modpack"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 )
@@ -158,7 +158,7 @@ func (h *Handler) MCInstanceSettingsSave(c *fiber.Ctx) error {
 		inst.Name = name
 	}
 	inst.MOTD = motd
-	inst.Tier = minecraft.NormalizeTier(tierStr)
+	inst.Tier = domain.NormalizeTier(tierStr)
 
 	if mcVer != "" && mcVer != inst.MCVersion {
 		if !inst.CanSetVersion() {

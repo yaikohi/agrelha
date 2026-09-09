@@ -3,18 +3,18 @@ package server
 import (
 	"context"
 
-	"agrelha/internal/app"
+	appbackups "agrelha/internal/app/backups"
 )
 
 // backupScheduler builds the application service from the server's wiring. The
 // scheduler is not an HTTP concern — it used to live in internal/http/instances
 // despite having no fiber dependency at all.
-func (s *FiberServer) backupScheduler() *app.BackupScheduler {
+func (s *FiberServer) backupScheduler() *appbackups.BackupScheduler {
 	var ns string
 	if s.cfg != nil {
 		ns = s.cfg.MinecraftNamespace
 	}
-	return &app.BackupScheduler{
+	return &appbackups.BackupScheduler{
 		Cfg:       s.cfg,
 		Store:     s.store,
 		Instances: s.mcInstances,

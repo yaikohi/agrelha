@@ -21,10 +21,9 @@ var layers = []struct{ prefix, layer string }{
 	{"internal/app", "app"},
 	{"internal/infra", "infra"},
 	{"internal/web", "web"},
-	{"internal/minecraft", "app"},
-	{"internal/modpack", "app"},
 	{"internal/server", "web"},
-	{"cmd/", "cmd"},
+	{"internal/wiring", "root"},
+	{"cmd/", "root"},
 }
 
 var allowed = map[string]map[string]bool{
@@ -35,12 +34,12 @@ var allowed = map[string]map[string]bool{
 	"app":      {"domain": true, "ports": true, "platform": true, "app": true},
 	"infra":    {"domain": true, "ports": true, "platform": true, "infra": true},
 	"web":      {"domain": true, "ports": true, "platform": true, "app": true, "web": true},
-	"cmd":      {"domain": true, "ports": true, "platform": true, "app": true, "infra": true, "web": true, "cmd": true},
+	"root":     {"domain": true, "ports": true, "platform": true, "app": true, "infra": true, "web": true, "root": true},
 }
 
 const configPkg = module + "/internal/platform/config"
 
-var configImporters = map[string]bool{"cmd": true}
+var configImporters = map[string]bool{"root": true}
 
 type exception struct {
 	importer string
@@ -49,13 +48,12 @@ type exception struct {
 }
 
 var exceptions = []exception{
-	{"internal/app", "infra", "C"},
-	{"internal/app", "config", "I"},
-	{"internal/app/ingest", "infra", "C"},
-	{"internal/minecraft", "infra", "C"},
-	{"internal/modpack", "infra", "F"},
-	{"internal/server", "infra", "D"},
-	{"internal/server", "config", "D"},
+	{"internal/app/backups", "infra", "E"},
+	{"internal/app/backups", "config", "I"},
+	{"internal/app/content", "infra", "F"},
+	{"internal/app/modpack", "infra", "F"},
+	{"internal/server", "infra", "E"},
+	{"internal/server", "config", "E"},
 	{"internal/infra/auth/oidc", "config", "I"},
 	{"internal/web/handlers/access", "infra", "E"},
 	{"internal/web/handlers/access", "config", "I"},

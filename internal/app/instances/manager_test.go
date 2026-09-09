@@ -1,6 +1,8 @@
-package minecraft
+package instances
 
 import (
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/manifests"
 	"context"
 	"path/filepath"
 	"testing"
@@ -17,17 +19,17 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 	defer st.Close()
 
 	mgr := NewInstanceManager(
-		store.NewInstanceRepo(st), nil, nil, 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", "ykhi.xyz/gameserver=true", "minecraft-modded")
+		store.NewInstanceRepo(st), nil, nil, 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded")
 
 	ctx := context.Background()
 
 	// 1. Create first instance (auto-number 1)
-	inst1, err := mgr.CreateInstance(ctx, Instance{
+	inst1, err := mgr.CreateInstance(ctx, domain.Instance{
 		Name:      "Fluxweave",
-		Loader:    LoaderNeoForge,
-		Source:    SourceModlist,
+		Loader:    domain.LoaderNeoForge,
+		Source:    domain.SourceModlist,
 		MCVersion: "1.21.1",
-		Tier:      TierLarge, // 12 GiB
+		Tier:      domain.TierLarge, // 12 GiB
 	}, "jei\n")
 	if err != nil {
 		t.Fatalf("create instance 1 failed: %v", err)
@@ -40,11 +42,11 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 	}
 
 	// 2. Create second instance (auto-number 2)
-	inst2, err := mgr.CreateInstance(ctx, Instance{
+	inst2, err := mgr.CreateInstance(ctx, domain.Instance{
 		Name:      "Vanilla Survival",
-		Source:    SourceVanilla,
+		Source:    domain.SourceVanilla,
 		MCVersion: "1.21.4",
-		Tier:      TierLarge, // 12 GiB
+		Tier:      domain.TierLarge, // 12 GiB
 	}, "")
 	if err != nil {
 		t.Fatalf("create instance 2 failed: %v", err)
@@ -57,12 +59,12 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 	}
 
 	// 3. Create third instance
-	inst3, err := mgr.CreateInstance(ctx, Instance{
+	inst3, err := mgr.CreateInstance(ctx, domain.Instance{
 		Name:      "Cobblemon",
-		Loader:    LoaderFabric,
-		Source:    SourceModlist,
+		Loader:    domain.LoaderFabric,
+		Source:    domain.SourceModlist,
 		MCVersion: "1.20.1",
-		Tier:      TierSmall, // 4 GiB
+		Tier:      domain.TierSmall, // 4 GiB
 	}, "fabric-api\n")
 	if err != nil {
 		t.Fatalf("create instance 3 failed: %v", err)

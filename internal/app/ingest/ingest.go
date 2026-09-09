@@ -11,8 +11,6 @@ import (
 	"log/slog"
 	"regexp"
 	"time"
-
-	"agrelha/internal/infra/store"
 )
 
 type logStreamer interface {
@@ -26,7 +24,14 @@ var (
 	dcRe    = regexp.MustCompile(`Closing socket (\d{17})`)
 )
 
-func Run(ctx context.Context, k logStreamer, st *store.Store) {
+type presenceStore interface {
+	ClearPresence() error
+	UpsertSeen(id, character string, joined bool) error
+	SetOnline(id string, online bool) error
+	RecordEvent(kind, id string) error
+}
+
+func Run(ctx context.Context, k logStreamer, st presenceStore) {
 	_ = st.ClearPresence()
 	for {
 		if ctx.Err() != nil {
@@ -43,7 +48,7 @@ func Run(ctx context.Context, k logStreamer, st *store.Store) {
 	}
 }
 
-func consume(ctx context.Context, k logStreamer, st *store.Store) error {
+func consume(ctx context.Context, k logStreamer, st presenceStore) error {
 	rc, err := k.StreamLogs(ctx, 200)
 	if err != nil {
 		return err
