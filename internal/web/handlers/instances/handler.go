@@ -1,32 +1,19 @@
 package instances
 
 import (
-	mcaccess "agrelha/internal/app/access"
-	"agrelha/internal/app/instances"
-	"agrelha/internal/domain"
-	"agrelha/internal/infra/rcon"
 	"context"
 	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 
-	"agrelha/internal/infra/content/mcversions"
-	"agrelha/internal/infra/content/modpackindex"
-	"agrelha/internal/infra/content/modrinth"
-	"agrelha/internal/infra/gitops"
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
-	"agrelha/internal/platform/config"
-	"agrelha/internal/web/shared"
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
+	"agrelha/internal/ports"
 )
 
 // InstanceStat holds cached per-instance stats for players, status, and uptime.
-type InstanceStat struct {
-	Players      int
-	PlayersKnown bool
-	Uptime       string
-}
+type InstanceStat = instances.InstanceStat
 
 type instanceStatsCache struct {
 	mu   sync.Mutex
@@ -38,15 +25,8 @@ const instanceStatsTTL = 15 * time.Second
 
 // Config specifies dependencies for the Minecraft instances handlers.
 type Config struct {
-	Cfg                     *config.Config
-	Store                   *store.Store
-	Git                     *gitops.Committer
-	MCK8s                   *k8s.Client
 	MCInstances             *instances.InstanceManager
-	MCRconPool              *rcon.Pool
-	MCV                     *mcversions.Client
-	MPI                     *modpackindex.Client
-	MR                      *modrinth.Client
+	MinecraftGame           ports.Game
 	Actor                   func(*fiber.Ctx) string
 	ApplyMinecraftAfterSync func(cmName, depName, key string, want func(string) bool)
 }
@@ -111,27 +91,11 @@ func (h *Handler) InstanceStats(ctx context.Context, insts []domain.Instance) ma
 		return h.instStats.data
 	}
 
-	out := make(map[int]InstanceStat, len(insts))
-	for _, inst := range insts {
-		if inst.State != domain.StateRunning {
-			continue
-		}
-		st := InstanceStat{}
-
-		if h.cfg.MCK8s != nil {
-			if ps, err := h.cfg.MCK8s.DeploymentPodStatus(ctx, inst.DeploymentName()); err == nil && !ps.StartedAt.IsZero() {
-				st.Uptime = shared.HumanDuration(time.Since(ps.StartedAt))
-			}
-		}
-		if h.cfg.MCRconPool != nil && inst.LBIP != "" {
-			if res, err := h.cfg.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute("/list"); err == nil {
-				st.Players = len(mcaccess.ParsePlayerList(res))
-				st.PlayersKnown = true
-			}
-		}
-		out[inst.Number] = st
+	if h.cfg.MCInstances == nil {
+		return nil
 	}
 
+	out := h.cfg.MCInstances.InstanceStats(ctx, insts)
 	h.instStats.data = out
 	h.instStats.at = time.Now()
 	return out

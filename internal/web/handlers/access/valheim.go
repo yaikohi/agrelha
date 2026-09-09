@@ -3,7 +3,7 @@ package access
 import (
 	"strings"
 
-	"agrelha/internal/infra/store"
+	"agrelha/internal/domain"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 
@@ -11,15 +11,13 @@ import (
 )
 
 func (h *Handler) AdminsPage(c *fiber.Ctx) error {
-	var players []store.Player
-	if h.cfg.Store != nil {
-		players, _ = h.cfg.Store.ListPlayers()
+	var players []domain.Player
+	if h.cfg.Players != nil {
+		players, _ = h.cfg.Players.ListPlayers()
 	}
 	var adminIDs []string
-	if h.cfg.K8s != nil {
-		if data, err := h.cfg.K8s.ConfigMapData(c.UserContext(), "valheim-admins"); err == nil {
-			adminIDs = strings.Fields(data["ADMINLIST_IDS"])
-		}
+	if h.cfg.Admins != nil {
+		adminIDs, _ = h.cfg.Admins.List(c.UserContext())
 	}
 	fk, fm := shared.TakeFlash(c)
 	return shared.Render(c, pages.Admins(players, adminIDs, h.cfg.Admins != nil, fk, fm))
@@ -35,13 +33,10 @@ func (h *Handler) AdminsGrant(c *fiber.Ctx) error {
 		shared.SetFlash(c, "err", "A Steam64 ID is required.")
 		return c.Redirect("/admins", fiber.StatusSeeOther)
 	}
-	changed, err := h.cfg.Admins.Grant(c.UserContext(), id)
+	changed, err := h.cfg.Admins.Grant(c.UserContext(), id, h.cfg.Actor(c))
 	if err != nil {
 		shared.SetFlash(c, "err", "Grant commit failed: "+err.Error())
 		return c.Redirect("/admins", fiber.StatusSeeOther)
-	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "admin-grant", id)
 	}
 	if changed {
 		if h.cfg.ApplyAfterSync != nil {
@@ -66,13 +61,10 @@ func (h *Handler) AdminsRevoke(c *fiber.Ctx) error {
 		shared.SetFlash(c, "err", "A Steam64 ID is required.")
 		return c.Redirect("/admins", fiber.StatusSeeOther)
 	}
-	changed, err := h.cfg.Admins.Revoke(c.UserContext(), id)
+	changed, err := h.cfg.Admins.Revoke(c.UserContext(), id, h.cfg.Actor(c))
 	if err != nil {
 		shared.SetFlash(c, "err", "Revoke commit failed: "+err.Error())
 		return c.Redirect("/admins", fiber.StatusSeeOther)
-	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "admin-revoke", id)
 	}
 	if changed {
 		if h.cfg.ApplyAfterSync != nil {

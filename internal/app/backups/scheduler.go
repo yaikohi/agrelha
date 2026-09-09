@@ -1,61 +1,136 @@
-// Package app holds application services: use cases that orchestrate the domain
-// and the ports, and belong to neither. They are not HTTP handlers (nothing here
-// touches fiber) and they are not domain rules (they coordinate infrastructure).
-//
-// This is the layer a JVM codebase would call `application`. See
-// docs/modularization-plan.md §7.
+// Package backups holds application services for scheduling instance backups
+// and retention pruning.
 package backups
 
 import (
-	"agrelha/internal/app/instances"
-	"agrelha/internal/domain"
-	"agrelha/internal/infra/backups"
-	"agrelha/internal/infra/rcon"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
-	"agrelha/internal/platform/config"
+	"agrelha/internal/domain"
+	"agrelha/internal/ports"
 )
+
+// JobRunner creates backup jobs in the underlying infrastructure.
+type JobRunner interface {
+	CreateBackupJob(ctx context.Context, jobName, archiveName, sourcePVC, backupPVC string) error
+}
+
+// InstanceLister lists instances.
+type InstanceLister interface {
+	ListInstances(ctx context.Context) ([]domain.Instance, error)
+}
+
+// Option configures a BackupScheduler.
+type Option func(*BackupScheduler)
 
 // BackupScheduler snapshots every running Minecraft instance once a day and
 // prunes old archives.
 type BackupScheduler struct {
-	Cfg        *config.Config
-	Store      *store.Store
-	Instances  *instances.InstanceManager
-	K8s        *k8s.Client
-	RconPool   *rcon.Pool
-	Namespace  string
-	BackupsPVC string
-	Keep       int
+	instances  InstanceLister
+	jobRunner  JobRunner
+	cmdExec    func(ctx context.Context, inst domain.Instance, cmd string) error
+	pruner     func(slug string, num, keep int) error
+	audit      ports.AuditRecorder
+	event      ports.EventRecorder
+	namespace  string
+	backupsPVC string
+	keep       int
 }
 
-func (s *BackupScheduler) namespace() string {
-	if s.Namespace != "" {
-		return s.Namespace
+// New creates a new BackupScheduler with pure interfaces and optional configuration.
+func New(instances InstanceLister, runner JobRunner, opts ...Option) *BackupScheduler {
+	s := &BackupScheduler{
+		instances:  instances,
+		jobRunner:  runner,
+		namespace:  "minecraft-modded",
+		backupsPVC: "minecraft-modded-backups",
+		keep:       5,
 	}
-	if s.Cfg != nil && s.Cfg.MinecraftNamespace != "" {
-		return s.Cfg.MinecraftNamespace
+	for _, opt := range opts {
+		opt(s)
 	}
-	return "minecraft-modded"
+	return s
 }
 
-func (s *BackupScheduler) backupsPVC() string {
-	if s.BackupsPVC != "" {
-		return s.BackupsPVC
+// WithNamespace sets the kubernetes namespace where the server and PVCs reside.
+func WithNamespace(ns string) Option {
+	return func(s *BackupScheduler) {
+		if ns != "" {
+			s.namespace = ns
+		}
 	}
-	return "minecraft-modded-backups"
 }
 
-func (s *BackupScheduler) keep() int {
-	if s.Keep > 0 {
-		return s.Keep
+// WithBackupsPVC sets the PVC name where backups are stored.
+func WithBackupsPVC(pvc string) Option {
+	return func(s *BackupScheduler) {
+		if pvc != "" {
+			s.backupsPVC = pvc
+		}
 	}
-	return 5
+}
+
+// WithKeep sets how many daily backups to retain.
+func WithKeep(keep int) Option {
+	return func(s *BackupScheduler) {
+		if keep > 0 {
+			s.keep = keep
+		}
+	}
+}
+
+// WithCommandExecutor configures a function to run console commands on the instance before/after backup.
+func WithCommandExecutor(fn func(ctx context.Context, inst domain.Instance, cmd string) error) Option {
+	return func(s *BackupScheduler) {
+		s.cmdExec = fn
+	}
+}
+
+// WithPruner configures an archive pruner function.
+func WithPruner(fn func(slug string, num, keep int) error) Option {
+	return func(s *BackupScheduler) {
+		s.pruner = fn
+	}
+}
+
+// WithAudit configures the audit recorder.
+func WithAudit(a ports.AuditRecorder) Option {
+	return func(s *BackupScheduler) {
+		s.audit = a
+	}
+}
+
+// WithEvent configures the event recorder.
+func WithEvent(e ports.EventRecorder) Option {
+	return func(s *BackupScheduler) {
+		s.event = e
+	}
+}
+
+// Namespace returns the configured namespace.
+func (s *BackupScheduler) Namespace() string {
+	if s == nil || s.namespace == "" {
+		return "minecraft-modded"
+	}
+	return s.namespace
+}
+
+// BackupsPVC returns the configured backups PVC name.
+func (s *BackupScheduler) BackupsPVC() string {
+	if s == nil || s.backupsPVC == "" {
+		return "minecraft-modded-backups"
+	}
+	return s.backupsPVC
+}
+
+// Keep returns the configured retention count.
+func (s *BackupScheduler) Keep() int {
+	if s == nil || s.keep <= 0 {
+		return 5
+	}
+	return s.keep
 }
 
 // Start runs the daily pass at 04:00 UTC, once per calendar day.
@@ -83,11 +158,11 @@ func (s *BackupScheduler) Start(ctx context.Context) {
 
 // RunDaily backs up every running instance.
 func (s *BackupScheduler) RunDaily(ctx context.Context) {
-	if s.Instances == nil || s.K8s == nil {
+	if s == nil || s.instances == nil || s.jobRunner == nil {
 		return
 	}
 
-	instances, err := s.Instances.ListInstances(ctx)
+	instances, err := s.instances.ListInstances(ctx)
 	if err != nil {
 		slog.Error("scheduler: failed to list minecraft instances", "err", err)
 		return
@@ -109,27 +184,27 @@ func (s *BackupScheduler) RunDaily(ctx context.Context) {
 func (s *BackupScheduler) backupOne(ctx context.Context, inst domain.Instance) {
 	slog.Info("scheduler: starting daily backup", "instance", inst.Name, "num", inst.Number)
 
-	if s.RconPool != nil {
-		addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(), s.namespace())
-		client := s.RconPool.ClientFor(addr)
-		_, _ = client.Execute("/save-off")
-		_, _ = client.Execute("/save-all flush")
-		defer func() { _, _ = client.Execute("/save-on") }()
+	if s.cmdExec != nil {
+		_ = s.cmdExec(ctx, inst, "/save-off")
+		_ = s.cmdExec(ctx, inst, "/save-all flush")
+		defer func() { _ = s.cmdExec(ctx, inst, "/save-on") }()
 	}
 
 	jobName := fmt.Sprintf("mc-backup-%s-%02d-daily-%d", inst.Slug, inst.Number, time.Now().Unix())
-	archiveName := backups.FormatBackupFileName(inst.Slug, inst.Number, "daily")
+	archiveName := domain.FormatBackupFileName(inst.Slug, inst.Number, "daily")
 
-	if err := s.K8s.CreateBackupJob(ctx, jobName, archiveName, inst.PVCName(), s.backupsPVC()); err != nil {
+	if err := s.jobRunner.CreateBackupJob(ctx, jobName, archiveName, inst.PVCName(), s.backupsPVC); err != nil {
 		slog.Error("scheduler: failed to create daily backup job", "instance", inst.Name, "err", err)
 		return
 	}
 
-	if s.Cfg != nil && s.Cfg.BackupsDir != "" {
-		_ = backups.PruneBackups(s.Cfg.BackupsDir, inst.Slug, inst.Number, s.keep())
+	if s.pruner != nil {
+		_ = s.pruner(inst.Slug, inst.Number, s.keep)
 	}
-	if s.Store != nil {
-		_ = s.Store.RecordAudit("system", "mc-backup-daily", fmt.Sprintf("Daily backup created: %s", archiveName))
-		_ = s.Store.RecordEvent("mc-backup-daily", fmt.Sprintf("World #%02d %s", inst.Number, inst.Name))
+	if s.audit != nil {
+		_ = s.audit.RecordAudit("system", "mc-backup-daily", fmt.Sprintf("Daily backup created: %s", archiveName))
+	}
+	if s.event != nil {
+		_ = s.event.RecordEvent("mc-backup-daily", fmt.Sprintf("World #%02d %s", inst.Number, inst.Name))
 	}
 }

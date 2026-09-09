@@ -75,7 +75,7 @@ func TestAccessHistoryPage(t *testing.T) {
 
 	_ = st.RecordAudit("admin", "test-action", "test-target")
 
-	h := New(Config{Store: st})
+	h := New(Config{History: st})
 	app := fiber.New()
 	app.Get("/history", h.HistoryPage)
 
@@ -177,12 +177,7 @@ func TestAccessMinecraftUnconfigured(t *testing.T) {
 		}
 	}
 }
-
 func TestAccessConfiguredFlow(t *testing.T) {
-	state := newMemStateStore()
-	adm := admins.New(state, "valheim-admins.yaml")
-	mcAcc := mcaccess.NewAccessManager(state, "neoforge-access.yaml", nil)
-
 	dbPath := filepath.Join(t.TempDir(), "access_test2.db")
 	st, err := store.Open(dbPath)
 	if err != nil {
@@ -190,11 +185,16 @@ func TestAccessConfiguredFlow(t *testing.T) {
 	}
 	defer st.Close()
 
+	state := newMemStateStore()
+	adm := admins.New(state, "valheim-admins.yaml", admins.WithAudit(st))
+	mcAcc := mcaccess.NewAccessManager(state, "neoforge-access.yaml", nil, mcaccess.WithAudit(st))
+
 	applied := false
 	h := New(Config{
 		Admins:     adm,
 		MCAccess:   mcAcc,
-		Store:      st,
+		History:    st,
+		Players:    st,
 		StateStore: state,
 		ApplyAfterSync: func(cmName, key string, want func(string) bool) {
 			applied = true

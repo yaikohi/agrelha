@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -16,37 +15,26 @@ import (
 	"agrelha/internal/web/sse"
 )
 
-const mcConfigsCM = "minecraft-neoforge-configs"
-
 var mcCfgNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._\-/]*\.(toml|json|json5|yaml|yml|cfg|txt|properties|ini)$`)
 
-// MCConfigsList lists all global Minecraft config file names from the ConfigMap.
+// MCConfigsList lists all global Minecraft config file names.
 func (h *Handler) MCConfigsList(c *fiber.Ctx) ([]string, error) {
-	if h.cfg.MCK8s == nil {
+	if h.cfg.MCInstances == nil {
 		return nil, nil
 	}
-	data, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), mcConfigsCM)
-	if err != nil {
-		return nil, err
-	}
-	files := make([]string, 0, len(data))
-	for k := range data {
-		files = append(files, k)
-	}
-	sort.Strings(files)
-	return files, nil
+	return h.cfg.MCInstances.ListGlobalConfigs(c.UserContext())
 }
 
 // MCConfigsPage renders the list of Minecraft config files.
 func (h *Handler) MCConfigsPage(c *fiber.Ctx) error {
 	files, _ := h.MCConfigsList(c)
 	fk, fm := shared.TakeFlash(c)
-	return shared.Render(c, pages.MinecraftConfigs(files, h.cfg.Git != nil, fk, fm))
+	return shared.Render(c, pages.MinecraftConfigs(files, h.cfg.MCInstances != nil, fk, fm))
 }
 
 // MCConfigNew renders the new Minecraft config file form.
 func (h *Handler) MCConfigNew(c *fiber.Ctx) error {
-	return shared.Render(c, pages.MinecraftConfigEdit("", "", true, h.cfg.Git != nil))
+	return shared.Render(c, pages.MinecraftConfigEdit("", "", true, h.cfg.MCInstances != nil))
 }
 
 // MCConfigEdit renders the edit form for an existing Minecraft config file.
@@ -57,18 +45,16 @@ func (h *Handler) MCConfigEdit(c *fiber.Ctx) error {
 		return c.Redirect("/minecraft/configs", fiber.StatusSeeOther)
 	}
 	var content string
-	if h.cfg.MCK8s != nil {
-		if data, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), mcConfigsCM); err == nil {
-			content = data[name]
-		}
+	if h.cfg.MCInstances != nil {
+		content, _ = h.cfg.MCInstances.GetGlobalConfig(c.UserContext(), name)
 	}
-	return shared.Render(c, pages.MinecraftConfigEdit(name, content, false, h.cfg.Git != nil))
+	return shared.Render(c, pages.MinecraftConfigEdit(name, content, false, h.cfg.MCInstances != nil))
 }
 
 // MCConfigSave saves changes to a global Minecraft config file.
 func (h *Handler) MCConfigSave(c *fiber.Ctx) error {
-	if h.cfg.Git == nil || h.cfg.Cfg == nil {
-		shared.SetFlash(c, "err", "Declarative plane disabled — no Codeberg token configured.")
+	if h.cfg.MCInstances == nil {
+		shared.SetFlash(c, "err", "Instance manager unconfigured.")
 		return c.Redirect("/minecraft/configs", fiber.StatusSeeOther)
 	}
 	file := strings.TrimSpace(c.FormValue("file"))
@@ -78,17 +64,12 @@ func (h *Handler) MCConfigSave(c *fiber.Ctx) error {
 	}
 	content := strings.ReplaceAll(c.FormValue("content"), "\r\n", "\n")
 
-	changed, err := h.cfg.Git.SetData(c.UserContext(), h.cfg.Cfg.MinecraftConfigsPath, file, content,
-		"agrelha: edit minecraft config "+file)
+	changed, err := h.cfg.MCInstances.SaveGlobalConfig(c.UserContext(), file, content, h.cfg.Actor(c))
 	if err != nil {
 		shared.SetFlash(c, "err", "Save failed: "+err.Error())
 		return c.Redirect("/minecraft/configs", fiber.StatusSeeOther)
 	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-config-edit", file)
-	}
 	if changed {
-		h.cfg.ApplyMinecraftAfterSync(mcConfigsCM, "", file, func(v string) bool { return v == content })
 		shared.SetFlash(c, "ok", "Saved "+file+" — committed; the server will restart to apply.")
 	} else {
 		shared.SetFlash(c, "ok", file+" is unchanged.")
@@ -98,8 +79,8 @@ func (h *Handler) MCConfigSave(c *fiber.Ctx) error {
 
 // MCConfigDelete deletes a global Minecraft config file.
 func (h *Handler) MCConfigDelete(c *fiber.Ctx) error {
-	if h.cfg.Git == nil || h.cfg.Cfg == nil {
-		shared.SetFlash(c, "err", "Declarative plane disabled — no Codeberg token configured.")
+	if h.cfg.MCInstances == nil {
+		shared.SetFlash(c, "err", "Instance manager unconfigured.")
 		return c.Redirect("/minecraft/configs", fiber.StatusSeeOther)
 	}
 	file := strings.TrimSpace(c.FormValue("file"))
@@ -107,17 +88,12 @@ func (h *Handler) MCConfigDelete(c *fiber.Ctx) error {
 		shared.SetFlash(c, "err", "Invalid config file name.")
 		return c.Redirect("/minecraft/configs", fiber.StatusSeeOther)
 	}
-	changed, err := h.cfg.Git.DeleteData(c.UserContext(), h.cfg.Cfg.MinecraftConfigsPath, file,
-		"agrelha: delete minecraft config "+file)
+	changed, err := h.cfg.MCInstances.DeleteGlobalConfig(c.UserContext(), file, h.cfg.Actor(c))
 	if err != nil {
 		shared.SetFlash(c, "err", "Delete failed: "+err.Error())
 		return c.Redirect("/minecraft/configs", fiber.StatusSeeOther)
 	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-config-delete", file)
-	}
 	if changed {
-		h.cfg.ApplyMinecraftAfterSync(mcConfigsCM, "", file, func(v string) bool { return v == "" })
 		shared.SetFlash(c, "ok", "Deleted "+file+" — committed; the server will restart to apply.")
 	} else {
 		shared.SetFlash(c, "ok", file+" was not present.")
@@ -127,16 +103,12 @@ func (h *Handler) MCConfigDelete(c *fiber.Ctx) error {
 
 // MCInstanceConfigGet reads a config file for a specific instance into the SSE editor.
 func (h *Handler) MCInstanceConfigGet(c *fiber.Ctx) error {
-	if h.cfg.MCInstances == nil || h.cfg.MCK8s == nil {
+	if h.cfg.MCInstances == nil {
 		return c.Status(fiber.StatusServiceUnavailable).SendString("Service unavailable")
 	}
 	num, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
-	}
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err != nil || inst == nil {
-		return c.Status(fiber.StatusNotFound).SendString("Instance not found")
 	}
 
 	fileName := strings.TrimSpace(c.Query("f"))
@@ -144,10 +116,7 @@ func (h *Handler) MCInstanceConfigGet(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("File name required")
 	}
 
-	content := ""
-	if data, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), inst.ConfigsCMName()); err == nil {
-		content = data[fileName]
-	}
+	content, _ := h.cfg.MCInstances.GetConfig(c.UserContext(), num, fileName)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -167,16 +136,12 @@ func (h *Handler) MCInstanceConfigGet(c *fiber.Ctx) error {
 
 // MCInstanceConfigSave saves a config file for a specific instance.
 func (h *Handler) MCInstanceConfigSave(c *fiber.Ctx) error {
-	if h.cfg.MCInstances == nil || h.cfg.Git == nil {
-		return shared.SSEToast(c, "err", "Instance manager or Git committer unconfigured.", nil)
+	if h.cfg.MCInstances == nil {
+		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
 	num, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
-	}
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err != nil || inst == nil {
-		return shared.SSEToast(c, "err", "Instance not found.", nil)
 	}
 
 	var req struct {
@@ -194,17 +159,12 @@ func (h *Handler) MCInstanceConfigSave(c *fiber.Ctx) error {
 	}
 
 	content := strings.ReplaceAll(req.Content, "\r\n", "\n")
-	relPath := fmt.Sprintf("manifests/minecraft-modded/instance-%02d/configs.yaml", inst.Number)
 
-	changed, err := h.cfg.Git.SetData(c.UserContext(), relPath, fileName, content,
-		fmt.Sprintf("agrelha: edit config %s for instance #%02d", fileName, inst.Number))
+	changed, err := h.cfg.MCInstances.SaveConfig(c.UserContext(), num, fileName, content, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Save failed: "+err.Error(), nil)
 	}
 
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-config-edit", fmt.Sprintf("Saved %s on #%02d", fileName, num))
-	}
 	if changed {
 		return shared.SSEToast(c, "ok", fmt.Sprintf("Saved %s — committed to git. Restarts apply.", fileName), map[string]any{
 			"showEditor": false,
@@ -217,16 +177,12 @@ func (h *Handler) MCInstanceConfigSave(c *fiber.Ctx) error {
 
 // MCInstanceConfigDelete deletes a config file for a specific instance.
 func (h *Handler) MCInstanceConfigDelete(c *fiber.Ctx) error {
-	if h.cfg.MCInstances == nil || h.cfg.Git == nil {
-		return shared.SSEToast(c, "err", "Instance manager or Git committer unconfigured.", nil)
+	if h.cfg.MCInstances == nil {
+		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
 	num, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
-	}
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err != nil || inst == nil {
-		return shared.SSEToast(c, "err", "Instance not found.", nil)
 	}
 
 	var req struct {
@@ -242,16 +198,11 @@ func (h *Handler) MCInstanceConfigDelete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "File name required.", nil)
 	}
 
-	relPath := fmt.Sprintf("manifests/minecraft-modded/instance-%02d/configs.yaml", inst.Number)
-	changed, err := h.cfg.Git.DeleteData(c.UserContext(), relPath, fileName,
-		fmt.Sprintf("agrelha: delete config %s for instance #%02d", fileName, inst.Number))
+	changed, err := h.cfg.MCInstances.DeleteConfig(c.UserContext(), num, fileName, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Delete failed: "+err.Error(), nil)
 	}
 
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-config-delete", fmt.Sprintf("Deleted %s on #%02d", fileName, num))
-	}
 	if changed {
 		return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted %s — committed to git.", fileName), nil)
 	}

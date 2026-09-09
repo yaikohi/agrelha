@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"agrelha/internal/infra/content/modrinth"
+	"agrelha/internal/domain"
 )
 
 type CartCompatibility struct {
@@ -16,8 +16,13 @@ type CartCompatibility struct {
 	FabBlocking []string `json:"fab_blocking"`
 }
 
-func CheckCartCompatibility(ctx context.Context, mr *modrinth.Client, slugs []string, mcVersion string) CartCompatibility {
-	if len(slugs) == 0 || mr == nil {
+// ProjectResolver resolves mod projects in batches.
+type ProjectResolver interface {
+	GetProjects(ctx context.Context, idsOrSlugs []string) ([]domain.ModProject, error)
+}
+
+func CheckCartCompatibility(ctx context.Context, resolver ProjectResolver, slugs []string, mcVersion string) CartCompatibility {
+	if len(slugs) == 0 || resolver == nil {
 		return CartCompatibility{BestLoader: "neoforge"}
 	}
 
@@ -29,7 +34,7 @@ func CheckCartCompatibility(ctx context.Context, mr *modrinth.Client, slugs []st
 		}
 	}
 
-	projects, err := mr.GetProjects(ctx, cleanSlugs)
+	projects, err := resolver.GetProjects(ctx, cleanSlugs)
 	if err != nil || len(projects) == 0 {
 		return CartCompatibility{
 			TotalMods:   len(cleanSlugs),

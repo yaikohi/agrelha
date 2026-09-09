@@ -6,6 +6,7 @@ import (
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/rcon"
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,6 +53,12 @@ type FiberServer struct {
 	mcRconPool       *rcon.Pool
 	mck8s            *k8s.Client
 	mcInstances      *instances.InstanceManager
+	valheimGame      ports.Game
+	minecraftGame    ports.Game
+	valheimRuntime   ports.Runtime
+	valheimRef       ports.ServerRef
+	mcRuntime        ports.Runtime
+	mcRef            ports.ServerRef
 	stateStore       ports.StateStore
 	reconciler       ports.Reconciler
 	accessHandler    *access.Handler
@@ -73,24 +80,30 @@ type FiberServer struct {
 }
 
 type Deps struct {
-	Store       *store.Store
-	K8s         *k8s.Client
-	MCK8s       *k8s.Client
-	Auth        ports.Auth
-	Mods        *mods.Manager
-	Admins      *admins.Manager
-	Git         *gitops.Committer
-	TS          *thunderstore.Client
-	MR          *modrinth.Client
-	MPI         *modpackindex.Client
-	MCV         *mcversions.Client
-	MCMods      *mcaccess.ModManager
-	MCAccess    *mcaccess.AccessManager
-	MCRcon      *rcon.Client
-	MCRconPool  *rcon.Pool
-	MCInstances *instances.InstanceManager
-	StateStore  ports.StateStore
-	Reconciler  ports.Reconciler
+	Store          *store.Store
+	K8s            *k8s.Client
+	MCK8s          *k8s.Client
+	Auth           ports.Auth
+	ValheimGame    ports.Game
+	MinecraftGame  ports.Game
+	ValheimRuntime ports.Runtime
+	ValheimRef     ports.ServerRef
+	MCRuntime      ports.Runtime
+	MCRef          ports.ServerRef
+	Mods           *mods.Manager
+	Admins         *admins.Manager
+	Git            *gitops.Committer
+	TS             *thunderstore.Client
+	MR             *modrinth.Client
+	MPI            *modpackindex.Client
+	MCV            *mcversions.Client
+	MCMods         *mcaccess.ModManager
+	MCAccess       *mcaccess.AccessManager
+	MCRcon         *rcon.Client
+	MCRconPool     *rcon.Pool
+	MCInstances    *instances.InstanceManager
+	StateStore     ports.StateStore
+	Reconciler     ports.Reconciler
 }
 
 // New assembles the HTTP server from already-built dependencies. It performs no
@@ -101,25 +114,35 @@ func New(cfg *config.Config, d Deps) *FiberServer {
 			ServerHeader: "agrelha",
 			AppName:      "agrelha",
 		}),
-		cfg:         cfg,
-		store:       d.Store,
-		k8s:         d.K8s,
-		mck8s:       d.MCK8s,
-		auth:        d.Auth,
-		mods:        d.Mods,
-		admins:      d.Admins,
-		git:         d.Git,
-		ts:          d.TS,
-		mr:          d.MR,
-		mpi:         d.MPI,
-		mcv:         d.MCV,
-		mcMods:      d.MCMods,
-		mcAccess:    d.MCAccess,
-		mcRcon:      d.MCRcon,
-		mcRconPool:  d.MCRconPool,
-		mcInstances: d.MCInstances,
-		stateStore:  d.StateStore,
-		reconciler:  d.Reconciler,
+		cfg:            cfg,
+		store:          d.Store,
+		k8s:            d.K8s,
+		mck8s:          d.MCK8s,
+		auth:           d.Auth,
+		valheimGame:    d.ValheimGame,
+		minecraftGame:  d.MinecraftGame,
+		valheimRuntime: d.ValheimRuntime,
+		valheimRef:     d.ValheimRef,
+		mcRuntime:      d.MCRuntime,
+		mcRef:          d.MCRef,
+		mods:           d.Mods,
+		admins:         d.Admins,
+		git:            d.Git,
+		ts:             d.TS,
+		mr:             d.MR,
+		mpi:            d.MPI,
+		mcv:            d.MCV,
+		mcMods:         d.MCMods,
+		mcAccess:       d.MCAccess,
+		mcRcon:         d.MCRcon,
+		mcRconPool:     d.MCRconPool,
+		mcInstances:    d.MCInstances,
+		stateStore:     d.StateStore,
+		reconciler:     d.Reconciler,
+	}
+
+	if s.mcInstances != nil {
+		s.mcInstances.ApplyOptions(instances.WithAfterSyncHook(s.applyMinecraftAfterSync))
 	}
 
 	s.StartMinecraftScheduler(context.Background())
@@ -153,16 +176,51 @@ func (s *FiberServer) ensureWizardHandler() *wizardhttp.Handler {
 
 func (s *FiberServer) ensureInstancesHandler() *instanceshttp.Handler {
 	if s.instancesHandler == nil {
+		if s.mcInstances != nil {
+			var opts []instances.Option
+			if s.cfg != nil && s.cfg.BackupsDir != "" {
+				opts = append(opts, instances.WithBackupsDir(s.cfg.BackupsDir))
+			}
+			if s.mck8s != nil {
+				opts = append(opts,
+					instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
+						inst, err := s.mcInstances.GetInstance(ctx, num)
+						if err != nil {
+							return nil, err
+						}
+						return s.mck8s.ConfigMapData(ctx, inst.ConfigsCMName())
+					}),
+					instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+						inst, err := s.mcInstances.GetInstance(ctx, num)
+						if err != nil {
+							return nil, err
+						}
+						cm, err := s.mck8s.ConfigMapData(ctx, inst.ModsCMName())
+						if err != nil {
+							return nil, err
+						}
+						modsTxt := cm["mods.txt"]
+						var lines []string
+						for _, line := range strings.Split(modsTxt, "\n") {
+							line = strings.TrimSpace(line)
+							if line != "" && !strings.HasPrefix(line, "#") {
+								lines = append(lines, line)
+							}
+						}
+						return lines, nil
+					}),
+					instances.WithGlobalConfigsReader(func(ctx context.Context) (map[string]string, error) {
+						return s.mck8s.ConfigMapData(ctx, "minecraft-modded-configs")
+					}),
+				)
+			}
+			if len(opts) > 0 {
+				s.mcInstances.ApplyOptions(opts...)
+			}
+		}
 		s.instancesHandler = instanceshttp.New(instanceshttp.Config{
-			Cfg:                     s.cfg,
-			Store:                   s.store,
-			Git:                     s.git,
-			MCK8s:                   s.mck8s,
 			MCInstances:             s.mcInstances,
-			MCRconPool:              s.mcRconPool,
-			MCV:                     s.mcv,
-			MPI:                     s.mpi,
-			MR:                      s.mr,
+			MinecraftGame:           s.minecraftGame,
 			Actor:                   s.actor,
 			ApplyMinecraftAfterSync: s.applyMinecraftAfterSync,
 		})
@@ -176,6 +234,7 @@ func (s *FiberServer) ensureContentHandler() *contenthttp.Handler {
 			Cfg:            s.cfg,
 			Store:          s.store,
 			K8s:            s.k8s,
+			ValheimGame:    s.valheimGame,
 			Mods:           s.mods,
 			Git:            s.git,
 			TS:             s.ts,
@@ -197,6 +256,8 @@ func (s *FiberServer) ensureDashboardHandler() *dashboardhttp.Handler {
 			MCK8s:         s.mck8s,
 			MCInstances:   s.mcInstances,
 			MCAccess:      s.mcAccess,
+			ValheimGame:   s.valheimGame,
+			MinecraftGame: s.minecraftGame,
 			Auth:          s.auth,
 			Actor:         s.actor,
 			BackupInfo:    s.backupInfo,
@@ -224,11 +285,9 @@ func (s *FiberServer) ensureAccessHandler() *access.Handler {
 		s.accessHandler = access.New(access.Config{
 			Admins:         s.admins,
 			MCAccess:       s.mcAccess,
-			Store:          s.store,
-			K8s:            s.k8s,
-			MCK8s:          s.mck8s,
+			History:        s.store,
+			Players:        s.store,
 			StateStore:     s.stateStore,
-			Cfg:            s.cfg,
 			Actor:          s.actor,
 			ApplyAfterSync: s.applyAfterSync,
 		})
@@ -257,13 +316,15 @@ func (s *FiberServer) ensureBackupsHandler() *backupshttp.Handler {
 func (s *FiberServer) ensureConsoleHandler() *consolehttp.Handler {
 	if s.consoleHandler == nil {
 		s.consoleHandler = consolehttp.New(consolehttp.Config{
-			K8s:         s.k8s,
-			MCK8s:       s.mck8s,
-			MCInstances: s.mcInstances,
-			MCRconPool:  s.mcRconPool,
-			Store:       s.store,
-			Auth:        s.auth,
-			Actor:       s.actor,
+			ValheimRuntime: s.valheimRuntime,
+			ValheimRef:     s.valheimRef,
+			MCRuntime:      s.mcRuntime,
+			MCRef:          s.mcRef,
+			MCInstances:    s.mcInstances,
+			Audit:          s.store,
+			Event:          s.store,
+			Auth:           s.auth,
+			Actor:          s.actor,
 		})
 	}
 	return s.consoleHandler

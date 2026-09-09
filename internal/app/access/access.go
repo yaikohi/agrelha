@@ -9,16 +9,55 @@ import (
 )
 
 type AccessManager struct {
-	store ports.StateStore
-	path  string // relPath of neoforge-access.yaml in yaya-ops
-	rcon  ports.Console
+	store        ports.StateStore
+	path         string // relPath of neoforge-access.yaml in yaya-ops
+	rcon         ports.Console
+	audit        ports.AuditRecorder
+	accessReader func(ctx context.Context) ([]string, []string, error)
 }
 
-func NewAccessManager(store ports.StateStore, path string, rcon ports.Console) *AccessManager {
+type AccessOption func(*AccessManager)
+
+func WithAudit(recorder ports.AuditRecorder) AccessOption {
+	return func(a *AccessManager) {
+		a.audit = recorder
+	}
+}
+
+func WithAccessReader(fn func(ctx context.Context) ([]string, []string, error)) AccessOption {
+	return func(a *AccessManager) {
+		a.accessReader = fn
+	}
+}
+
+func NewAccessManager(store ports.StateStore, path string, rcon ports.Console, opts ...AccessOption) *AccessManager {
 	if path == "" {
 		path = "manifests/neoforge-access.yaml"
 	}
-	return &AccessManager{store: store, path: path, rcon: rcon}
+	a := &AccessManager{store: store, path: path, rcon: rcon}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
+}
+
+// ListAccess returns the current operator usernames and whitelisted usernames.
+func (a *AccessManager) ListAccess(ctx context.Context) (ops []string, whitelist []string, err error) {
+	if a.accessReader != nil {
+		return a.accessReader(ctx)
+	}
+	if a.store == nil {
+		return nil, nil, ports.ErrNotImplemented
+	}
+	doc, err := a.store.Get(ctx, a.path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if doc.Data != nil {
+		ops = ParseUsers(doc.Data["ops.txt"])
+		whitelist = ParseUsers(doc.Data["whitelist.txt"])
+	}
+	return ops, whitelist, nil
 }
 
 // ParseUsers extracts clean usernames from ops.txt or whitelist.txt.
@@ -34,8 +73,15 @@ func ParseUsers(content string) []string {
 	return out
 }
 
+func actorOrHyphen(actor []string) string {
+	if len(actor) > 0 && actor[0] != "" {
+		return actor[0]
+	}
+	return "-"
+}
+
 // GrantOp adds a user to ops.txt in Git and executes live /op via RCON.
-func (a *AccessManager) GrantOp(ctx context.Context, username string) (bool, error) {
+func (a *AccessManager) GrantOp(ctx context.Context, username string, actor ...string) (bool, error) {
 	username = strings.TrimSpace(username)
 	msg := fmt.Sprintf("mc-access: op %s", username)
 
@@ -67,11 +113,14 @@ func (a *AccessManager) GrantOp(ctx context.Context, username string) (bool, err
 	if a.rcon != nil {
 		_, _ = a.rcon.Execute("/op " + username)
 	}
+	if changed && a.audit != nil {
+		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-op-grant", username)
+	}
 	return changed, nil
 }
 
 // RevokeOp removes a user from ops.txt in Git and executes live /deop via RCON.
-func (a *AccessManager) RevokeOp(ctx context.Context, username string) (bool, error) {
+func (a *AccessManager) RevokeOp(ctx context.Context, username string, actor ...string) (bool, error) {
 	username = strings.TrimSpace(username)
 	msg := fmt.Sprintf("mc-access: deop %s", username)
 
@@ -109,11 +158,14 @@ func (a *AccessManager) RevokeOp(ctx context.Context, username string) (bool, er
 	if a.rcon != nil {
 		_, _ = a.rcon.Execute("/deop " + username)
 	}
+	if changed && a.audit != nil {
+		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-op-revoke", username)
+	}
 	return changed, nil
 }
 
 // AddWhitelist adds a user to whitelist.txt in Git and executes /whitelist add via RCON.
-func (a *AccessManager) AddWhitelist(ctx context.Context, username string) (bool, error) {
+func (a *AccessManager) AddWhitelist(ctx context.Context, username string, actor ...string) (bool, error) {
 	username = strings.TrimSpace(username)
 	msg := fmt.Sprintf("mc-access: whitelist add %s", username)
 
@@ -145,11 +197,14 @@ func (a *AccessManager) AddWhitelist(ctx context.Context, username string) (bool
 		_, _ = a.rcon.Execute("/whitelist add " + username)
 		_, _ = a.rcon.Execute("/whitelist reload")
 	}
+	if changed && a.audit != nil {
+		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-add", username)
+	}
 	return changed, nil
 }
 
 // RemoveWhitelist removes a user from whitelist.txt in Git and executes /whitelist remove via RCON.
-func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string) (bool, error) {
+func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string, actor ...string) (bool, error) {
 	username = strings.TrimSpace(username)
 	msg := fmt.Sprintf("mc-access: whitelist remove %s", username)
 
@@ -187,6 +242,9 @@ func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string) (b
 	if a.rcon != nil {
 		_, _ = a.rcon.Execute("/whitelist remove " + username)
 		_, _ = a.rcon.Execute("/whitelist reload")
+	}
+	if changed && a.audit != nil {
+		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-remove", username)
 	}
 	return changed, nil
 }
@@ -246,14 +304,22 @@ func (a *AccessManager) WhitelistEnforced() (bool, error) {
 }
 
 // SetWhitelistEnforced turns whitelist on or off in-game via RCON.
-func (a *AccessManager) SetWhitelistEnforced(enforce bool) error {
+func (a *AccessManager) SetWhitelistEnforced(enforce bool, actor ...string) error {
 	if a.rcon == nil {
 		return fmt.Errorf("rcon client not configured")
 	}
 	cmd := "/whitelist off"
+	desc := "disabled"
 	if enforce {
 		cmd = "/whitelist on"
+		desc = "enabled"
 	}
 	_, err := a.rcon.Execute(cmd)
-	return err
+	if err != nil {
+		return err
+	}
+	if a.audit != nil {
+		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-toggle", desc)
+	}
+	return nil
 }

@@ -1,19 +1,12 @@
 package instances
 
 import (
-	"agrelha/internal/domain"
-	"agrelha/internal/infra/store"
 	"fmt"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
-	"agrelha/internal/app/modpack"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 )
@@ -71,42 +64,27 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 	d.Pack = packName
 
 	// Fetch installed mods if on mods tab or overview
-	if h.cfg.MCK8s != nil {
-		if data, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), inst.ModsCMName()); err == nil {
-			if modsTxt, ok := data["mods.txt"]; ok {
-				for line := range strings.SplitSeq(modsTxt, "\n") {
-					line = strings.TrimSpace(line)
-					if line != "" && !strings.HasPrefix(line, "#") {
-						d.InstalledMods = append(d.InstalledMods, strings.TrimSuffix(line, "?"))
-					}
-				}
-			}
+	if tab == "mods" || tab == "overview" {
+		if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), inst.Number); err == nil {
+			d.InstalledMods = mods
 		}
 	}
 
 	// Fetch config files if on configs tab or overview
-	if (tab == "configs" || tab == "overview") && h.cfg.MCK8s != nil {
-		if data, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), inst.ConfigsCMName()); err == nil {
-			for k := range data {
-				d.ConfigFiles = append(d.ConfigFiles, k)
-			}
-			sort.Strings(d.ConfigFiles)
+	if tab == "configs" || tab == "overview" {
+		if cfgs, err := h.cfg.MCInstances.ListConfigs(c.UserContext(), inst.Number); err == nil {
+			d.ConfigFiles = cfgs
 		}
 	}
 
 	// Fetch backups if on backups tab
-	if tab == "backups" && h.cfg.Cfg != nil && h.cfg.Cfg.BackupsDir != "" {
-		pattern := filepath.Join(h.cfg.Cfg.BackupsDir, fmt.Sprintf("mc-%s-%02d-*.tar.gz", inst.Slug, inst.Number))
-		if matches, err := filepath.Glob(pattern); err == nil {
-			for _, match := range matches {
-				if fi, err := os.Stat(match); err == nil {
-					d.Backups = append(d.Backups, pages.BackupUI{
-						Name:      filepath.Base(match),
-						SizeBytes: fi.Size(),
-						CreatedAt: fi.ModTime().Format("2006-01-02 15:04"),
-					})
-				}
-			}
+	if tab == "backups" {
+		for _, b := range h.cfg.MCInstances.ListBackups(*inst) {
+			d.Backups = append(d.Backups, pages.BackupUI{
+				Name:      b.Name,
+				SizeBytes: b.SizeBytes,
+				CreatedAt: b.CreatedAt,
+			})
 		}
 	}
 
@@ -122,11 +100,6 @@ func (h *Handler) MCInstanceSettingsSave(c *fiber.Ctx) error {
 	num, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
-	}
-
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err != nil || inst == nil {
-		return shared.SSEToast(c, "err", "Instance not found.", nil)
 	}
 
 	var req struct {
@@ -154,24 +127,8 @@ func (h *Handler) MCInstanceSettingsSave(c *fiber.Ctx) error {
 		mcVer = strings.TrimSpace(c.FormValue("mc_version"))
 	}
 
-	if name != "" {
-		inst.Name = name
-	}
-	inst.MOTD = motd
-	inst.Tier = domain.NormalizeTier(tierStr)
-
-	if mcVer != "" && mcVer != inst.MCVersion {
-		if !inst.CanSetVersion() {
-			return shared.SSEToast(c, "err", inst.PackOwnedFieldErr("Minecraft version").Error(), nil)
-		}
-		inst.MCVersion = mcVer
-	}
-
-	if h.cfg.Store != nil {
-		if err := store.NewInstanceRepo(h.cfg.Store).Upsert(*inst); err != nil {
-			return shared.SSEToast(c, "err", "Failed to update instance: "+err.Error(), nil)
-		}
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-settings-save", fmt.Sprintf("Updated settings for #%02d", num))
+	if err := h.cfg.MCInstances.UpdateSettings(c.UserContext(), num, name, motd, tierStr, mcVer, h.cfg.Actor(c)); err != nil {
+		return shared.SSEToast(c, "err", "Failed to update settings: "+err.Error(), nil)
 	}
 
 	return shared.SSEToast(c, "ok", "Settings saved successfully.", nil)
@@ -193,28 +150,10 @@ func (h *Handler) MCInstanceModsRemove(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Mod slug required.", nil)
 	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err != nil || inst == nil {
-		return shared.SSEToast(c, "err", "Instance not found.", nil)
+	if err := h.cfg.MCInstances.RemoveMod(c.UserContext(), num, slug, h.cfg.Actor(c)); err != nil {
+		return shared.SSEToast(c, "err", "Remove failed: "+err.Error(), nil)
 	}
 
-	modsPath := fmt.Sprintf("manifests/minecraft-modded/instance-%02d/mods.yaml", num)
-	if h.cfg.Git != nil {
-		_, _ = h.cfg.Git.Patch(c.UserContext(), modsPath, "mods.txt", fmt.Sprintf("mc: remove %s from instance #%02d", slug, num), func(cur string) (string, error) {
-			lines := strings.Split(cur, "\n")
-			var out []string
-			for _, l := range lines {
-				if strings.TrimSpace(strings.TrimSuffix(l, "?")) != slug {
-					out = append(out, l)
-				}
-			}
-			return strings.Join(out, "\n"), nil
-		})
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-mod-remove", fmt.Sprintf("Removed %s from #%02d", slug, num))
-	}
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Removed %s. Updating...", slug), nil)
 }
 
@@ -231,67 +170,24 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 	if slug == "" {
 		return shared.SSEToast(c, "err", "Mod slug required.", nil)
 	}
-	if h.cfg.Git == nil {
-		return shared.SSEToast(c, "err", "GitOps plane disabled — no Codeberg token configured.", nil)
-	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err != nil || inst == nil {
-		return shared.SSEToast(c, "err", "Instance not found.", nil)
-	}
-
-	wanted := []string{slug}
-	if h.cfg.MR != nil {
-		deps, err := h.cfg.MR.ResolveRequiredDependencies(c.UserContext(), slug, inst.MCVersion, string(inst.Loader))
-		if err != nil {
-			slog.Warn("could not resolve all mod dependencies", "slug", slug, "instance", num, "err", err)
-		}
-		wanted = append(wanted, deps...)
-	}
-
-	modsPath := fmt.Sprintf("manifests/minecraft-modded/instance-%02d/mods.yaml", num)
-	msg := fmt.Sprintf("mc: install %s into instance #%02d", slug, num)
-	_, err = h.cfg.Git.Patch(c.UserContext(), modsPath, "mods.txt", msg, func(cur string) (string, error) {
-		present := map[string]bool{}
-		for l := range strings.SplitSeq(cur, "\n") {
-			if t := strings.TrimSpace(strings.TrimSuffix(l, "?")); t != "" && !strings.HasPrefix(t, "#") {
-				present[t] = true
-			}
-		}
-		var body strings.Builder
-		body.WriteString(strings.TrimRight(cur, "\n"))
-		added := 0
-		for _, w := range wanted {
-			if w = strings.TrimSpace(w); w != "" && !present[w] {
-				body.WriteString("\n" + w)
-				present[w] = true
-				added++
-			}
-		}
-		if added == 0 {
-			return cur, nil
-		}
-		return strings.TrimLeft(body.String(), "\n") + "\n", nil
-	})
+	added, err := h.cfg.MCInstances.InstallMod(c.UserContext(), num, slug, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Install failed: "+err.Error(), nil)
 	}
 
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-mod-install", fmt.Sprintf("Installed %s into #%02d", slug, num))
-	}
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Installed %s (+%d deps). Updating...", slug, len(wanted)-1), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Installed %s (+%d deps). Updating...", slug, added-1), nil)
 }
 
 // MCInstanceExport exports the instance as a Modrinth modpack (.mrpack).
 func (h *Handler) MCInstanceExport(c *fiber.Ctx) error {
-	if h.cfg.MCInstances == nil || h.cfg.MR == nil {
-		return c.Status(fiber.StatusServiceUnavailable).SendString("Export service unavailable")
-	}
-
 	num, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
+	}
+
+	if h.cfg.MCInstances == nil || h.cfg.MinecraftGame == nil {
+		return c.Status(fiber.StatusServiceUnavailable).SendString("Export service unavailable")
 	}
 
 	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
@@ -299,34 +195,11 @@ func (h *Handler) MCInstanceExport(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Instance not found")
 	}
 
-	var slugs []string
-	if h.cfg.MCK8s != nil {
-		if data, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), inst.ModsCMName()); err == nil {
-			if modsTxt, ok := data["mods.txt"]; ok {
-				for line := range strings.SplitSeq(modsTxt, "\n") {
-					line = strings.TrimSpace(line)
-					if line != "" && !strings.HasPrefix(line, "#") {
-						slugs = append(slugs, strings.TrimSuffix(line, "?"))
-					}
-				}
-			}
-		}
-	}
-
-	cfgFiles := make(map[string]string)
-	if h.cfg.MCK8s != nil {
-		if cfgData, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), inst.ConfigsCMName()); err == nil {
-			cfgFiles = cfgData
-		}
-	}
-
-	mrpackBytes, err := modpack.BuildMrpack(c.UserContext(), h.cfg.MR, inst.Name, inst.MCVersion, string(inst.Loader), "", slugs, cfgFiles)
+	bundle, err := h.cfg.MinecraftGame.ExportClientBundle(c.UserContext(), *inst)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString("Build mrpack failed: " + err.Error())
 	}
-
-	fileName := fmt.Sprintf("%s-%s.mrpack", inst.Slug, inst.MCVersion)
-	c.Set("Content-Type", "application/x-modrinth-modpack+zip")
-	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fileName))
-	return c.Send(mrpackBytes)
+	c.Set("Content-Type", bundle.ContentType)
+	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, bundle.Filename))
+	return c.Send(bundle.Data)
 }

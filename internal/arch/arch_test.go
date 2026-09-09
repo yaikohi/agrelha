@@ -48,23 +48,14 @@ type exception struct {
 }
 
 var exceptions = []exception{
-	{"internal/app/backups", "infra", "E"},
-	{"internal/app/backups", "config", "I"},
-	{"internal/app/content", "infra", "F"},
-	{"internal/app/modpack", "infra", "F"},
 	{"internal/server", "infra", "E"},
 	{"internal/server", "config", "E"},
 	{"internal/infra/auth/oidc", "config", "I"},
-	{"internal/web/handlers/access", "infra", "E"},
-	{"internal/web/handlers/access", "config", "I"},
 	{"internal/web/handlers/backups", "infra", "E"},
-	{"internal/web/handlers/console", "infra", "E"},
 	{"internal/web/handlers/content", "infra", "E"},
 	{"internal/web/handlers/content", "config", "I"},
 	{"internal/web/handlers/dashboard", "infra", "E"},
 	{"internal/web/handlers/dashboard", "config", "I"},
-	{"internal/web/handlers/instances", "infra", "E"},
-	{"internal/web/handlers/instances", "config", "I"},
 	{"internal/web/handlers/wizard", "infra", "E"},
 	{"internal/web/pages", "infra", "H"},
 }

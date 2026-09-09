@@ -35,13 +35,54 @@ evidence, the decisions and the full phase table. Progress:
 - **Phase B (Architecture test)** ✅: `internal/arch/arch_test.go`, pure stdlib, runs in `go test ./...`. A **ratchet**: the edge table is the spec, `exceptions` lists today's violations tagged by the phase that removes each. Fails on a new forbidden edge, a stale exception, an unclassified package, or a stale layer prefix. All four failure modes verified by deliberately triggering them.
 - **Phase C (Split `minecraft` + `modpack`)** ✅: both packages gone. `instance.go`/`content.go` turned out to be pure re-export shims, so the work was rewriting ~120 call sites, not writing domain code. Three dependencies **inverted**: `ports.SpecRenderer`, `ports.Console`, and a local `ingest.presenceStore`.
 - **Phase D (Composition root)** ✅: `internal/wiring` (**not** `cmd`, because Go forbids importing `package main` and two real tests exercise the wiring decisions). `wiring.Build` returns an error where the old code called `os.Exit(1)`. `server.New(cfg, Deps)` now constructs no adapters and does no I/O. No `os.Exit` anywhere under `internal/`.
-- **Phases E–I** remain. **Ledger: 19 known violations** (was 20). Done means `exceptions` is empty and the `layers` table no longer mentions `internal/server`.
+- **Phases E–I** remain. **Ledger: 10 known violations** (was 19). Done means `exceptions` is empty and the `layers` table no longer mentions `internal/server`.
 
-- **Quality & Verification** (2026-09-09, after cleanup phase D): `go build`,
-  `go vet`, `go test ./...` and `gofmt` all clean; the binary was smoke-run
-  (`/healthz` 200, `/` 200, `/sse` 200, `/minecraft` 302, clean shutdown).
-  Coverage last measured **33.6%**; phase E is what makes handler tests
-  writable, so expect it to move only from there.
+- **Quality & Verification** (2026-09-09, after candidate 4): `go build`,
+  `go vet`, `go test ./...` and `gofmt` all clean (229 tests passing across 51 packages).
+  Coverage expanding with pure Go unit tests on deep managers and thin HTTP handlers.
+
+### Architecture Deepening Roadmap (2026-09-09)
+Refactoring shallow modules into deep modules with narrow interfaces hiding significant complexity, maximizing testability ("the interface is the test surface") and locality:
+
+- **Candidate 1 (Complete): Deepen the Game Engine Seam (`ports.Game` & `internal/app/games`)** ✅
+  - **Target Seam**: `ports.Game`, `internal/app/games/valheim`, `internal/app/games/minecraft`
+  - **Delivered**: `ports.Game` interface deepened to encapsulate client bundle export (`ExportClientBundle`), telemetry retrieval, admission policies, and runtime specifications. Concrete engines in `internal/app/games/minecraft` and `internal/app/games/valheim` encapsulate game-specific mechanics. Handlers delegate directly without leaking format or client details.
+  - **Impact**: High locality and leverage; game engine specifics decoupled from web presentation.
+
+- **Candidate 2 (Complete): Invert Web Handlers into Deep Application Modules (`internal/app/instances`, `internal/app/access`, `internal/app/admins`)** ✅
+  - **Target Seam**: `internal/app/instances.InstanceManager`, `internal/app/access.AccessManager`, `internal/app/admins.Manager`
+  - **Delivered**: Handlers in `internal/web/handlers/access` and `internal/web/handlers/instances` inverted into thin delivery adapters, completely eliminating concrete dependencies on `infra/` (`*k8s.Client`, `*gitops.Committer`, `*store.Store`, `*rcon.Pool`) and `platform/config/` (`*config.Config`). Deepened application managers encapsulate composite business workflows: git state mutations via `ports.StateStore`, audit logging via `ports.AuditRecorder`, event recording via `ports.EventRecorder`, configs/mods access via functional readers, and automated sync hooks.
+  - **Impact**: Removed 4 ratchet exceptions in `arch_test.go` (`handlers/access` -> `infra`, `handlers/access` -> `config`, `handlers/instances` -> `infra`, `handlers/instances` -> `config`). Ratchet ledger reduced from 19 to 15 known violations. All 227 tests passing.
+
+- **Candidate 3 (Complete): Deepen Content and Pack Resolution (`ports.ModResolver`, `internal/app/content`, `internal/app/modpack`)** ✅
+  - **Target Seam**: `ports.ModResolver`, `internal/domain.Mod*`, `internal/app/content`, `internal/app/modpack`, `internal/infra/content/modrinth`
+  - **Delivered**: Extracted pure domain mod types (`domain.ModProject`, `domain.ModVersion`, `domain.ModVersionFile`, `domain.VersionDependency`). Defined narrow `ports.ModResolver` port for batch version resolution and compatibility lookups. Refactored `internal/app/content` and `internal/app/modpack` to consume domain models, completely eliminating direct imports of `internal/infra/content/modrinth`.
+  - **Impact**: Removed 2 Phase F exceptions in `arch_test.go` (`app/content` -> `infra`, `app/modpack` -> `infra`). Ratchet ledger reduced from 15 to 13 known violations.
+
+- **Candidate 4 (Complete): Unify Workload Lifecycle into `ports.Runtime` (`ports.Runtime`, `internal/app/backups`, `internal/web/handlers/console`, `internal/server`)** ✅
+  - **Target Seam**: `ports.Runtime`, `internal/app/backups.BackupScheduler`, `internal/web/handlers/console`, `internal/server`
+  - **Delivered**: Deepened `ports.Runtime` with `WatchAvailability`. Implemented across `k8s` and `docker` runtime adapters. Deepened `internal/app/instances.InstanceManager` with `InstanceLogs` and `ExecuteCommand` using seam options. Inverted `internal/web/handlers/console` to use pure `ports.Runtime`, `ports.AuditRecorder`, and `ports.EventRecorder`, removing concrete `k8s.Client`, `rcon.Pool`, and `store.Store`. Refactored `internal/app/backups.BackupScheduler` to consume pure `JobRunner`, `InstanceLister`, and functional options, extracting `domain.FormatBackupFileName` into `domain` and eliminating all `infra/` and `platform/config` dependencies. Unified server and control routes to execute lifecycle commands through `ports.Runtime` rather than raw k8s client scaling/restarts.
+  - **Impact**: Removed 3 ratchet exceptions in `arch_test.go` (`app/backups` -> `infra`, `app/backups` -> `config`, `web/handlers/console` -> `infra`). Ratchet ledger reduced from 13 to **10 known violations**. All 229 tests passing.
+
+### Layering Model & Package Roles (Agreed 2026-09-09)
+Aligned with Hexagonal (Ports & Adapters) and Onion Architecture:
+- **`internal/domain`** (Core): Entities, value objects, and domain invariants. Imports **nothing**.
+- **`internal/ports`** (Core Seams): Inverted interfaces for driven adapters. Imports **`domain` only**.
+- **`internal/app`** (Core Use Cases): Application services orchestrating business workflows (budget enforcement, instance management, backup scheduling, mod compatibility). Imports **`domain` + `ports` only**. Never `infra`, never `web`.
+- **`internal/infra`** (Driven / Outbound Adapters): Technical plumbing and external integrations (SQLite, Kubernetes, Docker, Modrinth, RCON). Imports **`domain` + `ports`**. Never `app`, never `web`.
+- **`internal/web`** (Driving / Inbound Adapters): Presentation delivery (Fiber routing, thin handlers, templ components, Datastar SSE). Imports **`domain` + `ports` + `app`**. Never `infra`.
+- **`internal/platform`** (Bootstrap): Cross-cutting environment config for bootstrap.
+- **`internal/wiring`** (Composition Root): Pure dependency injection graph assembly.
+- **`internal/server`** (Transitional): Legacy monolith package holding routing and daunting handlers; slated for complete dissolution.
+
+- **Candidate 5: Package READMEs & Documentation** [In Progress]
+  - Create a structured `README.md` inside each of the 9 `internal/*` subdirectories explaining layer roles, permitted import directions, and package contents.
+
+- **Candidate 6: Decompose Daunting Handlers & Dissolve `internal/server`** [Next]
+  - **Target Seams**: `internal/server` -> `internal/app/*` (orchestration) + `internal/web/handlers/*` (thin delivery) + `internal/web/routes.go` (routing).
+  - Move wizard/provisioning orchestration out of `handlers_mc_wizard.go` into `app/instances` or `app/wizard`.
+  - Invert remaining `server` handlers (`handlers_mc_backups`, `handlers_dashboard`, `handlers_mods`) to consume application services and ports.
+  - Migrate route registrations into `internal/web/routes.go`, move server assembly into `internal/wiring`, and completely delete `internal/server`, eliminating the final ratchet exceptions.
 
 ---
 

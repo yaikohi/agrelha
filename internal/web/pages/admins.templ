@@ -3,10 +3,10 @@ package pages
 import (
 	"strconv"
 
-	"agrelha/internal/infra/store"
+	"agrelha/internal/domain"
 )
 
-templ Admins(players []store.Player, adminIDs []string, enabled bool, flashKind, flashMsg string) {
+templ Admins(players []domain.Player, adminIDs []string, enabled bool, flashKind, flashMsg string) {
 	@Layout("Admins") {
 		@nav()
 		<h1 class="mb-6 text-2xl font-semibold">Admins</h1>

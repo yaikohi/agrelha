@@ -4,7 +4,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"io"
+	"strings"
 	"testing"
+	"time"
 
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
@@ -96,5 +99,103 @@ func TestMinecraftExportClientBundle(t *testing.T) {
 	}
 	if !foundIndex {
 		t.Errorf("expected modrinth.index.json in .mrpack bundle")
+	}
+}
+
+type fakeRuntime struct {
+	status  ports.Status
+	metrics ports.Metrics
+}
+
+func (f *fakeRuntime) Start(ctx context.Context, ref ports.ServerRef) error   { return nil }
+func (f *fakeRuntime) Stop(ctx context.Context, ref ports.ServerRef) error    { return nil }
+func (f *fakeRuntime) Restart(ctx context.Context, ref ports.ServerRef) error { return nil }
+func (f *fakeRuntime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status, error) {
+	return f.status, nil
+}
+func (f *fakeRuntime) Metrics(ctx context.Context, ref ports.ServerRef) (ports.Metrics, error) {
+	return f.metrics, nil
+}
+func (f *fakeRuntime) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogOptions) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (f *fakeRuntime) WatchAvailability(ctx context.Context, ref ports.ServerRef, timeout time.Duration) error {
+	return nil
+}
+
+var _ ports.Runtime = (*fakeRuntime)(nil)
+
+func TestMinecraftTelemetry(t *testing.T) {
+	now := time.Now().Add(-45 * time.Minute)
+	rt := &fakeRuntime{
+		status: ports.Status{
+			Lifecycle: ports.LifecycleRunning,
+			Available: true,
+			StartedAt: now,
+		},
+		metrics: ports.Metrics{
+			CPUMillicores: 450,
+			MemoryMiB:     4096,
+			Known:         true,
+		},
+	}
+
+	g := New(
+		WithRuntime(rt, ports.ServerRef{Name: "minecraft", Scope: "minecraft-neoforge"}),
+		WithPlayerCount(func(ctx context.Context) (int, error) { return 3, nil }),
+		WithActiveInstance(func(ctx context.Context) (domain.Loader, string) {
+			return domain.LoaderFabric, "Better Adventures"
+		}),
+	)
+
+	tele, err := g.Telemetry(context.Background())
+	if err != nil {
+		t.Fatalf("Telemetry failed: %v", err)
+	}
+
+	if tele.State != "Up" || !tele.Online {
+		t.Errorf("State = %s, Online = %v, want Up/true", tele.State, tele.Online)
+	}
+	if tele.Players != 3 || !tele.PlayersKnown {
+		t.Errorf("Players = %d, PlayersKnown = %v, want 3/true", tele.Players, tele.PlayersKnown)
+	}
+	if tele.Loader != "Fabric" {
+		t.Errorf("Loader = %s, want Fabric", tele.Loader)
+	}
+	if tele.PackName != "Better Adventures" {
+		t.Errorf("PackName = %s, want Better Adventures", tele.PackName)
+	}
+	if tele.CPU != "450m" {
+		t.Errorf("CPU = %s, want 450m", tele.CPU)
+	}
+	if tele.Memory != "4096 Mi" {
+		t.Errorf("Memory = %s, want 4096 Mi", tele.Memory)
+	}
+	if !strings.Contains(tele.Uptime, "45m") {
+		t.Errorf("Uptime = %s, want ~45m", tele.Uptime)
+	}
+}
+
+func TestMinecraftBundleBuilder(t *testing.T) {
+	g := New(
+		WithBundleBuilder(func(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
+			return domain.Bundle{
+				Filename:    inst.Slug + "-custom.mrpack",
+				ContentType: "application/x-modrinth-modpack+zip",
+				Data:        []byte("fake-mrpack-bytes"),
+			}, nil
+		}),
+	)
+
+	b, err := g.ExportClientBundle(context.Background(), domain.Instance{Slug: "world-1"})
+	if err != nil {
+		t.Fatalf("ExportClientBundle failed: %v", err)
+	}
+	if b.Filename != "world-1-custom.mrpack" {
+		t.Errorf("Filename = %q, want world-1-custom.mrpack", b.Filename)
+	}
+	if string(b.Data) != "fake-mrpack-bytes" {
+		t.Errorf("Data unexpected: %s", string(b.Data))
 	}
 }

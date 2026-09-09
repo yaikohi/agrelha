@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"agrelha/internal/ports"
 )
 
 // applyAfterSync waits (in the background) for ArgoCD to reconcile a committed
@@ -31,8 +33,14 @@ func (s *FiberServer) applyAfterSync(cmName, key string, want func(string) bool)
 					continue
 				}
 				if want(data[key]) {
-					if err := s.k8s.Restart(ctx); err != nil {
-						slog.Error("applyAfterSync: restart failed", "configmap", cmName, "err", err)
+					var restartErr error
+					if s.valheimRuntime != nil {
+						restartErr = s.valheimRuntime.Restart(ctx, s.valheimRef)
+					} else {
+						restartErr = s.k8s.Restart(ctx)
+					}
+					if restartErr != nil {
+						slog.Error("applyAfterSync: restart failed", "configmap", cmName, "err", restartErr)
 						return
 					}
 					slog.Info("applyAfterSync: change landed, rolled valheim", "configmap", cmName)
@@ -69,8 +77,18 @@ func (s *FiberServer) applyMinecraftAfterSync(cmName, depName, key string, want 
 					continue
 				}
 				if want(data[key]) {
-					if err := s.mck8s.RestartDeployment(ctx, depName); err != nil {
-						slog.Error("applyMinecraftAfterSync: restart failed", "configmap", cmName, "dep", depName, "err", err)
+					var restartErr error
+					if s.mcRuntime != nil {
+						scope := ""
+						if s.cfg != nil {
+							scope = s.cfg.MinecraftNamespace
+						}
+						restartErr = s.mcRuntime.Restart(ctx, ports.ServerRef{Name: depName, Scope: scope})
+					} else {
+						restartErr = s.mck8s.RestartDeployment(ctx, depName)
+					}
+					if restartErr != nil {
+						slog.Error("applyMinecraftAfterSync: restart failed", "configmap", cmName, "dep", depName, "err", restartErr)
 						return
 					}
 					slog.Info("applyMinecraftAfterSync: change landed, rolled minecraft deployment", "configmap", cmName, "dep", depName)

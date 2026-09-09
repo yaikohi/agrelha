@@ -1,15 +1,13 @@
 package instances
 
 import (
-	"agrelha/internal/domain"
-	"agrelha/internal/infra/backups"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 )
@@ -121,14 +119,9 @@ func (h *Handler) MCInstanceCreate(c *fiber.Ctx) error {
 		inst.Loader = domain.NormalizeLoader(loaderStr)
 	}
 
-	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, mods)
+	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, mods, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Failed to create world: "+err.Error(), nil)
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-instance-create", fmt.Sprintf("World #%02d %q", created.Number, created.Name))
-		_ = h.cfg.Store.RecordEvent("mc-instance-create", h.cfg.Actor(c))
 	}
 
 	return shared.SSEToast(c, "ok", fmt.Sprintf("World %q created as instance #%02d. ArgoCD will sync manifests.", created.Name, created.Number), nil)
@@ -145,13 +138,8 @@ func (h *Handler) MCInstanceStart(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.MCInstances.StartInstance(c.UserContext(), num); err != nil {
+	if err := h.cfg.MCInstances.StartInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to start world: "+err.Error(), nil)
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-instance-start", fmt.Sprintf("Instance #%02d", num))
-		_ = h.cfg.Store.RecordEvent("mc-instance-start", h.cfg.Actor(c))
 	}
 
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Starting instance #%02d...", num), nil)
@@ -168,43 +156,8 @@ func (h *Handler) MCInstanceStop(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err == nil && inst != nil {
-		// 1. RCON save-all flush if active (with 250ms deadline so unreachable RCON does not hang)
-		if h.cfg.MCRconPool != nil && inst.State == domain.StateRunning {
-			addr := fmt.Sprintf("%s.minecraft-modded.svc.cluster.local:25575", inst.ServiceName())
-			client := h.cfg.MCRconPool.ClientFor(addr)
-			done := make(chan struct{})
-			go func() {
-				_, _ = client.Execute("/save-all flush")
-				close(done)
-			}()
-			select {
-			case <-done:
-			case <-time.After(250 * time.Millisecond):
-			}
-		}
-
-		// 2. Pre-stop auto-backup
-		if h.cfg.MCK8s != nil {
-			jobName := fmt.Sprintf("mc-backup-%s-%02d-stop-%d", inst.Slug, inst.Number, time.Now().Unix())
-			archiveName := backups.FormatBackupFileName(inst.Slug, inst.Number, "stop")
-			_ = h.cfg.MCK8s.CreateBackupJob(c.UserContext(), jobName, archiveName, inst.PVCName(), "minecraft-modded-backups")
-		}
-
-		// 3. Prune older backups
-		if h.cfg.Cfg != nil && h.cfg.Cfg.BackupsDir != "" {
-			_ = backups.PruneBackups(h.cfg.Cfg.BackupsDir, inst.Slug, inst.Number, 5)
-		}
-	}
-
-	if err := h.cfg.MCInstances.StopInstance(c.UserContext(), num); err != nil {
+	if err := h.cfg.MCInstances.StopInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to stop world: "+err.Error(), nil)
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-instance-stop", fmt.Sprintf("Instance #%02d", num))
-		_ = h.cfg.Store.RecordEvent("mc-instance-stop", h.cfg.Actor(c))
 	}
 
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Stopping instance #%02d (pre-stop snapshot initiated)...", num), nil)
@@ -221,20 +174,8 @@ func (h *Handler) MCInstanceDelete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err == nil && inst != nil && h.cfg.MCK8s != nil {
-		jobName := fmt.Sprintf("mc-backup-%s-%02d-final-%d", inst.Slug, inst.Number, time.Now().Unix())
-		archiveName := backups.FormatBackupFileName(inst.Slug, inst.Number, "final")
-		_ = h.cfg.MCK8s.CreateBackupJob(c.UserContext(), jobName, archiveName, inst.PVCName(), "minecraft-modded-backups")
-	}
-
-	if err := h.cfg.MCInstances.DeleteInstance(c.UserContext(), num); err != nil {
+	if err := h.cfg.MCInstances.DeleteInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to delete world: "+err.Error(), nil)
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-instance-delete", fmt.Sprintf("Instance #%02d", num))
-		_ = h.cfg.Store.RecordEvent("mc-instance-delete", h.cfg.Actor(c))
 	}
 
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted instance #%02d (final snapshot saved to backups).", num), nil)
@@ -251,20 +192,8 @@ func (h *Handler) MCInstanceRestart(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err != nil || inst == nil {
-		return shared.SSEToast(c, "err", "Instance not found.", nil)
-	}
-
-	if h.cfg.MCK8s != nil {
-		if err := h.cfg.MCK8s.RestartDeployment(c.UserContext(), inst.DeploymentName()); err != nil {
-			return shared.SSEToast(c, "err", "Restart failed: "+err.Error(), nil)
-		}
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-instance-restart", fmt.Sprintf("Instance #%02d", num))
-		_ = h.cfg.Store.RecordEvent("mc-instance-restart", h.cfg.Actor(c))
+	if err := h.cfg.MCInstances.RestartInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+		return shared.SSEToast(c, "err", "Restart failed: "+err.Error(), nil)
 	}
 
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Restarting instance #%02d...", num), nil)

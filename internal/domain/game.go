@@ -1,6 +1,9 @@
-// Package domain contains pure domain types, rules, and invariants.
-// It imports nothing outward (no ports, adapters, or infrastructure).
 package domain
+
+import (
+	"fmt"
+	"time"
+)
 
 type GameID string
 
@@ -75,4 +78,34 @@ type RuntimeSpec struct {
 	Env         map[string]string
 	Volumes     []VolumeSpec
 	HealthProbe string
+}
+
+// GameTelemetry represents real-time runtime and gameplay metrics for a game engine or instance.
+type GameTelemetry struct {
+	State        string            // e.g. "Up", "Pending", "Stopped", "unknown"
+	Online       bool              // true if server is available / ready
+	StartedAt    time.Time         // timestamp when the workload started
+	Uptime       string            // human-readable uptime duration, e.g. "2h 15m"
+	CPU          string            // formatted CPU consumption, e.g. "15m"
+	Memory       string            // formatted Memory consumption, e.g. "1200 Mi"
+	Players      int               // number of players currently connected
+	PlayersKnown bool              // true if player count is tracked
+	Loader       string            // active loader (e.g. "NeoForge", "Fabric")
+	PackName     string            // active modpack name
+	Extra        map[string]string // engine-specific telemetry metadata
+}
+
+// FormatDuration formats a duration into human-readable shorthand (e.g. "2d 5h", "3h 12m", "45m").
+func FormatDuration(d time.Duration) string {
+	d = d.Round(time.Minute)
+	days := int(d.Hours()) / 24
+	h := int(d.Hours()) % 24
+	m := int(d.Minutes()) % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh", days, h)
+	}
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm", h, m)
+	}
+	return fmt.Sprintf("%dm", m)
 }

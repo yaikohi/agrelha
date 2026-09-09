@@ -39,6 +39,8 @@ type Config struct {
 	MCK8s         *k8s.Client
 	MCInstances   *instances.InstanceManager
 	MCAccess      *mcaccess.AccessManager
+	ValheimGame   ports.Game
+	MinecraftGame ports.Game
 	Auth          ports.Auth
 	Actor         func(*fiber.Ctx) string
 	BackupInfo    func() (backups.Info, bool)
@@ -230,11 +232,6 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 		"mc_players": "—", "mc_cpu": "—", "mc_mem": "—", "mc_uptime": "—", "mc_state": "unknown", "mc_loader": "NeoForge",
 	}
 
-	if h.cfg.Store != nil {
-		if n, err := h.cfg.Store.CountOnline(); err == nil {
-			sig["players"] = n
-		}
-	}
 	if h.cfg.BackupInfo != nil {
 		if bi, ok := h.cfg.BackupInfo(); ok && bi.Count > 0 {
 			sig["backup"] = shared.HumanAgo(bi.LatestAt)
@@ -242,57 +239,109 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 				bi.Count, shared.HumanSize(bi.TotalSize), shared.HumanSize(bi.LatestSize))
 		}
 	}
-	if h.cfg.K8s != nil {
-		if ps, err := h.cfg.K8s.PodStatus(ctx); err == nil {
-			if ps.Ready {
-				sig["state"] = "Up"
-			} else {
-				sig["state"] = ps.Phase
+
+	if h.cfg.ValheimGame != nil {
+		if tele, err := h.cfg.ValheimGame.Telemetry(ctx); err == nil {
+			if tele.PlayersKnown {
+				sig["players"] = tele.Players
 			}
-			sig["online"] = ps.Ready
-			if !ps.StartedAt.IsZero() {
-				sig["uptime"] = shared.HumanDuration(time.Since(ps.StartedAt))
+			if tele.State != "" {
+				sig["state"] = tele.State
+			}
+			sig["online"] = tele.Online
+			if tele.Uptime != "" {
+				sig["uptime"] = tele.Uptime
+			}
+			if tele.CPU != "" {
+				sig["cpu"] = tele.CPU
+			}
+			if tele.Memory != "" {
+				sig["mem"] = tele.Memory
 			}
 		}
-		if cpu, mem, err := h.cfg.K8s.PodMetrics(ctx); err == nil {
-			sig["cpu"] = fmt.Sprintf("%dm", cpu)
-			sig["mem"] = fmt.Sprintf("%d Mi", mem)
+	} else {
+		if h.cfg.Store != nil {
+			if n, err := h.cfg.Store.CountOnline(); err == nil {
+				sig["players"] = n
+			}
+		}
+		if h.cfg.K8s != nil {
+			if ps, err := h.cfg.K8s.PodStatus(ctx); err == nil {
+				if ps.Ready {
+					sig["state"] = "Up"
+				} else {
+					sig["state"] = ps.Phase
+				}
+				sig["online"] = ps.Ready
+				if !ps.StartedAt.IsZero() {
+					sig["uptime"] = shared.HumanDuration(time.Since(ps.StartedAt))
+				}
+			}
+			if cpu, mem, err := h.cfg.K8s.PodMetrics(ctx); err == nil {
+				sig["cpu"] = fmt.Sprintf("%dm", cpu)
+				sig["mem"] = fmt.Sprintf("%d Mi", mem)
+			}
 		}
 	}
 
-	if h.cfg.MCK8s != nil {
-		if h.cfg.MCInstances != nil {
-			if insts, err := h.cfg.MCInstances.ListInstances(ctx); err == nil && len(insts) > 0 {
-				inst := insts[0]
-				if inst.Loader == domain.LoaderFabric {
-					sig["mc_loader"] = "Fabric"
+	if h.cfg.MinecraftGame != nil {
+		if tele, err := h.cfg.MinecraftGame.Telemetry(ctx); err == nil {
+			if tele.PlayersKnown {
+				sig["mc_players"] = tele.Players
+			}
+			if tele.State != "" {
+				sig["mc_state"] = tele.State
+			}
+			if tele.Uptime != "" {
+				sig["mc_uptime"] = tele.Uptime
+			}
+			if tele.CPU != "" {
+				sig["mc_cpu"] = tele.CPU
+			}
+			if tele.Memory != "" {
+				sig["mc_mem"] = tele.Memory
+			}
+			if tele.Loader != "" {
+				sig["mc_loader"] = tele.Loader
+			}
+			if tele.PackName != "" {
+				sig["mc_pack"] = tele.PackName
+			}
+		}
+	} else {
+		if h.cfg.MCK8s != nil {
+			if h.cfg.MCInstances != nil {
+				if insts, err := h.cfg.MCInstances.ListInstances(ctx); err == nil && len(insts) > 0 {
+					inst := insts[0]
+					if inst.Loader == domain.LoaderFabric {
+						sig["mc_loader"] = "Fabric"
+					}
+					if inst.PackDefined() && inst.Pack.Name != "" {
+						sig["mc_pack"] = inst.Pack.Name
+					}
 				}
-				if inst.PackDefined() && inst.Pack.Name != "" {
-					sig["mc_pack"] = inst.Pack.Name
+			}
+		}
+		if h.cfg.MCAccess != nil {
+			if pl, err := h.cfg.MCAccess.OnlinePlayers(); err == nil {
+				sig["mc_players"] = len(pl)
+			}
+		}
+		if h.cfg.MCK8s != nil {
+			if ps, err := h.cfg.MCK8s.PodStatus(ctx); err == nil {
+				if ps.Ready {
+					sig["mc_state"] = "Up"
+				} else {
+					sig["mc_state"] = ps.Phase
+				}
+				if !ps.StartedAt.IsZero() {
+					sig["mc_uptime"] = shared.HumanDuration(time.Since(ps.StartedAt))
 				}
 			}
-		}
-	}
-
-	if h.cfg.MCAccess != nil {
-		if pl, err := h.cfg.MCAccess.OnlinePlayers(); err == nil {
-			sig["mc_players"] = len(pl)
-		}
-	}
-	if h.cfg.MCK8s != nil {
-		if ps, err := h.cfg.MCK8s.PodStatus(ctx); err == nil {
-			if ps.Ready {
-				sig["mc_state"] = "Up"
-			} else {
-				sig["mc_state"] = ps.Phase
+			if cpu, mem, err := h.cfg.MCK8s.PodMetrics(ctx); err == nil {
+				sig["mc_cpu"] = fmt.Sprintf("%dm", cpu)
+				sig["mc_mem"] = fmt.Sprintf("%d Mi", mem)
 			}
-			if !ps.StartedAt.IsZero() {
-				sig["mc_uptime"] = shared.HumanDuration(time.Since(ps.StartedAt))
-			}
-		}
-		if cpu, mem, err := h.cfg.MCK8s.PodMetrics(ctx); err == nil {
-			sig["mc_cpu"] = fmt.Sprintf("%dm", cpu)
-			sig["mc_mem"] = fmt.Sprintf("%d Mi", mem)
 		}
 	}
 

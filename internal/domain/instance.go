@@ -222,3 +222,20 @@ func (inst Instance) Annotations() map[string]string {
 	}
 	return ann
 }
+
+// BackupFile represents an existing archive on disk for an instance.
+type BackupFile struct {
+	Name      string
+	SizeBytes int64
+	CreatedAt string
+}
+
+// FormatBackupFileName generates a standard archive name for instance backups.
+func FormatBackupFileName(slug string, num int, tag string) string {
+	ts := time.Now().UTC().Format("20060102-150405")
+	if tag != "" {
+		return fmt.Sprintf("mc-%s-%02d-%s-%s.tar.gz", slug, num, tag, ts)
+	}
+	return fmt.Sprintf("mc-%s-%02d-%s.tar.gz", slug, num, ts)
+}
+

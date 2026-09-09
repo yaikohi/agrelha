@@ -1,21 +1,65 @@
 package console
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
+	"agrelha/internal/ports"
 
 	"github.com/gofiber/fiber/v2"
-	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
 )
+
+type fakeRuntime struct {
+	restarted bool
+	stopped   bool
+	started   bool
+}
+
+func (f *fakeRuntime) Start(ctx context.Context, ref ports.ServerRef) error {
+	f.started = true
+	return nil
+}
+func (f *fakeRuntime) Stop(ctx context.Context, ref ports.ServerRef) error {
+	f.stopped = true
+	return nil
+}
+func (f *fakeRuntime) Restart(ctx context.Context, ref ports.ServerRef) error {
+	f.restarted = true
+	return nil
+}
+func (f *fakeRuntime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status, error) {
+	return ports.Status{}, nil
+}
+func (f *fakeRuntime) Metrics(ctx context.Context, ref ports.ServerRef) (ports.Metrics, error) {
+	return ports.Metrics{}, nil
+}
+func (f *fakeRuntime) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogOptions) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("log line\n")), nil
+}
+func (f *fakeRuntime) WatchAvailability(ctx context.Context, ref ports.ServerRef, timeout time.Duration) error {
+	return nil
+}
+
+var _ ports.Runtime = (*fakeRuntime)(nil)
+
+type fakeRecorder struct {
+	audits []string
+	events []string
+}
+
+func (f *fakeRecorder) RecordAudit(actor, action, detail string) error {
+	f.audits = append(f.audits, action)
+	return nil
+}
+func (f *fakeRecorder) RecordEvent(kind, detail string) error {
+	f.events = append(f.events, kind)
+	return nil
+}
 
 func TestValheimConsolePage(t *testing.T) {
 	h := New(Config{})
@@ -32,7 +76,7 @@ func TestValheimConsolePage(t *testing.T) {
 	}
 }
 
-func TestServerLifecycleWithoutK8s(t *testing.T) {
+func TestServerLifecycleWithoutRuntime(t *testing.T) {
 	h := New(Config{})
 	app := fiber.New()
 	h.Register(app)
@@ -57,22 +101,15 @@ func TestServerLifecycleWithoutK8s(t *testing.T) {
 	}
 }
 
-func TestServerLifecycleWithK8s(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "console_test.db")
-	st, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	cs := fake.NewSimpleClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "valheim", Namespace: "valheim"},
-	})
-	k8sClient := k8s.NewWithClientset(cs, "valheim", "valheim")
+func TestServerLifecycleWithRuntime(t *testing.T) {
+	rt := &fakeRuntime{}
+	rec := &fakeRecorder{}
 
 	h := New(Config{
-		K8s:   k8sClient,
-		Store: st,
+		ValheimRuntime: rt,
+		ValheimRef:     ports.ServerRef{Name: "valheim", Scope: "valheim"},
+		Audit:          rec,
+		Event:          rec,
 	})
 	app := fiber.New()
 	h.Register(app)
@@ -87,6 +124,9 @@ func TestServerLifecycleWithK8s(t *testing.T) {
 	if !strings.Contains(string(bodyRestart), "Restart triggered") {
 		t.Errorf("restart response = %s", string(bodyRestart))
 	}
+	if !rt.restarted {
+		t.Error("expected runtime Restart to be called")
+	}
 
 	// 2. Stop (scale to 0)
 	reqStop := httptest.NewRequest(http.MethodPost, "/server/stop", nil)
@@ -98,6 +138,9 @@ func TestServerLifecycleWithK8s(t *testing.T) {
 	if !strings.Contains(string(bodyStop), "Stopping the server") {
 		t.Errorf("stop response = %s", string(bodyStop))
 	}
+	if !rt.stopped {
+		t.Error("expected runtime Stop to be called")
+	}
 
 	// 3. Start (scale to 1)
 	reqStart := httptest.NewRequest(http.MethodPost, "/server/start", nil)
@@ -108,6 +151,16 @@ func TestServerLifecycleWithK8s(t *testing.T) {
 	bodyStart, _ := io.ReadAll(respStart.Body)
 	if !strings.Contains(string(bodyStart), "Starting the server") {
 		t.Errorf("start response = %s", string(bodyStart))
+	}
+	if !rt.started {
+		t.Error("expected runtime Start to be called")
+	}
+
+	if len(rec.audits) != 3 {
+		t.Errorf("audits count = %d, want 3", len(rec.audits))
+	}
+	if len(rec.events) != 3 {
+		t.Errorf("events count = %d, want 3", len(rec.events))
 	}
 }
 

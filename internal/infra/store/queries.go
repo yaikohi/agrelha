@@ -2,18 +2,11 @@ package store
 
 import (
 	"database/sql"
-	"time"
+
+	"agrelha/internal/domain"
 )
 
-type Player struct {
-	SteamID     string
-	Character   string
-	FirstSeen   time.Time
-	LastSeen    time.Time
-	Sessions    int
-	Online      bool
-	OnlineSince time.Time
-}
+type Player = domain.Player
 
 // UpsertSeen records/refreshes a player from a parsed join event. bumpSession
 // increments the session counter (set true on a fresh connection line).

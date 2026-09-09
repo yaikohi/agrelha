@@ -4,13 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
+	"strings"
 	"time"
 
 	mcaccess "agrelha/internal/app/access"
 	"agrelha/internal/app/admins"
+	"agrelha/internal/app/games/minecraft"
+	"agrelha/internal/app/games/valheim"
 	"agrelha/internal/app/ingest"
 	"agrelha/internal/app/instances"
+	"agrelha/internal/app/modpack"
 	"agrelha/internal/app/mods"
+	"agrelha/internal/domain"
 	"agrelha/internal/infra/auth/local"
 	"agrelha/internal/infra/auth/oidc"
 	"agrelha/internal/infra/content/mcversions"
@@ -61,14 +67,18 @@ func Build(ctx context.Context, cfg *config.Config) (server.Deps, error) {
 
 	if d.StateStore != nil {
 		d.Mods = mods.New(d.StateStore, cfg.ModsPath)
-		d.Admins = admins.New(d.StateStore, cfg.AdminsPath)
+		d.Admins = admins.New(d.StateStore, cfg.AdminsPath,
+			admins.WithAudit(st),
+		)
 		d.MCMods = mcaccess.NewModManager(d.StateStore, cfg.MinecraftModsPath)
 
 		var console ports.Console
 		if d.MCRcon != nil {
 			console = d.MCRcon
 		}
-		d.MCAccess = mcaccess.NewAccessManager(d.StateStore, cfg.MinecraftAccessPath, console)
+		d.MCAccess = mcaccess.NewAccessManager(d.StateStore, cfg.MinecraftAccessPath, console,
+			mcaccess.WithAudit(st),
+		)
 	}
 
 	rt := buildRuntime(cfg, &d)
@@ -80,6 +90,78 @@ func Build(ctx context.Context, cfg *config.Config) (server.Deps, error) {
 		go ingest.Run(ctx, c, st)
 	}
 
+	var instOpts []instances.Option
+	instOpts = append(instOpts,
+		instances.WithAudit(st),
+		instances.WithEvent(st),
+		instances.WithBackupsDir(cfg.BackupsDir),
+		instances.WithGlobalConfigsPath(cfg.MinecraftConfigsPath),
+	)
+	if d.MR != nil {
+		instOpts = append(instOpts, instances.WithDependencyResolver(d.MR.ResolveRequiredDependencies))
+	}
+	if d.MCRconPool != nil {
+		instOpts = append(instOpts,
+			instances.WithPreStopHook(func(ctx context.Context, inst domain.Instance) {
+				if inst.LBIP != "" {
+					_, _ = d.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute("/say Server stopping in 5 seconds...")
+				}
+			}),
+			instances.WithPreDeleteHook(func(ctx context.Context, inst domain.Instance) {
+				if inst.LBIP != "" {
+					_, _ = d.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute("/say Server being deleted...")
+				}
+			}),
+			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
+				if inst.LBIP == "" {
+					return 0, false
+				}
+				res, err := d.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute("/list")
+				if err != nil {
+					return 0, false
+				}
+				return len(mcaccess.ParsePlayerList(res)), true
+			}),
+			instances.WithCommandExecutor(func(ctx context.Context, inst domain.Instance, cmd string) (string, error) {
+				addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(), cfg.MinecraftNamespace)
+				return d.MCRconPool.ClientFor(addr).Execute(cmd)
+			}),
+		)
+	}
+	if d.MCK8s != nil {
+		instOpts = append(instOpts,
+			instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
+				inst, err := d.MCInstances.GetInstance(ctx, num)
+				if err != nil {
+					return nil, err
+				}
+				return d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName())
+			}),
+			instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+				inst, err := d.MCInstances.GetInstance(ctx, num)
+				if err != nil {
+					return nil, err
+				}
+				cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName())
+				if err != nil {
+					return nil, err
+				}
+				modsTxt := cm["mods.txt"]
+				var lines []string
+				for _, line := range strings.Split(modsTxt, "\n") {
+					line = strings.TrimSpace(line)
+					if line != "" && !strings.HasPrefix(line, "#") {
+						lines = append(lines, line)
+					}
+				}
+				return lines, nil
+			}),
+			instances.WithGlobalConfigsReader(func(ctx context.Context) (map[string]string, error) {
+				return d.MCK8s.ConfigMapData(ctx, "minecraft-modded-configs")
+			}),
+		)
+	}
+
 	d.MCInstances = instances.NewInstanceManager(
 		store.NewInstanceRepo(st), d.StateStore, rt,
 		cfg.MCTotalBudgetGiB, cfg.MCMaxInstances, cfg.MCMaxRunning,
@@ -87,9 +169,105 @@ func Build(ctx context.Context, cfg *config.Config) (server.Deps, error) {
 		cfg.MCLBBaseIP,
 		manifests.New(cfg.GameNodeSelector, cfg.MinecraftNamespace),
 		cfg.MinecraftNamespace,
+		instOpts...,
 	)
 
 	d.Auth = buildAuth(ctx, cfg, st)
+
+	var valheimRuntime ports.Runtime
+	if cfg.Runtime == "docker" {
+		valheimRuntime = rt
+	} else if d.K8s != nil {
+		valheimRuntime = k8sruntime.New(d.K8s)
+	}
+	d.ValheimRuntime = valheimRuntime
+	d.ValheimRef = ports.ServerRef{Name: cfg.ValheimDeployment, Scope: cfg.ValheimNamespace}
+	d.MCRuntime = rt
+	d.MCRef = ports.ServerRef{Name: cfg.MinecraftDeployment, Scope: cfg.MinecraftNamespace}
+
+	d.ValheimGame = valheim.New(
+		valheim.WithRuntime(valheimRuntime, d.ValheimRef),
+		valheim.WithPlayerCount(st.CountOnline),
+		valheim.WithBundleSource(func(ctx context.Context) ([]string, map[string]string, error) {
+			var entries []string
+			configs := map[string]string{}
+			if d.K8s != nil {
+				if data, err := d.K8s.ConfigMapData(ctx, "valheim-mods"); err == nil {
+					entries = mods.Parse(data["mods.txt"])
+				}
+				if cfgData, err := d.K8s.ConfigMapData(ctx, "valheim-mod-configs"); err == nil {
+					maps.Copy(configs, cfgData)
+				}
+			}
+			return entries, configs, nil
+		}),
+	)
+
+	d.MinecraftGame = minecraft.New(
+		minecraft.WithRuntime(rt, ports.ServerRef{Name: cfg.MinecraftDeployment, Scope: cfg.MinecraftNamespace}),
+		minecraft.WithPlayerCount(func(ctx context.Context) (int, error) {
+			if d.MCAccess != nil {
+				players, err := d.MCAccess.OnlinePlayers()
+				if err != nil {
+					return 0, err
+				}
+				return len(players), nil
+			}
+			return 0, nil
+		}),
+		minecraft.WithActiveInstance(func(ctx context.Context) (domain.Loader, string) {
+			if d.MCInstances != nil {
+				if insts, err := d.MCInstances.ListInstances(ctx); err == nil && len(insts) > 0 {
+					inst := insts[0]
+					pack := ""
+					if inst.PackDefined() && inst.Pack != nil {
+						pack = inst.Pack.Name
+					}
+					return inst.Loader, pack
+				}
+			}
+			return domain.LoaderNeoForge, ""
+		}),
+		minecraft.WithBundleBuilder(func(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
+			var slugs []string
+			cfgFiles := make(map[string]string)
+			if d.MCK8s != nil {
+				if data, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName()); err == nil {
+					if modsTxt, ok := data["mods.txt"]; ok {
+						for line := range strings.SplitSeq(modsTxt, "\n") {
+							line = strings.TrimSpace(line)
+							if line != "" && !strings.HasPrefix(line, "#") {
+								slugs = append(slugs, strings.TrimSuffix(line, "?"))
+							}
+						}
+					}
+				}
+				if cfgData, err := d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName()); err == nil {
+					cfgFiles = cfgData
+				}
+			}
+
+			loader := string(inst.Loader)
+			if loader == "" {
+				loader = string(domain.LoaderNeoForge)
+			}
+			mcVer := inst.MCVersion
+			if mcVer == "" {
+				mcVer = "1.21.1"
+			}
+
+			mrpackBytes, err := modpack.BuildMrpack(ctx, d.MR, inst.Name, mcVer, loader, "", slugs, cfgFiles)
+			if err != nil {
+				return domain.Bundle{}, fmt.Errorf("build mrpack: %w", err)
+			}
+
+			return domain.Bundle{
+				Filename:    fmt.Sprintf("%s-%s.mrpack", inst.Slug, mcVer),
+				ContentType: "application/x-modrinth-modpack+zip",
+				Data:        mrpackBytes,
+			}, nil
+		}),
+	)
 
 	return d, nil
 }

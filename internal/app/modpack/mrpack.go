@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"agrelha/internal/infra/content/modrinth"
+	"agrelha/internal/domain"
 )
 
 type MrpackIndex struct {
@@ -103,13 +103,13 @@ func ResolveNeoForgeVersion(ctx context.Context, mcVersion, requestedVersion str
 
 // ModrinthProvider defines the subset of Modrinth client needed for building modpacks.
 type ModrinthProvider interface {
-	GetProject(ctx context.Context, idOrSlug string) (*modrinth.Project, error)
-	GetProjectVersions(ctx context.Context, idOrSlug, mcVersion, loader string) ([]modrinth.Version, error)
+	GetProject(ctx context.Context, idOrSlug string) (*domain.ModProject, error)
+	GetProjectVersions(ctx context.Context, idOrSlug, mcVersion, loader string) ([]domain.ModVersion, error)
 }
 
 // ModrinthBatchProvider optionally provides batch project resolution.
 type ModrinthBatchProvider interface {
-	GetProjects(ctx context.Context, idsOrSlugs []string) ([]modrinth.Project, error)
+	GetProjects(ctx context.Context, idsOrSlugs []string) ([]domain.ModProject, error)
 }
 
 // BuildMrpack generates a Modrinth modpack (.mrpack) ZIP archive suitable for 1-click import into Prism Launcher.
@@ -165,7 +165,7 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 	}
 
 	// 2. Fetch project metadata (using batch provider if available)
-	projectMap := make(map[string]*modrinth.Project)
+	projectMap := make(map[string]*domain.ModProject)
 	if batchProvider, ok := mr.(ModrinthBatchProvider); ok {
 		projects, err := batchProvider.GetProjects(ctx, cleanSlugs)
 		if err == nil {
@@ -182,7 +182,7 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 	var (
 		serverOnlyMods []string
 		missingMods    []string
-		clientMods     []*modrinth.Project
+		clientMods     []*domain.ModProject
 	)
 
 	for _, slug := range cleanSlugs {
@@ -225,7 +225,7 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 
 	for _, proj := range clientMods {
 		wg.Add(1)
-		go func(p *modrinth.Project) {
+		go func(p *domain.ModProject) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
@@ -241,7 +241,7 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 
 			// Choose best version: prefer primary version file with .jar extension
 			ver := versions[0]
-			var chosenFile *modrinth.VersionFile
+			var chosenFile *domain.ModVersionFile
 			for _, f := range ver.Files {
 				if f.Primary && strings.HasSuffix(f.FileName, ".jar") {
 					copyF := f

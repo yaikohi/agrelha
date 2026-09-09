@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"agrelha/internal/app/modpack"
 	"agrelha/internal/domain"
@@ -17,8 +18,14 @@ const (
 
 // Game implements ports.Game for Valheim.
 type Game struct {
-	providers []ports.ContentProvider
-	image     string
+	providers       []ports.ContentProvider
+	image           string
+	runtime         ports.Runtime
+	serverRef       ports.ServerRef
+	playerCountFn   func() (int, error)
+	statusProvider  func(context.Context) (domain.GameTelemetry, error)
+	contentResolver func(context.Context, domain.Instance) (domain.ContentSet, error)
+	bundleSource    func(context.Context) (entries []string, configs map[string]string, err error)
 }
 
 // Option configures a Valheim Game instance.
@@ -37,6 +44,42 @@ func WithImage(img string) Option {
 		if img != "" {
 			g.image = img
 		}
+	}
+}
+
+// WithRuntime associates a workload execution runtime and server reference.
+func WithRuntime(rt ports.Runtime, ref ports.ServerRef) Option {
+	return func(g *Game) {
+		g.runtime = rt
+		g.serverRef = ref
+	}
+}
+
+// WithPlayerCount registers a callback returning current online players.
+func WithPlayerCount(fn func() (int, error)) Option {
+	return func(g *Game) {
+		g.playerCountFn = fn
+	}
+}
+
+// WithStatusProvider overrides telemetry gathering with a custom provider.
+func WithStatusProvider(fn func(context.Context) (domain.GameTelemetry, error)) Option {
+	return func(g *Game) {
+		g.statusProvider = fn
+	}
+}
+
+// WithContentResolver sets the content resolution strategy.
+func WithContentResolver(fn func(context.Context, domain.Instance) (domain.ContentSet, error)) Option {
+	return func(g *Game) {
+		g.contentResolver = fn
+	}
+}
+
+// WithBundleSource sets a provider for mod entries and config files when exporting client bundles.
+func WithBundleSource(fn func(context.Context) ([]string, map[string]string, error)) Option {
+	return func(g *Game) {
+		g.bundleSource = fn
 	}
 }
 
@@ -116,19 +159,108 @@ func WithBepInEx(entries []string, version string) []string {
 	return append([]string{"denikson/BepInExPack_Valheim/" + version}, entries...)
 }
 
+func (g *Game) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
+	if g.statusProvider != nil {
+		return g.statusProvider(ctx)
+	}
+
+	tele := domain.GameTelemetry{
+		State:        "unknown",
+		Online:       false,
+		CPU:          "—",
+		Memory:       "—",
+		Uptime:       "—",
+		PlayersKnown: false,
+	}
+
+	if g.playerCountFn != nil {
+		if n, err := g.playerCountFn(); err == nil {
+			tele.Players = n
+			tele.PlayersKnown = true
+		}
+	}
+
+	if g.runtime != nil {
+		if st, err := g.runtime.Status(ctx, g.serverRef); err == nil {
+			if st.Available {
+				tele.State = "Up"
+				tele.Online = true
+			} else if st.Lifecycle == ports.LifecycleStopped {
+				tele.State = "Stopped"
+				tele.Online = false
+			} else if st.Lifecycle != "" {
+				tele.State = string(st.Lifecycle)
+			}
+			if !st.StartedAt.IsZero() {
+				tele.StartedAt = st.StartedAt
+				tele.Uptime = domain.FormatDuration(time.Since(st.StartedAt))
+			}
+		}
+		if m, err := g.runtime.Metrics(ctx, g.serverRef); err == nil && m.Known {
+			tele.CPU = fmt.Sprintf("%dm", m.CPUMillicores)
+			tele.Memory = fmt.Sprintf("%d Mi", m.MemoryMiB)
+		}
+	}
+
+	return tele, nil
+}
+
 func (g *Game) ResolveContent(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
-	return domain.ContentSet{}, nil
+	if g.contentResolver != nil {
+		return g.contentResolver(ctx, inst)
+	}
+	var entries []string
+	if g.bundleSource != nil {
+		entries, _, _ = g.bundleSource(ctx)
+	}
+	var items []domain.ContentItem
+	for _, e := range entries {
+		parts := strings.Split(e, "/")
+		name := e
+		ver := ""
+		if len(parts) >= 2 {
+			name = parts[1]
+		}
+		if len(parts) >= 3 {
+			ver = parts[2]
+		}
+		items = append(items, domain.ContentItem{
+			ID:      e,
+			Name:    name,
+			Version: ver,
+		})
+	}
+	return domain.ContentSet{Items: items}, nil
 }
 
 // ExportClientBundle generates an .r2z bundle compatible with r2modman / Thunderstore.
 func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
-	// Build an empty or default bundle; full bundle with configs is built via BuildClientBundle
-	data, err := modpack.Build(inst.Name, WithBepInEx(nil, FallbackBepInExVersion), nil)
+	name := inst.Name
+	if name == "" {
+		name = "Valheim"
+	}
+	slug := inst.Slug
+	if slug == "" {
+		slug = domain.Slugify(name)
+	}
+
+	var entries []string
+	var configs map[string]string
+	if g.bundleSource != nil {
+		var err error
+		entries, configs, err = g.bundleSource(ctx)
+		if err != nil {
+			return domain.Bundle{}, fmt.Errorf("read valheim bundle source: %w", err)
+		}
+	}
+
+	modEntries := WithBepInEx(entries, FallbackBepInExVersion)
+	data, err := modpack.Build(name, modEntries, configs)
 	if err != nil {
 		return domain.Bundle{}, fmt.Errorf("build valheim client bundle: %w", err)
 	}
 	return domain.Bundle{
-		Filename:    fmt.Sprintf("%s-mods.r2z", inst.Slug),
+		Filename:    fmt.Sprintf("%s-mods.r2z", slug),
 		ContentType: "application/zip",
 		Data:        data,
 	}, nil

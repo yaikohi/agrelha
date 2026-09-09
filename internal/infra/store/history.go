@@ -1,14 +1,12 @@
 package store
 
-import "time"
+import (
+	"time"
 
-type HistoryEntry struct {
-	At     time.Time
-	Source string
-	Kind   string
-	Actor  string
-	Detail string
-}
+	"agrelha/internal/domain"
+)
+
+type HistoryEntry = domain.HistoryEntry
 
 func (s *Store) ListHistory(limit int) ([]HistoryEntry, error) {
 	rows, err := s.db.Query(`

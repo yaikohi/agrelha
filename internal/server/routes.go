@@ -57,10 +57,30 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Get("/sse/logs", s.sseLogs)
 	app.Get("/valheim", s.valheimConsole)
 
-	app.Post("/server/restart", s.guard("restart", "Restart triggered — the server is rolling.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
-	app.Post("/server/update", s.guard("update", "Update triggered — restarting; the image installs any Valheim update on boot.", func(ctx context.Context) error { return s.k8s.Restart(ctx) }))
-	app.Post("/server/stop", s.guard("stop", "Stopping the server — scaling to 0.", func(ctx context.Context) error { return s.k8s.Scale(ctx, 0) }))
-	app.Post("/server/start", s.guard("start", "Starting the server — scaling to 1.", func(ctx context.Context) error { return s.k8s.Scale(ctx, 1) }))
+	app.Post("/server/restart", s.guard("restart", "Restart triggered — the server is rolling.", func(ctx context.Context) error {
+		if s.valheimRuntime != nil {
+			return s.valheimRuntime.Restart(ctx, s.valheimRef)
+		}
+		return s.k8s.Restart(ctx)
+	}))
+	app.Post("/server/update", s.guard("update", "Update triggered — restarting; the image installs any Valheim update on boot.", func(ctx context.Context) error {
+		if s.valheimRuntime != nil {
+			return s.valheimRuntime.Restart(ctx, s.valheimRef)
+		}
+		return s.k8s.Restart(ctx)
+	}))
+	app.Post("/server/stop", s.guard("stop", "Stopping the server — scaling to 0.", func(ctx context.Context) error {
+		if s.valheimRuntime != nil {
+			return s.valheimRuntime.Stop(ctx, s.valheimRef)
+		}
+		return s.k8s.Scale(ctx, 0)
+	}))
+	app.Post("/server/start", s.guard("start", "Starting the server — scaling to 1.", func(ctx context.Context) error {
+		if s.valheimRuntime != nil {
+			return s.valheimRuntime.Start(ctx, s.valheimRef)
+		}
+		return s.k8s.Scale(ctx, 1)
+	}))
 
 	app.Get("/mods", s.modsPage)
 	app.Get("/mods/:namespace/:name", s.modDetail)
@@ -128,9 +148,24 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	app.Post("/api/minecraft/access/whitelist/remove", s.mcAccessRemoveWhitelist)
 	app.Post("/api/minecraft/access/whitelist/toggle", s.mcAccessWhitelistToggle)
 
-	app.Post("/minecraft/server/restart", s.guardMC("mc-restart", "Minecraft restart triggered — server is rolling.", func(ctx context.Context) error { return s.mck8s.Restart(ctx) }))
-	app.Post("/minecraft/server/stop", s.guardMC("mc-stop", "Stopping Minecraft server — scaling to 0.", func(ctx context.Context) error { return s.mck8s.Scale(ctx, 0) }))
-	app.Post("/minecraft/server/start", s.guardMC("mc-start", "Starting Minecraft server — scaling to 1.", func(ctx context.Context) error { return s.mck8s.Scale(ctx, 1) }))
+	app.Post("/minecraft/server/restart", s.guardMC("mc-restart", "Minecraft restart triggered — server is rolling.", func(ctx context.Context) error {
+		if s.mcRuntime != nil {
+			return s.mcRuntime.Restart(ctx, s.mcRef)
+		}
+		return s.mck8s.Restart(ctx)
+	}))
+	app.Post("/minecraft/server/stop", s.guardMC("mc-stop", "Stopping Minecraft server — scaling to 0.", func(ctx context.Context) error {
+		if s.mcRuntime != nil {
+			return s.mcRuntime.Stop(ctx, s.mcRef)
+		}
+		return s.mck8s.Scale(ctx, 0)
+	}))
+	app.Post("/minecraft/server/start", s.guardMC("mc-start", "Starting Minecraft server — scaling to 1.", func(ctx context.Context) error {
+		if s.mcRuntime != nil {
+			return s.mcRuntime.Start(ctx, s.mcRef)
+		}
+		return s.mck8s.Scale(ctx, 1)
+	}))
 
 	// --- Per-instance detail & controls ---
 	app.Get("/minecraft/:num<int>", func(c *fiber.Ctx) error {
@@ -161,7 +196,7 @@ func (s *FiberServer) actor(c *fiber.Ctx) string {
 
 func (s *FiberServer) guard(action, okMsg string, fn func(context.Context) error) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if s.k8s == nil {
+		if s.valheimRuntime == nil && s.k8s == nil {
 			metrics.ControlActions.WithLabelValues(action, "disabled").Inc()
 			return sseToast(c, "err", "Imperative plane disabled — no cluster access.", nil)
 		}
@@ -180,7 +215,7 @@ func (s *FiberServer) guard(action, okMsg string, fn func(context.Context) error
 
 func (s *FiberServer) guardMC(action, okMsg string, fn func(context.Context) error) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if s.mck8s == nil {
+		if s.mcRuntime == nil && s.mck8s == nil {
 			metrics.ControlActions.WithLabelValues(action, "disabled").Inc()
 			return sseToast(c, "err", "Minecraft imperative plane disabled — no cluster access.", nil)
 		}

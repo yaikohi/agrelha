@@ -1,13 +1,10 @@
 package console
 
 import (
-	"agrelha/internal/app/instances"
-	"agrelha/internal/infra/rcon"
 	"context"
 	"time"
 
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
+	"agrelha/internal/app/instances"
 	"agrelha/internal/ports"
 	"agrelha/internal/web/metrics"
 	"agrelha/internal/web/shared"
@@ -17,13 +14,15 @@ import (
 
 // Config defines dependencies for console, log tailing, and server lifecycle handlers.
 type Config struct {
-	K8s         *k8s.Client
-	MCK8s       *k8s.Client
-	MCInstances *instances.InstanceManager
-	MCRconPool  *rcon.Pool
-	Store       *store.Store
-	Auth        ports.Auth
-	Actor       func(*fiber.Ctx) string
+	ValheimRuntime ports.Runtime
+	ValheimRef     ports.ServerRef
+	MCRuntime      ports.Runtime
+	MCRef          ports.ServerRef
+	MCInstances    *instances.InstanceManager
+	Audit          ports.AuditRecorder
+	Event          ports.EventRecorder
+	Auth           ports.Auth
+	Actor          func(*fiber.Ctx) string
 }
 
 // Handler handles console viewing, log streaming, and imperative actions.
@@ -59,7 +58,7 @@ func (h *Handler) Register(router fiber.Router) {
 
 func (h *Handler) guard(action, okMsg string, fn func(context.Context) error) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if h.cfg.K8s == nil {
+		if h.cfg.ValheimRuntime == nil {
 			metrics.ControlActions.WithLabelValues(action, "disabled").Inc()
 			return shared.SSEToast(c, "err", "Imperative plane disabled — no cluster access.", nil)
 		}
@@ -70,9 +69,11 @@ func (h *Handler) guard(action, okMsg string, fn func(context.Context) error) fi
 			return shared.SSEToast(c, "err", action+" failed: "+err.Error(), nil)
 		}
 		metrics.ControlActions.WithLabelValues(action, "ok").Inc()
-		if h.cfg.Store != nil {
-			_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), action, "")
-			_ = h.cfg.Store.RecordEvent(action, h.cfg.Actor(c))
+		if h.cfg.Audit != nil {
+			_ = h.cfg.Audit.RecordAudit(h.cfg.Actor(c), action, "")
+		}
+		if h.cfg.Event != nil {
+			_ = h.cfg.Event.RecordEvent(action, h.cfg.Actor(c))
 		}
 		return shared.SSEToast(c, "ok", okMsg, nil)
 	}

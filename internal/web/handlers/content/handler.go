@@ -19,6 +19,7 @@ import (
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
+	"agrelha/internal/ports"
 )
 
 // Config configures dependencies for the content management handler.
@@ -26,6 +27,7 @@ type Config struct {
 	Cfg            *config.Config
 	Store          *store.Store
 	K8s            *k8s.Client
+	ValheimGame    ports.Game
 	Mods           *mods.Manager
 	Git            *gitops.Committer
 	TS             *thunderstore.Client

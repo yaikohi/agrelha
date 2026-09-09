@@ -8,17 +8,15 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"agrelha/internal/domain"
 )
 
 var safeBackupName = regexp.MustCompile(`^mc-[a-z0-9-]+-\d{2}-[a-zA-Z0-9_-]+\.tar\.gz$`)
 
 // FormatBackupFileName generates a standard archive name for instance backups.
 func FormatBackupFileName(slug string, num int, tag string) string {
-	ts := time.Now().UTC().Format("20060102-150405")
-	if tag != "" {
-		return fmt.Sprintf("mc-%s-%02d-%s-%s.tar.gz", slug, num, tag, ts)
-	}
-	return fmt.Sprintf("mc-%s-%02d-%s.tar.gz", slug, num, ts)
+	return domain.FormatBackupFileName(slug, num, tag)
 }
 
 // PruneBackups keeps the latest keepCount backups matching the instance pattern and deletes older archives.

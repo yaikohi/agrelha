@@ -1,68 +1,82 @@
 package backups
 
 import (
-	"agrelha/internal/app/instances"
-	"agrelha/internal/domain"
-	"agrelha/internal/infra/manifests"
 	"context"
-	"path/filepath"
 	"testing"
 
-	"k8s.io/client-go/kubernetes/fake"
-
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
-	"agrelha/internal/platform/config"
+	"agrelha/internal/domain"
 )
 
-func newScheduler(t *testing.T) (*BackupScheduler, *instances.InstanceManager, *store.Store) {
-	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	kc := k8s.NewWithClientset(fake.NewSimpleClientset(), "minecraft-modded", "mc")
-	mgr := instances.NewInstanceManager(
-		store.NewInstanceRepo(st), nil, nil, 24, 4, 2,
-		"manifests/minecraft-modded", "", manifests.New("", "minecraft-modded"), "minecraft-modded",
-	)
-	return &BackupScheduler{
-		Cfg:       &config.Config{},
-		Store:     st,
-		Instances: mgr,
-		K8s:       kc,
-		Namespace: "minecraft-modded",
-	}, mgr, st
+type fakeJobRunner struct {
+	jobs []string
+}
+
+func (f *fakeJobRunner) CreateBackupJob(ctx context.Context, jobName, archiveName, sourcePVC, backupPVC string) error {
+	f.jobs = append(f.jobs, jobName)
+	return nil
+}
+
+type fakeInstanceLister struct {
+	instances []domain.Instance
+}
+
+func (f *fakeInstanceLister) ListInstances(ctx context.Context) ([]domain.Instance, error) {
+	return f.instances, nil
+}
+
+type fakeRecorder struct {
+	audits []string
+	events []string
+}
+
+func (f *fakeRecorder) RecordAudit(actor, action, detail string) error {
+	f.audits = append(f.audits, action)
+	return nil
+}
+
+func (f *fakeRecorder) RecordEvent(kind, detail string) error {
+	f.events = append(f.events, kind)
+	return nil
 }
 
 func TestRunDailyBacksUpRunningInstances(t *testing.T) {
-	s, mgr, st := newScheduler(t)
-	defer st.Close()
-
-	if _, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name: "ActiveWorld", MCVersion: "1.21.1",
-		Loader: domain.LoaderNeoForge, Tier: domain.TierMedium,
-		State: domain.StateRunning,
-	}, ""); err != nil {
-		t.Fatal(err)
+	lister := &fakeInstanceLister{
+		instances: []domain.Instance{
+			{
+				Name:      "ActiveWorld",
+				Slug:      "active-world",
+				Number:    1,
+				MCVersion: "1.21.1",
+				Loader:    domain.LoaderNeoForge,
+				Tier:      domain.TierMedium,
+				State:     domain.StateRunning,
+			},
+			{
+				Name:   "StoppedWorld",
+				Slug:   "stopped-world",
+				Number: 2,
+				State:  domain.StateStopped,
+			},
+		},
 	}
+	runner := &fakeJobRunner{}
+	rec := &fakeRecorder{}
+
+	s := New(lister, runner,
+		WithAudit(rec),
+		WithEvent(rec),
+	)
 
 	s.RunDaily(context.Background())
 
-	// The run must be recorded, proving it actually reached the backup path
-	// rather than bailing out early.
-	hist, err := st.ListHistory(50)
-	if err != nil {
-		t.Fatal(err)
+	if len(runner.jobs) != 1 {
+		t.Fatalf("jobs created = %d, want 1", len(runner.jobs))
 	}
-	found := false
-	for _, h := range hist {
-		if h.Kind == "mc-backup-daily" {
-			found = true
-		}
+	if len(rec.audits) != 1 || rec.audits[0] != "mc-backup-daily" {
+		t.Fatalf("expected audit for mc-backup-daily, got %v", rec.audits)
 	}
-	if !found {
-		t.Fatal("expected a mc-backup-daily audit/event entry")
+	if len(rec.events) != 1 || rec.events[0] != "mc-backup-daily" {
+		t.Fatalf("expected event for mc-backup-daily, got %v", rec.events)
 	}
 }
 
@@ -71,27 +85,32 @@ func TestRunDailyBacksUpRunningInstances(t *testing.T) {
 func TestRunDailyIsSafeWhenUnwired(t *testing.T) {
 	(&BackupScheduler{}).RunDaily(context.Background())
 
-	s, _, st := newScheduler(t)
-	defer st.Close()
-	s.K8s = nil
+	s := New(nil, nil)
 	s.RunDaily(context.Background())
+
+	lister := &fakeInstanceLister{}
+	s2 := New(lister, nil)
+	s2.RunDaily(context.Background())
 }
 
-// Namespace, backups PVC and retention were hardcoded in the old scheduler,
-// bypassing the configuration phase 0 introduced.
+// Namespace, backups PVC and retention defaults and overrides.
 func TestSchedulerDefaultsAreOverridable(t *testing.T) {
-	s := &BackupScheduler{Cfg: &config.Config{MinecraftNamespace: "games"}}
-	if got := s.namespace(); got != "games" {
-		t.Fatalf("namespace = %q, want games (from config)", got)
+	s := New(nil, nil)
+	if got := s.Namespace(); got != "minecraft-modded" {
+		t.Fatalf("namespace default = %q, want minecraft-modded", got)
 	}
-	s.Namespace = "explicit"
-	if got := s.namespace(); got != "explicit" {
-		t.Fatalf("explicit namespace ignored, got %q", got)
-	}
-	if got := (&BackupScheduler{}).keep(); got != 5 {
+	if got := s.Keep(); got != 5 {
 		t.Fatalf("keep default = %d, want 5", got)
 	}
-	if got := (&BackupScheduler{Keep: 2}).keep(); got != 2 {
-		t.Fatalf("keep override ignored, got %d", got)
+
+	s2 := New(nil, nil, WithNamespace("custom-ns"), WithKeep(2), WithBackupsPVC("custom-pvc"))
+	if got := s2.Namespace(); got != "custom-ns" {
+		t.Fatalf("namespace = %q, want custom-ns", got)
+	}
+	if got := s2.Keep(); got != 2 {
+		t.Fatalf("keep = %d, want 2", got)
+	}
+	if got := s2.BackupsPVC(); got != "custom-pvc" {
+		t.Fatalf("backupsPVC = %q, want custom-pvc", got)
 	}
 }

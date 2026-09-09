@@ -7,6 +7,7 @@ import (
 	"io"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
@@ -51,6 +52,10 @@ func (f *fakeRuntime) Metrics(context.Context, ports.ServerRef) (ports.Metrics, 
 
 func (f *fakeRuntime) Logs(context.Context, ports.ServerRef, ports.LogOptions) (io.ReadCloser, error) {
 	return nil, ports.ErrNotImplemented
+}
+
+func (f *fakeRuntime) WatchAvailability(ctx context.Context, ref ports.ServerRef, timeout time.Duration) error {
+	return nil
 }
 
 var _ ports.Runtime = (*fakeRuntime)(nil)

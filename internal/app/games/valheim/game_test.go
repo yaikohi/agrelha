@@ -4,8 +4,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
@@ -131,5 +133,96 @@ func TestValheimExportClientBundle(t *testing.T) {
 	}
 	if !strings.HasSuffix(b2.Filename, ".r2z") {
 		t.Errorf("expected .r2z filename, got %q", b2.Filename)
+	}
+}
+
+type fakeRuntime struct {
+	status  ports.Status
+	metrics ports.Metrics
+}
+
+func (f *fakeRuntime) Start(ctx context.Context, ref ports.ServerRef) error   { return nil }
+func (f *fakeRuntime) Stop(ctx context.Context, ref ports.ServerRef) error    { return nil }
+func (f *fakeRuntime) Restart(ctx context.Context, ref ports.ServerRef) error { return nil }
+func (f *fakeRuntime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status, error) {
+	return f.status, nil
+}
+func (f *fakeRuntime) Metrics(ctx context.Context, ref ports.ServerRef) (ports.Metrics, error) {
+	return f.metrics, nil
+}
+func (f *fakeRuntime) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogOptions) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (f *fakeRuntime) WatchAvailability(ctx context.Context, ref ports.ServerRef, timeout time.Duration) error {
+	return nil
+}
+
+var _ ports.Runtime = (*fakeRuntime)(nil)
+
+func TestValheimTelemetry(t *testing.T) {
+	now := time.Now().Add(-2 * time.Hour)
+	rt := &fakeRuntime{
+		status: ports.Status{
+			Lifecycle: ports.LifecycleRunning,
+			Available: true,
+			StartedAt: now,
+		},
+		metrics: ports.Metrics{
+			CPUMillicores: 120,
+			MemoryMiB:     1024,
+			Known:         true,
+		},
+	}
+
+	g := New(
+		WithRuntime(rt, ports.ServerRef{Name: "valheim", Scope: "valheim"}),
+		WithPlayerCount(func() (int, error) { return 4, nil }),
+	)
+
+	tele, err := g.Telemetry(context.Background())
+	if err != nil {
+		t.Fatalf("Telemetry failed: %v", err)
+	}
+
+	if tele.State != "Up" || !tele.Online {
+		t.Errorf("State = %s, Online = %v, want Up/true", tele.State, tele.Online)
+	}
+	if tele.Players != 4 || !tele.PlayersKnown {
+		t.Errorf("Players = %d, PlayersKnown = %v, want 4/true", tele.Players, tele.PlayersKnown)
+	}
+	if tele.CPU != "120m" {
+		t.Errorf("CPU = %s, want 120m", tele.CPU)
+	}
+	if tele.Memory != "1024 Mi" {
+		t.Errorf("Memory = %s, want 1024 Mi", tele.Memory)
+	}
+	if !strings.Contains(tele.Uptime, "2h") {
+		t.Errorf("Uptime = %s, want ~2h", tele.Uptime)
+	}
+}
+
+func TestValheimResolveContentAndBundleSource(t *testing.T) {
+	g := New(
+		WithBundleSource(func(ctx context.Context) ([]string, map[string]string, error) {
+			return []string{"author/coolmod/1.2.0"}, map[string]string{"coolmod.cfg": "active=true"}, nil
+		}),
+	)
+
+	ctx := context.Background()
+	content, err := g.ResolveContent(ctx, domain.Instance{Name: "Agrelha"})
+	if err != nil {
+		t.Fatalf("ResolveContent failed: %v", err)
+	}
+	if len(content.Items) != 1 || content.Items[0].Name != "coolmod" || content.Items[0].Version != "1.2.0" {
+		t.Errorf("unexpected content items: %+v", content.Items)
+	}
+
+	bundle, err := g.ExportClientBundle(ctx, domain.Instance{Name: "Server", Slug: "server"})
+	if err != nil {
+		t.Fatalf("ExportClientBundle failed: %v", err)
+	}
+	if bundle.Filename != "server-mods.r2z" {
+		t.Errorf("Filename = %q, want server-mods.r2z", bundle.Filename)
 	}
 }

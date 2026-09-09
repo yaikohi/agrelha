@@ -5,8 +5,10 @@ import (
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/manifests"
 	"context"
+	"io"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -17,7 +19,7 @@ import (
 	"agrelha/internal/infra/kube"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/platform/config"
+	"agrelha/internal/ports"
 )
 
 func setupTestInstancesHandler(t *testing.T) (*Handler, *store.Store, *k8s.Client, *instances.InstanceManager) {
@@ -45,13 +47,31 @@ func setupTestInstancesHandler(t *testing.T) (*Handler, *store.Store, *k8s.Clien
 	)
 
 	mck8s := k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded")
-	mgr := instances.NewInstanceManager(
-		store.NewInstanceRepo(st), nil, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded")
+	var mgr *instances.InstanceManager
+	mgr = instances.NewInstanceManager(
+		store.NewInstanceRepo(st), nil, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded",
+		instances.WithBackupsDir(t.TempDir()),
+		instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
+			inst, err := mgr.GetInstance(ctx, num)
+			if err != nil {
+				return nil, err
+			}
+			return mck8s.ConfigMapData(ctx, inst.ConfigsCMName())
+		}),
+		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+			inst, err := mgr.GetInstance(ctx, num)
+			if err != nil {
+				return nil, err
+			}
+			cm, err := mck8s.ConfigMapData(ctx, inst.ModsCMName())
+			if err != nil {
+				return nil, err
+			}
+			return strings.Split(strings.TrimSpace(cm["mods.txt"]), "\n"), nil
+		}),
+	)
 
 	h := New(Config{
-		Cfg:         &config.Config{BackupsDir: t.TempDir()},
-		Store:       st,
-		MCK8s:       mck8s,
 		MCInstances: mgr,
 	})
 
@@ -171,4 +191,65 @@ func TestConfigFilenameRegex(t *testing.T) {
 			t.Errorf("expected %q to be invalid config name", f)
 		}
 	}
+}
+
+type fakeMCGame struct {
+	bundle domain.Bundle
+}
+
+func (f *fakeMCGame) ID() domain.GameID                  { return domain.GameMinecraft }
+func (f *fakeMCGame) Display() domain.Display            { return domain.Display{Name: "Minecraft"} }
+func (f *fakeMCGame) Providers() []ports.ContentProvider { return nil }
+func (f *fakeMCGame) ResolveContent(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
+	return domain.ContentSet{}, nil
+}
+func (f *fakeMCGame) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
+	return f.bundle, nil
+}
+func (f *fakeMCGame) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
+	return domain.RuntimeSpec{}
+}
+func (f *fakeMCGame) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
+	return domain.GameTelemetry{}, nil
+}
+func (f *fakeMCGame) AdmissionModel() domain.AdmissionModel { return domain.AdmissionAllowlist }
+func (f *fakeMCGame) OperatorIDKind() domain.OperatorIDKind { return domain.IDKindUsername }
+
+func TestMCInstanceExportWithGameEngine(t *testing.T) {
+	h, st, _, mgr := setupTestInstancesHandler(t)
+	defer st.Close()
+
+	// Seed instance 1
+	repo := store.NewInstanceRepo(st)
+	_ = repo.Upsert(domain.Instance{
+		Number: 1, Name: "Ducktopia", Slug: "mc-ducktopia-01",
+	})
+
+	h.cfg.MinecraftGame = &fakeMCGame{
+		bundle: domain.Bundle{
+			Filename:    "ducktopia-1.21.1.mrpack",
+			ContentType: "application/x-modrinth-modpack+zip",
+			Data:        []byte("mock-mrpack-archive"),
+		},
+	}
+
+	app := fiber.New()
+	app.Get("/instances/:num/export", h.MCInstanceExport)
+
+	req := httptest.NewRequest("GET", "/instances/1/export", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("GET /instances/1/export: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "mock-mrpack-archive" {
+		t.Errorf("body = %s, want mock-mrpack-archive", string(body))
+	}
+	if disp := resp.Header.Get("Content-Disposition"); !strings.Contains(disp, "ducktopia-1.21.1.mrpack") {
+		t.Errorf("Content-Disposition = %s, want ducktopia-1.21.1.mrpack", disp)
+	}
+	_ = mgr
 }

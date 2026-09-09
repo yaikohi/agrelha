@@ -57,21 +57,25 @@ Full detail in `docs/architecture-cleanup-plan.md`. Summary:
 - **D** — `internal/wiring` is the composition root. `server.New(cfg, Deps)`
   constructs nothing; no `os.Exit` under `internal/`.
 
-**Ledger: 19 known violations remain** (was 20). Run `go test ./internal/arch/ -v`
+**Ledger: 10 known violations remain** (was 20). Run `go test ./internal/arch/ -v`
 to see the count. Done = `exceptions` empty and no `internal/server` in `layers`.
 
-## 3. Pick up here: phase E
+- Deepening candidates 1, 2, 3, and 4 delivered:
+  - Candidate 1: Deepened `ports.Game` engine seam.
+  - Candidate 2: Inverted `handlers/access` and `handlers/instances` (4 exceptions cleared).
+  - Candidate 3: Extracted `domain.Mod*` types and `ports.ModResolver` (2 Phase F exceptions cleared: `app/content` and `app/modpack`).
+  - Candidate 4: Deepened `ports.Runtime` with `WatchAvailability`, unified lifecycle across `web/handlers/console`, `app/backups`, and `server` routes (3 exceptions cleared: `app/backups` -> `infra`, `app/backups` -> `config`, `handlers/console` -> `infra`).
 
-Invert the HTTP boundary. Handler `Config` structs and `server.Deps` currently
-take `*store.Store`, `*k8s.Client`, `*instances.InstanceManager` — concrete.
-Replace with ports. **Clears 13 of the 19 ledger entries** and is what makes
-handler tests writable with fakes (coverage is stuck at ~33.6% because of this).
+## 3. Next steps
 
-Tests must land **with** each inversion, not after — otherwise E's diff is
-unverifiable.
-
-Then F (content provider port) → G (rebuild `Game` from the Valheim slice) →
-H (view types) → I (narrow adapter config).
+Remaining 10 exceptions:
+- `internal/server` -> `infra`, `config`
+- `internal/infra/auth/oidc` -> `config`
+- `internal/web/handlers/backups` -> `infra`
+- `internal/web/handlers/content` -> `infra`, `config`
+- `internal/web/handlers/dashboard` -> `infra`, `config`
+- `internal/web/handlers/wizard` -> `infra`
+- `internal/web/pages` -> `infra`
 
 ## 4. Traps already paid for — do not re-derive
 

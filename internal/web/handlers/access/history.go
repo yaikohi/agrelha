@@ -1,7 +1,7 @@
 package access
 
 import (
-	"agrelha/internal/infra/store"
+	"agrelha/internal/domain"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 
@@ -9,9 +9,9 @@ import (
 )
 
 func (h *Handler) HistoryPage(c *fiber.Ctx) error {
-	var entries []store.HistoryEntry
-	if h.cfg.Store != nil {
-		entries, _ = h.cfg.Store.ListHistory(200)
+	var entries []domain.HistoryEntry
+	if h.cfg.History != nil {
+		entries, _ = h.cfg.History.ListHistory(200)
 	}
 	return shared.Render(c, pages.History(entries))
 }

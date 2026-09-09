@@ -137,3 +137,26 @@ func (r *Runtime) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogO
 	}
 	return r.client.ContainerLogs(ctx, ref.Name, opts)
 }
+
+func (r *Runtime) WatchAvailability(ctx context.Context, ref ports.ServerRef, timeout time.Duration) error {
+	if r == nil || r.client == nil {
+		return ports.ErrNotImplemented
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			st, err := r.Status(ctx, ref)
+			if err == nil && st.Available {
+				return nil
+			}
+		}
+	}
+}

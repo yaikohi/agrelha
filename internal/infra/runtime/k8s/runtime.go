@@ -5,6 +5,7 @@ package k8s
 import (
 	"context"
 	"io"
+	"time"
 
 	k8sclient "agrelha/internal/infra/kube"
 	"agrelha/internal/ports"
@@ -87,4 +88,27 @@ func (r *Runtime) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogO
 		tail = 200
 	}
 	return r.c.StreamDeploymentLogs(ctx, ref.Name, tail)
+}
+
+func (r *Runtime) WatchAvailability(ctx context.Context, ref ports.ServerRef, timeout time.Duration) error {
+	if r == nil || r.c == nil {
+		return ports.ErrNotImplemented
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			st, err := r.Status(ctx, ref)
+			if err == nil && st.Available {
+				return nil
+			}
+		}
+	}
 }

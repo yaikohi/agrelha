@@ -10,6 +10,7 @@ import (
 	"agrelha/internal/app/games/valheim"
 	"agrelha/internal/app/modpack"
 	"agrelha/internal/app/mods"
+	"agrelha/internal/domain"
 	"agrelha/internal/web/shared"
 )
 
@@ -29,10 +30,28 @@ func (h *Handler) WithBepInEx(ctx context.Context, entries []string) []string {
 
 // ModpackExport creates and streams a .r2z profile archive for Valheim.
 func (h *Handler) ModpackExport(c *fiber.Ctx) error {
+	ctx := c.UserContext()
+
+	if h.cfg.ValheimGame != nil {
+		bundle, err := h.cfg.ValheimGame.ExportClientBundle(ctx, domain.Instance{Name: "Valheim (ykhi)", Slug: "valheim"})
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "build modpack: "+err.Error())
+		}
+		if len(bundle.Data) == 0 {
+			shared.SetFlash(c, "err", "No mods are installed — nothing to export.")
+			return c.Redirect("/mods", fiber.StatusSeeOther)
+		}
+		if h.cfg.Store != nil {
+			_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "modpack-export", "")
+		}
+		c.Set("Content-Type", bundle.ContentType)
+		c.Set("Content-Disposition", `attachment; filename="`+bundle.Filename+`"`)
+		return c.Send(bundle.Data)
+	}
+
 	if h.cfg.K8s == nil {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "k8s client not available")
 	}
-	ctx := c.UserContext()
 
 	data, err := h.cfg.K8s.ConfigMapData(ctx, "valheim-mods")
 	if err != nil {

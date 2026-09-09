@@ -17,18 +17,13 @@ import (
 
 // MCRconCommand executes a Minecraft console command via RCON and returns the output fragment via SSE.
 func (h *Handler) MCRconCommand(c *fiber.Ctx) error {
-	if h.cfg.MCInstances == nil || h.cfg.MCRconPool == nil {
-		return shared.SSEToast(c, "err", "Instance manager or RCON pool unconfigured.", nil)
+	if h.cfg.MCInstances == nil {
+		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
 
 	num, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
-	}
-
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err != nil || inst == nil {
-		return shared.SSEToast(c, "err", "Instance not found.", nil)
 	}
 
 	var body struct {
@@ -43,10 +38,7 @@ func (h *Handler) MCRconCommand(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Command cannot be empty.", nil)
 	}
 
-	addr := fmt.Sprintf("%s.minecraft-modded.svc.cluster.local:25575", inst.ServiceName())
-	client := h.cfg.MCRconPool.ClientFor(addr)
-
-	resp, err := client.Execute(cmd)
+	resp, err := h.cfg.MCInstances.ExecuteCommand(c.UserContext(), num, cmd)
 	if err != nil {
 		resp = fmt.Sprintf("Error: %s", err.Error())
 	}
@@ -72,7 +64,7 @@ func (h *Handler) MCRconCommand(c *fiber.Ctx) error {
 
 // MCLogsStream streams real-time deployment logs for a Minecraft instance over SSE.
 func (h *Handler) MCLogsStream(c *fiber.Ctx) error {
-	if h.cfg.MCInstances == nil || h.cfg.MCK8s == nil {
+	if h.cfg.MCInstances == nil {
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")
 		var buf bytes.Buffer
@@ -86,9 +78,14 @@ func (h *Handler) MCLogsStream(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid number")
 	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
-	if err != nil || inst == nil {
-		return c.Status(fiber.StatusNotFound).SendString("Not found")
+	stream, err := h.cfg.MCInstances.InstanceLogs(context.Background(), num, 100)
+	if err != nil {
+		c.Set("Content-Type", "text/event-stream")
+		c.Set("Cache-Control", "no-cache")
+		var buf bytes.Buffer
+		w := bufio.NewWriter(&buf)
+		_ = sse.AppendElement(w, "#console-logs", fmt.Sprintf("<p class=\"text-red-400\">Log stream error: %s</p>", html.EscapeString(err.Error())))
+		return c.Send(buf.Bytes())
 	}
 
 	c.Set("Content-Type", "text/event-stream")
@@ -96,11 +93,6 @@ func (h *Handler) MCLogsStream(c *fiber.Ctx) error {
 	c.Set("Connection", "keep-alive")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		stream, err := h.cfg.MCK8s.StreamDeploymentLogs(context.Background(), inst.DeploymentName(), 100)
-		if err != nil {
-			_ = sse.AppendElement(w, "#console-logs", fmt.Sprintf("<p class=\"text-red-400\">Log stream error: %s</p>", html.EscapeString(err.Error())))
-			return
-		}
 		defer stream.Close()
 
 		scanner := bufio.NewScanner(stream)

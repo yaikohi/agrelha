@@ -80,6 +80,7 @@ type Runtime interface {
 	Status(ctx context.Context, ref ServerRef) (Status, error)
 	Metrics(ctx context.Context, ref ServerRef) (Metrics, error)
 	Logs(ctx context.Context, ref ServerRef, opts LogOptions) (io.ReadCloser, error)
+	WatchAvailability(ctx context.Context, ref ServerRef, timeout time.Duration) error
 }
 
 type Console interface {

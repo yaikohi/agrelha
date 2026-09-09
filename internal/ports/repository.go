@@ -15,3 +15,23 @@ type InstanceRepository interface {
 	UpdateState(number int, state domain.InstanceState) error
 	Delete(number int) error
 }
+
+// AuditRecorder records operational actions for auditing and history tracking.
+type AuditRecorder interface {
+	RecordAudit(actor, action, detail string) error
+}
+
+// EventRecorder records system events (joins, crashes, lifecycle transitions).
+type EventRecorder interface {
+	RecordEvent(kind, detail string) error
+}
+
+// HistoryReader lists recent history entries.
+type HistoryReader interface {
+	ListHistory(limit int) ([]domain.HistoryEntry, error)
+}
+
+// PlayerReader lists known players in the roster.
+type PlayerReader interface {
+	ListPlayers() ([]domain.Player, error)
+}

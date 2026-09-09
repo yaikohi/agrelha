@@ -1,7 +1,6 @@
 package access
 
 import (
-	mcaccess "agrelha/internal/app/access"
 	"fmt"
 	"strings"
 
@@ -21,14 +20,10 @@ func (h *Handler) MCAccessPage(c *fiber.Ctx) error {
 	var ops []string
 	var whitelist []string
 
-	if h.cfg.MCK8s != nil {
-		data, err := h.cfg.MCK8s.ConfigMapData(c.UserContext(), "minecraft-modded-access")
-		if err != nil {
-			data, err = h.cfg.MCK8s.ConfigMapData(c.UserContext(), "minecraft-neoforge-access")
-		}
-		if err == nil {
-			ops = mcaccess.ParseUsers(data["ops.txt"])
-			whitelist = mcaccess.ParseUsers(data["whitelist.txt"])
+	if h.cfg.MCAccess != nil {
+		if o, w, err := h.cfg.MCAccess.ListAccess(c.UserContext()); err == nil {
+			ops = o
+			whitelist = w
 		}
 	}
 
@@ -65,17 +60,13 @@ func (h *Handler) MCAccessGrantOp(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username is required"})
 	}
 
-	changed, err := h.cfg.MCAccess.GrantOp(c.UserContext(), user)
+	changed, err := h.cfg.MCAccess.GrantOp(c.UserContext(), user, h.cfg.Actor(c))
 	if err != nil {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Grant op failed: "+err.Error())
 			return c.Redirect("/minecraft/access", fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-op-grant", user)
 	}
 
 	if isHTMLForm(c) {
@@ -108,17 +99,13 @@ func (h *Handler) MCAccessRevokeOp(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username is required"})
 	}
 
-	changed, err := h.cfg.MCAccess.RevokeOp(c.UserContext(), user)
+	changed, err := h.cfg.MCAccess.RevokeOp(c.UserContext(), user, h.cfg.Actor(c))
 	if err != nil {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Revoke op failed: "+err.Error())
 			return c.Redirect("/minecraft/access", fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-op-revoke", user)
 	}
 
 	if isHTMLForm(c) {
@@ -151,17 +138,13 @@ func (h *Handler) MCAccessAddWhitelist(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username is required"})
 	}
 
-	changed, err := h.cfg.MCAccess.AddWhitelist(c.UserContext(), user)
+	changed, err := h.cfg.MCAccess.AddWhitelist(c.UserContext(), user, h.cfg.Actor(c))
 	if err != nil {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Add whitelist failed: "+err.Error())
 			return c.Redirect("/minecraft/access", fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-whitelist-add", user)
 	}
 
 	if isHTMLForm(c) {
@@ -194,17 +177,13 @@ func (h *Handler) MCAccessRemoveWhitelist(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username is required"})
 	}
 
-	changed, err := h.cfg.MCAccess.RemoveWhitelist(c.UserContext(), user)
+	changed, err := h.cfg.MCAccess.RemoveWhitelist(c.UserContext(), user, h.cfg.Actor(c))
 	if err != nil {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Remove whitelist failed: "+err.Error())
 			return c.Redirect("/minecraft/access", fiber.StatusSeeOther)
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-whitelist-remove", user)
 	}
 
 	if isHTMLForm(c) {
@@ -239,7 +218,7 @@ func (h *Handler) MCAccessWhitelistToggle(c *fiber.Ctx) error {
 	}
 
 	target := !current
-	if err := h.cfg.MCAccess.SetWhitelistEnforced(target); err != nil {
+	if err := h.cfg.MCAccess.SetWhitelistEnforced(target, h.cfg.Actor(c)); err != nil {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Failed to toggle whitelist: "+err.Error())
 			return c.Redirect("/minecraft/access", fiber.StatusSeeOther)
@@ -250,9 +229,6 @@ func (h *Handler) MCAccessWhitelistToggle(c *fiber.Ctx) error {
 	actionDesc := "enabled"
 	if !target {
 		actionDesc = "disabled"
-	}
-	if h.cfg.Store != nil {
-		_ = h.cfg.Store.RecordAudit(h.cfg.Actor(c), "mc-whitelist-toggle", actionDesc)
 	}
 
 	if isHTMLForm(c) {

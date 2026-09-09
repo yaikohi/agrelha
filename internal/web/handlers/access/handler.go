@@ -3,9 +3,6 @@ package access
 import (
 	mcaccess "agrelha/internal/app/access"
 	"agrelha/internal/app/admins"
-	"agrelha/internal/infra/kube"
-	"agrelha/internal/infra/store"
-	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 
 	"github.com/gofiber/fiber/v2"
@@ -15,11 +12,9 @@ import (
 type Config struct {
 	Admins         *admins.Manager
 	MCAccess       *mcaccess.AccessManager
-	Store          *store.Store
-	K8s            *k8s.Client
-	MCK8s          *k8s.Client
+	History        ports.HistoryReader
+	Players        ports.PlayerReader
 	StateStore     ports.StateStore
-	Cfg            *config.Config
 	Actor          func(*fiber.Ctx) string
 	ApplyAfterSync func(cmName, key string, want func(string) bool)
 }

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"agrelha/internal/ports"
 	"agrelha/internal/web/metrics"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
@@ -49,14 +50,16 @@ func (h *Handler) SSELogs(c *fiber.Ctx) error {
 				"reason", reason, "log_lines", logLines, "dur_ms", time.Since(start).Milliseconds())
 		}()
 
-		client := h.cfg.K8s
+		rt := h.cfg.ValheimRuntime
+		ref := h.cfg.ValheimRef
 		if server == "minecraft" {
-			client = h.cfg.MCK8s
+			rt = h.cfg.MCRuntime
+			ref = h.cfg.MCRef
 		}
-		if client == nil {
+		if rt == nil {
 			return
 		}
-		rc, err := client.StreamLogs(ctx, 50)
+		rc, err := rt.Logs(ctx, ref, ports.LogOptions{Tail: 50, Follow: true})
 		if err != nil {
 			slog.Warn("sse log stream unavailable", "rid", id, "server", server, "err", err)
 			return
@@ -80,24 +83,24 @@ func (h *Handler) SSELogs(c *fiber.Ctx) error {
 
 func (h *Handler) ServerRestart(c *fiber.Ctx) error {
 	return h.guard("restart", "Restart triggered — the server is rolling.", func(ctx context.Context) error {
-		return h.cfg.K8s.Restart(ctx)
+		return h.cfg.ValheimRuntime.Restart(ctx, h.cfg.ValheimRef)
 	})(c)
 }
 
 func (h *Handler) ServerUpdate(c *fiber.Ctx) error {
 	return h.guard("update", "Update triggered — restarting; the image installs any Valheim update on boot.", func(ctx context.Context) error {
-		return h.cfg.K8s.Restart(ctx)
+		return h.cfg.ValheimRuntime.Restart(ctx, h.cfg.ValheimRef)
 	})(c)
 }
 
 func (h *Handler) ServerStop(c *fiber.Ctx) error {
 	return h.guard("stop", "Stopping the server — scaling to 0.", func(ctx context.Context) error {
-		return h.cfg.K8s.Scale(ctx, 0)
+		return h.cfg.ValheimRuntime.Stop(ctx, h.cfg.ValheimRef)
 	})(c)
 }
 
 func (h *Handler) ServerStart(c *fiber.Ctx) error {
 	return h.guard("start", "Starting the server — scaling to 1.", func(ctx context.Context) error {
-		return h.cfg.K8s.Scale(ctx, 1)
+		return h.cfg.ValheimRuntime.Start(ctx, h.cfg.ValheimRef)
 	})(c)
 }

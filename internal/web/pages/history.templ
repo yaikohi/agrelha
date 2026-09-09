@@ -1,8 +1,8 @@
 package pages
 
-import "agrelha/internal/infra/store"
+import "agrelha/internal/domain"
 
-templ History(entries []store.HistoryEntry) {
+templ History(entries []domain.HistoryEntry) {
 	@Layout("History") {
 		@nav()
 		<h1 class="mb-2 text-2xl font-semibold">History</h1>
