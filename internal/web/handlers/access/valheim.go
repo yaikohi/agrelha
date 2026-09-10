@@ -1,6 +1,7 @@
 package access
 
 import (
+	"fmt"
 	"strings"
 
 	"agrelha/internal/domain"
@@ -19,8 +20,26 @@ func (h *Handler) AdminsPage(c *fiber.Ctx) error {
 	if h.cfg.Admins != nil {
 		adminIDs, _ = h.cfg.Admins.List(c.UserContext())
 	}
+	var passwords []pages.ValheimWorldPasswordUI
+	if h.cfg.ValheimInstances != nil {
+		if insts, err := h.cfg.ValheimInstances.ListInstances(c.UserContext()); err == nil {
+			for _, inst := range insts {
+				addr := ""
+				if inst.LBIP != "" {
+					addr = fmt.Sprintf("%s:2456", inst.LBIP)
+				}
+				passwords = append(passwords, pages.ValheimWorldPasswordUI{
+					Number:   inst.Number,
+					Name:     inst.Name,
+					State:    string(inst.State),
+					Password: inst.Password,
+					Address:  addr,
+				})
+			}
+		}
+	}
 	fk, fm := shared.TakeFlash(c)
-	return shared.Render(c, pages.Admins(players, adminIDs, h.cfg.Admins != nil, fk, fm))
+	return shared.Render(c, pages.Admins(players, adminIDs, passwords, h.cfg.Admins != nil, fk, fm))
 }
 
 func (h *Handler) AdminsGrant(c *fiber.Ctx) error {

@@ -3,6 +3,7 @@ package access
 import (
 	mcaccess "agrelha/internal/app/access"
 	"agrelha/internal/app/admins"
+	"agrelha/internal/app/instances"
 	"agrelha/internal/ports"
 
 	"github.com/gofiber/fiber/v2"
@@ -10,13 +11,14 @@ import (
 
 // Config defines dependencies for access management HTTP handlers.
 type Config struct {
-	Admins         *admins.Manager
-	MCAccess       *mcaccess.AccessManager
-	History        ports.HistoryReader
-	Players        ports.PlayerReader
-	StateStore     ports.StateStore
-	Actor          func(*fiber.Ctx) string
-	ApplyAfterSync func(cmName, key string, want func(string) bool)
+	Admins           *admins.Manager
+	MCAccess         *mcaccess.AccessManager
+	ValheimInstances *instances.InstanceManager
+	History          ports.HistoryReader
+	Players          ports.PlayerReader
+	StateStore       ports.StateStore
+	Actor            func(*fiber.Ctx) string
+	ApplyAfterSync   func(cmName, key string, want func(string) bool)
 }
 
 // Handler serves endpoints for game operator management and whitelisting.

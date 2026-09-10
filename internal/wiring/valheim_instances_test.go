@@ -87,10 +87,57 @@ func TestValheimDashboardEmpty(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	html := string(body)
 
-	// Since AdoptLegacyValheim runs, slot 01 is adopted as "valheim"
-	for _, want := range []string{"Valheim Instances", "16 GiB", "valheim", "#01"} {
+	// Without active deployment in runtime, no instance is adopted and dashboard is empty
+	for _, want := range []string{"Valheim Instances", "16 GiB", "Create your first Valheim world"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("dashboard missing %q", want)
+		}
+	}
+}
+
+func TestValheimNoWorldsRedirects(t *testing.T) {
+	app, st, _, _, _ := setupTestValheimServer(t)
+	defer st.Close()
+
+	// 1. /valheim/mods and /mods redirect to /valheim
+	for _, path := range []string{"/valheim/mods", "/mods"} {
+		req := httptest.NewRequest(fiber.MethodGet, path, nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("GET %s failed: %v", path, err)
+		}
+		if resp.StatusCode != fiber.StatusTemporaryRedirect {
+			t.Errorf("GET %s status = %d, want 307", path, resp.StatusCode)
+		}
+		if loc := resp.Header.Get("Location"); loc != "/valheim" {
+			t.Errorf("GET %s location = %q, want /valheim", path, loc)
+		}
+	}
+
+	// 2. /valheim/configs and /configs redirect to /valheim
+	for _, path := range []string{"/valheim/configs", "/configs"} {
+		req := httptest.NewRequest(fiber.MethodGet, path, nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("GET %s failed: %v", path, err)
+		}
+		if resp.StatusCode != fiber.StatusTemporaryRedirect {
+			t.Errorf("GET %s status = %d, want 307", path, resp.StatusCode)
+		}
+		if loc := resp.Header.Get("Location"); loc != "/valheim" {
+			t.Errorf("GET %s location = %q, want /valheim", path, loc)
+		}
+	}
+
+	// 3. Directly attempting instance 1 pages returns 404
+	for _, path := range []string{"/valheim/1/overview", "/valheim/1/mods", "/valheim/1/configs"} {
+		req := httptest.NewRequest(fiber.MethodGet, path, nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("GET %s failed: %v", path, err)
+		}
+		if resp.StatusCode != fiber.StatusNotFound {
+			t.Errorf("GET %s status = %d, want 404", path, resp.StatusCode)
 		}
 	}
 }
@@ -127,7 +174,7 @@ func TestValheimWizardCreateAndDetail(t *testing.T) {
 	app, st, _, _, _ := setupTestValheimServer(t)
 	defer st.Close()
 
-	// 1. Create instance via wizard endpoint (slot 1 is already adopted, so this becomes slot 2)
+	// 1. Create instance via wizard endpoint (slot 1 is created)
 	payload := map[string]any{
 		"name":     "Odin's Hall",
 		"password": "secretpassword",
@@ -153,8 +200,8 @@ func TestValheimWizardCreateAndDetail(t *testing.T) {
 		t.Errorf("expected redirect signal in wizard response, got: %s", string(createBody))
 	}
 
-	// 2. Fetch overview tab for newly created slot 2
-	req = httptest.NewRequest(fiber.MethodGet, "/valheim/2/overview", nil)
+	// 2. Fetch overview tab for newly created slot 1
+	req = httptest.NewRequest(fiber.MethodGet, "/valheim/1/overview", nil)
 	resp, err = app.Test(req)
 	if err != nil {
 		t.Fatalf("get overview failed: %v", err)
@@ -171,9 +218,9 @@ func TestValheimWizardCreateAndDetail(t *testing.T) {
 		t.Errorf("overview missing '6 GiB' medium tier allocation")
 	}
 
-	// 3. Test tabs for slot 2
+	// 3. Test tabs for slot 1
 	for _, tab := range []string{"mods", "configs", "console", "backups", "settings"} {
-		tabReq := httptest.NewRequest(fiber.MethodGet, fmt.Sprintf("/valheim/2/%s", tab), nil)
+		tabReq := httptest.NewRequest(fiber.MethodGet, fmt.Sprintf("/valheim/1/%s", tab), nil)
 		tabResp, tabErr := app.Test(tabReq)
 		if tabErr != nil {
 			t.Fatalf("get tab %s failed: %v", tab, tabErr)
@@ -276,3 +323,135 @@ func TestValheimLifecycleEndpoints(t *testing.T) {
 		t.Errorf("delete status = %d, want 200", respDelete.StatusCode)
 	}
 }
+
+func TestValheimHubCardSymmetry(t *testing.T) {
+	app, st, mgr, _, _ := setupTestValheimServer(t)
+	defer st.Close()
+
+	// 1. Check 0-worlds empty state on Hub card
+	req0 := httptest.NewRequest(fiber.MethodGet, "/", nil)
+	resp0, err := app.Test(req0)
+	if err != nil {
+		t.Fatalf("GET / (0 worlds) failed: %v", err)
+	}
+	if resp0.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET / (0 worlds) status = %d, want 200", resp0.StatusCode)
+	}
+	body0, _ := io.ReadAll(resp0.Body)
+	html0 := string(body0)
+	for _, want := range []string{
+		"Valheim Worlds",
+		"0 of 4 worlds saved",
+		"All Valheim worlds are currently offline.",
+		"+ Create World",
+	} {
+		if !strings.Contains(html0, want) {
+			t.Errorf("Hub page (0 worlds) missing %q", want)
+		}
+	}
+
+	// 2. Provision instance 1 and mark it as running so it allocates medium tier (6 GiB) RAM
+	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
+		GameID: domain.GameValheim,
+		Name:   "Valhalla",
+		Tier:   domain.TierMedium,
+	}, "test-admin")
+	if err != nil {
+		t.Fatalf("CreateInstance failed: %v", err)
+	}
+	_ = store.NewValheimInstanceRepo(st).UpdateState(inst.Number, domain.StateRunning)
+
+	req := httptest.NewRequest(fiber.MethodGet, "/", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("GET / failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET / status = %d, want 200", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	html := string(body)
+
+	for _, want := range []string{
+		"Valheim Worlds",
+		"Dedicated multi-world cluster",
+		"1 of 4 worlds saved",
+		"1 of 2 running",
+		"RAM 6G of 16G",
+		"Open Valheim Manager →",
+		`href="/valheim"`,
+		"Minecraft Worlds",
+		"Open Minecraft Manager →",
+		`href="/minecraft"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("Hub page missing %q", want)
+		}
+	}
+}
+
+func TestValheimBackupsAndRestores(t *testing.T) {
+	app, st, mgr, _, _ := setupTestValheimServer(t)
+	defer st.Close()
+
+	// Provision instance 1
+	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
+		GameID: domain.GameValheim,
+		Name:   "Valheim",
+		Tier:   domain.TierMedium,
+	}, "test-admin")
+	if err != nil {
+		t.Fatalf("CreateInstance failed: %v", err)
+	}
+	_ = store.NewValheimInstanceRepo(st).UpdateState(inst.Number, domain.StateRunning)
+
+	// 1. Create backup
+	reqBkp := httptest.NewRequest(fiber.MethodPost, fmt.Sprintf("/api/valheim/%d/backups/create", inst.Number), nil)
+	respBkp, err := app.Test(reqBkp)
+	if err != nil {
+		t.Fatalf("create backup failed: %v", err)
+	}
+	if respBkp.StatusCode != fiber.StatusOK {
+		t.Fatalf("create backup status = %d, want 200", respBkp.StatusCode)
+	}
+
+	// 2. Stop instance 1 before in-place restore
+	reqStop := httptest.NewRequest(fiber.MethodPost, fmt.Sprintf("/api/valheim/instances/%d/stop", inst.Number), nil)
+	_, _ = app.Test(reqStop)
+
+	// 3. In-place restore
+	archiveName := "valheim-valheim-01-daily-123456.tar.gz"
+	payloadInPlace := fmt.Sprintf(`{"archive":"%s"}`, archiveName)
+	reqRst := httptest.NewRequest(fiber.MethodPost, fmt.Sprintf("/api/valheim/%d/backups/restore-inplace", inst.Number), strings.NewReader(payloadInPlace))
+	reqRst.Header.Set("Content-Type", "application/json")
+	respRst, err := app.Test(reqRst)
+	if err != nil {
+		t.Fatalf("in-place restore failed: %v", err)
+	}
+	if respRst.StatusCode != fiber.StatusOK {
+		t.Fatalf("in-place restore status = %d, want 200", respRst.StatusCode)
+	}
+
+	// 4. Restore as new world
+	payloadNew := fmt.Sprintf(`{"name":"Valheim Cloned","tier":"medium","archive":"%s"}`, archiveName)
+	reqRstNew := httptest.NewRequest(fiber.MethodPost, fmt.Sprintf("/api/valheim/%d/backups/restore-new", inst.Number), strings.NewReader(payloadNew))
+	reqRstNew.Header.Set("Content-Type", "application/json")
+	respRstNew, err := app.Test(reqRstNew)
+	if err != nil {
+		t.Fatalf("restore-new failed: %v", err)
+	}
+	if respRstNew.StatusCode != fiber.StatusOK {
+		t.Fatalf("restore-new status = %d, want 200", respRstNew.StatusCode)
+	}
+
+	// Verify instance 2 was created
+	inst2, err := mgr.GetInstance(context.Background(), 2)
+	if err != nil || inst2 == nil {
+		t.Fatalf("expected instance 2 to be created via restore-new: %v", err)
+	}
+	if inst2.Name != "Valheim Cloned" {
+		t.Errorf("instance 2 name = %q, want 'Valheim Cloned'", inst2.Name)
+	}
+}
+

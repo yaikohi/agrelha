@@ -303,13 +303,14 @@ func startValheimScheduler(ctx context.Context, cfg *config.Config, d Deps) {
 
 func buildAccessHandler(d Deps, applyAfterSync func(string, string, func(string) bool)) *access.Handler {
 	return access.New(access.Config{
-		Admins:         d.Admins,
-		MCAccess:       d.MCAccess,
-		History:        d.Store,
-		Players:        d.Store,
-		StateStore:     d.StateStore,
-		Actor:          actor,
-		ApplyAfterSync: applyAfterSync,
+		Admins:           d.Admins,
+		MCAccess:         d.MCAccess,
+		ValheimInstances: d.ValheimInstances,
+		History:          d.Store,
+		Players:          d.Store,
+		StateStore:       d.StateStore,
+		Actor:            actor,
+		ApplyAfterSync:   applyAfterSync,
 	})
 }
 
@@ -648,6 +649,7 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 		GrafanaDashboardURL: grafanaURL,
 		ValheimAddress:      valheimAddr,
 		GameNodeName:        nodeName,
+		ValheimInstances:    d.ValheimInstances,
 		MCInstances:         d.MCInstances,
 		ValheimGame:         d.ValheimGame,
 		MinecraftGame:       d.MinecraftGame,

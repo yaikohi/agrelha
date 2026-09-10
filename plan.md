@@ -124,14 +124,27 @@ Aligned with Hexagonal (Ports & Adapters) and Onion Architecture:
     - Preserved backward compatibility with legacy redirects: `/mods` -> `/valheim/1/mods`, `/configs` -> `/valheim/1/configs`, `/valheim/mods` -> `/valheim/1/mods`, `/valheim/configs` -> `/valheim/1/configs`.
     - Zero architectural ratchet exceptions in `internal/arch/arch_test.go` and 100% test pass rate across the full repository (242 passed across 52 packages).
 
-- **Candidate 9: Valheim Backup Jobs, Restores & End-to-End Verification** [Planned]
-  - **Objective**: Implement on-demand and scheduled backup capabilities for Valheim worlds with in-place and clone restores, verifying full system integration.
-  - **Key Work Items**:
-    - Create Kubernetes Job template for Valheim world backups (`.tar.gz` snapshots of `/config/worlds_local`).
-    - Implement in-place restore (when stopped) and restore-as-new-world (slot clone) in `InstanceManager`.
-    - Integrate Valheim into the daily backup scheduler pass alongside Minecraft in `internal/wiring/server.go`.
-    - Build end-to-end integration tests in `internal/wiring` covering Valheim multi-instance provisioning, lifecycle actions, mod installs, and backup/restore workflows.
-    - Verify architecture ratchet remains at 0 exceptions via `rtk go test ./internal/arch/...` and full suite passes via `rtk go test ./...`.
+- **Candidate 9: Valheim Backup Jobs, Restores & End-to-End Verification** [Done]
+  - **Objective**: Implement on-demand and scheduled backup capabilities for Valheim worlds with in-place and clone restores, verifying full system integration and Hub card symmetry.
+  - **Delivered**:
+    - Scoped Kubernetes backup and restore Job templates dynamically to instance namespaces in `internal/infra/kube/client.go` (`c.namespace + "-backup"` and `c.namespace + "-restore"`).
+    - Verified in-place restores (`RestoreInPlace`, safety snapshot + unpack into PVC when stopped) and clone restores (`RestoreNew`, unpack into new slot PVC) in `InstanceManager`.
+    - Integrated background automated backup scheduler in `internal/wiring/server.go` (`startValheimScheduler`).
+    - Full Hub (`/`) Dashboard card symmetry matching Minecraft: Valheim card renders multi-world cluster status ("Valheim Worlds", "Dedicated multi-world cluster", "X of 4 worlds saved", "Y of 2 running", "RAM AG of 16G"), active server rows with `.r2z` download buttons, and "Open Valheim Manager →" pointing to `/valheim`.
+    - Comprehensive integration test suite in `internal/wiring/valheim_instances_test.go` (`TestValheimDashboardEmpty`, `TestValheimWizardPage`, `TestValheimWizardCreateAndDetail`, `TestValheimLifecycleEndpoints`, `TestValheimHubCardSymmetry`, `TestValheimBackupsAndRestores`).
+    - Zero architectural ratchet exceptions in `internal/arch/arch_test.go` and 100% test pass rate across the full repository (244 passed across 52 packages).
+
+- **Candidate 10: Player Hint Consistency & Valheim Access Server Passwords** [Done]
+  - **Objective**: Remove `" / WireGuard"` from player-facing cards on Hub (`/`) and display Valheim world passwords for administrators on `/admins` / `/valheim/access`.
+  - **Delivered**:
+    - Cleaned `AccessNote` and `EmptyHint` strings in [`internal/web/pages/helpers.go`](internal/web/pages/helpers.go) to uniformly reference `"ask the host on Discord."` without WireGuard mentions.
+    - Added `ValheimWorldPasswordUI` with `CopyScript()` and `EscapeJS()` helper in [`internal/web/pages/helpers.go`](internal/web/pages/helpers.go).
+    - Designed and implemented "Server Passwords" card on the Valheim Access page ([`internal/web/pages/admins.templ`](internal/web/pages/admins.templ)) featuring world slot #, name, status pill, connection address, masked password with reveal toggle (`$showPass`), and click-to-copy button with toast feedback.
+    - Wired `ValheimInstances *instances.InstanceManager` into `access.Config` ([`internal/web/handlers/access/handler.go`](internal/web/handlers/access/handler.go)) and resolved world instances in `AdminsPage` ([`internal/web/handlers/access/valheim.go`](internal/web/handlers/access/valheim.go)).
+    - Injected `d.ValheimInstances` into `buildAccessHandler` within [`internal/wiring/server.go`](internal/wiring/server.go).
+    - Added unit test `TestAccessValheimPasswords` in [`internal/web/handlers/access/access_test.go`](internal/web/handlers/access/access_test.go).
+    - Verified 0 architecture exceptions in `internal/arch/arch_test.go` and 247/247 tests passing across 52 packages.
+
 
 ---
 

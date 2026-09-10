@@ -74,6 +74,9 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Get("/valheim", h.ValheimDashboard)
 	router.Get("/valheim/mods", h.LegacyModsRedirect)
 	router.Get("/valheim/configs", h.LegacyConfigsRedirect)
+	router.Get("/valheim/access", func(c *fiber.Ctx) error {
+		return c.Redirect("/admins", fiber.StatusTemporaryRedirect)
+	})
 	router.Get("/mods", h.LegacyModsRedirect)
 	router.Get("/configs", h.LegacyConfigsRedirect)
 

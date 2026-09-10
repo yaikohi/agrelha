@@ -10,9 +10,10 @@ import (
 	"agrelha/internal/ports"
 )
 
-// AdoptLegacyValheim ensures that slot #01 exists in repo. If it does not exist,
-// it adopts the pre-existing singleton Valheim workload into slot #01, probing
-// its live runtime status so that existing world data and running state are preserved.
+// AdoptLegacyValheim checks if a pre-existing singleton Valheim workload exists
+// in the runtime and adopts it into slot #01 if repo does not have slot #01.
+// If the legacy deployment does not exist in the runtime (e.g. running on local
+// or in a clean cluster), no instance is adopted.
 func AdoptLegacyValheim(
 	ctx context.Context,
 	repo ports.InstanceRepository,
@@ -21,7 +22,7 @@ func AdoptLegacyValheim(
 	defaultLBIP string,
 	serverName string,
 ) (*domain.Instance, error) {
-	if repo == nil {
+	if repo == nil || rt == nil || legacyRef.Name == "" {
 		return nil, nil
 	}
 
@@ -33,6 +34,12 @@ func AdoptLegacyValheim(
 		return existing, nil
 	}
 
+	st, err := rt.Status(ctx, legacyRef)
+	if err != nil || st.Lifecycle == ports.LifecycleUnknown {
+		// Legacy workload does not exist in the runtime; nothing to adopt.
+		return nil, nil
+	}
+
 	if serverName == "" {
 		serverName = "Valheim"
 	}
@@ -42,13 +49,8 @@ func AdoptLegacyValheim(
 	}
 
 	initialState := domain.StateStopped
-	if rt != nil && legacyRef.Name != "" {
-		st, err := rt.Status(ctx, legacyRef)
-		if err == nil {
-			if st.Available || st.Lifecycle == ports.LifecycleRunning {
-				initialState = domain.StateRunning
-			}
-		}
+	if st.Available || st.Lifecycle == ports.LifecycleRunning {
+		initialState = domain.StateRunning
 	}
 
 	inst := domain.Instance{

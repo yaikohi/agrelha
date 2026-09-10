@@ -3,6 +3,7 @@ package access
 import (
 	mcaccess "agrelha/internal/app/access"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"testing"
 
 	"agrelha/internal/app/admins"
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
 
@@ -275,5 +278,77 @@ func TestAccessConfiguredFlow(t *testing.T) {
 	}
 	if respWLRem.StatusCode != http.StatusOK {
 		t.Errorf("whitelist remove status = %d, want 200", respWLRem.StatusCode)
+	}
+}
+
+func TestAccessValheimPasswords(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "valheim_pass_test.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	repo := store.NewValheimInstanceRepo(st)
+	_ = repo.Upsert(domain.Instance{
+		GameID:   domain.GameValheim,
+		Number:   1,
+		Name:     "Viking World",
+		Password: "supersecretpass",
+		State:    domain.StateRunning,
+		LBIP:     "192.168.20.224",
+	})
+	_ = repo.Upsert(domain.Instance{
+		GameID:   domain.GameValheim,
+		Number:   2,
+		Name:     "Public World",
+		Password: "",
+		State:    domain.StateStopped,
+		LBIP:     "192.168.20.225",
+	})
+
+	mgr := instances.NewInstanceManager(
+		repo, nil, nil, 16, 4, 2, "manifests/valheim", "192.168.20.224", nil, "valheim",
+		instances.WithGameID(domain.GameValheim),
+	)
+
+	h := New(Config{
+		ValheimInstances: mgr,
+	})
+	app := fiber.New()
+	h.Register(app)
+
+	req := httptest.NewRequest(http.MethodGet, "/admins", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /admins status = %d, want 200", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(body)
+
+	if !strings.Contains(html, "Server Passwords") {
+		t.Errorf("expected 'Server Passwords' card in HTML")
+	}
+	if !strings.Contains(html, "Viking World") {
+		t.Errorf("expected 'Viking World' in HTML")
+	}
+	if !strings.Contains(html, "supersecretpass") {
+		t.Errorf("expected 'supersecretpass' in HTML")
+	}
+	if !strings.Contains(html, "showPass1") {
+		t.Errorf("expected showPass1 signal binding in HTML")
+	}
+	if !strings.Contains(html, "Public World") {
+		t.Errorf("expected 'Public World' in HTML")
+	}
+	if !strings.Contains(html, "No password required (public access)") {
+		t.Errorf("expected public access label for world 2 in HTML")
 	}
 }

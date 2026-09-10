@@ -219,6 +219,31 @@ func (r ServerRowUI) CopyScript() string {
 	)
 }
 
+// ValheimWorldPasswordUI holds connection and authentication details for a Valheim world
+// shown on the admin access page.
+type ValheimWorldPasswordUI struct {
+	Number   int
+	Name     string
+	State    string
+	Password string
+	Address  string
+}
+
+func (p ValheimWorldPasswordUI) CopyScript() string {
+	return fmt.Sprintf(
+		"navigator.clipboard.writeText('%s'); $toast = 'Copied world %s password!'; $toastkind = 'ok'",
+		EscapeJS(p.Password), EscapeJS(p.Name),
+	)
+}
+
+// EscapeJS escapes backslashes and quotes for safe embedding in JS inline strings.
+func EscapeJS(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
+}
+
 func (r ServerRowUI) PlayersText() string {
 	if !r.PlayersKnown {
 		return "—"
@@ -293,34 +318,87 @@ func iconStyle(accent string) string {
 	return "bg-emerald-950/40 text-emerald-400 ring-1 ring-emerald-800/40"
 }
 
-// ValheimCard builds the Valheim card. Its stats are live Datastar signals, so
-// the row and header pill bind rather than print.
-func ValheimCard(addr, nodeName string, isAdmin bool) GameCardUI {
-	g := GameCardUI{
-		Icon:         "\u2694\ufe0f",
-		Accent:       "orange",
-		Title:        "Valheim Dedicated",
-		AccessPill:   "\U0001f512 Password",
-		Subtitle:     "Dedicated survival server",
-		OnlineSignal: "online",
-		AccessNote:   "Password required — ask the host on Discord / WireGuard.",
-		Rows: []ServerRowUI{{
-			Name:          "Valheim Dedicated",
-			Address:       addr,
-			DownloadURL:   "/mods/export",
-			DownloadFmt:   ".r2z",
-			Launchers:     []string{"r2modman", "Thunderstore Mod Manager"},
-			ImportSteps:   "Import → From file",
-			OnlineSignal:  "online",
-			PlayersSignal: "players",
-			UptimeSignal:  "uptime",
-		}},
+// Primary is the instance the card footer acts on.
+func (v ValheimSummaryUI) Primary() *InstanceUI {
+	if len(v.ActiveInstances) > 0 {
+		return &v.ActiveInstances[0]
 	}
-	// Both cards always carry an extras strip, so the guest layouts stay
-	// symmetric; Valheim's parallels Minecraft's "N of M worlds saved".
-	g.Extras = []string{"Single persistent world"}
-	if isAdmin && nodeName != "" {
-		g.Extras = append(g.Extras, "Node "+nodeName)
+	return v.ActiveInstance
+}
+
+// ValheimCard builds the Valheim card. Its stats are live Datastar signals, so
+// ValheimCard builds the Valheim card matching the multi-world cluster style of MinecraftCard.
+// Its stats are live Datastar signals, so the row and header pill bind rather than print.
+func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryUI) GameCardUI {
+	var vh ValheimSummaryUI
+	if len(summary) > 0 && summary[0].MaxInstances > 0 {
+		vh = summary[0]
+	} else {
+		// Fallback when called in unit tests without summary: provide default cluster budget with active instance 1
+		vh = ValheimSummaryUI{
+			TotalInstances: 1,
+			MaxInstances:   4,
+			RunningCount:   1,
+			MaxRunning:     2,
+			UsedGiB:        6,
+			TotalBudgetGiB: 16,
+			ActiveInstances: []InstanceUI{{
+				Number:       1,
+				Name:         "valheim",
+				LBIP:         strings.Split(addr, ":")[0],
+				Source:       "modpack",
+				PlayersKnown: true,
+			}},
+		}
+	}
+
+	g := GameCardUI{
+		Icon:         "⚔️",
+		Accent:       "orange",
+		Title:        "Valheim Worlds",
+		AccessPill:   "🔒 Password",
+		Subtitle:     "Dedicated multi-world cluster",
+		OnlineSignal: "online",
+		AccessNote:   "Password required — ask the host on Discord.",
+		EmptyText:    "All Valheim worlds are currently offline.",
+		EmptyHint:    "Ask the server host on Discord to start a world!",
+	}
+
+	for _, inst := range vh.ActiveInstances {
+		versionBadge := "BepInEx · Modded"
+		if inst.Source == "vanilla" {
+			versionBadge = "Vanilla"
+		}
+		row := ServerRowUI{
+			Name:         inst.Name,
+			Address:      fmt.Sprintf("%s:2456", inst.LBIP),
+			VersionBadge: versionBadge,
+			DownloadURL:  fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number),
+			DownloadFmt:  ".r2z",
+			Launchers:    []string{"r2modman", "Thunderstore Mod Manager"},
+			ImportSteps:  "Import → From file",
+			Online:       true,
+			Players:      inst.Players,
+			PlayersKnown: inst.PlayersKnown,
+			Uptime:       inst.Uptime,
+		}
+		if inst.Number == 1 {
+			row.OnlineSignal = "online"
+			row.PlayersSignal = "players"
+			row.UptimeSignal = "uptime"
+		}
+		g.Rows = append(g.Rows, row)
+	}
+
+	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", vh.TotalInstances, vh.MaxInstances)}
+	if isAdmin {
+		g.Extras = append(g.Extras,
+			fmt.Sprintf("%d of %d running", vh.RunningCount, vh.MaxRunning),
+			fmt.Sprintf("RAM %dG of %dG", vh.UsedGiB, vh.TotalBudgetGiB),
+		)
+		if nodeName != "" {
+			g.Extras = append(g.Extras, "Node "+nodeName)
+		}
 	}
 	return g
 }
@@ -328,14 +406,14 @@ func ValheimCard(addr, nodeName string, isAdmin bool) GameCardUI {
 // MinecraftCard builds the Minecraft card from the running instances.
 func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 	g := GameCardUI{
-		Icon:       "\u26cf\ufe0f",
+		Icon:       "⛏️",
 		Accent:     "emerald",
 		Title:      "Minecraft Worlds",
-		AccessPill: "\U0001f6e1\ufe0f Whitelist",
+		AccessPill: "🛡️ Whitelist",
 		Subtitle:   "Dedicated multi-world cluster",
-		AccessNote: "Whitelist required — ask the host on Discord / WireGuard to get added.",
+		AccessNote: "Whitelist required — ask the host on Discord to get added.",
 		EmptyText:  "All Minecraft worlds are currently offline.",
-		EmptyHint:  "Ask the server host on Discord / WireGuard to start a world!",
+		EmptyHint:  "Ask the server host on Discord to start a world!",
 	}
 
 	for _, inst := range mc.ActiveInstances {
@@ -398,24 +476,50 @@ func actionStyle(kind string) string {
 	}
 }
 
-// ValheimActions is Valheim's footer. Update is Valheim-specific and therefore
-// sits in the marked Special slot.
-func ValheimActions() CardActionsUI {
-	return CardActionsUI{
-		Lifecycle: []ActionUI{
-			{Label: "Restart", Script: "@post('/server/restart')"},
-			{Label: "Stop", Script: "@post('/server/stop')", Kind: "danger"},
-			{Label: "Start", Script: "@post('/server/start')", Kind: "go"},
-		},
-		Special: []ActionUI{
-			{Label: "Update", Script: "@post('/server/update')", Kind: "special"},
-		},
-		Links: []ActionUI{
-			{Label: "Configs", Href: "/configs", Kind: "link"},
-			{Label: "Access", Href: "/admins", Kind: "link"},
-		},
-		Manager: ActionUI{Label: "Open Valheim Manager →", Href: "/mods"},
+// ValheimActions is Valheim's footer, mirroring MinecraftActions.
+func ValheimActions(summary ...ValheimSummaryUI) CardActionsUI {
+	var vh ValheimSummaryUI
+	if len(summary) > 0 {
+		vh = summary[0]
+	} else {
+		// Fallback for tests calling without summary (assumes active instance 1)
+		vh = ValheimSummaryUI{
+			TotalInstances: 1,
+			MaxInstances:   4,
+			RunningCount:   1,
+			MaxRunning:     2,
+			ActiveInstances: []InstanceUI{{
+				Number: 1,
+				Name:   "valheim",
+			}},
+		}
 	}
+
+	a := CardActionsUI{
+		Links: []ActionUI{
+			{Label: "Access", Href: "/valheim/access", Kind: "link"},
+		},
+		Manager: ActionUI{Label: "Open Valheim Manager →", Href: "/valheim"},
+	}
+
+	if inst := vh.Primary(); inst != nil {
+		a.Lifecycle = []ActionUI{
+			{Label: "Restart", Script: fmt.Sprintf("@post('/api/valheim/instances/%d/restart')", inst.Number)},
+			{Label: "Stop", Script: fmt.Sprintf("@post('/api/valheim/instances/%d/stop')", inst.Number), Kind: "danger"},
+			{Label: "Start", Script: fmt.Sprintf("@post('/api/valheim/instances/%d/start')", inst.Number), Kind: "go"},
+		}
+		a.Special = []ActionUI{
+			{Label: "Update", Script: "@post('/server/update')", Kind: "special"},
+		}
+		a.Links = append([]ActionUI{
+			{Label: "Configs", Href: fmt.Sprintf("/valheim/%d/configs", inst.Number), Kind: "link"},
+		}, a.Links...)
+	} else {
+		a.Special = []ActionUI{
+			{Label: "+ Create World", Href: "/valheim/create", Kind: "special"},
+		}
+	}
+	return a
 }
 
 // Primary is the instance the card footer acts on. The summary carries both a
@@ -471,9 +575,9 @@ func ValheimNav() NavGroupUI {
 		Label: "Valheim",
 		Href:  "/valheim",
 		Links: []ActionUI{
-			{Label: "mods", Href: "/mods"},
-			{Label: "configs", Href: "/configs"},
-			{Label: "access", Href: "/admins"},
+			{Label: "mods", Href: "/valheim/mods"},
+			{Label: "configs", Href: "/valheim/configs"},
+			{Label: "access", Href: "/valheim/access"},
 		},
 	}
 }

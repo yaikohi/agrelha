@@ -81,3 +81,45 @@ func TestAdoptLegacyValheim(t *testing.T) {
 		t.Errorf("expected original name preserved, got %s", second.Name)
 	}
 }
+
+func TestAdoptLegacyValheim_NoWorkload(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test-no-workload.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+
+	repo := store.NewValheimInstanceRepo(st)
+	ctx := context.Background()
+	legacyRef := ports.ServerRef{Name: "valheim", Scope: "valheim"}
+
+	// 1. rt is nil (local testing mode)
+	adopted, err := AdoptLegacyValheim(ctx, repo, nil, legacyRef, "192.168.20.224", "Valheim Legacy")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if adopted != nil {
+		t.Fatalf("expected nil when runtime is nil, got %v", adopted)
+	}
+	insts, _ := repo.List()
+	if len(insts) != 0 {
+		t.Fatalf("expected 0 instances in repo, got %d", len(insts))
+	}
+
+	// 2. rt returns LifecycleUnknown (workload not deployed in cluster)
+	rtUnknown := &mockRuntimeForAdoption{
+		status: ports.Status{Lifecycle: ports.LifecycleUnknown},
+	}
+	adopted, err = AdoptLegacyValheim(ctx, repo, rtUnknown, legacyRef, "192.168.20.224", "Valheim Legacy")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if adopted != nil {
+		t.Fatalf("expected nil when workload is unknown, got %v", adopted)
+	}
+	insts, _ = repo.List()
+	if len(insts) != 0 {
+		t.Fatalf("expected 0 instances in repo, got %d", len(insts))
+	}
+}

@@ -39,6 +39,7 @@ type Config struct {
 	GrafanaDashboardURL string
 	ValheimAddress      string
 	GameNodeName        string
+	ValheimInstances    *instances.InstanceManager
 	MCInstances         *instances.InstanceManager
 	ValheimGame         ports.Game
 	MinecraftGame       ports.Game
@@ -128,11 +129,60 @@ func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 		}
 	}
 
+	var valheimSummary pages.ValheimSummaryUI
+
+	if h.cfg.ValheimInstances != nil {
+		valheimSummary.MaxInstances = 4
+		valheimSummary.MaxRunning = 2
+		valheimSummary.TotalBudgetGiB = 16
+		if insts, err := h.cfg.ValheimInstances.ListInstances(c.UserContext()); err == nil {
+			var stats map[int]InstanceStat
+			if h.cfg.InstanceStats != nil {
+				stats = h.cfg.InstanceStats(c.UserContext(), insts)
+			}
+			budget := h.cfg.ValheimInstances.Budget(insts)
+			valheimSummary.TotalInstances = budget.TotalInstances
+			valheimSummary.RunningCount = budget.RunningCount
+			valheimSummary.MaxInstances = budget.MaxInstances
+			valheimSummary.MaxRunning = budget.MaxRunning
+			valheimSummary.UsedGiB = budget.UsedGiB
+			valheimSummary.TotalBudgetGiB = budget.TotalBudgetGiB
+
+			for _, inst := range insts {
+				if inst.State == domain.StateRunning {
+					uinst := pages.InstanceUI{
+						GameID:    string(inst.GameID),
+						Number:    inst.Number,
+						Name:      inst.Name,
+						Slug:      inst.Slug,
+						Password:  inst.Password,
+						Seed:      inst.Seed,
+						Tier:      string(inst.Tier),
+						MemoryGiB: inst.MemoryGiB(),
+						State:     string(inst.State),
+						LBIP:      inst.LBIP,
+					}
+					if stats != nil {
+						if st, ok := stats[inst.Number]; ok {
+							uinst.Players = st.Players
+							uinst.PlayersKnown = st.PlayersKnown
+							uinst.Uptime = st.Uptime
+						}
+					}
+					valheimSummary.ActiveInstances = append(valheimSummary.ActiveInstances, uinst)
+					if valheimSummary.ActiveInstance == nil {
+						valheimSummary.ActiveInstance = &uinst
+					}
+				}
+			}
+		}
+	}
+
 	grafanaURL := h.cfg.GrafanaDashboardURL
 	valheimAddr := h.cfg.ValheimAddress
 	nodeName := h.cfg.GameNodeName
 
-	return shared.Render(c, pages.Dashboard(grafanaURL, valheimAddr, nodeName, mcSummary, isAdmin, fk, fm))
+	return shared.Render(c, pages.Dashboard(grafanaURL, valheimAddr, nodeName, valheimSummary, mcSummary, isAdmin, fk, fm))
 }
 
 // SSEMain streams tile signals + updates badge/list every 5s.

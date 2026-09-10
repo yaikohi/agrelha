@@ -121,7 +121,7 @@ func (c *Client) CreateBackupJob(ctx context.Context, jobName, archiveName, data
 			Name:      jobName,
 			Namespace: c.namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/name":      "mc-backup",
+				"app.kubernetes.io/name":      c.namespace + "-backup",
 				"app.kubernetes.io/component": "backup-job",
 			},
 		},
@@ -131,7 +131,7 @@ func (c *Client) CreateBackupJob(ctx context.Context, jobName, archiveName, data
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app.kubernetes.io/name": "mc-backup",
+						"app.kubernetes.io/name": c.namespace + "-backup",
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -203,7 +203,7 @@ func (c *Client) CreateRestoreJob(ctx context.Context, jobName, archiveName, dat
 			Name:      jobName,
 			Namespace: c.namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/name":      "mc-restore",
+				"app.kubernetes.io/name":      c.namespace + "-restore",
 				"app.kubernetes.io/component": "restore-job",
 			},
 		},
@@ -213,7 +213,7 @@ func (c *Client) CreateRestoreJob(ctx context.Context, jobName, archiveName, dat
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app.kubernetes.io/name": "mc-restore",
+						"app.kubernetes.io/name": c.namespace + "-restore",
 					},
 				},
 				Spec: corev1.PodSpec{
