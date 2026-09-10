@@ -90,15 +90,18 @@ Aligned with Hexagonal (Ports & Adapters) and Onion Architecture:
 
 ### Valheim Multi-Instance Roadmap (Mirroring Minecraft)
 
-- **Candidate 7: Multi-Game Domain, Engine Generalization & Valheim Manifests** [Planned]
+- **Candidate 7: Multi-Game Domain, Engine Generalization & Valheim Manifests** [Done]
   - **Objective**: Generalize the instance management engine to natively orchestrate both `minecraft` and `valheim` workloads via pluggable spec renderers, independent resource budgets, and dedicated Cilium L2 LoadBalancer IPs.
-  - **Key Work Items**:
-    - Generalize `domain.Instance`: Ensure `GameID` (`valheim` vs `minecraft`) drives manifest generation, port specs, and memory tiers.
-    - Define Valheim memory tiers (Small: 4GiB, Medium: 6GiB, Large: 8GiB) and validation.
-    - Add configuration keys to `internal/platform/config`: `VALHEIM_LB_BASE_IP`, `VALHEIM_INSTANCES_PATH`, `VALHEIM_TOTAL_BUDGET_GIB`, `VALHEIM_MAX_INSTANCES`, `VALHEIM_MAX_RUNNING`.
-    - Extend `InstanceManager` to support game-scoped operations (`ListInstancesByGame`) and pluggable `SpecRenderer` (`ValheimManifestRenderer` vs `MinecraftManifestRenderer`).
-    - Create Valheim slot manifest templates in `internal/infra/manifests/valheim/`: `deployment.yaml.tmpl` (`lloesche/valheim-server`), `service.yaml.tmpl` (Cilium LB IP on UDP 2456-2457), `pvc.yaml.tmpl` (`valheim-instance-XX-data`), `mods.yaml.tmpl` (`mods.txt`), `configs.yaml.tmpl` (`.cfg` files).
-    - Implement migration logic to gracefully import the live Valheim deployment into slot #01 (`valheim-instance-01-data`), preserving existing worlds and configs.
+  - **Delivered**:
+    - Generalized `domain.Instance`: `GameID` (`valheim` vs `minecraft`), `Password`, and game-scoped naming conventions (`valheim-<slug>-<num>`, `valheim-instance-<num>-data`, `valheim-<slug>-<num>-{slot,mods,configs}`).
+    - Added Valheim memory tiers (Small: 4GiB / 5GiB limit, Med: 6GiB / 7GiB limit, Large: 8GiB / 10GiB limit) and default Valheim budget constants (16GiB total, 4 max instances, 2 max running).
+    - Added configuration keys to `internal/platform/config`: `VALHEIM_LB_BASE_IP` (`192.168.20.224`), `VALHEIM_INSTANCES_PATH`, `VALHEIM_TOTAL_BUDGET_GIB`, `VALHEIM_MAX_INSTANCES`, `VALHEIM_MAX_RUNNING`.
+    - Extended `internal/infra/store`: Added `valheim_instances` table migration, CRUD queries, and `NewValheimInstanceRepo(s *Store)` satisfying `ports.InstanceRepository`.
+    - Created Valheim slot manifest templates in `internal/infra/manifests/valheim/templates/`: `deployment.yaml.tmpl` (`lloesche/valheim-server:latest`, mounts, probes, BepInEx config sync), `service.yaml.tmpl` (Cilium LB IP on UDP 2456-2457, TCP 9001), `pvc.yaml.tmpl` (`valheim-instance-XX-data`), `slot.yaml.tmpl`, `mods.yaml.tmpl`, `configs.yaml.tmpl`. Implemented `ports.SpecRenderer` in `valheim.Renderer`.
+    - Generalized `InstanceManager` in `internal/app/instances`: Added `WithGameID`, `WithBackupsPVC`, `WithServerRefResolver`, game-scoped lifecycle methods, and `UpdateValheimSettings`.
+    - Implemented legacy adoption logic `AdoptLegacyValheim` in `internal/app/instances/adoption.go` to import the pre-existing singleton Valheim workload into slot #01 (`valheim-instance-01-data`), preserving existing world data and running state.
+    - Wired `d.ValheimInstances`, `AdoptLegacyValheim`, `makeApplyValheimAfterSync`, and `startValheimScheduler` into `internal/wiring`.
+    - Zero architectural ratchet violations in `internal/arch/arch_test.go` and 100% test pass rate across the full suite (232 tests passing across 51 packages).
 
 - **Candidate 8: Valheim Web Delivery, Handlers & 3-Step Wizard** [Planned]
   - **Objective**: Provide full UI and API parity for Valheim under `/valheim`, mirroring Minecraft's instance dashboard, creation wizard, and tabbed instance view.

@@ -18,6 +18,7 @@ import (
 	infrabackups "agrelha/internal/infra/backups"
 	"agrelha/internal/infra/content/modpackindex"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
+	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 	"agrelha/internal/web"
@@ -38,7 +39,34 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 		d.MCInstances.ApplyOptions(instances.WithAfterSyncHook(applyMCAfterSync))
 	}
 
+	if d.ValheimInstances != nil && d.Store != nil {
+		defaultLBIP := ""
+		serverName := "Valheim"
+		if cfg != nil {
+			defaultLBIP = cfg.ValheimLBBaseIP
+			if cfg.ValheimDeployment != "" {
+				serverName = cfg.ValheimDeployment
+			}
+		}
+		if _, err := instances.AdoptLegacyValheim(
+			ctx,
+			store.NewValheimInstanceRepo(d.Store),
+			d.ValheimRuntime,
+			d.ValheimRef,
+			defaultLBIP,
+			serverName,
+		); err != nil {
+			slog.Warn("adopt legacy valheim instance failed", "err", err)
+		}
+	}
+
+	applyValheimAfterSync := makeApplyValheimAfterSync(cfg, d)
+	if d.ValheimInstances != nil {
+		d.ValheimInstances.ApplyOptions(instances.WithAfterSyncHook(applyValheimAfterSync))
+	}
+
 	startMinecraftScheduler(ctx, cfg, d)
+	startValheimScheduler(ctx, cfg, d)
 
 	applyAfterSync := makeApplyAfterSync(d)
 
@@ -194,6 +222,82 @@ func startMinecraftScheduler(ctx context.Context, cfg *config.Config, d Deps) {
 	sched.Start(ctx)
 }
 
+func makeApplyValheimAfterSync(cfg *config.Config, d Deps) func(string, string, string, func(string) bool) {
+	return func(cmName, depName, key string, want func(string) bool) {
+		if d.K8s == nil {
+			return
+		}
+		if depName == "" && cfg != nil {
+			depName = cfg.ValheimDeployment
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			t := time.NewTicker(10 * time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					slog.Warn("applyValheimAfterSync: timed out waiting for ArgoCD sync", "configmap", cmName)
+					return
+				case <-t.C:
+					data, err := d.K8s.ConfigMapData(ctx, cmName)
+					if err != nil {
+						continue
+					}
+					if want(data[key]) {
+						var restartErr error
+						if d.ValheimRuntime != nil {
+							scope := ""
+							if cfg != nil {
+								scope = cfg.ValheimNamespace
+							}
+							restartErr = d.ValheimRuntime.Restart(ctx, ports.ServerRef{Name: depName, Scope: scope})
+						} else {
+							restartErr = d.K8s.RestartDeployment(ctx, depName)
+						}
+						if restartErr != nil {
+							slog.Error("applyValheimAfterSync: restart failed", "configmap", cmName, "dep", depName, "err", restartErr)
+							return
+						}
+						slog.Info("applyValheimAfterSync: change landed, rolled valheim deployment", "configmap", cmName, "dep", depName)
+						if d.Store != nil {
+							_ = d.Store.RecordEvent("valheim-auto-restart", cmName)
+						}
+						return
+					}
+				}
+			}
+		}()
+	}
+}
+
+func startValheimScheduler(ctx context.Context, cfg *config.Config, d Deps) {
+	if d.ValheimInstances == nil || d.K8s == nil {
+		return
+	}
+	var opts []appbackups.Option
+	if cfg != nil {
+		opts = append(opts,
+			appbackups.WithNamespace(cfg.ValheimNamespace),
+			appbackups.WithBackupsPVC("valheim-backups"),
+		)
+		if cfg.BackupsDir != "" {
+			opts = append(opts, appbackups.WithPruner(func(slug string, num, keep int) error {
+				return infrabackups.PruneBackups(cfg.BackupsDir, slug, num, keep)
+			}))
+		}
+	}
+	if d.Store != nil {
+		opts = append(opts,
+			appbackups.WithAudit(d.Store),
+			appbackups.WithEvent(d.Store),
+		)
+	}
+	sched := appbackups.New(d.ValheimInstances, d.K8s, opts...)
+	sched.Start(ctx)
+}
+
 func buildAccessHandler(d Deps, applyAfterSync func(string, string, func(string) bool)) *access.Handler {
 	return access.New(access.Config{
 		Admins:         d.Admins,
@@ -322,7 +426,7 @@ func buildInstancesHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 					}
 					modsTxt := cm["mods.txt"]
 					var lines []string
-					for _, line := range strings.Split(modsTxt, "\n") {
+					for line := range strings.SplitSeq(modsTxt, "\n") {
 						line = strings.TrimSpace(line)
 						if line != "" && !strings.HasPrefix(line, "#") {
 							lines = append(lines, line)

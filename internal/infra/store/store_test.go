@@ -206,6 +206,69 @@ func TestInstanceCRUD(t *testing.T) {
 	}
 }
 
+func TestValheimInstancesStoreAndRepo(t *testing.T) {
+	s := newTestStore(t)
+	repo := NewValheimInstanceRepo(s)
+
+	inst := domain.Instance{
+		GameID:     domain.GameValheim,
+		Number:     1,
+		Name:       "Odin's Hall",
+		Slug:       "odins-hall",
+		Seed:       "seed123",
+		Password:   "valheimpass",
+		Tier:       domain.TierLarge,
+		State:      domain.StateRunning,
+		MOTD:       "Welcome to Valheim",
+		MaxPlayers: 10,
+		LBIP:       "192.168.20.211",
+	}
+
+	// 1. Upsert via repo
+	if err := repo.Upsert(inst); err != nil {
+		t.Fatalf("Upsert failed: %v", err)
+	}
+
+	// 2. Get via repo
+	got, err := repo.Get(1)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("expected instance 1, got nil")
+	}
+	if got.GameID != domain.GameValheim || got.Name != "Odin's Hall" || got.Password != "valheimpass" || got.Tier != domain.TierLarge {
+		t.Fatalf("unexpected instance retrieved: %+v", got)
+	}
+
+	// 3. Update state
+	if err := repo.UpdateState(1, domain.StateStopped); err != nil {
+		t.Fatalf("UpdateState failed: %v", err)
+	}
+	got, _ = repo.Get(1)
+	if got.State != domain.StateStopped {
+		t.Fatalf("expected stopped, got %s", got.State)
+	}
+
+	// 4. List via repo
+	list, err := repo.List()
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(list) != 1 || list[0].Number != 1 || list[0].GameID != domain.GameValheim {
+		t.Fatalf("unexpected List output: %+v", list)
+	}
+
+	// 5. Delete via repo
+	if err := repo.Delete(1); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+	got, _ = repo.Get(1)
+	if got != nil {
+		t.Fatalf("expected nil after delete, got %+v", got)
+	}
+}
+
 func TestAuditEventsAndHistory(t *testing.T) {
 	s := newTestStore(t)
 

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .ModsCMName }}
+  namespace: {{ .Namespace }}
+  labels:
+    app: {{ .DeploymentName }}
+    instance: "{{ .Number }}"
+data:
+  mods.txt: |
+{{ .IndentModsTxt }}

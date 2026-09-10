@@ -3,10 +3,12 @@ package instances
 import (
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/manifests"
+	valheimmanifests "agrelha/internal/infra/manifests/valheim"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -307,5 +309,140 @@ func TestInstanceManagerDeepWorkflows(t *testing.T) {
 	// Verify audit records exist
 	if len(audit.records) == 0 {
 		t.Fatalf("expected audit records, got none")
+	}
+}
+
+func TestValheimInstanceManager(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test-valheim.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test store: %v", err)
+	}
+	defer st.Close()
+
+	state := newMockStateStore()
+	audit := &mockAuditRecorder{}
+
+	valheimRepo := store.NewValheimInstanceRepo(st)
+	renderer := valheimmanifests.New("dedicated=gameserver", "valheim")
+
+	mgr := NewInstanceManager(
+		valheimRepo, state, nil, 16, 4, 2,
+		"manifests/valheim", "192.168.20.210", renderer, "valheim",
+		WithGameID(domain.GameValheim),
+		WithAudit(audit),
+	)
+
+	ctx := context.Background()
+
+	// 1. Create first Valheim instance
+	inst1, err := mgr.CreateInstance(ctx, domain.Instance{
+		Name:     "Viking Outpost",
+		Password: "outpostpassword",
+		Seed:     "seed999",
+		Tier:     domain.TierMedium, // 6 GiB
+	}, "denikson/BepInExPack_Valheim\n", "admin@agrelha.local")
+	if err != nil {
+		t.Fatalf("create valheim instance failed: %v", err)
+	}
+
+	if inst1.Number != 1 {
+		t.Fatalf("expected slot 1, got %d", inst1.Number)
+	}
+	if inst1.GameID != domain.GameValheim {
+		t.Fatalf("expected GameValheim, got %s", inst1.GameID)
+	}
+	if inst1.DeploymentName() != "valheim-viking-outpost-01" {
+		t.Fatalf("unexpected deployment name: %s", inst1.DeploymentName())
+	}
+	if inst1.LBIP != "192.168.20.211" {
+		t.Fatalf("unexpected LBIP: %s", inst1.LBIP)
+	}
+
+	// Verify manifests written to stateStore
+	depDoc, ok := state.docs["manifests/valheim/instance-01/deployment.yaml"]
+	if !ok || !strings.Contains(string(depDoc.Raw), "lloesche/valheim-server:latest") {
+		t.Fatalf("deployment.yaml not written to stateStore or missing image: %s", string(depDoc.Raw))
+	}
+	svcDoc, ok := state.docs["manifests/valheim/instance-01/service.yaml"]
+	if !ok || !strings.Contains(string(svcDoc.Raw), "192.168.20.211") {
+		t.Fatalf("service.yaml not written to stateStore or missing IP: %s", string(svcDoc.Raw))
+	}
+
+	// 2. Create second Valheim instance
+	inst2, err := mgr.CreateInstance(ctx, domain.Instance{
+		Name:     "Farms of Valheim",
+		Password: "farmspassword",
+		Tier:     domain.TierLarge, // 8 GiB
+	}, "", "admin@agrelha.local")
+	if err != nil {
+		t.Fatalf("create second instance failed: %v", err)
+	}
+	if inst2.Number != 2 {
+		t.Fatalf("expected slot 2, got %d", inst2.Number)
+	}
+
+	// 3. Start instances and verify budget
+	if err := mgr.StartInstance(ctx, inst1.Number, "admin@agrelha.local"); err != nil {
+		t.Fatalf("start inst1 failed: %v", err)
+	}
+	if err := mgr.StartInstance(ctx, inst2.Number, "admin@agrelha.local"); err != nil {
+		t.Fatalf("start inst2 failed: %v", err)
+	}
+
+	// Try to start a 3rd instance when maxRunning is 2
+	inst3, err := mgr.CreateInstance(ctx, domain.Instance{
+		Name: "Third Instance",
+		Tier: domain.TierSmall, // 4 GiB
+	}, "")
+	if err != nil {
+		t.Fatalf("create inst3 failed: %v", err)
+	}
+	if err := mgr.StartInstance(ctx, inst3.Number); err == nil || !strings.Contains(err.Error(), "maximum of 2 running instances reached") {
+		t.Fatalf("expected maxRunning error, got %v", err)
+	}
+
+	// 4. Update Valheim Settings
+	if err := mgr.UpdateValheimSettings(ctx, inst1.Number, "Viking Stronghold", "Updated MOTD", "large", "newpass", "admin@agrelha.local"); err != nil {
+		t.Fatalf("UpdateValheimSettings failed: %v", err)
+	}
+	updated, err := mgr.GetInstance(ctx, inst1.Number)
+	if err != nil || updated == nil {
+		t.Fatalf("get updated instance failed: %v", err)
+	}
+	if updated.Name != "Viking Stronghold" || updated.Password != "newpass" || updated.Tier != domain.TierLarge {
+		t.Fatalf("updated instance unexpected: %+v", updated)
+	}
+
+	// 5. ListInstancesByGame
+	valheimList, err := mgr.ListInstancesByGame(ctx, domain.GameValheim)
+	if err != nil {
+		t.Fatalf("ListInstancesByGame failed: %v", err)
+	}
+	if len(valheimList) != 3 {
+		t.Fatalf("expected 3 valheim instances, got %d", len(valheimList))
+	}
+
+	// 6. Stop and delete
+	if err := mgr.StopInstance(ctx, inst2.Number, "admin@agrelha.local"); err != nil {
+		t.Fatalf("stop inst2 failed: %v", err)
+	}
+	if err := mgr.DeleteInstance(ctx, inst2.Number, "admin@agrelha.local"); err != nil {
+		t.Fatalf("delete inst2 failed: %v", err)
+	}
+	deleted, _ := mgr.GetInstance(ctx, inst2.Number)
+	if deleted != nil {
+		t.Fatalf("expected deleted instance to be nil")
+	}
+
+	// Check audit events recorded with valheim prefix
+	foundValheimCreate := false
+	for _, rec := range audit.records {
+		if strings.Contains(rec, "valheim-instance-create") {
+			foundValheimCreate = true
+		}
+	}
+	if !foundValheimCreate {
+		t.Fatalf("expected valheim-instance-create audit action, got: %+v", audit.records)
 	}
 }

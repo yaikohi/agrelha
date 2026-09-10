@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .DeploymentName }}
+  namespace: {{ .Namespace }}
+  labels:
+    app: {{ .DeploymentName }}
+    role: valheim-instance
+    instance: "{{ .Number }}"
+    world: "{{ .Slug }}"
+spec:
+  replicas: {{ if eq .State "running" }}1{{ else }}0{{ end }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .DeploymentName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .DeploymentName }}
+        role: valheim-instance
+        instance: "{{ .Number }}"
+        world: "{{ .Slug }}"
+    spec:
+{{- if .NodeSelectorKey }}
+      nodeSelector:
+        {{ .NodeSelectorKey }}: "{{ .NodeSelectorValue }}"
+{{- end }}
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "gameserver"
+          effect: "NoSchedule"
+      initContainers:
+        - name: sync-configs
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              mkdir -p /config/bepinex/config
+              if [ -d /custom-configs ] && [ "$(ls -A /custom-configs 2>/dev/null)" ]; then
+                echo ">> Syncing custom mod configs to /config/bepinex/config..."
+                cp -Lf /custom-configs/* /config/bepinex/config/ 2>/dev/null || true
+              fi
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+            - name: custom-configs
+              mountPath: /custom-configs
+      containers:
+        - name: valheim
+          image: lloesche/valheim-server:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: {{ .ConfigCMName }}
+          env:
+            - name: SERVER_NAME
+              value: {{ quote .Name }}
+            - name: WORLD_NAME
+              value: {{ quote .Slug }}
+            - name: SERVER_PASS
+              value: {{ quote .Password }}
+            - name: SERVER_PUBLIC
+              value: "true"
+            - name: BEPINEX
+              value: "true"
+            - name: STATUS_HTTP
+              value: "true"
+            - name: SERVER_ARGS
+              value: "-savedir /config/worlds_local"
+            - name: TZ
+              value: "Europe/Amsterdam"
+          ports:
+            - containerPort: 2456
+              name: game
+              protocol: UDP
+            - containerPort: 2457
+              name: query
+              protocol: UDP
+            - containerPort: 9001
+              name: status
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: 9001
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: 9001
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 2000m
+              memory: {{ .MemoryGiB }}Gi
+            limits:
+              memory: {{ .MemoryLimitGiB }}Gi
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+            - name: server-volume
+              mountPath: /opt/valheim
+            - name: backups-volume
+              mountPath: /backups
+            - name: mods-config
+              mountPath: /config-mods
+              readOnly: true
+            - name: custom-configs
+              mountPath: /custom-configs
+      volumes:
+        - name: config-volume
+          persistentVolumeClaim:
+            claimName: {{ .PVCName }}
+        - name: server-volume
+          emptyDir: {}
+        - name: backups-volume
+          persistentVolumeClaim:
+            claimName: valheim-backups
+        - name: mods-config
+          configMap:
+            name: {{ .ModsCMName }}
+            optional: true
+        - name: custom-configs
+          configMap:
+            name: {{ .ConfigsCMName }}
+            optional: true

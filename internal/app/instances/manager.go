@@ -36,6 +36,9 @@ type InstanceManager struct {
 	lbBaseIP         string
 	renderer         ports.SpecRenderer
 	namespace        string
+	gameID           domain.GameID
+	backupsPVC       string
+	serverRefResolver func(inst domain.Instance) ports.ServerRef
 
 	audit               ports.AuditRecorder
 	event               ports.EventRecorder
@@ -54,6 +57,18 @@ type InstanceManager struct {
 }
 
 type Option func(*InstanceManager)
+
+func WithGameID(id domain.GameID) Option {
+	return func(m *InstanceManager) { m.gameID = id }
+}
+
+func WithBackupsPVC(pvc string) Option {
+	return func(m *InstanceManager) { m.backupsPVC = pvc }
+}
+
+func WithServerRefResolver(fn func(inst domain.Instance) ports.ServerRef) Option {
+	return func(m *InstanceManager) { m.serverRefResolver = fn }
+}
 
 func WithJobRunner(runner ports.JobRunner) Option {
 	return func(m *InstanceManager) { m.jobRunner = runner }
@@ -156,9 +171,13 @@ func NewInstanceManager(
 		renderer:          renderer,
 		namespace:         namespace,
 		globalConfigsPath: "manifests/minecraft-modded/configs.yaml",
+		gameID:            domain.GameMinecraft,
 	}
 	for _, opt := range opts {
 		opt(m)
+	}
+	if m.gameID == domain.GameValheim && m.globalConfigsPath == "manifests/minecraft-modded/configs.yaml" {
+		m.globalConfigsPath = "manifests/valheim-mod-configs.yaml"
 	}
 	return m
 }
@@ -172,12 +191,33 @@ func (m *InstanceManager) ApplyOptions(opts ...Option) {
 	}
 }
 
-func (m *InstanceManager) TotalBudgetGiB() int { return m.totalBudgetGiB }
-func (m *InstanceManager) MaxInstances() int   { return m.maxInstances }
-func (m *InstanceManager) MaxRunning() int     { return m.maxRunning }
+func (m *InstanceManager) TotalBudgetGiB() int   { return m.totalBudgetGiB }
+func (m *InstanceManager) MaxInstances() int     { return m.maxInstances }
+func (m *InstanceManager) MaxRunning() int       { return m.maxRunning }
+func (m *InstanceManager) GameID() domain.GameID { return m.gameID }
+
+func (m *InstanceManager) gamePrefix() string {
+	if m.gameID == domain.GameValheim {
+		return "valheim"
+	}
+	return "mc"
+}
+
+func (m *InstanceManager) effectiveBackupsPVC() string {
+	if m.backupsPVC != "" {
+		return m.backupsPVC
+	}
+	if m.gameID == domain.GameValheim {
+		return "valheim-backups"
+	}
+	return "minecraft-modded-backups"
+}
 
 // serverRef addresses one Instance in whatever runtime is configured.
 func (m *InstanceManager) serverRef(inst domain.Instance) ports.ServerRef {
+	if m.serverRefResolver != nil {
+		return m.serverRefResolver(inst)
+	}
 	return ports.ServerRef{Name: inst.DeploymentName(), Scope: m.namespace}
 }
 
@@ -219,6 +259,20 @@ func (m *InstanceManager) ListInstances(ctx context.Context) ([]domain.Instance,
 		return instances[i].Number < instances[j].Number
 	})
 	return instances, nil
+}
+
+func (m *InstanceManager) ListInstancesByGame(ctx context.Context, gameID domain.GameID) ([]domain.Instance, error) {
+	all, err := m.ListInstances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var filtered []domain.Instance
+	for _, inst := range all {
+		if inst.GameID == gameID {
+			filtered = append(filtered, inst)
+		}
+	}
+	return filtered, nil
 }
 
 func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*domain.Instance, error) {
@@ -276,8 +330,20 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 		return nil, fmt.Errorf("invalid instance number %d (must be 1..%d)", inst.Number, m.maxInstances)
 	}
 
+	if inst.GameID == "" {
+		if m.gameID != "" {
+			inst.GameID = m.gameID
+		} else {
+			inst.GameID = domain.GameMinecraft
+		}
+	}
+
 	if strings.TrimSpace(inst.Name) == "" {
-		inst.Name = fmt.Sprintf("World %02d", inst.Number)
+		if inst.GameID == domain.GameValheim {
+			inst.Name = fmt.Sprintf("Valheim %02d", inst.Number)
+		} else {
+			inst.Name = fmt.Sprintf("World %02d", inst.Number)
+		}
 	}
 	inst.EnsureDefaults(m.lbBaseIP)
 
@@ -287,7 +353,7 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 	}
 
 	dirRel := fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, inst.Number)
-	commitMsg := fmt.Sprintf("mc: create instance %02d (%s)", inst.Number, inst.Name)
+	commitMsg := fmt.Sprintf("%s: create instance %02d (%s)", m.gamePrefix(), inst.Number, inst.Name)
 
 	if m.stateStore != nil {
 		docs := make(map[string]ports.Document, len(files))
@@ -303,11 +369,12 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 		return nil, fmt.Errorf("save instance record: %w", err)
 	}
 
+	action := fmt.Sprintf("%s-instance-create", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-instance-create", fmt.Sprintf("World #%02d %q", inst.Number, inst.Name))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), action, fmt.Sprintf("World #%02d %q", inst.Number, inst.Name))
 	}
 	if m.event != nil {
-		_ = m.event.RecordEvent("mc-instance-create", actorOrHyphen(actor))
+		_ = m.event.RecordEvent(action, actorOrHyphen(actor))
 	}
 
 	return &inst, nil
@@ -353,11 +420,12 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...s
 		return err
 	}
 
+	startAction := fmt.Sprintf("%s-instance-start", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-instance-start", fmt.Sprintf("Instance #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), startAction, fmt.Sprintf("Instance #%02d", num))
 	}
 	if m.event != nil {
-		_ = m.event.RecordEvent("mc-instance-start", actorOrHyphen(actor))
+		_ = m.event.RecordEvent(startAction, actorOrHyphen(actor))
 	}
 	return nil
 }
@@ -386,11 +454,12 @@ func (m *InstanceManager) StopInstance(ctx context.Context, num int, actor ...st
 		return err
 	}
 
+	stopAction := fmt.Sprintf("%s-instance-stop", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-instance-stop", fmt.Sprintf("Instance #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), stopAction, fmt.Sprintf("Instance #%02d", num))
 	}
 	if m.event != nil {
-		_ = m.event.RecordEvent("mc-instance-stop", actorOrHyphen(actor))
+		_ = m.event.RecordEvent(stopAction, actorOrHyphen(actor))
 	}
 	return nil
 }
@@ -416,7 +485,7 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int, actor ...
 	}
 
 	dirRel := fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, num)
-	commitMsg := fmt.Sprintf("mc: delete instance %02d (%s)", num, inst.Name)
+	commitMsg := fmt.Sprintf("%s: delete instance %02d (%s)", m.gamePrefix(), num, inst.Name)
 
 	if m.stateStore != nil {
 		if err := m.stateStore.Delete(ctx, dirRel, commitMsg); err != nil {
@@ -428,11 +497,12 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int, actor ...
 		return err
 	}
 
+	deleteAction := fmt.Sprintf("%s-instance-delete", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-instance-delete", fmt.Sprintf("Instance #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), deleteAction, fmt.Sprintf("Instance #%02d", num))
 	}
 	if m.event != nil {
-		_ = m.event.RecordEvent("mc-instance-delete", actorOrHyphen(actor))
+		_ = m.event.RecordEvent(deleteAction, actorOrHyphen(actor))
 	}
 	return nil
 }
@@ -452,11 +522,12 @@ func (m *InstanceManager) RestartInstance(ctx context.Context, num int, actor ..
 		}
 	}
 
+	restartAction := fmt.Sprintf("%s-instance-restart", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-instance-restart", fmt.Sprintf("Instance #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), restartAction, fmt.Sprintf("Instance #%02d", num))
 	}
 	if m.event != nil {
-		_ = m.event.RecordEvent("mc-instance-restart", actorOrHyphen(actor))
+		_ = m.event.RecordEvent(restartAction, actorOrHyphen(actor))
 	}
 	return nil
 }
@@ -487,8 +558,38 @@ func (m *InstanceManager) UpdateSettings(ctx context.Context, num int, name, mot
 		return fmt.Errorf("update instance %d settings: %w", num, err)
 	}
 
+	saveAction := fmt.Sprintf("%s-settings-save", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-settings-save", fmt.Sprintf("Updated settings for #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), saveAction, fmt.Sprintf("Updated settings for #%02d", num))
+	}
+	return nil
+}
+
+func (m *InstanceManager) UpdateValheimSettings(ctx context.Context, num int, name, motd, tier, password string, actor ...string) error {
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil {
+		return err
+	}
+	if inst == nil {
+		return fmt.Errorf("instance %d not found", num)
+	}
+
+	if name != "" {
+		inst.Name = name
+	}
+	inst.MOTD = motd
+	inst.Tier = domain.NormalizeTier(tier)
+	if password != "" {
+		inst.Password = password
+	}
+
+	if err := m.repo.Upsert(*inst); err != nil {
+		return fmt.Errorf("update instance %d settings: %w", num, err)
+	}
+
+	saveAction := fmt.Sprintf("%s-settings-save", m.gamePrefix())
+	if m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), saveAction, fmt.Sprintf("Updated settings for #%02d", num))
 	}
 	return nil
 }
@@ -544,7 +645,7 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 		return 0, ports.ErrNotImplemented
 	}
 	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
-	msg := fmt.Sprintf("mc: install %s into instance #%02d", slug, num)
+	msg := fmt.Sprintf("%s: install %s into instance #%02d", m.gamePrefix(), slug, num)
 	addedCount := 0
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
@@ -577,7 +678,7 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 		return 0, err
 	}
 	if changed && m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-mod-install", fmt.Sprintf("Installed %s into #%02d", slug, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-install", m.gamePrefix()), fmt.Sprintf("Installed %s into #%02d", slug, num))
 	}
 	return addedCount, nil
 }
@@ -591,7 +692,7 @@ func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, a
 		return ports.ErrNotImplemented
 	}
 	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
-	msg := fmt.Sprintf("mc: remove %s from instance #%02d", slug, num)
+	msg := fmt.Sprintf("%s: remove %s from instance #%02d", m.gamePrefix(), slug, num)
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
 			return false, nil
@@ -617,7 +718,7 @@ func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, a
 		return err
 	}
 	if changed && m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-mod-remove", fmt.Sprintf("Removed %s from #%02d", slug, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-remove", m.gamePrefix()), fmt.Sprintf("Removed %s from #%02d", slug, num))
 	}
 	return nil
 }
@@ -693,7 +794,7 @@ func (m *InstanceManager) SaveConfig(ctx context.Context, num int, filename, con
 		return false, err
 	}
 	if changed && m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-config-edit", fmt.Sprintf("Saved %s on #%02d", filename, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-config-edit", m.gamePrefix()), fmt.Sprintf("Saved %s on #%02d", filename, num))
 	}
 	return changed, nil
 }
@@ -718,7 +819,7 @@ func (m *InstanceManager) DeleteConfig(ctx context.Context, num int, filename st
 		return false, err
 	}
 	if changed && m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-config-delete", fmt.Sprintf("Deleted %s on #%02d", filename, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-config-delete", m.gamePrefix()), fmt.Sprintf("Deleted %s on #%02d", filename, num))
 	}
 	return changed, nil
 }
@@ -830,7 +931,11 @@ func (m *InstanceManager) ListBackups(inst domain.Instance) []domain.BackupFile 
 	if m.backupsDir == "" {
 		return nil
 	}
-	pattern := filepath.Join(m.backupsDir, fmt.Sprintf("mc-%s-%02d-*.tar.gz", inst.Slug, inst.Number))
+	prefix := "mc"
+	if inst.GameID == domain.GameValheim {
+		prefix = "valheim"
+	}
+	pattern := filepath.Join(m.backupsDir, fmt.Sprintf("%s-%s-%02d-*.tar.gz", prefix, inst.Slug, inst.Number))
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil
@@ -934,43 +1039,48 @@ func (m *InstanceManager) CreateBackup(ctx context.Context, num int, actor ...st
 
 	// Flush world save via command executor if running
 	if inst.State == domain.StateRunning && m.commandExecutor != nil {
-		_, _ = m.commandExecutor(ctx, *inst, "/save-off")
-		_, _ = m.commandExecutor(ctx, *inst, "/save-all flush")
-		defer func() {
-			_, _ = m.commandExecutor(ctx, *inst, "/save-on")
-		}()
+		if inst.GameID == domain.GameValheim {
+			_, _ = m.commandExecutor(ctx, *inst, "save")
+		} else {
+			_, _ = m.commandExecutor(ctx, *inst, "/save-off")
+			_, _ = m.commandExecutor(ctx, *inst, "/save-all flush")
+			defer func() {
+				_, _ = m.commandExecutor(ctx, *inst, "/save-on")
+			}()
+		}
 	}
 
-	backupName := domain.FormatBackupFileName(inst.Slug, inst.Number, "")
-	jobName := fmt.Sprintf("mc-bkp-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
+	backupName := domain.FormatGameBackupFileName(inst.GameID, inst.Slug, inst.Number, "")
+	jobName := fmt.Sprintf("%s-bkp-%s-%d-%s", m.gamePrefix(), inst.Slug, inst.Number, time.Now().Format("150405"))
 
 	if m.jobRunner != nil {
-		dataPVC := fmt.Sprintf("mc-instance-%02d-data", inst.Number)
-		backupsPVC := "minecraft-modded-backups"
+		dataPVC := inst.PVCName()
+		backupsPVC := m.effectiveBackupsPVC()
 		if err := m.jobRunner.CreateBackupJob(ctx, jobName, backupName, dataPVC, backupsPVC); err != nil {
 			return "", fmt.Errorf("failed to launch backup Job: %w", err)
 		}
 	}
 
 	if m.backupsDir != "" {
-		_ = pruneBackups(m.backupsDir, inst.Slug, inst.Number, 5)
+		_ = pruneBackups(m.backupsDir, m.gamePrefix(), inst.Slug, inst.Number, 5)
 	}
 
+	backupAction := fmt.Sprintf("%s-backup", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-backup", fmt.Sprintf("Backup %s for instance #%02d", backupName, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), backupAction, fmt.Sprintf("Backup %s for instance #%02d", backupName, num))
 	}
 	if m.event != nil {
-		_ = m.event.RecordEvent("mc-backup", actorOrHyphen(actor))
+		_ = m.event.RecordEvent(backupAction, actorOrHyphen(actor))
 	}
 
 	return backupName, nil
 }
 
-func pruneBackups(backupsDir, slug string, num, keepCount int) error {
+func pruneBackups(backupsDir, gamePrefix, slug string, num, keepCount int) error {
 	if backupsDir == "" || keepCount <= 0 {
 		return nil
 	}
-	pattern := filepath.Join(backupsDir, fmt.Sprintf("mc-%s-%02d-*.tar.gz", slug, num))
+	pattern := filepath.Join(backupsDir, fmt.Sprintf("%s-%s-%02d-*.tar.gz", gamePrefix, slug, num))
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return err
@@ -1014,21 +1124,22 @@ func (m *InstanceManager) RestoreInPlace(ctx context.Context, num int, archive s
 	}
 
 	if m.jobRunner != nil {
-		safetyArchive := domain.FormatBackupFileName(inst.Slug, inst.Number, "prerestore")
-		safetyJob := fmt.Sprintf("mc-bkp-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
-		_ = m.jobRunner.CreateBackupJob(ctx, safetyJob, safetyArchive, inst.PVCName(), "minecraft-modded-backups")
+		safetyArchive := domain.FormatGameBackupFileName(inst.GameID, inst.Slug, inst.Number, "prerestore")
+		safetyJob := fmt.Sprintf("%s-bkp-%s-%d-%s", m.gamePrefix(), inst.Slug, inst.Number, time.Now().Format("150405"))
+		_ = m.jobRunner.CreateBackupJob(ctx, safetyJob, safetyArchive, inst.PVCName(), m.effectiveBackupsPVC())
 
-		restoreJobName := fmt.Sprintf("mc-rst-%s-%d-%s", inst.Slug, inst.Number, time.Now().Format("150405"))
-		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, inst.PVCName(), "minecraft-modded-backups"); err != nil {
+		restoreJobName := fmt.Sprintf("%s-rst-%s-%d-%s", m.gamePrefix(), inst.Slug, inst.Number, time.Now().Format("150405"))
+		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, inst.PVCName(), m.effectiveBackupsPVC()); err != nil {
 			return fmt.Errorf("failed to launch restore Job: %w", err)
 		}
 	}
 
+	restoreAction := fmt.Sprintf("%s-backup-restore-inplace", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-backup-restore-inplace", fmt.Sprintf("Restored %s into #%02d", archiveName, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), restoreAction, fmt.Sprintf("Restored %s into #%02d", archiveName, num))
 	}
 	if m.event != nil {
-		_ = m.event.RecordEvent("mc-backup-restore-inplace", actorOrHyphen(actor))
+		_ = m.event.RecordEvent(restoreAction, actorOrHyphen(actor))
 	}
 
 	return nil
@@ -1057,8 +1168,10 @@ func (m *InstanceManager) RestoreNew(ctx context.Context, num int, newName, tier
 	}
 
 	newInst := domain.Instance{
+		GameID:     srcInst.GameID,
 		Name:       newName,
 		Seed:       srcInst.Seed,
+		Password:   srcInst.Password,
 		Loader:     srcInst.Loader,
 		Source:     srcInst.Source,
 		Pack:       srcInst.Pack,
@@ -1080,17 +1193,18 @@ func (m *InstanceManager) RestoreNew(ctx context.Context, num int, newName, tier
 	}
 
 	if m.jobRunner != nil {
-		restoreJobName := fmt.Sprintf("mc-rst-%s-%d-%s", created.Slug, created.Number, time.Now().Format("150405"))
-		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, created.PVCName(), "minecraft-modded-backups"); err != nil {
+		restoreJobName := fmt.Sprintf("%s-rst-%s-%d-%s", m.gamePrefix(), created.Slug, created.Number, time.Now().Format("150405"))
+		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, created.PVCName(), m.effectiveBackupsPVC()); err != nil {
 			return created, fmt.Errorf("instance created, but restore Job failed: %w", err)
 		}
 	}
 
+	newAction := fmt.Sprintf("%s-backup-restore-new", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-backup-restore-new", fmt.Sprintf("Restored %s into new instance #%02d %q", archiveName, created.Number, created.Name))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), newAction, fmt.Sprintf("Restored %s into new instance #%02d %q", archiveName, created.Number, created.Name))
 	}
 	if m.event != nil {
-		_ = m.event.RecordEvent("mc-backup-restore-new", actorOrHyphen(actor))
+		_ = m.event.RecordEvent(newAction, actorOrHyphen(actor))
 	}
 
 	return created, nil

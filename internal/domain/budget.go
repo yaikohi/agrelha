@@ -6,6 +6,10 @@ const (
 	DefaultMaxInstances   = 4
 	DefaultMaxRunning     = 2
 	DefaultTotalBudgetGiB = 24
+
+	DefaultValheimMaxInstances   = 4
+	DefaultValheimMaxRunning     = 2
+	DefaultValheimTotalBudgetGiB = 16
 )
 
 // Budget represents the global resource budget across all games.

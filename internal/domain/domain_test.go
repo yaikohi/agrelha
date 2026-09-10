@@ -236,3 +236,87 @@ user2 # inline comment without space handled
 		t.Errorf("AssignLBIP failed, got %s", AssignLBIP("192.168.1.100", 5))
 	}
 }
+
+func TestValheimInstance(t *testing.T) {
+	vInst := Instance{
+		GameID:   GameValheim,
+		Name:     "Viking World",
+		Number:   1,
+		Password: "secretpassword",
+		Seed:     "valheimseed123",
+		Tier:     TierSmall,
+	}
+	vInst.EnsureDefaults("192.168.20.210")
+
+	if vInst.GameID != GameValheim {
+		t.Fatalf("GameID = %s, want valheim", vInst.GameID)
+	}
+	if vInst.Slug != "viking-world" {
+		t.Fatalf("Slug = %s, want viking-world", vInst.Slug)
+	}
+	if vInst.MaxPlayers != 10 {
+		t.Fatalf("MaxPlayers = %d, want 10", vInst.MaxPlayers)
+	}
+	if vInst.LBIP != "192.168.20.211" {
+		t.Fatalf("LBIP = %s, want 192.168.20.211", vInst.LBIP)
+	}
+
+	// Memory calculations for Valheim
+	if vInst.MemoryGiB() != 4 || vInst.MemoryLimitGiB() != 5 || vInst.HeapInitMemoryGiB() != 0 {
+		t.Fatalf("Valheim TierSmall unexpected memory: %d, %d, %d", vInst.MemoryGiB(), vInst.MemoryLimitGiB(), vInst.HeapInitMemoryGiB())
+	}
+
+	vInstMed := Instance{GameID: GameValheim, Tier: TierMedium}
+	if vInstMed.MemoryGiB() != 6 || vInstMed.MemoryLimitGiB() != 7 {
+		t.Fatalf("Valheim TierMedium unexpected memory: %d, %d", vInstMed.MemoryGiB(), vInstMed.MemoryLimitGiB())
+	}
+
+	vInstLarge := Instance{GameID: GameValheim, Tier: TierLarge}
+	if vInstLarge.MemoryGiB() != 8 || vInstLarge.MemoryLimitGiB() != 10 {
+		t.Fatalf("Valheim TierLarge unexpected memory: %d, %d", vInstLarge.MemoryGiB(), vInstLarge.MemoryLimitGiB())
+	}
+
+	// Naming
+	if vInst.DeploymentName() != "valheim-viking-world-01" {
+		t.Errorf("DeploymentName = %q, want valheim-viking-world-01", vInst.DeploymentName())
+	}
+	if vInst.ServiceName() != "valheim-viking-world-01" {
+		t.Errorf("ServiceName = %q, want valheim-viking-world-01", vInst.ServiceName())
+	}
+	if vInst.PVCName() != "valheim-instance-01-data" {
+		t.Errorf("PVCName = %q, want valheim-instance-01-data", vInst.PVCName())
+	}
+	if vInst.ConfigCMName() != "valheim-viking-world-01-slot" {
+		t.Errorf("ConfigCMName = %q, want valheim-viking-world-01-slot", vInst.ConfigCMName())
+	}
+	if vInst.ModsCMName() != "valheim-viking-world-01-mods" {
+		t.Errorf("ModsCMName = %q, want valheim-viking-world-01-mods", vInst.ModsCMName())
+	}
+	if vInst.ConfigsCMName() != "valheim-viking-world-01-configs" {
+		t.Errorf("ConfigsCMName = %q, want valheim-viking-world-01-configs", vInst.ConfigsCMName())
+	}
+
+	// Env
+	env := vInst.Env()
+	if env["SERVER_NAME"] != "Viking World" || env["WORLD_NAME"] != "viking-world" || env["SERVER_PASS"] != "secretpassword" {
+		t.Errorf("Valheim Env unexpected: %v", env)
+	}
+	if env["BEPINEX"] != "true" || env["WORLD_SEED"] != "valheimseed123" {
+		t.Errorf("Valheim Env missing bepinex/seed: %v", env)
+	}
+
+	// Annotations
+	ann := vInst.Annotations()
+	if ann["agrelha.dev/game"] != "valheim" || ann["agrelha.dev/instance-number"] != "1" || ann["agrelha.dev/seed"] != "valheimseed123" {
+		t.Errorf("Valheim Annotations unexpected: %v", ann)
+	}
+
+	// Backup file naming
+	bkpName := FormatGameBackupFileName(GameValheim, "viking-world", 1, "manual")
+	if !strings.HasPrefix(bkpName, "valheim-viking-world-01-manual-") || !strings.HasSuffix(bkpName, ".tar.gz") {
+		t.Errorf("Valheim backup name unexpected: %s", bkpName)
+	}
+	if !IsSafeBackupFileName(bkpName) {
+		t.Errorf("IsSafeBackupFileName rejected valid Valheim backup: %s", bkpName)
+	}
+}

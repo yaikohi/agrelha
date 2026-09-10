@@ -98,6 +98,20 @@ func (s *Store) migrate() error {
 		created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		last_used     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
+	CREATE TABLE IF NOT EXISTS valheim_instances (
+		number        INTEGER PRIMARY KEY,
+		name          TEXT NOT NULL,
+		slug          TEXT NOT NULL,
+		seed          TEXT,
+		password      TEXT,
+		tier          TEXT NOT NULL DEFAULT 'medium',
+		state         TEXT NOT NULL DEFAULT 'stopped',
+		motd          TEXT,
+		max_players   INTEGER DEFAULT 10,
+		lb_ip         TEXT,
+		created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_used     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	CREATE TABLE IF NOT EXISTS users (
 		username      TEXT PRIMARY KEY,
 		password_hash TEXT NOT NULL,

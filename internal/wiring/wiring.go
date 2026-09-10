@@ -26,6 +26,7 @@ import (
 	"agrelha/internal/infra/gitops"
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/manifests"
+	valheimmanifests "agrelha/internal/infra/manifests/valheim"
 	"agrelha/internal/infra/rcon"
 	argocd "agrelha/internal/infra/reconcile/argocd"
 	compose "agrelha/internal/infra/reconcile/compose"
@@ -41,30 +42,31 @@ import (
 
 // Deps bundles all constructed infrastructure adapters and application services.
 type Deps struct {
-	Store          *store.Store
-	K8s            *k8s.Client
-	MCK8s          *k8s.Client
-	Auth           ports.Auth
-	ValheimGame    ports.Game
-	MinecraftGame  ports.Game
-	ValheimRuntime ports.Runtime
-	ValheimRef     ports.ServerRef
-	MCRuntime      ports.Runtime
-	MCRef          ports.ServerRef
-	Mods           *mods.Manager
-	Admins         *admins.Manager
-	Git            *gitops.Committer
-	TS             *thunderstore.Client
-	MR             *modrinth.Client
-	MPI            *modpackindex.Client
-	MCV            *mcversions.Client
-	MCMods         *mcaccess.ModManager
-	MCAccess       *mcaccess.AccessManager
-	MCRcon         *rcon.Client
-	MCRconPool     *rcon.Pool
-	MCInstances    *instances.InstanceManager
-	StateStore     ports.StateStore
-	Reconciler     ports.Reconciler
+	Store            *store.Store
+	K8s              *k8s.Client
+	MCK8s            *k8s.Client
+	Auth             ports.Auth
+	ValheimGame      ports.Game
+	MinecraftGame    ports.Game
+	ValheimRuntime   ports.Runtime
+	ValheimRef       ports.ServerRef
+	MCRuntime        ports.Runtime
+	MCRef            ports.ServerRef
+	Mods             *mods.Manager
+	Admins           *admins.Manager
+	Git              *gitops.Committer
+	TS               *thunderstore.Client
+	MR               *modrinth.Client
+	MPI              *modpackindex.Client
+	MCV              *mcversions.Client
+	MCMods           *mcaccess.ModManager
+	MCAccess         *mcaccess.AccessManager
+	MCRcon           *rcon.Client
+	MCRconPool       *rcon.Pool
+	MCInstances      *instances.InstanceManager
+	ValheimInstances *instances.InstanceManager
+	StateStore       ports.StateStore
+	Reconciler       ports.Reconciler
 }
 
 // Build is the composition root: it is the only place that decides which
@@ -112,6 +114,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	if c, err := k8s.New(cfg.ValheimNamespace, cfg.ValheimDeployment); err != nil {
 		slog.Warn("k8s client unavailable (dev?)", "err", err)
 	} else {
+		c.SetNodeSelector(cfg.GameNodeSelector)
 		d.K8s = c
 		go ingest.Run(ctx, c, st)
 	}
@@ -175,7 +178,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				}
 				modsTxt := cm["mods.txt"]
 				var lines []string
-				for _, line := range strings.Split(modsTxt, "\n") {
+				for line := range strings.SplitSeq(modsTxt, "\n") {
 					line = strings.TrimSpace(line)
 					if line != "" && !strings.HasPrefix(line, "#") {
 						lines = append(lines, line)
@@ -209,6 +212,71 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 	d.ValheimRuntime = valheimRuntime
 	d.ValheimRef = ports.ServerRef{Name: cfg.ValheimDeployment, Scope: cfg.ValheimNamespace}
+
+	var valheimInstOpts []instances.Option
+	valheimInstOpts = append(valheimInstOpts,
+		instances.WithGameID(domain.GameValheim),
+		instances.WithAudit(st),
+		instances.WithEvent(st),
+		instances.WithBackupsDir(cfg.BackupsDir),
+		instances.WithGlobalConfigsPath(cfg.ModConfigsPath),
+	)
+	if d.K8s != nil {
+		valheimInstOpts = append(valheimInstOpts,
+			instances.WithJobRunner(d.K8s),
+			instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
+				inst, err := d.ValheimInstances.GetInstance(ctx, num)
+				if err != nil {
+					return nil, err
+				}
+				return d.K8s.ConfigMapData(ctx, inst.ConfigsCMName())
+			}),
+			instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+				inst, err := d.ValheimInstances.GetInstance(ctx, num)
+				if err != nil {
+					return nil, err
+				}
+				cm, err := d.K8s.ConfigMapData(ctx, inst.ModsCMName())
+				if err != nil {
+					return nil, err
+				}
+				modsTxt := cm["mods.txt"]
+				var lines []string
+				for line := range strings.SplitSeq(modsTxt, "\n") {
+					line = strings.TrimSpace(line)
+					if line != "" && !strings.HasPrefix(line, "#") {
+						lines = append(lines, line)
+					}
+				}
+				return lines, nil
+			}),
+			instances.WithGlobalConfigsReader(func(ctx context.Context) (map[string]string, error) {
+				return d.K8s.ConfigMapData(ctx, "valheim-mod-configs")
+			}),
+		)
+	}
+	valheimInstOpts = append(valheimInstOpts,
+		instances.WithServerRefResolver(func(inst domain.Instance) ports.ServerRef {
+			depName := inst.DeploymentName()
+			if inst.Number == 1 && cfg.ValheimDeployment != "" && d.K8s != nil {
+				if _, _, err := d.K8s.DeploymentReplicas(context.Background(), depName); err != nil {
+					return ports.ServerRef{Name: cfg.ValheimDeployment, Scope: cfg.ValheimNamespace}
+				}
+			}
+			return ports.ServerRef{Name: depName, Scope: cfg.ValheimNamespace}
+		}),
+	)
+
+	d.ValheimInstances = instances.NewInstanceManager(
+		store.NewValheimInstanceRepo(st), d.StateStore, valheimRuntime,
+		cfg.ValheimTotalBudgetGiB, cfg.ValheimMaxInstances, cfg.ValheimMaxRunning,
+		cfg.ValheimInstancesPath,
+		cfg.ValheimLBBaseIP,
+		valheimmanifests.New(cfg.GameNodeSelector, cfg.ValheimNamespace),
+		cfg.ValheimNamespace,
+		valheimInstOpts...,
+	)
+
 	d.MCRuntime = rt
 	d.MCRef = ports.ServerRef{Name: cfg.MinecraftDeployment, Scope: cfg.MinecraftNamespace}
 

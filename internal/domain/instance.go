@@ -25,6 +25,7 @@ type Instance struct {
 	Name       string
 	Slug       string
 	Seed       string
+	Password   string
 	Loader     Loader
 	Source     Source
 	Pack       *Pack
@@ -42,14 +43,37 @@ type Instance struct {
 }
 
 func (inst Instance) MemoryGiB() int {
+	if inst.GameID == GameValheim {
+		switch inst.Tier {
+		case TierSmall:
+			return 4
+		case TierLarge:
+			return 8
+		default:
+			return 6
+		}
+	}
 	return inst.Tier.MemoryGiB()
 }
 
 func (inst Instance) MemoryLimitGiB() int {
+	if inst.GameID == GameValheim {
+		switch inst.Tier {
+		case TierSmall:
+			return 5
+		case TierLarge:
+			return 10
+		default:
+			return 7
+		}
+	}
 	return inst.Tier.MemoryLimitGiB()
 }
 
 func (inst Instance) HeapInitMemoryGiB() int {
+	if inst.GameID == GameValheim {
+		return 0
+	}
 	return inst.Tier.HeapInitMemoryGiB()
 }
 
@@ -105,50 +129,95 @@ func (inst *Instance) EnsureDefaults(lbBase string) {
 		inst.State = StateStopped
 	}
 	if inst.MaxPlayers <= 0 {
-		inst.MaxPlayers = 20
+		if inst.GameID == GameValheim {
+			inst.MaxPlayers = 10
+		} else {
+			inst.MaxPlayers = 20
+		}
 	}
-	if inst.Difficulty == "" {
-		inst.Difficulty = "normal"
-	}
-	if inst.Gamemode == "" {
-		inst.Gamemode = "survival"
-	}
-	if inst.WorldType == "" {
-		inst.WorldType = "default"
+	if inst.GameID == GameMinecraft {
+		if inst.Difficulty == "" {
+			inst.Difficulty = "normal"
+		}
+		if inst.Gamemode == "" {
+			inst.Gamemode = "survival"
+		}
+		if inst.WorldType == "" {
+			inst.WorldType = "default"
+		}
 	}
 	if inst.LBIP == "" && inst.Number > 0 {
 		inst.LBIP = AssignLBIP(lbBase, inst.Number)
 	}
 	if inst.MOTD == "" {
-		inst.MOTD = fmt.Sprintf("%s (%s)", inst.Name, inst.LBIP)
+		if inst.LBIP != "" {
+			inst.MOTD = fmt.Sprintf("%s (%s)", inst.Name, inst.LBIP)
+		} else {
+			inst.MOTD = inst.Name
+		}
 	}
 }
 
 func (inst Instance) DeploymentName() string {
+	if inst.GameID == GameValheim {
+		return fmt.Sprintf("valheim-%s-%02d", inst.Slug, inst.Number)
+	}
 	return fmt.Sprintf("mc-%s-%02d", inst.Slug, inst.Number)
 }
 
 func (inst Instance) ServiceName() string {
+	if inst.GameID == GameValheim {
+		return fmt.Sprintf("valheim-%s-%02d", inst.Slug, inst.Number)
+	}
 	return fmt.Sprintf("mc-%s-%02d", inst.Slug, inst.Number)
 }
 
 func (inst Instance) PVCName() string {
+	if inst.GameID == GameValheim {
+		return fmt.Sprintf("valheim-instance-%02d-data", inst.Number)
+	}
 	return fmt.Sprintf("mc-instance-%02d-data", inst.Number)
 }
 
 func (inst Instance) ConfigCMName() string {
+	if inst.GameID == GameValheim {
+		return fmt.Sprintf("valheim-%s-%02d-slot", inst.Slug, inst.Number)
+	}
 	return fmt.Sprintf("mc-%s-%02d-slot", inst.Slug, inst.Number)
 }
 
 func (inst Instance) ModsCMName() string {
+	if inst.GameID == GameValheim {
+		return fmt.Sprintf("valheim-%s-%02d-mods", inst.Slug, inst.Number)
+	}
 	return fmt.Sprintf("mc-%s-%02d-mods", inst.Slug, inst.Number)
 }
 
 func (inst Instance) ConfigsCMName() string {
+	if inst.GameID == GameValheim {
+		return fmt.Sprintf("valheim-%s-%02d-configs", inst.Slug, inst.Number)
+	}
 	return fmt.Sprintf("mc-%s-%02d-configs", inst.Slug, inst.Number)
 }
 
 func (inst Instance) Env() map[string]string {
+	if inst.GameID == GameValheim {
+		env := map[string]string{
+			"SERVER_NAME":   inst.Name,
+			"WORLD_NAME":    inst.Slug,
+			"SERVER_PASS":   inst.Password,
+			"SERVER_PUBLIC": "true",
+			"BEPINEX":       "true",
+			"STATUS_HTTP":   "true",
+			"SERVER_ARGS":   "-savedir /config/worlds_local",
+			"TZ":            "Europe/Amsterdam",
+		}
+		if inst.Seed != "" {
+			env["WORLD_SEED"] = inst.Seed
+		}
+		return env
+	}
+
 	env := map[string]string{
 		"LEVEL": inst.Slug,
 	}
@@ -202,24 +271,33 @@ func (inst Instance) Env() map[string]string {
 }
 
 func (inst Instance) Annotations() map[string]string {
+	gameID := inst.GameID
+	if gameID == "" {
+		gameID = GameMinecraft
+	}
 	ann := map[string]string{
 		annPrefix + "instance-number": fmt.Sprintf("%d", inst.Number),
-		annPrefix + "source":          string(NormalizeSource(string(inst.Source))),
-		annPrefix + "loader":          string(NormalizeLoader(string(inst.Loader))),
 		annPrefix + "tier":            string(inst.Tier),
 	}
-	if inst.MCVersion != "" {
-		ann[annPrefix+"mc-version"] = inst.MCVersion
+	if inst.GameID != "" {
+		ann[annPrefix+"game"] = string(inst.GameID)
+	}
+	if gameID == GameMinecraft {
+		ann[annPrefix+"source"] = string(NormalizeSource(string(inst.Source)))
+		ann[annPrefix+"loader"] = string(NormalizeLoader(string(inst.Loader)))
+		if inst.MCVersion != "" {
+			ann[annPrefix+"mc-version"] = inst.MCVersion
+		}
+		if inst.PackDefined() {
+			ann[annPrefix+"pack-provider"] = string(inst.Pack.Provider)
+			ann[annPrefix+"pack-ref"] = inst.Pack.Ref
+			if inst.Pack.Name != "" {
+				ann[annPrefix+"pack-name"] = inst.Pack.Name
+			}
+		}
 	}
 	if inst.Seed != "" {
 		ann[annPrefix+"seed"] = inst.Seed
-	}
-	if inst.PackDefined() {
-		ann[annPrefix+"pack-provider"] = string(inst.Pack.Provider)
-		ann[annPrefix+"pack-ref"] = inst.Pack.Ref
-		if inst.Pack.Name != "" {
-			ann[annPrefix+"pack-name"] = inst.Pack.Name
-		}
 	}
 	return ann
 }
@@ -231,13 +309,22 @@ type BackupFile struct {
 	CreatedAt string
 }
 
-// FormatBackupFileName generates a standard archive name for instance backups.
-func FormatBackupFileName(slug string, num int, tag string) string {
+// FormatGameBackupFileName generates a standard archive name for instance backups for a specific game.
+func FormatGameBackupFileName(gameID GameID, slug string, num int, tag string) string {
+	prefix := "mc"
+	if gameID == GameValheim {
+		prefix = "valheim"
+	}
 	ts := time.Now().UTC().Format("20060102-150405")
 	if tag != "" {
-		return fmt.Sprintf("mc-%s-%02d-%s-%s.tar.gz", slug, num, tag, ts)
+		return fmt.Sprintf("%s-%s-%02d-%s-%s.tar.gz", prefix, slug, num, tag, ts)
 	}
-	return fmt.Sprintf("mc-%s-%02d-%s.tar.gz", slug, num, ts)
+	return fmt.Sprintf("%s-%s-%02d-%s.tar.gz", prefix, slug, num, ts)
+}
+
+// FormatBackupFileName generates a standard archive name for instance backups.
+func FormatBackupFileName(slug string, num int, tag string) string {
+	return FormatGameBackupFileName(GameMinecraft, slug, num, tag)
 }
 
 // BackupSummary aggregates metadata for storage and backup health reporting.
@@ -249,7 +336,7 @@ type BackupSummary struct {
 	LatestAt   time.Time
 }
 
-var safeBackupName = regexp.MustCompile(`^mc-[a-z0-9-]+-\d{2}-[a-zA-Z0-9_-]+\.tar\.gz$`)
+var safeBackupName = regexp.MustCompile(`^(mc|valheim)-[a-z0-9-]+-\d{2}-[a-zA-Z0-9_-]+\.tar\.gz$`)
 
 // IsSafeBackupFileName checks whether an archive name matches the standard instance backup pattern.
 func IsSafeBackupFileName(name string) bool {

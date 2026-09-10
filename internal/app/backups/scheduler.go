@@ -182,16 +182,21 @@ func (s *BackupScheduler) RunDaily(ctx context.Context) {
 // permanently if the process died mid-run. A per-instance function makes the
 // defer fire per instance, which is what was intended.
 func (s *BackupScheduler) backupOne(ctx context.Context, inst domain.Instance) {
-	slog.Info("scheduler: starting daily backup", "instance", inst.Name, "num", inst.Number)
+	slog.Info("scheduler: starting daily backup", "instance", inst.Name, "num", inst.Number, "game", inst.GameID)
 
-	if s.cmdExec != nil {
+	if s.cmdExec != nil && (inst.GameID == "" || inst.GameID == domain.GameMinecraft) {
 		_ = s.cmdExec(ctx, inst, "/save-off")
 		_ = s.cmdExec(ctx, inst, "/save-all flush")
 		defer func() { _ = s.cmdExec(ctx, inst, "/save-on") }()
 	}
 
-	jobName := fmt.Sprintf("mc-backup-%s-%02d-daily-%d", inst.Slug, inst.Number, time.Now().Unix())
-	archiveName := domain.FormatBackupFileName(inst.Slug, inst.Number, "daily")
+	prefix := "mc"
+	if inst.GameID == domain.GameValheim {
+		prefix = "valheim"
+	}
+
+	jobName := fmt.Sprintf("%s-backup-%s-%02d-daily-%d", prefix, inst.Slug, inst.Number, time.Now().Unix())
+	archiveName := domain.FormatGameBackupFileName(inst.GameID, inst.Slug, inst.Number, "daily")
 
 	if err := s.jobRunner.CreateBackupJob(ctx, jobName, archiveName, inst.PVCName(), s.backupsPVC); err != nil {
 		slog.Error("scheduler: failed to create daily backup job", "instance", inst.Name, "err", err)
@@ -202,9 +207,9 @@ func (s *BackupScheduler) backupOne(ctx context.Context, inst domain.Instance) {
 		_ = s.pruner(inst.Slug, inst.Number, s.keep)
 	}
 	if s.audit != nil {
-		_ = s.audit.RecordAudit("system", "mc-backup-daily", fmt.Sprintf("Daily backup created: %s", archiveName))
+		_ = s.audit.RecordAudit("system", prefix+"-backup-daily", fmt.Sprintf("Daily backup created: %s", archiveName))
 	}
 	if s.event != nil {
-		_ = s.event.RecordEvent("mc-backup-daily", fmt.Sprintf("World #%02d %s", inst.Number, inst.Name))
+		_ = s.event.RecordEvent(prefix+"-backup-daily", fmt.Sprintf("World #%02d %s", inst.Number, inst.Name))
 	}
 }

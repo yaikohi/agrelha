@@ -30,7 +30,7 @@ func VersionNewer(a, b string) bool {
 	as := strings.Split(a, ".")
 	bs := strings.Split(b, ".")
 	n := max(len(bs), len(as))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		var av, bv int
 		if i < len(as) {
 			av, _ = strconv.Atoi(strings.TrimSpace(as[i]))

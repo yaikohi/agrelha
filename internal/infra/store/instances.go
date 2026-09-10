@@ -10,6 +10,7 @@ type InstanceRecord struct {
 	Name         string
 	Slug         string
 	Seed         string
+	Password     string
 	Loader       string
 	Source       string
 	Pack         string
@@ -130,5 +131,91 @@ func (s *Store) UpdateInstanceState(number int, state string) error {
 
 func (s *Store) DeleteInstance(number int) error {
 	_, err := s.db.Exec(`DELETE FROM mc_instances WHERE number = ?`, number)
+	return err
+}
+
+func (s *Store) UpsertValheimInstance(inst InstanceRecord) error {
+	_, err := s.db.Exec(`
+		INSERT INTO valheim_instances (
+			number, name, slug, seed, password, tier, state, motd, max_players, lb_ip, last_used
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(number) DO UPDATE SET
+			name        = excluded.name,
+			slug        = excluded.slug,
+			seed        = excluded.seed,
+			password    = excluded.password,
+			tier        = excluded.tier,
+			state       = excluded.state,
+			motd        = excluded.motd,
+			max_players = excluded.max_players,
+			lb_ip       = excluded.lb_ip,
+			last_used   = CURRENT_TIMESTAMP`,
+		inst.Number, inst.Name, inst.Slug, inst.Seed, inst.Password,
+		inst.Tier, inst.State, inst.MOTD, inst.MaxPlayers, inst.LBIP,
+	)
+	return err
+}
+
+func (s *Store) GetValheimInstance(number int) (*InstanceRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT number, name, slug, COALESCE(seed,''), COALESCE(password,''),
+		       tier, state, COALESCE(motd,''), COALESCE(max_players,10),
+		       COALESCE(lb_ip,''), created_at, last_used
+		FROM valheim_instances WHERE number = ?`, number)
+
+	var inst InstanceRecord
+	var created, used any
+	err := row.Scan(
+		&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Password,
+		&inst.Tier, &inst.State, &inst.MOTD, &inst.MaxPlayers,
+		&inst.LBIP, &created, &used,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	inst.CreatedAt = asTime(created)
+	inst.LastUsed = asTime(used)
+	return &inst, nil
+}
+
+func (s *Store) ListValheimInstances() ([]InstanceRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT number, name, slug, COALESCE(seed,''), COALESCE(password,''),
+		       tier, state, COALESCE(motd,''), COALESCE(max_players,10),
+		       COALESCE(lb_ip,''), created_at, last_used
+		FROM valheim_instances ORDER BY number ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []InstanceRecord
+	for rows.Next() {
+		var inst InstanceRecord
+		var created, used any
+		if err := rows.Scan(
+			&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Password,
+			&inst.Tier, &inst.State, &inst.MOTD, &inst.MaxPlayers,
+			&inst.LBIP, &created, &used,
+		); err != nil {
+			return nil, err
+		}
+		inst.CreatedAt = asTime(created)
+		inst.LastUsed = asTime(used)
+		out = append(out, inst)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) UpdateValheimInstanceState(number int, state string) error {
+	_, err := s.db.Exec(`UPDATE valheim_instances SET state = ?, last_used = CURRENT_TIMESTAMP WHERE number = ?`, state, number)
+	return err
+}
+
+func (s *Store) DeleteValheimInstance(number int) error {
+	_, err := s.db.Exec(`DELETE FROM valheim_instances WHERE number = ?`, number)
 	return err
 }

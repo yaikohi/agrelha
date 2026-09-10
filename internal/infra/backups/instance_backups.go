@@ -12,7 +12,7 @@ import (
 	"agrelha/internal/domain"
 )
 
-var safeBackupName = regexp.MustCompile(`^mc-[a-z0-9-]+-\d{2}-[a-zA-Z0-9_-]+\.tar\.gz$`)
+var safeBackupName = regexp.MustCompile(`^(mc|valheim)-[a-z0-9-]+-\d{2}-[a-zA-Z0-9_.-]+\.tar\.gz$`)
 
 // FormatBackupFileName generates a standard archive name for instance backups.
 func FormatBackupFileName(slug string, num int, tag string) string {
@@ -25,11 +25,17 @@ func PruneBackups(backupsDir, slug string, num, keepCount int) error {
 		return nil
 	}
 
-	pattern := filepath.Join(backupsDir, fmt.Sprintf("mc-%s-%02d-*.tar.gz", slug, num))
-	matches, err := filepath.Glob(pattern)
+	patternMC := filepath.Join(backupsDir, fmt.Sprintf("mc-%s-%02d-*.tar.gz", slug, num))
+	patternValheim := filepath.Join(backupsDir, fmt.Sprintf("valheim-%s-%02d-*.tar.gz", slug, num))
+	matchesMC, err := filepath.Glob(patternMC)
 	if err != nil {
 		return err
 	}
+	matchesValheim, err := filepath.Glob(patternValheim)
+	if err != nil {
+		return err
+	}
+	matches := append(matchesMC, matchesValheim...)
 
 	if len(matches) <= keepCount {
 		return nil

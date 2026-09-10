@@ -63,6 +63,13 @@ type Config struct {
 	MCInstancesPath  string
 	GameNodeSelector string
 
+	// Valheim Multi-Instance settings
+	ValheimTotalBudgetGiB int
+	ValheimMaxInstances   int
+	ValheimMaxRunning     int
+	ValheimLBBaseIP       string
+	ValheimInstancesPath  string
+
 	// Runtime & Engine (k8s vs docker)
 	Runtime       string
 	DockerSocket  string
@@ -109,6 +116,9 @@ func Load() *Config {
 	totalBudget := envIntWithFallback("TOTAL_BUDGET_GIB", "MC_TOTAL_BUDGET_GIB", 24)
 	maxInstances := envIntWithFallback("MAX_INSTANCES", "MC_MAX_INSTANCES", 4)
 	maxRunning := envIntWithFallback("MAX_RUNNING", "MC_MAX_RUNNING", 2)
+	valheimTotalBudget := envInt("VALHEIM_TOTAL_BUDGET_GIB", 16)
+	valheimMaxInstances := envInt("VALHEIM_MAX_INSTANCES", 4)
+	valheimMaxRunning := envInt("VALHEIM_MAX_RUNNING", 2)
 
 	return &Config{
 		ListenAddr: env("LISTEN_ADDR", ":8080"),
@@ -157,6 +167,12 @@ func Load() *Config {
 		MCLBBaseIP:       env("MC_LB_BASE_IP", ""),
 		MCInstancesPath:  env("MC_INSTANCES_PATH", "manifests/minecraft-modded"),
 		GameNodeSelector: env("GAME_NODE_SELECTOR", ""),
+
+		ValheimTotalBudgetGiB: valheimTotalBudget,
+		ValheimMaxInstances:   valheimMaxInstances,
+		ValheimMaxRunning:     valheimMaxRunning,
+		ValheimLBBaseIP:       env("VALHEIM_LB_BASE_IP", ""),
+		ValheimInstancesPath:  env("VALHEIM_INSTANCES_PATH", "manifests/valheim"),
 
 		Runtime:       env("RUNTIME", "k8s"),
 		DockerSocket:  env("DOCKER_SOCKET", "/var/run/docker.sock"),
