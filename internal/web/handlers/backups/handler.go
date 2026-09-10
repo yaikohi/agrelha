@@ -16,9 +16,10 @@ import (
 
 // Config holds dependencies for backup HTTP handlers.
 type Config struct {
-	BackupsDir  string
-	MCInstances *instances.InstanceManager
-	Actor       func(*fiber.Ctx) string
+	BackupsDir       string
+	MCInstances      *instances.InstanceManager
+	ValheimInstances *instances.InstanceManager
+	Actor            func(*fiber.Ctx) string
 }
 
 // Handler manages backup and restore HTTP endpoints.
@@ -46,6 +47,12 @@ func (h *Handler) Register(router fiber.Router) {
 	router.Post("/api/minecraft/:num<int>/backups/restore-new", h.RestoreNew)
 	router.Get("/api/minecraft/:num<int>/backups/download", h.Download)
 	router.Post("/api/minecraft/:num<int>/backups/delete", h.Delete)
+
+	router.Post("/api/valheim/:num<int>/backups/create", h.ValheimCreate)
+	router.Post("/api/valheim/:num<int>/backups/restore-inplace", h.ValheimRestoreInPlace)
+	router.Post("/api/valheim/:num<int>/backups/restore-new", h.ValheimRestoreNew)
+	router.Get("/api/valheim/:num<int>/backups/download", h.Download)
+	router.Post("/api/valheim/:num<int>/backups/delete", h.ValheimDelete)
 }
 
 // BackupInfo returns cached backup stats for the dashboard tile.
@@ -201,5 +208,109 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted %s.", fileName), map[string]any{
 		"redirect": fmt.Sprintf("/minecraft/%d/backups", num),
+	})
+}
+
+// ValheimCreate launches an asynchronous backup job for a specific Valheim instance.
+func (h *Handler) ValheimCreate(c *fiber.Ctx) error {
+	if h.cfg.ValheimInstances == nil {
+		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
+	}
+
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
+	}
+
+	backupName, err := h.cfg.ValheimInstances.CreateBackup(c.UserContext(), num, h.cfg.Actor(c))
+	if err != nil {
+		return shared.SSEToast(c, "err", err.Error(), nil)
+	}
+
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Backup job started: %s. Archiving to NAS...", backupName), nil)
+}
+
+// ValheimRestoreInPlace uncompresses an archive back into an existing stopped Valheim instance PVC.
+func (h *Handler) ValheimRestoreInPlace(c *fiber.Ctx) error {
+	if h.cfg.ValheimInstances == nil {
+		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
+	}
+
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
+	}
+
+	var req struct {
+		Archive string `json:"archive" form:"archive"`
+	}
+	_ = c.BodyParser(&req)
+
+	if err := h.cfg.ValheimInstances.RestoreInPlace(c.UserContext(), num, req.Archive, h.cfg.Actor(c)); err != nil {
+		return shared.SSEToast(c, "err", err.Error(), nil)
+	}
+
+	archiveName := filepath.Base(strings.TrimSpace(req.Archive))
+	return shared.SSEToast(c, "ok", fmt.Sprintf("In-place restore started from %s (safety snapshot saved). World data is unpacking.", archiveName), nil)
+}
+
+// ValheimRestoreNew provisions a new Valheim instance initialized from an existing backup archive.
+func (h *Handler) ValheimRestoreNew(c *fiber.Ctx) error {
+	if h.cfg.ValheimInstances == nil {
+		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
+	}
+
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
+	}
+
+	var req struct {
+		Name    string `json:"name" form:"name"`
+		Tier    string `json:"tier" form:"tier"`
+		Archive string `json:"archive" form:"archive"`
+	}
+	_ = c.BodyParser(&req)
+
+	created, err := h.cfg.ValheimInstances.RestoreNew(c.UserContext(), num, req.Name, req.Tier, req.Archive, h.cfg.Actor(c))
+	if err != nil {
+		return shared.SSEToast(c, "err", err.Error(), nil)
+	}
+
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Valheim server %q created from backup! Redirecting...", created.Name), map[string]any{
+		"redirect": fmt.Sprintf("/valheim/%d/overview", created.Number),
+	})
+}
+
+// ValheimDelete removes a Valheim backup archive from disk.
+func (h *Handler) ValheimDelete(c *fiber.Ctx) error {
+	var req struct {
+		File string `json:"file" form:"file"`
+	}
+	_ = c.BodyParser(&req)
+
+	fileName := filepath.Base(strings.TrimSpace(req.File))
+	if fileName == "" || fileName == "." {
+		return shared.SSEToast(c, "err", "File name required.", nil)
+	}
+
+	num, _ := strconv.Atoi(c.Params("num"))
+	if h.cfg.ValheimInstances != nil {
+		if err := h.cfg.ValheimInstances.DeleteBackup(c.UserContext(), num, fileName, h.cfg.Actor(c)); err != nil {
+			return shared.SSEToast(c, "err", err.Error(), nil)
+		}
+	} else if h.cfg.BackupsDir != "" {
+		if !domain.IsSafeBackupFileName(fileName) {
+			return shared.SSEToast(c, "err", "Failed to delete backup: invalid backup file name", nil)
+		}
+		if err := os.Remove(filepath.Join(h.cfg.BackupsDir, fileName)); err != nil {
+			return shared.SSEToast(c, "err", "Failed to delete backup: "+err.Error(), nil)
+		}
+	} else {
+		return shared.SSEToast(c, "err", "Backups directory unconfigured.", nil)
+	}
+
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted %s.", fileName), map[string]any{
+		"redirect": fmt.Sprintf("/valheim/%d/backups", num),
 	})
 }

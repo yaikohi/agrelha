@@ -113,9 +113,11 @@ func HistoryBadge(source, kind string) string {
 }
 
 type InstanceUI struct {
+	GameID             string
 	Number             int
 	Name               string
 	Slug               string
+	Password           string
 	Seed               string
 	Loader             string
 	Source             string
@@ -135,6 +137,20 @@ type InstanceUI struct {
 	StartBlockedReason string
 }
 
+type InstanceDetailUI struct {
+	InstanceUI
+	ActiveTab     string // overview, mods, configs, console, backups, settings
+	InstalledMods []string
+	ConfigFiles   []string
+	Backups       []BackupUI
+}
+
+type BackupUI struct {
+	Name      string
+	SizeBytes int64
+	CreatedAt string
+}
+
 type BudgetUI struct {
 	UsedGiB        int
 	TotalBudgetGiB int
@@ -145,6 +161,17 @@ type BudgetUI struct {
 }
 
 type MinecraftSummaryUI struct {
+	TotalInstances  int
+	RunningCount    int
+	MaxInstances    int
+	MaxRunning      int
+	UsedGiB         int
+	TotalBudgetGiB  int
+	ActiveInstance  *InstanceUI
+	ActiveInstances []InstanceUI
+}
+
+type ValheimSummaryUI struct {
 	TotalInstances  int
 	RunningCount    int
 	MaxInstances    int

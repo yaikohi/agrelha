@@ -122,3 +122,49 @@ func TestBackupsUnconfigured(t *testing.T) {
 		t.Errorf("expected BackupInfo to report not ok on empty dir")
 	}
 }
+
+func TestValheimBackups(t *testing.T) {
+	dir := t.TempDir()
+	archiveName := "valheim-world-01-20260909-120000.tar.gz"
+	archivePath := filepath.Join(dir, archiveName)
+	if err := os.WriteFile(archivePath, []byte("fake-valheim-tar-gz"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := New(Config{BackupsDir: dir})
+	app := fiber.New()
+	h.Register(app)
+
+	// 1. Download
+	reqDl := httptest.NewRequest(http.MethodGet, "/api/valheim/1/backups/download?f="+archiveName, nil)
+	respDl, err := app.Test(reqDl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if respDl.StatusCode != http.StatusOK {
+		t.Fatalf("valheim download status = %d, want 200", respDl.StatusCode)
+	}
+	body, _ := io.ReadAll(respDl.Body)
+	if string(body) != "fake-valheim-tar-gz" {
+		t.Errorf("valheim download body = %q, want fake-valheim-tar-gz", string(body))
+	}
+
+	// 2. Delete
+	reqDel := httptest.NewRequest(http.MethodPost, "/api/valheim/1/backups/delete", strings.NewReader(`{"file":"`+archiveName+`"}`))
+	reqDel.Header.Set("Content-Type", "application/json")
+	respDel, err := app.Test(reqDel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if respDel.StatusCode != http.StatusOK {
+		t.Fatalf("valheim delete status = %d, want 200", respDel.StatusCode)
+	}
+	delBody, _ := io.ReadAll(respDel.Body)
+	if !strings.Contains(string(delBody), "Deleted "+archiveName) {
+		t.Errorf("valheim delete response = %s, expected Deleted message", string(delBody))
+	}
+	if _, err := os.Stat(archivePath); !os.IsNotExist(err) {
+		t.Errorf("file was not deleted from disk")
+	}
+}
+

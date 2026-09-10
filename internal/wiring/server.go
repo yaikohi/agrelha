@@ -28,6 +28,7 @@ import (
 	contenthttp "agrelha/internal/web/handlers/content"
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
 	instanceshttp "agrelha/internal/web/handlers/instances"
+	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
 	"agrelha/internal/web/pages"
 )
@@ -76,6 +77,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 	contentH := buildContentHandler(cfg, d, applyAfterSync)
 	instancesH := buildInstancesHandler(cfg, d, applyMCAfterSync)
 	wizardH := buildWizardHandler(d)
+	valheimH := buildValheimHandler(d, applyValheimAfterSync, consoleH.ValheimConsole)
 	dashboardH := buildDashboardHandler(cfg, d, contentH, instancesH, backupsH)
 
 	return web.New(web.ServerConfig{
@@ -86,6 +88,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 		Content:   contentH,
 		Dashboard: dashboardH,
 		Instances: instancesH,
+		Valheim:   valheimH,
 		Wizard:    wizardH,
 	})
 }
@@ -327,10 +330,23 @@ func buildBackupsHandler(cfg *config.Config, d Deps) *backupshttp.Handler {
 			d.MCInstances.ApplyOptions(opts...)
 		}
 	}
+	if d.ValheimInstances != nil {
+		var opts []instances.Option
+		if d.K8s != nil {
+			opts = append(opts, instances.WithJobRunner(d.K8s))
+		}
+		if backupsDir != "" {
+			opts = append(opts, instances.WithBackupsDir(backupsDir))
+		}
+		if len(opts) > 0 {
+			d.ValheimInstances.ApplyOptions(opts...)
+		}
+	}
 	return backupshttp.New(backupshttp.Config{
-		BackupsDir:  backupsDir,
-		MCInstances: d.MCInstances,
-		Actor:       actor,
+		BackupsDir:       backupsDir,
+		MCInstances:      d.MCInstances,
+		ValheimInstances: d.ValheimInstances,
+		Actor:            actor,
 	})
 }
 
@@ -344,15 +360,31 @@ func buildConsoleHandler(d Deps) *consolehttp.Handler {
 		mcrt = k8sruntime.New(d.MCK8s)
 	}
 	return consolehttp.New(consolehttp.Config{
-		ValheimRuntime: vrt,
-		ValheimRef:     d.ValheimRef,
-		MCRuntime:      mcrt,
-		MCRef:          d.MCRef,
-		MCInstances:    d.MCInstances,
-		Audit:          d.Store,
-		Event:          d.Store,
-		Auth:           d.Auth,
-		Actor:          actor,
+		ValheimRuntime:   vrt,
+		ValheimRef:       d.ValheimRef,
+		ValheimInstances: d.ValheimInstances,
+		MCRuntime:        mcrt,
+		MCRef:            d.MCRef,
+		MCInstances:      d.MCInstances,
+		Audit:            d.Store,
+		Event:            d.Store,
+		Auth:             d.Auth,
+		Actor:            actor,
+	})
+}
+
+func buildValheimHandler(d Deps, applyValheimAfterSync func(string, string, string, func(string) bool), legacyConsole func(*fiber.Ctx) error) *valheimhttp.Handler {
+	var cat ports.PackageCatalog
+	if d.TS != nil {
+		cat = d.TS
+	}
+	return valheimhttp.New(valheimhttp.Config{
+		ValheimInstances:      d.ValheimInstances,
+		ValheimGame:           d.ValheimGame,
+		TS:                    cat,
+		Actor:                 actor,
+		ApplyValheimAfterSync: applyValheimAfterSync,
+		LegacyConsole:         legacyConsole,
 	})
 }
 

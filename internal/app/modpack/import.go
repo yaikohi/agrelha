@@ -8,6 +8,8 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type ImportedWorld struct {
@@ -197,3 +199,66 @@ func ParseRawModList(text string) *ImportedWorld {
 	world.Slugs = slugs
 	return world
 }
+
+// ParseR2Z reads an r2modman / Thunderstore .r2z or zip containing export.r2x or manifest.json.
+func ParseR2Z(r io.ReaderAt, size int64) (*ImportedWorld, error) {
+	zr, err := zip.NewReader(r, size)
+	if err != nil {
+		return nil, fmt.Errorf("open zip: %w", err)
+	}
+
+	var manifestFile *zip.File
+	for _, f := range zr.File {
+		if f.Name == "export.r2x" || f.Name == "manifest.json" {
+			manifestFile = f
+			break
+		}
+	}
+	if manifestFile == nil {
+		return nil, fmt.Errorf("neither export.r2x nor manifest.json found in profile")
+	}
+
+	rc, err := manifestFile.Open()
+	if err != nil {
+		return nil, fmt.Errorf("open manifest: %w", err)
+	}
+	defer rc.Close()
+
+	if manifestFile.Name == "export.r2x" {
+		var ef exportFormat
+		if err := yaml.NewDecoder(rc).Decode(&ef); err != nil {
+			return nil, fmt.Errorf("decode export.r2x: %w", err)
+		}
+		world := &ImportedWorld{
+			Name:   ef.ProfileName,
+			Source: "modpack",
+		}
+		var slugs []string
+		for _, m := range ef.Mods {
+			if !m.Enabled {
+				continue
+			}
+			slug := m.Name
+			slugs = append(slugs, slug)
+		}
+		world.Slugs = slugs
+		world.RawMods = strings.Join(slugs, "\n")
+		return world, nil
+	}
+
+	var tsManifest struct {
+		Name         string   `json:"name"`
+		Dependencies []string `json:"dependencies"`
+	}
+	if err := json.NewDecoder(rc).Decode(&tsManifest); err != nil {
+		return nil, fmt.Errorf("decode manifest.json: %w", err)
+	}
+	world := &ImportedWorld{
+		Name:    tsManifest.Name,
+		Source:  "modpack",
+		Slugs:   tsManifest.Dependencies,
+		RawMods: strings.Join(tsManifest.Dependencies, "\n"),
+	}
+	return world, nil
+}
+

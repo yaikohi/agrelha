@@ -14,6 +14,7 @@ import (
 	contenthttp "agrelha/internal/web/handlers/content"
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
 	instanceshttp "agrelha/internal/web/handlers/instances"
+	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
 	"agrelha/internal/web/metrics"
 	"agrelha/internal/web/shared"
@@ -28,6 +29,7 @@ type ServerConfig struct {
 	Content   *contenthttp.Handler
 	Dashboard *dashboardhttp.Handler
 	Instances *instanceshttp.Handler
+	Valheim   *valheimhttp.Handler
 	Wizard    *wizardhttp.Handler
 }
 
@@ -66,6 +68,9 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 	if cfg.Instances != nil {
 		cfg.Instances.RegisterPublic(app)
 	}
+	if cfg.Valheim != nil {
+		cfg.Valheim.RegisterPublic(app)
+	}
 
 	// Protected routes (admin authentication required)
 	protected := app.Group("/")
@@ -78,6 +83,9 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 	}
 	if cfg.Backups != nil {
 		cfg.Backups.Register(protected)
+	}
+	if cfg.Valheim != nil {
+		cfg.Valheim.RegisterProtected(protected)
 	}
 	if cfg.Console != nil {
 		cfg.Console.Register(protected)

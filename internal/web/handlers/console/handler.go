@@ -15,15 +15,16 @@ import (
 
 // Config defines dependencies for console, log tailing, and server lifecycle handlers.
 type Config struct {
-	ValheimRuntime ports.Runtime
-	ValheimRef     ports.ServerRef
-	MCRuntime      ports.Runtime
-	MCRef          ports.ServerRef
-	MCInstances    *instances.InstanceManager
-	Audit          ports.AuditRecorder
-	Event          ports.EventRecorder
-	Auth           ports.Auth
-	Actor          func(*fiber.Ctx) string
+	ValheimRuntime   ports.Runtime
+	ValheimRef       ports.ServerRef
+	ValheimInstances *instances.InstanceManager
+	MCRuntime        ports.Runtime
+	MCRef            ports.ServerRef
+	MCInstances      *instances.InstanceManager
+	Audit            ports.AuditRecorder
+	Event            ports.EventRecorder
+	Auth             ports.Auth
+	Actor            func(*fiber.Ctx) string
 }
 
 // Handler handles console viewing, log streaming, and imperative actions.
@@ -47,11 +48,15 @@ func New(cfg Config) *Handler {
 // Register mounts console routes onto the provided Fiber router.
 func (h *Handler) Register(router fiber.Router) {
 	router.Get("/valheim", h.ValheimConsole)
+	router.Get("/valheim/console", h.ValheimConsole)
 	router.Get("/sse/logs", h.SSELogs)
 	router.Post("/server/restart", h.ServerRestart)
 	router.Post("/server/update", h.ServerUpdate)
 	router.Post("/server/stop", h.ServerStop)
 	router.Post("/server/start", h.ServerStart)
+
+	router.Get("/api/valheim/:num<int>/logs", h.ValheimLogsStream)
+	router.Get("/api/valheim/:num<int>/logs/stream", h.ValheimLogsStream)
 
 	router.Post("/api/minecraft/:num<int>/rcon", h.MCRconCommand)
 	router.Get("/api/minecraft/:num<int>/logs", h.MCLogsStream)

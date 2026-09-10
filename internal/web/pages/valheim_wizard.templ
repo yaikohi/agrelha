@@ -1,0 +1,275 @@
+package pages
+
+import "fmt"
+
+templ ValheimWizard(budget BudgetUI) {
+	@Layout("Create Valheim World") {
+		@nav()
+		<div
+			class="space-y-6"
+			data-signals="{step:1,name:'',password:'',seed:'',source:'vanilla',tier:'medium',raw_mods:'',modQuery:'',modSearchLoading:false,importError:'',importLoading:false,redirect:''}"
+			data-effect="if ($redirect) { window.location.href = $redirect }"
+		>
+			<!-- Stepper progress header -->
+			<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-sm">
+				<div class="flex items-center justify-between text-xs font-medium">
+					<div
+						class="flex items-center gap-2"
+						data-class="{'text-orange-400 font-semibold': $step == 1, 'text-zinc-500': $step != 1}"
+					>
+						<span
+							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
+							data-class="{'bg-orange-700 text-white': $step == 1, 'bg-zinc-800 text-zinc-400': $step != 1}"
+						>1</span>
+						<span>Identity</span>
+					</div>
+					<div class="h-0.5 w-16 bg-zinc-800"></div>
+					<div
+						class="flex items-center gap-2"
+						data-class="{'text-orange-400 font-semibold': $step == 2, 'text-zinc-500': $step != 2}"
+					>
+						<span
+							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
+							data-class="{'bg-orange-700 text-white': $step == 2, 'bg-zinc-800 text-zinc-400': $step != 2}"
+						>2</span>
+						<span>Content & Mods</span>
+					</div>
+					<div class="h-0.5 w-16 bg-zinc-800"></div>
+					<div
+						class="flex items-center gap-2"
+						data-class="{'text-orange-400 font-semibold': $step == 3, 'text-zinc-500': $step != 3}"
+					>
+						<span
+							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
+							data-class="{'bg-orange-700 text-white': $step == 3, 'bg-zinc-800 text-zinc-400': $step != 3}"
+						>3</span>
+						<span>Tier & Review</span>
+					</div>
+				</div>
+			</div>
+
+			<!-- STEP 1: IDENTITY -->
+			<div data-show="$step == 1" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 1: Name Your Valheim Server</h2>
+				<p class="mt-1 text-xs text-zinc-400">Give your world a title, an optional join password, and a world seed.</p>
+
+				<div class="mt-6 max-w-md space-y-4">
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">World / Server Name <span class="text-red-400">*</span></label>
+						<input
+							type="text"
+							data-bind="name"
+							placeholder="e.g. Valheim Legends"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-orange-500 focus:outline-none"
+						/>
+					</div>
+
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Server Password (Optional)</label>
+						<input
+							type="text"
+							data-bind="password"
+							placeholder="e.g. secret123 (minimum 5 characters if set)"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-orange-500 focus:outline-none"
+						/>
+						<p class="mt-1 text-[11px] text-zinc-500">Valheim requires passwords to be at least 5 characters long. Leave empty for public.</p>
+					</div>
+
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">World Seed (Optional)</label>
+						<input
+							type="text"
+							data-bind="seed"
+							placeholder="e.g. OdinRealm (random if blank)"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-orange-500 focus:outline-none font-mono"
+						/>
+					</div>
+
+					<div class="pt-4 flex justify-end">
+						<button
+							type="button"
+							data-on:click="if ($name.trim()) { $step = 2 } else { alert('Please enter a world name') }"
+							class="rounded-xl bg-orange-700 px-5 py-2 text-xs font-semibold text-white hover:bg-orange-600"
+						>
+							Next: Choose Content &rarr;
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- STEP 2: CONTENT & MODS -->
+			<div data-show="$step == 2" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 2: Content & Modding</h2>
+				<p class="mt-1 text-xs text-zinc-400">Choose between clean BepInEx, starter Thunderstore mods, or import an r2modman profile.</p>
+
+				<div class="mt-6 space-y-6 max-w-2xl">
+					<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+						<label
+							class="flex flex-col p-4 rounded-xl border cursor-pointer transition"
+							data-class="{'border-orange-500 bg-orange-950/20': $source == 'vanilla', 'border-zinc-800 bg-zinc-900': $source != 'vanilla'}"
+						>
+							<input type="radio" name="source" value="vanilla" data-bind="source" class="sr-only"/>
+							<span class="text-sm font-semibold text-zinc-100">Clean BepInEx</span>
+							<span class="mt-1 text-xs text-zinc-400">Vanilla gameplay with BepInEx loader pre-installed for future mods.</span>
+						</label>
+
+						<label
+							class="flex flex-col p-4 rounded-xl border cursor-pointer transition"
+							data-class="{'border-orange-500 bg-orange-950/20': $source == 'scratch', 'border-zinc-800 bg-zinc-900': $source != 'scratch'}"
+						>
+							<input type="radio" name="source" value="scratch" data-bind="source" class="sr-only"/>
+							<span class="text-sm font-semibold text-zinc-100">Custom Mods</span>
+							<span class="mt-1 text-xs text-zinc-400">Specify Thunderstore package identifiers to install on startup.</span>
+						</label>
+
+						<label
+							class="flex flex-col p-4 rounded-xl border cursor-pointer transition"
+							data-class="{'border-orange-500 bg-orange-950/20': $source == 'modpack', 'border-zinc-800 bg-zinc-900': $source != 'modpack'}"
+						>
+							<input type="radio" name="source" value="modpack" data-bind="source" class="sr-only"/>
+							<span class="text-sm font-semibold text-zinc-100">Import Profile</span>
+							<span class="mt-1 text-xs text-zinc-400">Import an existing .r2z or export.r2x Thunderstore modpack profile.</span>
+						</label>
+					</div>
+
+					<!-- Scratch mods input -->
+					<div data-show="$source == 'scratch'" class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+						<label class="block text-xs font-medium text-zinc-300">Thunderstore Packages (one per line or comma-separated)</label>
+						<textarea
+							data-bind="raw_mods"
+							rows="4"
+							placeholder="denikson-BepInExPack_Valheim&#10;ValheimModding-Jotunn"
+							class="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-3 font-mono text-xs text-zinc-200 placeholder-zinc-500 focus:border-orange-500 focus:outline-none"
+						></textarea>
+						<p class="text-[11px] text-zinc-500">Dependencies are resolved automatically by the Valheim modloader initContainer.</p>
+					</div>
+
+					<!-- Import modpack file -->
+					<div data-show="$source == 'modpack'" class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+						<label class="block text-xs font-medium text-zinc-300">Upload Modpack Profile (.r2z or export.r2x)</label>
+						<input
+							type="file"
+							accept=".r2z,.r2x,.zip"
+							data-on:change="@post('/api/valheim/wizard/import', {contentType: 'form'})"
+							class="block w-full text-xs text-zinc-400 file:mr-4 file:rounded-xl file:border-0 file:bg-zinc-800 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-zinc-200 hover:file:bg-zinc-700"
+						/>
+						<div data-show="$importError" class="text-xs text-red-400" data-text="$importError"></div>
+					</div>
+
+					<div class="pt-4 flex justify-between">
+						<button
+							type="button"
+							data-on:click="$step = 1"
+							class="rounded-xl border border-zinc-700 px-5 py-2 text-xs text-zinc-300 hover:bg-zinc-800"
+						>
+							&larr; Back
+						</button>
+						<button
+							type="button"
+							data-on:click="$step = 3"
+							class="rounded-xl bg-orange-700 px-5 py-2 text-xs font-semibold text-white hover:bg-orange-600"
+						>
+							Next: Resource Tier &rarr;
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- STEP 3: TIER & REVIEW -->
+			<div data-show="$step == 3" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 3: Resource Tier & Review</h2>
+				<p class="mt-1 text-xs text-zinc-400">Select memory allocation and verify server details.</p>
+
+				<div class="mt-6 space-y-6 max-w-md">
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Memory Tier</label>
+						<div class="mt-2 space-y-2">
+							<label
+								class="flex items-center justify-between p-3 rounded-xl border cursor-pointer transition"
+								data-class="{'border-orange-500 bg-orange-950/20': $tier == 'small', 'border-zinc-800 bg-zinc-900': $tier != 'small'}"
+							>
+								<div class="flex items-center gap-3">
+									<input type="radio" name="tier" value="small" data-bind="tier" class="sr-only"/>
+									<div>
+										<p class="text-xs font-semibold text-zinc-100">Small (4 GiB / 5 GiB limit)</p>
+										<p class="text-[11px] text-zinc-500">Lightweight vanilla / minimal mods, up to 4 players</p>
+									</div>
+								</div>
+								<span class="font-mono text-xs text-zinc-400">4 GiB</span>
+							</label>
+
+							<label
+								class="flex items-center justify-between p-3 rounded-xl border cursor-pointer transition"
+								data-class="{'border-orange-500 bg-orange-950/20': $tier == 'medium', 'border-zinc-800 bg-zinc-900': $tier != 'medium'}"
+							>
+								<div class="flex items-center gap-3">
+									<input type="radio" name="tier" value="medium" data-bind="tier" class="sr-only"/>
+									<div>
+										<p class="text-xs font-semibold text-zinc-100">Medium (6 GiB / 7 GiB limit) - Standard</p>
+										<p class="text-[11px] text-zinc-500">Standard modded Valheim gameplay, up to 10 players</p>
+									</div>
+								</div>
+								<span class="font-mono text-xs text-orange-400 font-bold">6 GiB</span>
+							</label>
+
+							<label
+								class="flex items-center justify-between p-3 rounded-xl border cursor-pointer transition"
+								data-class="{'border-orange-500 bg-orange-950/20': $tier == 'large', 'border-zinc-800 bg-zinc-900': $tier != 'large'}"
+							>
+								<div class="flex items-center gap-3">
+									<input type="radio" name="tier" value="large" data-bind="tier" class="sr-only"/>
+									<div>
+										<p class="text-xs font-semibold text-zinc-100">Large (8 GiB / 10 GiB limit)</p>
+										<p class="text-[11px] text-zinc-500">Heavy modpacks with extensive assets, up to 10 players</p>
+									</div>
+								</div>
+								<span class="font-mono text-xs text-zinc-400">8 GiB</span>
+							</label>
+						</div>
+					</div>
+
+					<!-- Review Summary Card -->
+					<div class="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4 space-y-2 text-xs">
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Server Name:</span>
+							<span class="font-semibold text-zinc-200" data-text="$name"></span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Password:</span>
+							<span class="font-mono text-zinc-200" data-text="$password ? $password : 'None (Public)'"></span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Seed:</span>
+							<span class="font-mono text-zinc-200" data-text="$seed ? $seed : 'Random'"></span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Content Mode:</span>
+							<span class="capitalize text-zinc-200" data-text="$source"></span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Memory Budget:</span>
+							<span class="font-mono text-zinc-200">{ fmt.Sprintf("%d / %d GiB used", budget.UsedGiB, budget.TotalBudgetGiB) }</span>
+						</div>
+					</div>
+
+					<div class="pt-4 flex justify-between">
+						<button
+							type="button"
+							data-on:click="$step = 2"
+							class="rounded-xl border border-zinc-700 px-5 py-2 text-xs text-zinc-300 hover:bg-zinc-800"
+						>
+							&larr; Back
+						</button>
+						<button
+							type="button"
+							data-on:click="@post('/api/valheim/wizard/create', {contentType: 'json'})"
+							class="rounded-xl bg-orange-700 px-6 py-2.5 text-xs font-semibold text-white shadow-lg shadow-orange-950/50 hover:bg-orange-600"
+						>
+							Provision & Launch Server 🚀
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}

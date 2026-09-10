@@ -2,20 +2,6 @@ package pages
 
 import "fmt"
 
-type InstanceDetailUI struct {
-	InstanceUI
-	ActiveTab     string // overview, mods, configs, console, backups, settings
-	InstalledMods []string
-	ConfigFiles   []string
-	Backups       []BackupUI
-}
-
-type BackupUI struct {
-	Name      string
-	SizeBytes int64
-	CreatedAt string
-}
-
 templ MinecraftInstanceDetail(d InstanceDetailUI) {
 	@Layout(d.Name + " · Minecraft") {
 		@nav()

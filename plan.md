@@ -103,20 +103,26 @@ Aligned with Hexagonal (Ports & Adapters) and Onion Architecture:
     - Wired `d.ValheimInstances`, `AdoptLegacyValheim`, `makeApplyValheimAfterSync`, and `startValheimScheduler` into `internal/wiring`.
     - Zero architectural ratchet violations in `internal/arch/arch_test.go` and 100% test pass rate across the full suite (232 tests passing across 51 packages).
 
-- **Candidate 8: Valheim Web Delivery, Handlers & 3-Step Wizard** [Planned]
+- **Candidate 8: Valheim Web Delivery, Handlers & 3-Step Wizard** [Done]
   - **Objective**: Provide full UI and API parity for Valheim under `/valheim`, mirroring Minecraft's instance dashboard, creation wizard, and tabbed instance view.
-  - **Key Work Items**:
-    - Implement a streamlined 3-step Valheim creation wizard at `/valheim/create`:
-      1. World & Server Details (Name, Password, Seed).
-      2. Content Choice (Vanilla BepInEx, Scratch Thunderstore mods, or import `.r2z` / `export.r2x` modpack).
-      3. Resource Tier (Small: 4GiB, Medium: 6GiB, Large: 8GiB).
-    - Build Valheim instance management controllers and routes:
-      - `/valheim` (Instances dashboard showing slot cards, memory budget, and running count).
-      - `/valheim/:num/{overview,mods,configs,console,settings}`.
-      - API routes under `/api/valheim/...` for lifecycle, Thunderstore mod management, and BepInEx configs.
-    - Create Templ components under `internal/web/pages` for Valheim instance tabs, reusing shared patterns.
-    - Add legacy backward-compatibility redirects: `/mods` -> `/valheim/1/mods`, `/configs` -> `/valheim/1/configs`.
-    - Register all routes in `internal/web/routes.go` and wire handlers in `internal/wiring/server.go`.
+  - **Delivered**:
+    - Created shared UI structs in `internal/web/pages/helpers.go` (`InstanceUI` with `GameID` and `Password`, `InstanceDetailUI`, `BackupUI`, `ValheimSummaryUI`).
+    - Implemented Templ components:
+      - `valheim_dashboard.templ`: Valheim instances dashboard with 16 GiB RAM budget bar, slot cards (#01-#04), and create wizard CTA.
+      - `valheim_instance.templ`: Full 6-tab interface (`overview`, `mods`, `configs`, `console`, `backups`, `settings`) for Valheim instance #num with live container log streaming and BepInEx config editor.
+      - `valheim_wizard.templ`: Streamlined 3-step reactive creation wizard (Identity, Content & Modding with clean BepInEx / Thunderstore mods / `.r2z` modpack import, Resource Tier & Review).
+    - Added r2modman / Thunderstore `.r2z` modpack profile parser `modpack.ParseR2Z` in `internal/app/modpack/import.go`.
+    - Implemented HTTP handlers under `internal/web/handlers/valheim/`:
+      - `handler.go`: Route registration and cached instance stats.
+      - `dashboard.go`: Valheim dashboard with fallback to legacy console when unconfigured.
+      - `detail.go`: Tabbed instance view, settings update, mod install/uninstall, and `.r2z` export.
+      - `configs.go`: BepInEx `.cfg` file read, save, and delete.
+      - `wizard.go`: Wizard page, Thunderstore mod search, profile upload/import, and instance provisioning.
+    - Added live container log streaming for Valheim instances in `internal/web/handlers/console/` (`ValheimLogsStream`).
+    - Wired Valheim backup operations in `internal/web/handlers/backups/` (`ValheimCreate`, `ValheimRestoreInPlace`, `ValheimRestoreNew`, `ValheimDelete`).
+    - Wired routes in `internal/web/routes.go` and handlers in `internal/wiring/server.go` and `internal/wiring/wiring.go` (including telemetry provider).
+    - Preserved backward compatibility with legacy redirects: `/mods` -> `/valheim/1/mods`, `/configs` -> `/valheim/1/configs`, `/valheim/mods` -> `/valheim/1/mods`, `/valheim/configs` -> `/valheim/1/configs`.
+    - Zero architectural ratchet exceptions in `internal/arch/arch_test.go` and 100% test pass rate across the full repository (242 passed across 52 packages).
 
 - **Candidate 9: Valheim Backup Jobs, Restores & End-to-End Verification** [Planned]
   - **Objective**: Implement on-demand and scheduled backup capabilities for Valheim worlds with in-place and clone restores, verifying full system integration.

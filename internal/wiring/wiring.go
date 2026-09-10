@@ -221,6 +221,14 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		instances.WithBackupsDir(cfg.BackupsDir),
 		instances.WithGlobalConfigsPath(cfg.ModConfigsPath),
 	)
+	if st != nil {
+		valheimInstOpts = append(valheimInstOpts,
+			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
+				count, err := st.CountOnline()
+				return count, err == nil
+			}),
+		)
+	}
 	if d.K8s != nil {
 		valheimInstOpts = append(valheimInstOpts,
 			instances.WithJobRunner(d.K8s),

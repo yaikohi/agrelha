@@ -2,10 +2,12 @@ package console
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"html"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"agrelha/internal/ports"
@@ -104,3 +106,48 @@ func (h *Handler) ServerStart(c *fiber.Ctx) error {
 		return h.cfg.ValheimRuntime.Start(ctx, h.cfg.ValheimRef)
 	})(c)
 }
+
+// ValheimLogsStream streams real-time deployment logs for a Valheim instance over SSE.
+func (h *Handler) ValheimLogsStream(c *fiber.Ctx) error {
+	if h.cfg.ValheimInstances == nil {
+		c.Set("Content-Type", "text/event-stream")
+		c.Set("Cache-Control", "no-cache")
+		var buf bytes.Buffer
+		w := bufio.NewWriter(&buf)
+		_ = sse.AppendElement(w, "#console-logs", "<p class=\"text-zinc-500\">Logs unavailable</p>")
+		return c.Send(buf.Bytes())
+	}
+
+	num, err := strconv.Atoi(c.Params("num"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid number")
+	}
+
+	stream, err := h.cfg.ValheimInstances.InstanceLogs(context.Background(), num, 100)
+	if err != nil {
+		c.Set("Content-Type", "text/event-stream")
+		c.Set("Cache-Control", "no-cache")
+		var buf bytes.Buffer
+		w := bufio.NewWriter(&buf)
+		_ = sse.AppendElement(w, "#console-logs", fmt.Sprintf("<p class=\"text-red-400\">Log stream error: %s</p>", html.EscapeString(err.Error())))
+		return c.Send(buf.Bytes())
+	}
+
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+
+	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		defer stream.Close()
+
+		scanner := bufio.NewScanner(stream)
+		for scanner.Scan() {
+			line := html.EscapeString(scanner.Text())
+			frag := fmt.Sprintf("<div class=\"text-zinc-300\">%s</div>", line)
+			_ = sse.AppendElement(w, "#console-logs", frag)
+		}
+	})
+
+	return nil
+}
+
