@@ -83,14 +83,21 @@ spec:
               name: status
               protocol: TCP
           startupProbe:
-            tcpSocket:
-              port: 9001
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pgrep -f valheim_server
             initialDelaySeconds: 15
             periodSeconds: 10
-            failureThreshold: 30
+            failureThreshold: 60
           readinessProbe:
-            tcpSocket:
-              port: 9001
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pgrep -f valheim_server
+            initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
           resources:

@@ -98,6 +98,8 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	})
 	router.Get("/valheim/:num<int>/:tab", h.ValheimInstancePage)
 	router.Post("/api/valheim/:num<int>/settings", h.ValheimInstanceSettingsSave)
+	router.Get("/api/valheim/:num<int>/mods/search", h.ValheimInstanceModsSearch)
+	router.Post("/api/valheim/:num<int>/mods/search", h.ValheimInstanceModsSearch)
 	router.Post("/api/valheim/:num<int>/mods/install", h.ValheimInstanceModsInstall)
 	router.Post("/api/valheim/:num<int>/mods/remove", h.ValheimInstanceModsRemove)
 	router.Get("/api/valheim/:num<int>/configs/file", h.ValheimInstanceConfigGet)

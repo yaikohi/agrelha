@@ -145,6 +145,22 @@ Aligned with Hexagonal (Ports & Adapters) and Onion Architecture:
     - Added unit test `TestAccessValheimPasswords` in [`internal/web/handlers/access/access_test.go`](internal/web/handlers/access/access_test.go).
     - Verified 0 architecture exceptions in `internal/arch/arch_test.go` and 247/247 tests passing across 52 packages.
 
+- **Candidate 11: Active Player Destruction Guard & Graceful Termination Safety** [Ready to Implement]
+  - **Objective**: Prevent accidental destruction or disruption of active game pods (Minecraft & Valheim) while players are connected, across both the Agrelha application plane and Kubernetes infrastructure.
+  - **Agreed Design via `/grill-me`**:
+    - **Protected Operations**: Guard `Stop`, `Delete`, `Restart`, `RestoreInPlace`, and `ModUpdates` whenever `players > 0`.
+    - **Real-Time Telemetry Probe**:
+      - Minecraft: Synchronous RCON `/list` probe right before executing destructive lifecycle actions.
+      - Valheim: Live probe via `lloesche/valheim-server` HTTP status port 9001 (`/status.json`) and presence store cache.
+    - **Guard Invariant & Admin Override**:
+      - Standard requests return `409 Conflict` / rejection: `"Cannot stop/restart/delete server: N players are currently online."`
+      - Admin override via explicit modal / `force=true` parameter with mandatory audit log recording (`ports.AuditRecorder`).
+    - **Graceful In-Game Countdown & Flush**:
+      - When an authorized or forced shutdown occurs, trigger in-game broadcasts (30s / 10s countdown) and force world save (`/save-all` for Minecraft, save hook for Valheim) before terminating the process.
+    - **Kubernetes Infrastructure Safety**:
+      - Emit a `PodDisruptionBudget` (`minAvailable: 1`) per running instance in manifest templates to block accidental eviction during node drains/upgrades.
+      - Set `terminationGracePeriodSeconds: 60` with container `preStop` flush hooks in pod specs.
+
 
 ---
 

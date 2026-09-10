@@ -145,7 +145,18 @@ func (h *Handler) MCInstanceModsRemove(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	slug := strings.TrimSpace(c.FormValue("slug"))
+	var req struct {
+		Slug string `json:"slug" form:"slug"`
+	}
+	_ = c.BodyParser(&req)
+
+	slug := strings.TrimSpace(req.Slug)
+	if slug == "" {
+		slug = strings.TrimSpace(c.FormValue("slug"))
+	}
+	if slug == "" {
+		slug = strings.TrimSpace(c.Query("slug"))
+	}
 	if slug == "" {
 		return shared.SSEToast(c, "err", "Mod slug required.", nil)
 	}
@@ -166,7 +177,19 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
-	slug := strings.TrimSpace(c.FormValue("slug"))
+
+	var req struct {
+		Slug string `json:"slug" form:"slug"`
+	}
+	_ = c.BodyParser(&req)
+
+	slug := strings.TrimSpace(req.Slug)
+	if slug == "" {
+		slug = strings.TrimSpace(c.FormValue("slug"))
+	}
+	if slug == "" {
+		slug = strings.TrimSpace(c.Query("slug"))
+	}
 	if slug == "" {
 		return shared.SSEToast(c, "err", "Mod slug required.", nil)
 	}
