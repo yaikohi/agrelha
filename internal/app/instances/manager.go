@@ -250,6 +250,10 @@ func (m *InstanceManager) ListInstances(ctx context.Context) ([]domain.Instance,
 					inst.State = newState
 					_ = m.repo.UpdateState(inst.Number, newState)
 				}
+				if st.Address != "" && st.Address != inst.LBIP {
+					inst.LBIP = st.Address
+					_ = m.repo.Upsert(inst)
+				}
 			}
 		}
 		instances = append(instances, inst)
@@ -289,6 +293,10 @@ func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*domain.Ins
 			if newState := stateFromStatus(st); inst.State != newState {
 				inst.State = newState
 				_ = m.repo.UpdateState(inst.Number, newState)
+			}
+			if st.Address != "" && st.Address != inst.LBIP {
+				inst.LBIP = st.Address
+				_ = m.repo.Upsert(inst)
 			}
 		}
 	}

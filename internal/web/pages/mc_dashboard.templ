@@ -50,7 +50,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 												{ inst.Name } &rarr;
 											</a>
 										</div>
-										<p class="mt-0.5 font-mono text-xs text-zinc-400">{ inst.LBIP }:25565</p>
+										<p class="mt-0.5 font-mono text-xs text-zinc-400">{ ConnectAddress(inst.LBIP, 25565) }</p>
 									</div>
 									<div>
 										@components.StatusPill(components.StatusPillProps{State: inst.State})

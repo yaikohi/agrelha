@@ -48,6 +48,11 @@ type Status struct {
 	Available bool
 	StartedAt time.Time
 
+	// Address is where players actually connect, as the runtime reports it.
+	// Empty means the runtime has not assigned one yet — which must be shown as
+	// such, not as the address the operator hoped for.
+	Address string
+
 	// Failure carries what the runtime knows about the server dying. It is
 	// independent of Lifecycle (what the operator asked for) and of Available
 	// (whether players can connect now).

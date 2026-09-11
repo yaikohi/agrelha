@@ -71,7 +71,7 @@ templ ValheimInstanceDetail(d InstanceDetailUI) {
 						<div>
 							<span class="text-xs font-medium text-zinc-400 uppercase tracking-wider">Server Connection</span>
 							<div class="mt-1 flex items-center gap-3">
-								<code class="font-mono text-lg font-bold text-white">{ d.LBIP }:2456</code>
+								<code class="font-mono text-lg font-bold text-white">{ ConnectAddress(d.LBIP, 2456) }</code>
 								<button
 									type="button"
 									data-on:click={ fmt.Sprintf("navigator.clipboard.writeText('%s:2456')", d.LBIP) }

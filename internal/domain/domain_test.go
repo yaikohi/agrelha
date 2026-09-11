@@ -320,3 +320,15 @@ func TestValheimInstance(t *testing.T) {
 		t.Errorf("IsSafeBackupFileName rejected valid Valheim backup: %s", bkpName)
 	}
 }
+
+func TestServiceNameMatchesDeploymentName(t *testing.T) {
+	for _, inst := range []Instance{
+		{GameID: GameMinecraft, Slug: "bob", Number: 3},
+		{GameID: GameValheim, Slug: "boppo", Number: 2},
+	} {
+		if inst.ServiceName() != inst.DeploymentName() {
+			t.Errorf("%s: ServiceName %q != DeploymentName %q — the runtime looks a Service up by the deployment name in ServerRef, so divergence makes every address read as unallocated",
+				inst.GameID, inst.ServiceName(), inst.DeploymentName())
+		}
+	}
+}

@@ -564,3 +564,13 @@ func MinecraftNav() NavGroupUI {
 		Href:  "/minecraft",
 	}
 }
+
+// ConnectAddress renders where players connect. An instance whose LoadBalancer
+// has no address yet must say so: showing the address it was meant to get is
+// how a pending service looks identical to a working one.
+func ConnectAddress(ip string, port int) string {
+	if strings.TrimSpace(ip) == "" {
+		return "awaiting address"
+	}
+	return fmt.Sprintf("%s:%d", ip, port)
+}

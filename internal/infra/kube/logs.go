@@ -156,3 +156,50 @@ func (c *Client) DeploymentPodStatus(ctx context.Context, depName string) (PodSt
 	}
 	return ps, nil
 }
+
+// ServiceIP returns the address a LoadBalancer Service actually holds. It is
+// empty while the allocation is pending, which is a real state and not an error.
+func (c *Client) ServiceIP(ctx context.Context, name string) (string, error) {
+	if ip, err, ok := c.cachedServiceIP(name); ok {
+		return ip, err
+	}
+
+	ip, err := c.fetchServiceIP(ctx, name)
+	c.storeServiceIP(name, ip, err)
+	return ip, err
+}
+
+func (c *Client) cachedServiceIP(name string) (string, error, bool) {
+	c.svcMu.Lock()
+	defer c.svcMu.Unlock()
+	e, ok := c.svcCache[name]
+	if !ok || time.Since(e.at) > svcIPTTL {
+		return "", nil, false
+	}
+	return e.ip, e.err, true
+}
+
+func (c *Client) storeServiceIP(name, ip string, err error) {
+	c.svcMu.Lock()
+	defer c.svcMu.Unlock()
+	if c.svcCache == nil {
+		c.svcCache = make(map[string]svcIPEntry)
+	}
+	c.svcCache[name] = svcIPEntry{ip: ip, err: err, at: time.Now()}
+}
+
+func (c *Client) fetchServiceIP(ctx context.Context, name string) (string, error) {
+	svc, err := c.cs.CoreV1().Services(c.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	for _, ing := range svc.Status.LoadBalancer.Ingress {
+		if ing.IP != "" {
+			return ing.IP, nil
+		}
+		if ing.Hostname != "" {
+			return ing.Hostname, nil
+		}
+	}
+	return "", nil
+}

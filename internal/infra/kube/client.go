@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -26,7 +27,22 @@ type Client struct {
 	// means schedule anywhere. Set with SetNodeSelector.
 	nodeSelectorKey   string
 	nodeSelectorValue string
+
+	svcMu    sync.Mutex
+	svcCache map[string]svcIPEntry
 }
+
+// svcIPEntry caches one Service address lookup, successes and failures alike.
+// A LoadBalancer address changes about once a year, while the dashboard asks
+// for it several times a second; without this the client-go rate limiter
+// throttles every other call and page loads take tens of seconds.
+type svcIPEntry struct {
+	ip  string
+	err error
+	at  time.Time
+}
+
+const svcIPTTL = 60 * time.Second
 
 // SetNodeSelector configures where one-shot Jobs (backup/restore) are scheduled.
 func (c *Client) SetNodeSelector(sel string) {
@@ -48,6 +64,11 @@ func New(namespace, deployment string) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("in-cluster config: %w", err)
 	}
+	// client-go defaults to 5 QPS / 10 burst, which this app exceeds whenever a
+	// dashboard with several instances refreshes its tiles.
+	cfg.QPS = 50
+	cfg.Burst = 100
+
 	cs, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("clientset: %w", err)

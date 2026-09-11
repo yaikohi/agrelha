@@ -5,6 +5,7 @@ package k8s
 import (
 	"context"
 	"io"
+	"log/slog"
 	"time"
 
 	k8sclient "agrelha/internal/infra/kube"
@@ -72,6 +73,12 @@ func (r *Runtime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status
 			FinishedAt:    ps.LastFinishedAt,
 			OOMKilled:     ps.LastOOMKilled,
 		}
+	}
+	if ip, err := r.c.ServiceIP(ctx, ref.Name); err != nil {
+		slog.Warn("runtime: cannot read service address, falling back to the stored one",
+			"service", ref.Name, "err", err)
+	} else {
+		st.Address = ip
 	}
 	return st, nil
 }
