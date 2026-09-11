@@ -100,7 +100,18 @@ func (h *Handler) ValheimInstanceConfigDelete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	fileName := strings.TrimSpace(c.FormValue("file"))
+	var req struct {
+		File string `json:"file" form:"file"`
+	}
+	_ = c.BodyParser(&req)
+
+	fileName := strings.TrimSpace(req.File)
+	if fileName == "" {
+		fileName = strings.TrimSpace(c.FormValue("file"))
+	}
+	if fileName == "" {
+		fileName = strings.TrimSpace(c.Query("file"))
+	}
 	if !valheimCfgNameRe.MatchString(fileName) {
 		return shared.SSEToast(c, "err", "Invalid config file name.", nil)
 	}

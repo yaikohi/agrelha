@@ -46,6 +46,11 @@ type mockPackageCatalog struct {
 }
 
 func (m *mockPackageCatalog) Get(fullName string) (domain.ModSearchResult, bool) {
+	for _, r := range m.results {
+		if fmt.Sprintf("%s/%s", r.Owner, r.Name) == fullName || fmt.Sprintf("%s-%s", r.Owner, r.Name) == fullName || r.Name == fullName {
+			return r, true
+		}
+	}
 	return domain.ModSearchResult{}, false
 }
 func (m *mockPackageCatalog) Search(ctx context.Context, query string, limit int) ([]domain.ModSearchResult, error) {
@@ -53,10 +58,10 @@ func (m *mockPackageCatalog) Search(ctx context.Context, query string, limit int
 }
 func (m *mockPackageCatalog) Ready() bool { return true }
 func (m *mockPackageCatalog) LatestVersion(ctx context.Context, ns, name string) (string, []string, error) {
-	return "1.0.0", nil, nil
+	return "1.2.0", []string{"denikson-BepInExPack_Valheim-5.4.2202"}, nil
 }
 func (m *mockPackageCatalog) Readme(ctx context.Context, ns, name, version string) (string, error) {
-	return "", nil
+	return "# " + name + "\n\nAwesome Valheim mod by " + ns, nil
 }
 func (m *mockPackageCatalog) ResolveTree(ctx context.Context, ns, name string) ([]string, error) {
 	return nil, nil
@@ -107,6 +112,29 @@ func (m *memStateStore) Delete(ctx context.Context, path string, msg string) err
 }
 
 func (m *memStateStore) PutTree(ctx context.Context, dirPath string, docs map[string]ports.Document, msg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for fname, doc := range docs {
+		rel := filepath.Join(dirPath, fname)
+		d := doc
+		if d.Data == nil && len(d.Raw) > 0 {
+			d.Data = make(map[string]string)
+			rawStr := string(d.Raw)
+			if idx := strings.Index(rawStr, "mods.txt: |"); idx != -1 {
+				lines := strings.Split(rawStr[idx:], "\n")
+				var modLines []string
+				for _, line := range lines[1:] {
+					if strings.HasPrefix(line, "    ") {
+						modLines = append(modLines, strings.TrimPrefix(line, "    "))
+					} else if strings.TrimSpace(line) != "" {
+						break
+					}
+				}
+				d.Data["mods.txt"] = strings.Join(modLines, "\n")
+			}
+		}
+		m.docs[rel] = &d
+	}
 	return nil
 }
 
@@ -371,4 +399,208 @@ func TestValheimInstanceModsSearchAndInstall(t *testing.T) {
 	if !strings.Contains(removeStr, "Removed Smoothbrain-Mining") {
 		t.Errorf("expected remove response to contain toast, got: %s", removeStr)
 	}
+
+	// 4. Install via query parameter (fallback test)
+	reqInstallQuery := httptest.NewRequest("POST", "/api/valheim/1/mods/install?slug=Smoothbrain-Mining", nil)
+	respInstallQuery, err := app.Test(reqInstallQuery)
+	if err != nil || respInstallQuery.StatusCode != fiber.StatusOK {
+		t.Fatalf("query install failed: %v, status: %d", err, respInstallQuery.StatusCode)
+	}
+	installQueryBytes, _ := io.ReadAll(respInstallQuery.Body)
+	if !strings.Contains(string(installQueryBytes), "Installed Smoothbrain-Mining") {
+		t.Errorf("expected query install response to contain toast, got: %s", string(installQueryBytes))
+	}
+
+	// 5. Remove via query parameter (fallback test)
+	reqRemoveQuery := httptest.NewRequest("POST", "/api/valheim/1/mods/remove?slug=Smoothbrain-Mining", nil)
+	respRemoveQuery, err := app.Test(reqRemoveQuery)
+	if err != nil || respRemoveQuery.StatusCode != fiber.StatusOK {
+		t.Fatalf("query remove failed: %v, status: %d", err, respRemoveQuery.StatusCode)
+	}
+	removeQueryBytes, _ := io.ReadAll(respRemoveQuery.Body)
+	if !strings.Contains(string(removeQueryBytes), "Removed Smoothbrain-Mining") {
+		t.Errorf("expected query remove response to contain toast, got: %s", string(removeQueryBytes))
+	}
 }
+
+func TestValheimModDetail(t *testing.T) {
+	h, st, mgr := setupTestValheimHandler(t)
+	defer st.Close()
+
+	ctx := context.Background()
+	_, _ = mgr.CreateInstance(ctx, domain.Instance{
+		GameID: domain.GameValheim,
+		Number: 1,
+		Name:   "Valheim Detail",
+	}, "", "tester")
+
+	app := fiber.New()
+	h.Register(app)
+
+	req := httptest.NewRequest("GET", "/api/valheim/1/mods/detail?slug=Smoothbrain-Mining", nil)
+	resp, err := app.Test(req)
+	if err != nil || resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("detail request failed: %v, status: %d", err, resp.StatusCode)
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	if !strings.Contains(bodyStr, "showModDetail") {
+		t.Errorf("expected detail response to patch showModDetail, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "Awesome Valheim mod") {
+		t.Errorf("expected rendered README in detail response, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "Install Mod") {
+		t.Errorf("expected Install Mod button in detail response, got: %s", bodyStr)
+	}
+
+	// Test POST detail with JSON payload (avoiding query param length limits)
+	reqPost := httptest.NewRequest("POST", "/api/valheim/1/mods/detail", strings.NewReader(`{"slug":"Smoothbrain-Mining"}`))
+	reqPost.Header.Set("Content-Type", "application/json")
+	respPost, err := app.Test(reqPost)
+	if err != nil || respPost.StatusCode != fiber.StatusOK {
+		t.Fatalf("POST detail request failed: %v, status: %d", err, respPost.StatusCode)
+	}
+	postBytes, _ := io.ReadAll(respPost.Body)
+	if !strings.Contains(string(postBytes), "showModDetail") {
+		t.Errorf("expected POST detail response to patch showModDetail, got: %s", string(postBytes))
+	}
+}
+
+func TestValheimWizardModsSearch(t *testing.T) {
+	h, st, _ := setupTestValheimHandler(t)
+	defer st.Close()
+
+	app := fiber.New()
+	h.Register(app)
+
+	// GET initial popular mods
+	reqGet := httptest.NewRequest("GET", "/api/valheim/wizard/mods/search", nil)
+	respGet, err := app.Test(reqGet)
+	if err != nil || respGet.StatusCode != fiber.StatusOK {
+		t.Fatalf("wizard search GET failed: %v, status: %d", err, respGet.StatusCode)
+	}
+	getBody, _ := io.ReadAll(respGet.Body)
+	getStr := string(getBody)
+	if !strings.Contains(getStr, "Smoothbrain-Mining") {
+		t.Errorf("expected GET search to contain Smoothbrain-Mining, got: %s", getStr)
+	}
+	if !strings.Contains(getStr, "In Cart") {
+		t.Errorf("expected GET search cards to contain In Cart badge markup, got: %s", getStr)
+	}
+
+	// POST search with query
+	reqPost := httptest.NewRequest("POST", "/api/valheim/wizard/mods/search", strings.NewReader(`{"wizardModSearch":"mining"}`))
+	reqPost.Header.Set("Content-Type", "application/json")
+	respPost, err := app.Test(reqPost)
+	if err != nil || respPost.StatusCode != fiber.StatusOK {
+		t.Fatalf("wizard search POST failed: %v, status: %d", err, respPost.StatusCode)
+	}
+	postBody, _ := io.ReadAll(respPost.Body)
+	postStr := string(postBody)
+	if !strings.Contains(postStr, "Search Results for") {
+		t.Errorf("expected POST search to contain search header, got: %s", postStr)
+	}
+}
+
+func TestValheimWizardModDetail(t *testing.T) {
+	h, st, _ := setupTestValheimHandler(t)
+	defer st.Close()
+
+	app := fiber.New()
+	h.Register(app)
+
+	req := httptest.NewRequest("GET", "/api/valheim/wizard/mods/detail?slug=Smoothbrain-Mining", nil)
+	resp, err := app.Test(req)
+	if err != nil || resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("wizard mod detail failed: %v, status: %d", err, resp.StatusCode)
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	if !strings.Contains(bodyStr, "showWizardModDetail") {
+		t.Errorf("expected wizard mod detail to patch showWizardModDetail signal, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "+ Add to Cart") {
+		t.Errorf("expected Add to Cart button in wizard mod detail, got: %s", bodyStr)
+	}
+
+	// Test POST wizard detail with JSON payload
+	reqPost := httptest.NewRequest("POST", "/api/valheim/wizard/mods/detail", strings.NewReader(`{"slug":"Smoothbrain-Mining"}`))
+	reqPost.Header.Set("Content-Type", "application/json")
+	respPost, err := app.Test(reqPost)
+	if err != nil || respPost.StatusCode != fiber.StatusOK {
+		t.Fatalf("POST wizard mod detail failed: %v, status: %d", err, respPost.StatusCode)
+	}
+	postBytes, _ := io.ReadAll(respPost.Body)
+	if !strings.Contains(string(postBytes), "showWizardModDetail") {
+		t.Errorf("expected POST wizard detail to patch showWizardModDetail signal, got: %s", string(postBytes))
+	}
+}
+
+func TestValheimWizardCartSync(t *testing.T) {
+	h, st, _ := setupTestValheimHandler(t)
+	defer st.Close()
+
+	app := fiber.New()
+	h.Register(app)
+
+	cartBody := `{"cart":["Smoothbrain-Mining","ValheimModding-Jotunn"]}`
+	req := httptest.NewRequest("POST", "/api/valheim/wizard/cart/sync", strings.NewReader(cartBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	if err != nil || resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("cart sync failed: %v, status: %d", err, resp.StatusCode)
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	if !strings.Contains(bodyStr, "wizard-valheim-cart-items") {
+		t.Errorf("expected cart items element target, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "Smoothbrain-Mining") || !strings.Contains(bodyStr, "ValheimModding-Jotunn") {
+		t.Errorf("expected both mod slugs in cart chips, got: %s", bodyStr)
+	}
+}
+
+func TestValheimWizardCreateWithCart(t *testing.T) {
+	h, st, mgr := setupTestValheimHandler(t)
+	defer st.Close()
+
+	app := fiber.New()
+	h.Register(app)
+
+	createBody := `{"name":"Cart Realm","source":"scratch","tier":"medium","cart":["Smoothbrain-Mining"]}`
+	req := httptest.NewRequest("POST", "/api/valheim/wizard/create", strings.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	if err != nil || resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("wizard create failed: %v, status: %d", err, resp.StatusCode)
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	if !strings.Contains(bodyStr, "Created Valheim server") {
+		t.Errorf("expected success toast, got: %s", bodyStr)
+	}
+
+	// Verify the instance installed mods
+	ctx := context.Background()
+	insts, err := mgr.ListInstances(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(insts) == 0 {
+		t.Fatal("expected at least one instance created")
+	}
+
+	installed, err := mgr.GetInstalledMods(ctx, insts[0].Number)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(installed, "Smoothbrain-Mining") {
+		t.Errorf("expected Smoothbrain-Mining in installed mods, got: %v", installed)
+	}
+}
+

@@ -379,10 +379,15 @@ func buildValheimHandler(d Deps, applyValheimAfterSync func(string, string, stri
 	if d.TS != nil {
 		cat = d.TS
 	}
+	var readme ports.ReadmeCache
+	if d.Store != nil {
+		readme = d.Store
+	}
 	return valheimhttp.New(valheimhttp.Config{
 		ValheimInstances:      d.ValheimInstances,
 		ValheimGame:           d.ValheimGame,
 		TS:                    cat,
+		ReadmeCache:           readme,
 		Actor:                 actor,
 		ApplyValheimAfterSync: applyValheimAfterSync,
 		LegacyConsole:         legacyConsole,

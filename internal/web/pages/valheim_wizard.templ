@@ -10,7 +10,7 @@ templ ValheimWizard(budget BudgetUI) {
 		@nav()
 		<div
 			class="space-y-6"
-			data-signals="{step:1,name:'',password:'',seed:'',source:'vanilla',tier:'medium',raw_mods:'',modQuery:'',modSearchLoading:false,importError:'',importLoading:false,redirect:''}"
+			data-signals="{step:1,name:'',password:'',seed:'',source:'vanilla',tier:'medium',cart:[],wizardModSearch:'',wizardModSearchLoading:false,showWizardModDetail:false,manualSlug:'',raw_mods:'',importError:'',importLoading:false,redirect:''}"
 			data-effect="if ($redirect) { window.location.href = $redirect }"
 		>
 			<!-- Stepper progress header -->
@@ -65,7 +65,7 @@ templ ValheimWizard(budget BudgetUI) {
 				<h2 class="text-lg font-bold text-zinc-100">Step 2: Content & Modding</h2>
 				<p class="mt-1 text-xs text-zinc-400">Choose between clean BepInEx, starter Thunderstore mods, or import an r2modman profile.</p>
 
-				<div class="mt-6 space-y-6 max-w-2xl">
+				<div class="mt-6 space-y-6 max-w-3xl">
 					<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 						@components.OptionCard(components.OptionCardProps{
 							Name:        "source",
@@ -79,7 +79,7 @@ templ ValheimWizard(budget BudgetUI) {
 							Value:       "scratch",
 							BindSignal:  "source",
 							Title:       "Custom Mods",
-							Description: "Specify Thunderstore package identifiers to install on startup.",
+							Description: "Browse Thunderstore community mods or add custom packages to your cart.",
 						})
 						@components.OptionCard(components.OptionCardProps{
 							Name:        "source",
@@ -90,15 +90,89 @@ templ ValheimWizard(budget BudgetUI) {
 						})
 					</div>
 
-					<!-- Scratch mods input -->
-					<div data-show="$source == 'scratch'" class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
-						@components.Textarea(components.TextareaProps{
-							Label:       "Thunderstore Packages (one per line or comma-separated)",
-							Rows:        4,
-							Placeholder: "denikson-BepInExPack_Valheim\nValheimModding-Jotunn",
-							Bind:        "raw_mods",
-							HelperText:  "Dependencies are resolved automatically by the Valheim modloader initContainer.",
-						})
+					<!-- Scratch mods browsing & cart -->
+					<div data-show="$source == 'scratch'" class="space-y-4">
+						<!-- Mod Search Input -->
+						<div class="flex gap-2">
+							<input
+								type="text"
+								data-bind="wizardModSearch"
+								data-on:keydown="if (evt.key === 'Enter') { evt.preventDefault(); @post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: $wizardModSearch}}) }"
+								placeholder="Search Thunderstore mods (e.g. Mining, Jotunn, Equipment, PlantEasily)..."
+								class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+							/>
+							<button
+								type="button"
+								data-indicator="wizardModSearchLoading"
+								data-on:click="@post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: $wizardModSearch}})"
+								class="rounded-xl bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 hover:bg-white transition"
+							>
+								<span data-show="!$wizardModSearchLoading">Search</span>
+								<span data-show="$wizardModSearchLoading" class="animate-pulse">Searching...</span>
+							</button>
+						</div>
+
+						<!-- Selected Mods Cart Tray -->
+						<div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+							<div class="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+								<div class="flex items-center gap-2">
+									<h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Selected Mods</h4>
+									<span class="rounded-full bg-zinc-800 border border-zinc-700 px-2 py-0.5 text-[11px] font-mono font-medium text-zinc-300" data-text="$cart.length"></span>
+								</div>
+								<button
+									type="button"
+									data-show="$cart.length > 0"
+									data-on:click="$cart = []; @post('/api/valheim/wizard/cart/sync')"
+									class="text-xs text-zinc-500 hover:text-red-400 transition"
+								>
+									Clear All
+								</button>
+							</div>
+							<div id="wizard-valheim-cart-items" class="mt-3">
+								<span class="text-xs text-zinc-500 py-1">No mods added yet. Search or click "+ Add" on popular mods below.</span>
+							</div>
+						</div>
+
+						<!-- Results container populated via SSE -->
+						<div
+							id="wizard-valheim-mod-results"
+							class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1"
+							data-effect="@post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: ''}})"
+						>
+							<div class="col-span-full py-12 text-center text-xs text-zinc-500 animate-pulse">
+								Loading popular Thunderstore mods...
+							</div>
+						</div>
+
+						<!-- Collapsible exact slug / manual package entry -->
+						<details class="pt-2 border-t border-zinc-800/80">
+							<summary class="text-xs text-zinc-500 cursor-pointer hover:text-zinc-300">Or add custom package slugs manually...</summary>
+							<div class="mt-3 space-y-3">
+								<div class="flex items-center gap-2">
+									<input
+										type="text"
+										data-bind="manualSlug"
+										data-on:keydown="if (evt.key === 'Enter') { evt.preventDefault(); if ($manualSlug.trim()) { if (!$cart.includes($manualSlug.trim())) { $cart = [...$cart, $manualSlug.trim()] }; $manualSlug = ''; @post('/api/valheim/wizard/cart/sync') } }"
+										placeholder="e.g. denikson-BepInExPack_Valheim or ValheimModding-Jotunn"
+										class="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none font-mono"
+									/>
+									<button
+										type="button"
+										data-on:click="if ($manualSlug.trim()) { if (!$cart.includes($manualSlug.trim())) { $cart = [...$cart, $manualSlug.trim()] }; $manualSlug = ''; @post('/api/valheim/wizard/cart/sync') }"
+										class="rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition"
+									>
+										+ Add Slug
+									</button>
+								</div>
+								@components.Textarea(components.TextareaProps{
+									Label:       "Bulk package identifiers (one per line)",
+									Rows:        3,
+									Placeholder: "denikson-BepInExPack_Valheim\nValheimModding-Jotunn",
+									Bind:        "raw_mods",
+									HelperText:  "You can paste multiple identifiers here. They will be merged with your selected mods on creation.",
+								})
+							</div>
+						</details>
 					</div>
 
 					<!-- Import modpack file -->
@@ -184,6 +258,10 @@ templ ValheimWizard(budget BudgetUI) {
 							<span class="text-zinc-500">Content Mode:</span>
 							<span class="capitalize text-zinc-200" data-text="$source"></span>
 						</div>
+						<div data-show="$source == 'scratch'" class="flex justify-between">
+							<span class="text-zinc-500">Selected Mods:</span>
+							<span class="font-mono text-zinc-200" data-text="$cart.length + ' mods'"></span>
+						</div>
 						<div class="flex justify-between">
 							<span class="text-zinc-500">Memory Budget:</span>
 							<span class="font-mono text-zinc-200">{ fmt.Sprintf("%d / %d GiB used", budget.UsedGiB, budget.TotalBudgetGiB) }</span>
@@ -203,6 +281,22 @@ templ ValheimWizard(budget BudgetUI) {
 							OnClick: "@post('/api/valheim/wizard/create', {contentType: 'json'})",
 							Text:    "Provision & Launch Server 🚀",
 						})
+					</div>
+				</div>
+			</div>
+
+			<!-- Slide-over Mod Detail Drawer Modal in Wizard -->
+			<div
+				data-show="$showWizardModDetail"
+				class="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300"
+				style="display: none;"
+			>
+				<!-- Backdrop dismiss click -->
+				<div class="fixed inset-0" data-on:click="$showWizardModDetail = false"></div>
+				<!-- Drawer Panel -->
+				<div class="relative z-10 w-full max-w-2xl bg-zinc-900 border-l border-zinc-800 shadow-2xl overflow-y-auto h-full flex flex-col">
+					<div id="wizard-valheim-mod-detail-content">
+						<div class="p-8 text-center text-zinc-500 text-sm animate-pulse">Loading mod details...</div>
 					</div>
 				</div>
 			</div>

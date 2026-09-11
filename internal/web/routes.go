@@ -104,8 +104,9 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 // New creates a new Fiber application with the specified routes mounted.
 func New(cfg ServerConfig) *fiber.App {
 	app := fiber.New(fiber.Config{
-		ServerHeader: "agrelha",
-		AppName:      "agrelha",
+		ServerHeader:   "agrelha",
+		AppName:        "agrelha",
+		ReadBufferSize: 32 * 1024,
 	})
 	RegisterRoutes(app, cfg)
 	return app

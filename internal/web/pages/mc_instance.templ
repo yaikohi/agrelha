@@ -168,7 +168,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 						     Instances are excluded: the Pack manages their mod set. -->
 						<form
 							class="flex flex-wrap items-end gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
-							data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/mods/install', {slug: $addslug}); $addslug = ''", d.Number) }
+							data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/mods/install', {payload: {slug: $addslug}}); $addslug = ''", d.Number) }
 						>
 							<div class="min-w-0 flex-1">
 								<label class="block text-xs font-medium text-zinc-300">Add a mod</label>
@@ -248,7 +248,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 												>Modrinth ↗</a>
 												<button
 													type="button"
-													data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/mods/remove', {slug: '%s'})", d.Number, modSlug) }
+													data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/mods/remove?slug=%s', {payload: {slug: '%s'}})", d.Number, modSlug, modSlug) }
 													class="text-red-400 hover:text-red-300"
 												>Remove</button>
 											</td>
@@ -329,7 +329,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 							<button
 								type="button"
 								data-indicator="saveLoading"
-								data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/configs/save', {file: $selectedFile, content: $fileContent})", d.Number) }
+								data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/configs/save', {payload: {file: $selectedFile, content: $fileContent}})", d.Number) }
 								class="rounded-lg bg-zinc-100 px-5 py-2 text-xs font-semibold text-zinc-950 shadow-md hover:bg-white"
 							>
 								<span data-show="!$saveLoading">Save & Apply on Restart</span>
@@ -366,7 +366,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 												</button>
 												<button
 													type="button"
-													data-on:click={ fmt.Sprintf("if (confirm('Delete %s?')) { @post('/api/minecraft/%d/configs/delete', {file: '%s'}) }", cfgFile, d.Number, cfgFile) }
+													data-on:click={ fmt.Sprintf("if (confirm('Delete %s?')) { @post('/api/minecraft/%d/configs/delete?file=%s', {payload: {file: '%s'}})", cfgFile, d.Number, cfgFile, cfgFile) }
 													class="rounded bg-red-950/50 px-2.5 py-1 text-xs text-red-400 hover:bg-red-900/80 hover:text-red-200"
 												>
 													Delete
@@ -406,7 +406,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 					<!-- Command input bar -->
 					<form
 						class="flex gap-2"
-						data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/rcon', {cmd: $cmd}); $cmd = ''", d.Number) }
+						data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/rcon', {payload: {cmd: $cmd}}); $cmd = ''", d.Number) }
 					>
 						<input
 							type="text"
@@ -483,7 +483,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 							</button>
 							<button
 								type="button"
-								data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/backups/restore-new', {archive: $selectedArchive, name: $newWorldName, tier: $newWorldTier})", d.Number) }
+								data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/backups/restore-new', {payload: {archive: $selectedArchive, name: $newWorldName, tier: $newWorldTier}})", d.Number) }
 								class="rounded-lg bg-zinc-100 px-4 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white"
 							>
 								Provision & Restore World
@@ -526,7 +526,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 												} else {
 													<button
 														type="button"
-														data-on:click={ fmt.Sprintf("if (confirm('Restore %s in-place over current world data? A pre-restore safety snapshot will be created automatically.')) @post('/api/minecraft/%d/backups/restore-inplace', {archive: '%s'})", b.Name, d.Number, b.Name) }
+														data-on:click={ fmt.Sprintf("if (confirm('Restore %s in-place over current world data? A pre-restore safety snapshot will be created automatically.')) @post('/api/minecraft/%d/backups/restore-inplace?archive=%s', {payload: {archive: '%s'}})", b.Name, d.Number, b.Name, b.Name) }
 														class="rounded bg-amber-950/50 border border-amber-800/60 px-2 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-900/60"
 													>
 														Restore In-Place
@@ -550,7 +550,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 
 												<button
 													type="button"
-													data-on:click={ fmt.Sprintf("if (confirm('Permanently delete backup %s from NAS?')) @post('/api/minecraft/%d/backups/delete', {file: '%s'})", b.Name, d.Number, b.Name) }
+													data-on:click={ fmt.Sprintf("if (confirm('Permanently delete backup %s from NAS?')) @post('/api/minecraft/%d/backups/delete?file=%s', {payload: {file: '%s'}})", b.Name, d.Number, b.Name, b.Name) }
 													class="rounded px-1.5 py-1 text-[11px] text-red-400 hover:bg-red-950/40 hover:text-red-300"
 												>
 													Delete

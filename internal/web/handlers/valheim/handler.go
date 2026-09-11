@@ -29,6 +29,7 @@ type Config struct {
 	ValheimInstances      *instances.InstanceManager
 	ValheimGame           ports.Game
 	TS                    ports.PackageCatalog
+	ReadmeCache           ports.ReadmeCache
 	Actor                 func(*fiber.Ctx) string
 	ApplyValheimAfterSync func(cmName, depName, key string, want func(string) bool)
 	LegacyConsole         func(*fiber.Ctx) error
@@ -56,7 +57,7 @@ func New(cfg Config) *Handler {
 	return &Handler{cfg: cfg}
 }
 
-// Register mounts all instance management routes onto the Fiber router.
+// Register mounts all Valheim instance, wizard, and content routes.
 func (h *Handler) Register(router fiber.Router) {
 	h.RegisterPublic(router)
 	h.RegisterProtected(router)
@@ -68,15 +69,15 @@ func (h *Handler) RegisterPublic(router fiber.Router) {
 	router.Get("/valheim/mods/export", h.LegacyExportRedirect)
 }
 
-// RegisterProtected mounts authenticated instance management routes.
+// RegisterProtected mounts authenticated Valheim routes.
 func (h *Handler) RegisterProtected(router fiber.Router) {
-	// Dashboard & Legacy redirects
 	router.Get("/valheim", h.ValheimDashboard)
 	router.Get("/valheim/mods", h.LegacyModsRedirect)
 	router.Get("/valheim/configs", h.LegacyConfigsRedirect)
 	router.Get("/valheim/access", func(c *fiber.Ctx) error {
 		return c.Redirect("/admins", fiber.StatusTemporaryRedirect)
 	})
+
 	router.Get("/mods", h.LegacyModsRedirect)
 	router.Get("/configs", h.LegacyConfigsRedirect)
 
@@ -91,6 +92,10 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Post("/api/valheim/wizard/create", h.ValheimWizardCreate)
 	router.Post("/api/valheim/wizard/import", h.ValheimWizardImport)
 	router.Get("/api/valheim/wizard/mods/search", h.ValheimWizardModsSearch)
+	router.Post("/api/valheim/wizard/mods/search", h.ValheimWizardModsSearch)
+	router.Get("/api/valheim/wizard/mods/detail", h.ValheimWizardModDetail)
+	router.Post("/api/valheim/wizard/mods/detail", h.ValheimWizardModDetail)
+	router.Post("/api/valheim/wizard/cart/sync", h.ValheimWizardCartSync)
 
 	// Per-instance detail & controls
 	router.Get("/valheim/:num<int>", func(c *fiber.Ctx) error {
@@ -100,6 +105,8 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Post("/api/valheim/:num<int>/settings", h.ValheimInstanceSettingsSave)
 	router.Get("/api/valheim/:num<int>/mods/search", h.ValheimInstanceModsSearch)
 	router.Post("/api/valheim/:num<int>/mods/search", h.ValheimInstanceModsSearch)
+	router.Get("/api/valheim/:num<int>/mods/detail", h.ValheimModDetail)
+	router.Post("/api/valheim/:num<int>/mods/detail", h.ValheimModDetail)
 	router.Post("/api/valheim/:num<int>/mods/install", h.ValheimInstanceModsInstall)
 	router.Post("/api/valheim/:num<int>/mods/remove", h.ValheimInstanceModsRemove)
 	router.Get("/api/valheim/:num<int>/configs/file", h.ValheimInstanceConfigGet)

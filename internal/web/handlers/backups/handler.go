@@ -122,11 +122,19 @@ func (h *Handler) RestoreInPlace(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 
-	if err := h.cfg.MCInstances.RestoreInPlace(c.UserContext(), num, req.Archive, h.cfg.Actor(c)); err != nil {
+	archive := strings.TrimSpace(req.Archive)
+	if archive == "" {
+		archive = strings.TrimSpace(c.FormValue("archive"))
+	}
+	if archive == "" {
+		archive = strings.TrimSpace(c.Query("archive"))
+	}
+
+	if err := h.cfg.MCInstances.RestoreInPlace(c.UserContext(), num, archive, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
 
-	archiveName := filepath.Base(strings.TrimSpace(req.Archive))
+	archiveName := filepath.Base(archive)
 	return shared.SSEToast(c, "ok", fmt.Sprintf("In-place restore started from %s (safety snapshot saved). World data is unpacking.", archiveName), nil)
 }
 
@@ -185,7 +193,14 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 
-	fileName := filepath.Base(strings.TrimSpace(req.File))
+	file := strings.TrimSpace(req.File)
+	if file == "" {
+		file = strings.TrimSpace(c.FormValue("file"))
+	}
+	if file == "" {
+		file = strings.TrimSpace(c.Query("file"))
+	}
+	fileName := filepath.Base(file)
 	if fileName == "" || fileName == "." {
 		return shared.SSEToast(c, "err", "File name required.", nil)
 	}
@@ -246,11 +261,19 @@ func (h *Handler) ValheimRestoreInPlace(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 
-	if err := h.cfg.ValheimInstances.RestoreInPlace(c.UserContext(), num, req.Archive, h.cfg.Actor(c)); err != nil {
+	archive := strings.TrimSpace(req.Archive)
+	if archive == "" {
+		archive = strings.TrimSpace(c.FormValue("archive"))
+	}
+	if archive == "" {
+		archive = strings.TrimSpace(c.Query("archive"))
+	}
+
+	if err := h.cfg.ValheimInstances.RestoreInPlace(c.UserContext(), num, archive, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
 
-	archiveName := filepath.Base(strings.TrimSpace(req.Archive))
+	archiveName := filepath.Base(archive)
 	return shared.SSEToast(c, "ok", fmt.Sprintf("In-place restore started from %s (safety snapshot saved). World data is unpacking.", archiveName), nil)
 }
 
@@ -289,7 +312,14 @@ func (h *Handler) ValheimDelete(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 
-	fileName := filepath.Base(strings.TrimSpace(req.File))
+	file := strings.TrimSpace(req.File)
+	if file == "" {
+		file = strings.TrimSpace(c.FormValue("file"))
+	}
+	if file == "" {
+		file = strings.TrimSpace(c.Query("file"))
+	}
+	fileName := filepath.Base(file)
 	if fileName == "" || fileName == "." {
 		return shared.SSEToast(c, "err", "File name required.", nil)
 	}
