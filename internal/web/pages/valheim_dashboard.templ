@@ -18,7 +18,7 @@ templ ValheimDashboard(instances []InstanceUI, budget BudgetUI) {
 						<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d GiB", budget.UsedGiB, budget.TotalBudgetGiB) }</span>
 						<div class="ml-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800">
 							<div
-								class="h-full bg-orange-500"
+								class="h-full bg-zinc-300"
 								style={ fmt.Sprintf("width: %d%%", (budget.UsedGiB * 100) / budget.TotalBudgetGiB) }
 							></div>
 						</div>
@@ -43,7 +43,7 @@ templ ValheimDashboard(instances []InstanceUI, budget BudgetUI) {
 			if len(instances) == 0 {
 				<!-- Empty state hero -->
 				<div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 p-12 text-center">
-					<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-950/40 text-3xl text-orange-400 ring-1 ring-orange-800/40">
+					<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800/60 text-3xl text-zinc-300 ring-1 ring-zinc-700/60">
 						⚔️
 					</div>
 					<h2 class="text-lg font-semibold text-zinc-100">Create your first Valheim world</h2>
@@ -52,7 +52,7 @@ templ ValheimDashboard(instances []InstanceUI, budget BudgetUI) {
 					</p>
 					<a
 						href="/valheim/create"
-						class="mt-6 inline-flex items-center gap-2 rounded-xl bg-orange-700 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-950/50 hover:bg-orange-600"
+						class="mt-6 inline-flex items-center gap-2 rounded-xl bg-zinc-100 px-5 py-2.5 text-sm font-semibold text-zinc-950 shadow hover:bg-white"
 					>
 						<span>+</span> Create New World
 					</a>
@@ -68,7 +68,7 @@ templ ValheimDashboard(instances []InstanceUI, budget BudgetUI) {
 									<div>
 										<div class="flex items-center gap-2">
 											<span class="font-mono text-xs text-zinc-500">{ fmt.Sprintf("#%02d", inst.Number) }</span>
-											<a href={ templ.SafeURL(fmt.Sprintf("/valheim/%d", inst.Number)) } class="text-base font-semibold text-zinc-100 hover:text-orange-400 transition">
+											<a href={ templ.SafeURL(fmt.Sprintf("/valheim/%d", inst.Number)) } class="text-base font-semibold text-zinc-100 hover:text-zinc-300 transition">
 												{ inst.Name } &rarr;
 											</a>
 										</div>
@@ -96,7 +96,7 @@ templ ValheimDashboard(instances []InstanceUI, budget BudgetUI) {
 
 								<!-- Badges: Game, Tier, Password, Version -->
 								<div class="mt-4 flex flex-wrap gap-1.5">
-									<span class="rounded bg-orange-950/60 px-2 py-0.5 text-[11px] font-medium text-orange-300 ring-1 ring-orange-800/40">Valheim</span>
+									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-300 ring-1 ring-zinc-700/60">Valheim</span>
 									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-300">BepInEx</span>
 
 									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
@@ -161,7 +161,7 @@ templ ValheimDashboard(instances []InstanceUI, budget BudgetUI) {
 											<button
 												type="button"
 												data-on:click={ fmt.Sprintf("@post('/api/valheim/instances/%d/start')", inst.Number) }
-												class="rounded-lg bg-orange-700 px-3 py-1 text-xs font-medium text-white hover:bg-orange-600"
+												class="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
 											>
 												Start
 											</button>

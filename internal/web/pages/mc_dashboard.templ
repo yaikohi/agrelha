@@ -18,7 +18,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 						<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d GiB", budget.UsedGiB, budget.TotalBudgetGiB) }</span>
 						<div class="ml-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800">
 							<div
-								class="h-full bg-emerald-500"
+								class="h-full bg-zinc-300"
 								style={ fmt.Sprintf("width: %d%%", (budget.UsedGiB * 100) / budget.TotalBudgetGiB) }
 							></div>
 						</div>
@@ -43,7 +43,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 			if len(instances) == 0 {
 				<!-- Empty state hero -->
 				<div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 p-12 text-center">
-					<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-950/40 text-3xl text-emerald-400 ring-1 ring-emerald-800/40">
+					<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800/60 text-3xl text-zinc-300 ring-1 ring-zinc-700/60">
 						🌍
 					</div>
 					<h2 class="text-lg font-semibold text-zinc-100">Create your first world</h2>
@@ -52,7 +52,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 					</p>
 					<a
 						href="/minecraft/create"
-						class="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-950/50 hover:bg-emerald-600"
+						class="mt-6 inline-flex items-center gap-2 rounded-xl bg-zinc-100 px-5 py-2.5 text-sm font-semibold text-zinc-950 shadow hover:bg-white"
 					>
 						<span>+</span> Create New World
 					</a>
@@ -68,7 +68,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 									<div>
 										<div class="flex items-center gap-2">
 											<span class="font-mono text-xs text-zinc-500">{ fmt.Sprintf("#%02d", inst.Number) }</span>
-											<a href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d", inst.Number)) } class="text-base font-semibold text-zinc-100 hover:text-emerald-400 transition">
+											<a href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d", inst.Number)) } class="text-base font-semibold text-zinc-100 hover:text-zinc-300 transition">
 												{ inst.Name } &rarr;
 											</a>
 										</div>
@@ -170,7 +170,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 											<button
 												type="button"
 												data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/start')", inst.Number) }
-												class="rounded-lg bg-emerald-700 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600"
+												class="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
 											>
 												Start
 											</button>

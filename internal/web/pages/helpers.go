@@ -267,17 +267,11 @@ func ServersOnlineLabel(online int) string {
 }
 
 func extrasStyle(accent string) string {
-	if accent == "orange" {
-		return "border-orange-900/40 bg-orange-950/15"
-	}
-	return "border-emerald-900/40 bg-emerald-950/15"
+	return "border-zinc-800/80 bg-zinc-900/40"
 }
 
 func extrasLabelStyle(accent string) string {
-	if accent == "orange" {
-		return "text-orange-300/80"
-	}
-	return "text-emerald-300/80"
+	return "text-zinc-400"
 }
 
 // GameCardUI is one game's card. Both cards render through the same component,
@@ -312,10 +306,7 @@ func (g GameCardUI) OnlineCount() int {
 }
 
 func iconStyle(accent string) string {
-	if accent == "orange" {
-		return "bg-orange-950/40 text-orange-400 ring-1 ring-orange-800/40"
-	}
-	return "bg-emerald-950/40 text-emerald-400 ring-1 ring-emerald-800/40"
+	return "bg-zinc-800/60 text-zinc-300 ring-1 ring-zinc-700/60"
 }
 
 // Primary is the instance the card footer acts on.

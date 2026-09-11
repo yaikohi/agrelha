@@ -6,7 +6,7 @@ templ Configs(files []string, enabled bool, flashKind, flashMsg string) {
 		<div class="mb-4 flex items-center justify-between">
 			<h1 class="text-2xl font-semibold">Mod configs</h1>
 			if enabled {
-				<a href="/configs/new" class="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600">New file</a>
+				<a href="/configs/new" class="rounded bg-zinc-100 text-zinc-950 font-semibold px-4 py-2 text-sm hover:bg-white">New file</a>
 			}
 		</div>
 		@flashBanner(flashKind, flashMsg)

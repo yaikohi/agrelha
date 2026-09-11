@@ -159,7 +159,29 @@ Aligned with Hexagonal (Ports & Adapters) and Onion Architecture:
       - When an authorized or forced shutdown occurs, trigger in-game broadcasts (30s / 10s countdown) and force world save (`/save-all` for Minecraft, save hook for Valheim) before terminating the process.
     - **Kubernetes Infrastructure Safety**:
       - Emit a `PodDisruptionBudget` (`minAvailable: 1`) per running instance in manifest templates to block accidental eviction during node drains/upgrades.
-      - Set `terminationGracePeriodSeconds: 60` with container `preStop` flush hooks in pod specs.
+- **Candidate 12: Frontend Design System & Modular UI Components (`internal/web/components/`)** [Ready to Implement]
+  - **Objective**: Consolidate redundant styling across 25+ `.templ` pages into a single typed component library with strict functional color language and zero runtime overhead.
+  - **Findings & Motivation**:
+    - *Duplicate Styling*: Buttons (Primary CTA, Secondary, Danger, Warning/Stop), tab bars (`valheimTabStyle` vs `instanceTabStyle`), status pills/dots, form controls (inputs, textareas, labels), and option/radio cards are duplicated with divergent Tailwind class strings across Valheim and Minecraft pages.
+    - *Game-Color Confusion*: Valheim (arbitrary orange) and Minecraft (arbitrary green) produced confusing visual semantics rather than clear functional meaning (e.g. green for running/success, amber for warnings/stopping, red for destructive actions, neutral monochrome zinc for layout/tabs/actions).
+  - **Agreed Design via `/grill-me`**:
+    - **Package Location**: `internal/web/components/` (pure presentation components; imports only stdlib and `a-h/templ`).
+    - **Why Golang `templ` for Component Modularization**:
+      1. *Compile-Time Type Safety*: Props structs (`ButtonProps`, `InputProps`, `TabBarProps`, `StatusPillProps`, `OptionCardProps`) enforce valid configurations at build time (`templ generate && go test`), eliminating broken CSS class regressions.
+      2. *Zero Runtime Overhead*: Compiles into direct streaming Go byte writers; composition via `{ children... }` incurs zero virtual DOM diffing or reflection overhead.
+      3. *Single Source of Truth for Tailwind*: Component variants (`VariantPrimary`, `VariantSecondary`, `VariantSuccess`, `VariantWarning`, `VariantDanger`, `SizeSm`, `SizeMd`) are computed in pure Go helper functions instead of scattering 80-character class strings across templates.
+    - **Functional Color Language**:
+      - *Monochrome Zinc*: Layout, page headers, tab navigation (`border-zinc-100 text-zinc-100 font-semibold`), neutral primary buttons (`bg-zinc-100 text-zinc-950 font-semibold hover:bg-white`), secondary buttons (`border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700`), wizard steps (`bg-zinc-100 text-zinc-950`), selected cards (`border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60`), and focus rings (`focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400`).
+      - *Emerald / Green*: Functional success, running status pill (`bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-800/50`), Start Server lifecycle action (`bg-emerald-600 hover:bg-emerald-500 text-white`).
+      - *Amber / Orange*: Functional warnings, stopping/starting state (`bg-amber-950/80 text-amber-300 ring-1 ring-amber-800/50`), Stop Server action (`border-amber-800/60 bg-amber-950/30 text-amber-200 hover:bg-amber-900/50`).
+      - *Red*: Destructive actions (`text-red-400 hover:bg-red-950/40 hover:text-red-300` / `bg-red-900/80 text-white`), error alerts.
+    - **Component Primitives to Extract**:
+      - `Button(props ButtonProps)`: Standardizes variants (Primary, Secondary, Success/Start, Warning/Stop, Danger/Delete), sizes, disabled states, and button vs anchor rendering.
+      - `Input(props InputProps)` / `Textarea(props TextareaProps)`: Standardizes labels, help hints, validation errors, and high-contrast neutral focus rings.
+      - `TabBar(props TabBarProps)`: Standardizes tab link row with active bottom-border highlight.
+      - `StatusPill(props StatusPillProps)`: Standardizes state badge (running, stopped, starting, disabled) with pulsating dot.
+      - `OptionCard(props OptionCardProps)`: Standardizes radio/selectable cards for wizard and configuration pickers.
+      - `Modal(props ModalProps)`: Standardizes dialog backdrop, title, and action buttons.
 
 
 ---
