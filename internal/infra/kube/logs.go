@@ -50,12 +50,25 @@ func (c *Client) StreamDeploymentLogs(ctx context.Context, depName string, tail 
 	if len(pods.Items) == 0 {
 		return nil, fmt.Errorf("no pod found for app=%s in %s", depName, c.namespace)
 	}
-	name := pods.Items[0].Name
-	req := c.cs.CoreV1().Pods(c.namespace).GetLogs(name, &corev1.PodLogOptions{
+	pod := pods.Items[0]
+	container := ""
+	for _, cnt := range pod.Spec.Containers {
+		if cnt.Name == "valheim" || cnt.Name == "minecraft" {
+			container = cnt.Name
+			break
+		}
+	}
+	if container == "" && len(pod.Spec.Containers) > 0 {
+		container = pod.Spec.Containers[0].Name
+	}
+	logOpts := &corev1.PodLogOptions{
 		Follow:    true,
 		TailLines: &tail,
-		Container: "minecraft",
-	})
+	}
+	if container != "" {
+		logOpts.Container = container
+	}
+	req := c.cs.CoreV1().Pods(c.namespace).GetLogs(pod.Name, logOpts)
 	return req.Stream(ctx)
 }
 
