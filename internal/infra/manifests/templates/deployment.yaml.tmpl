@@ -108,14 +108,14 @@ spec:
               name: rcon
               protocol: TCP
           startupProbe:
-            tcpSocket:
-              port: 25565
+            exec:
+              command: ["mc-health"]
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 60
           readinessProbe:
-            tcpSocket:
-              port: 25565
+            exec:
+              command: ["mc-health"]
             periodSeconds: 10
             failureThreshold: 3
           resources:

@@ -127,6 +127,12 @@ func TestMCWizardPage(t *testing.T) {
 	if !strings.Contains(htmlContent, `@post('/api/minecraft/wizard/create')`) {
 		t.Errorf("wizard missing create @post handler")
 	}
+	if strings.Contains(htmlContent, `$loader = $bestLoader`) {
+		t.Errorf("wizard must not auto-override user loader choice with $bestLoader")
+	}
+	if !strings.Contains(htmlContent, `$loader = 'neoforge'`) || !strings.Contains(htmlContent, `$loader = 'fabric'`) {
+		t.Errorf("wizard must contain explicit NeoForge and Fabric loader selection buttons")
+	}
 }
 
 func TestMCInstanceCreateAndDetail(t *testing.T) {
@@ -370,5 +376,99 @@ func TestMCSettingsSave(t *testing.T) {
 	}
 	if updated.Tier != domain.TierMedium {
 		t.Errorf("got tier %s, want medium", updated.Tier)
+	}
+}
+
+func TestMCWizardAssembleLoaderSelection(t *testing.T) {
+	app, st, mgr, _, _ := setupTestMCServer(t)
+	defer st.Close()
+
+	// 1. Attempting assemble create without loader should be rejected
+	noLoaderPayload, _ := json.Marshal(map[string]any{
+		"name":       "AssembleNoLoader",
+		"source":     "assemble",
+		"loader":     "",
+		"mc_version": "1.21.1",
+		"tier":       "small",
+	})
+	req := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/create", bytes.NewReader(noLoaderPayload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("assemble create request failed: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Please select a mod loader") {
+		t.Errorf("expected error toast about selecting a mod loader, got %s", string(body))
+	}
+
+	// 2. Assemble create with explicit Fabric loader
+	fabricPayload, _ := json.Marshal(map[string]any{
+		"name":       "FabricWorld",
+		"source":     "assemble",
+		"loader":     "fabric",
+		"mc_version": "1.21.1",
+		"tier":       "small",
+	})
+	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/create", bytes.NewReader(fabricPayload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("fabric create request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", resp.StatusCode)
+	}
+	inst1, err := mgr.GetInstance(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("failed to get instance 1: %v", err)
+	}
+	if inst1.Loader != domain.LoaderFabric {
+		t.Errorf("expected LoaderFabric, got %s", inst1.Loader)
+	}
+
+	// 3. Assemble create with explicit NeoForge loader
+	neoPayload, _ := json.Marshal(map[string]any{
+		"name":       "NeoWorld",
+		"source":     "assemble",
+		"loader":     "neoforge",
+		"mc_version": "1.21.1",
+		"tier":       "small",
+	})
+	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/create", bytes.NewReader(neoPayload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("neoforge create request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", resp.StatusCode)
+	}
+	inst2, err := mgr.GetInstance(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("failed to get instance 2: %v", err)
+	}
+	if inst2.Loader != domain.LoaderNeoForge {
+		t.Errorf("expected LoaderNeoForge, got %s", inst2.Loader)
+	}
+
+	// 4. Test cart check endpoint
+	cartPayload, _ := json.Marshal(map[string]any{
+		"cart":       []string{"jei", "waystones"},
+		"mc_version": "1.21.1",
+	})
+	req = httptest.NewRequest(fiber.MethodPost, "/api/minecraft/wizard/cart/check", bytes.NewReader(cartPayload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("cart check request failed: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("cart check status = %d, want 200", resp.StatusCode)
+	}
+	cartRespBytes, _ := io.ReadAll(resp.Body)
+	cartRespStr := string(cartRespBytes)
+	if !strings.Contains(cartRespStr, "datastar-patch-signals") {
+		t.Errorf("expected datastar-patch-signals in cart check response, got: %s", cartRespStr)
 	}
 }

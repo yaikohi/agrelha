@@ -36,17 +36,17 @@ type BackupSummary struct {
 
 // Config defines dependencies for the dashboard page and main SSE loop.
 type Config struct {
-	GrafanaDashboardURL string
-	ValheimAddress      string
-	GameNodeName        string
-	ValheimInstances    *instances.InstanceManager
-	MCInstances         *instances.InstanceManager
-	ValheimGame         ports.Game
-	MinecraftGame       ports.Game
-	Auth                ports.Auth
-	Actor               func(*fiber.Ctx) string
-	BackupInfo          func() (BackupSummary, bool)
-	ModUpdates          func(context.Context) []pages.ModUpdate
+	GrafanaDashboardURL  string
+	ValheimAddress       string
+	GameNodeName         string
+	ValheimInstances     *instances.InstanceManager
+	MCInstances          *instances.InstanceManager
+	ValheimGame          ports.Game
+	MinecraftGame        ports.Game
+	Auth                 ports.Auth
+	Actor                func(*fiber.Ctx) string
+	BackupInfo           func() (BackupSummary, bool)
+	ModUpdates           func(context.Context) []pages.ModUpdate
 	PendingActive        func(context.Context) bool
 	InstanceStats        func(context.Context, []domain.Instance) map[int]InstanceStat
 	ValheimInstanceStats func(context.Context, []domain.Instance) map[int]InstanceStat

@@ -328,6 +328,27 @@ live cluster edits get reverted):
 
 ### P2 — features from the original design not yet built
 
+- [ ] **Crash detection + incident context.** Designed 2026-09-11, not built —
+      see [docs/server-health-plan.md](docs/server-health-plan.md). Today
+      `Available` is just `pod.Ready`, Valheim's readiness probe is `pgrep`
+      (observed reporting Ready for ~3 min with no game ports bound), and
+      `kube.PodStatus` discards restart count, exit code, `OOMKilled` and
+      `CrashLoopBackOff`. `"crash"` is already a history badge with no producer.
+      Plan adds **Health/Incident** as a third domain concept (never folded into
+      Lifecycle or Availability), captures the previous container's log tail at
+      detection time, and replaces the weak probes — Minecraft's `mc-health` is
+      already declared in `domain.RuntimeSpec.HealthProbe` and ignored by the
+      template.
+
+- [ ] **Mod-combination compatibility gate (Minecraft).** Designed 2026-09-11, not
+      built — see [docs/mod-compatibility-plan.md](docs/mod-compatibility-plan.md).
+      Static Modrinth-metadata gate at creation (tiered block/warn, always
+      overridable, mod lists only — never Packs), plus an **optional** boot smoke
+      test behind a wizard toggle. The smoke test is the expensive half: it needs
+      persisted wizard drafts in SQLite so the operator can leave and come back,
+      which is why it is phased. Two fields are already fetched and ignored today:
+      `ModProject.ServerSide` and `VersionDependency.DependencyType == "incompatible"`.
+
 - [x] **Mod browsing + metadata cache.** Done in 0.6.0 (see Done above); spec kept
       below for reference.
 - [x] **Audit / event timeline UI (0.7.1).** `GET /history` — merged timeline of `audit`

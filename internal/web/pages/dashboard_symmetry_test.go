@@ -84,12 +84,12 @@ func TestFormatBadgesDifferButButtonDoesNot(t *testing.T) {
 func sampleValheim() ValheimSummaryUI {
 	return ValheimSummaryUI{
 		TotalInstances: 2, MaxInstances: 4,
-		RunningCount:   1, MaxRunning: 2,
-		UsedGiB:        6, TotalBudgetGiB: 16,
+		RunningCount: 1, MaxRunning: 2,
+		UsedGiB: 6, TotalBudgetGiB: 16,
 		ActiveInstances: []InstanceUI{{
 			Number: 1, Name: "lareira-V2", LBIP: "192.168.20.224",
-			Source:       "modpack",
-			Players:      2, PlayersKnown: true, Uptime: "1h 30m",
+			Source:  "modpack",
+			Players: 2, PlayersKnown: true, Uptime: "1h 30m",
 		}},
 	}
 }

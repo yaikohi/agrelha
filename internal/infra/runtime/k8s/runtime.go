@@ -64,6 +64,14 @@ func (r *Runtime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status
 	if ps, err := r.c.DeploymentPodStatus(ctx, ref.Name); err == nil {
 		st.Available = ps.Ready
 		st.StartedAt = ps.StartedAt
+		st.Failure = ports.Failure{
+			RestartCount:  ps.RestartCount,
+			WaitingReason: ps.WaitingReason,
+			ExitCode:      ps.LastExitCode,
+			Reason:        ps.LastReason,
+			FinishedAt:    ps.LastFinishedAt,
+			OOMKilled:     ps.LastOOMKilled,
+		}
 	}
 	return st, nil
 }
@@ -87,7 +95,11 @@ func (r *Runtime) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogO
 	if tail <= 0 {
 		tail = 200
 	}
-	return r.c.StreamDeploymentLogs(ctx, ref.Name, tail)
+	return r.c.StreamDeploymentLogsQuery(ctx, ref.Name, k8sclient.LogQuery{
+		Tail:     tail,
+		Follow:   opts.Follow,
+		Previous: opts.Previous,
+	})
 }
 
 func (r *Runtime) WatchAvailability(ctx context.Context, ref ports.ServerRef, timeout time.Duration) error {

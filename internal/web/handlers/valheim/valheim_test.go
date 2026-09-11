@@ -124,8 +124,8 @@ func (m *memStateStore) PutTree(ctx context.Context, dirPath string, docs map[st
 				lines := strings.Split(rawStr[idx:], "\n")
 				var modLines []string
 				for _, line := range lines[1:] {
-					if strings.HasPrefix(line, "    ") {
-						modLines = append(modLines, strings.TrimPrefix(line, "    "))
+					if after, ok := strings.CutPrefix(line, "    "); ok {
+						modLines = append(modLines, after)
 					} else if strings.TrimSpace(line) != "" {
 						break
 					}
@@ -603,4 +603,3 @@ func TestValheimWizardCreateWithCart(t *testing.T) {
 		t.Errorf("expected Smoothbrain-Mining in installed mods, got: %v", installed)
 	}
 }
-

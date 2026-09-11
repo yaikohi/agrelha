@@ -481,9 +481,30 @@ func buildInstancesHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 			d.MCInstances.ApplyOptions(opts...)
 		}
 	}
+	var searchMods instanceshttp.SearchModsFunc
+	if d.MR != nil {
+		searchMods = func(ctx context.Context, query, mcVersion string) ([]instanceshttp.ModHit, error) {
+			res, err := d.MR.Search(ctx, query, mcVersion, "", 20, 0)
+			if err != nil {
+				return nil, err
+			}
+			hits := make([]instanceshttp.ModHit, 0, len(res.Hits))
+			for _, h := range res.Hits {
+				hits = append(hits, instanceshttp.ModHit{
+					Slug:        h.Slug,
+					Title:       h.Title,
+					Description: h.Description,
+					IconURL:     h.IconURL,
+				})
+			}
+			return hits, nil
+		}
+	}
+
 	return instanceshttp.New(instanceshttp.Config{
 		MCInstances:             d.MCInstances,
 		MinecraftGame:           d.MinecraftGame,
+		SearchMods:              searchMods,
 		Actor:                   actor,
 		ApplyMinecraftAfterSync: applyMCAfterSync,
 	})

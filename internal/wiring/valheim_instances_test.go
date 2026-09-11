@@ -454,4 +454,3 @@ func TestValheimBackupsAndRestores(t *testing.T) {
 		t.Errorf("instance 2 name = %q, want 'Valheim Cloned'", inst2.Name)
 	}
 }
-

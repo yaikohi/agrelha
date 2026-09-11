@@ -293,6 +293,9 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 	if loader == "" {
 		loader = strings.ToLower(strings.TrimSpace(c.FormValue("loader")))
 	}
+	if source == "assemble" && loader == "" {
+		return shared.SSEToast(c, "err", "Please select a mod loader (NeoForge or Fabric).", nil)
+	}
 	mcVersion := strings.TrimSpace(req.MCVersion)
 	if mcVersion == "" {
 		mcVersion = strings.TrimSpace(c.FormValue("mc_version"))

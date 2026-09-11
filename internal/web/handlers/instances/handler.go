@@ -28,6 +28,7 @@ const instanceStatsTTL = 15 * time.Second
 type Config struct {
 	MCInstances             *instances.InstanceManager
 	MinecraftGame           ports.Game
+	SearchMods              SearchModsFunc
 	Actor                   func(*fiber.Ctx) string
 	ApplyMinecraftAfterSync func(cmName, depName, key string, want func(string) bool)
 }
@@ -91,6 +92,8 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	})
 	router.Get("/minecraft/:num<int>/:tab", h.MCInstancePage)
 	router.Post("/api/minecraft/:num<int>/settings", h.MCInstanceSettingsSave)
+	router.Get("/api/minecraft/:num<int>/mods/search", h.MCInstanceModsSearch)
+	router.Post("/api/minecraft/:num<int>/mods/search", h.MCInstanceModsSearch)
 	router.Post("/api/minecraft/:num<int>/mods/install", h.MCInstanceModsInstall)
 	router.Post("/api/minecraft/:num<int>/mods/remove", h.MCInstanceModsRemove)
 	router.Get("/api/minecraft/:num<int>/configs/file", h.MCInstanceConfigGet)

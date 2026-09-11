@@ -342,4 +342,3 @@ var safeBackupName = regexp.MustCompile(`^(mc|valheim)-[a-z0-9-]+-\d{2}-[a-zA-Z0
 func IsSafeBackupFileName(name string) bool {
 	return safeBackupName.MatchString(name)
 }
-

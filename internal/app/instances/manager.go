@@ -26,18 +26,18 @@ type InstanceStat struct {
 }
 
 type InstanceManager struct {
-	repo             ports.InstanceRepository
-	stateStore       ports.StateStore
-	runtime          ports.Runtime
-	totalBudgetGiB   int
-	maxInstances     int
-	maxRunning       int
-	instancesRelPath string
-	lbBaseIP         string
-	renderer         ports.SpecRenderer
-	namespace        string
-	gameID           domain.GameID
-	backupsPVC       string
+	repo              ports.InstanceRepository
+	stateStore        ports.StateStore
+	runtime           ports.Runtime
+	totalBudgetGiB    int
+	maxInstances      int
+	maxRunning        int
+	instancesRelPath  string
+	lbBaseIP          string
+	renderer          ports.SpecRenderer
+	namespace         string
+	gameID            domain.GameID
+	backupsPVC        string
 	serverRefResolver func(inst domain.Instance) ports.ServerRef
 
 	audit               ports.AuditRecorder
@@ -1015,7 +1015,42 @@ func (m *InstanceManager) InstanceLogs(ctx context.Context, num int, tail int64)
 	if tail <= 0 {
 		tail = 100
 	}
-	return m.runtime.Logs(ctx, m.serverRef(*inst), ports.LogOptions{Tail: tail})
+	return m.runtime.Logs(ctx, m.serverRef(*inst), ports.LogOptions{Tail: tail, Follow: true})
+}
+
+// RuntimeStatus reports what the runtime knows about an instance, including how
+// it last died.
+func (m *InstanceManager) RuntimeStatus(ctx context.Context, num int) (ports.Status, error) {
+	if m.runtime == nil {
+		return ports.Status{Lifecycle: ports.LifecycleUnknown}, ports.ErrNotImplemented
+	}
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil {
+		return ports.Status{Lifecycle: ports.LifecycleUnknown}, err
+	}
+	if inst == nil {
+		return ports.Status{Lifecycle: ports.LifecycleUnknown}, fmt.Errorf("instance %d not found", num)
+	}
+	return m.runtime.Status(ctx, m.serverRef(*inst))
+}
+
+// CrashLogs reads the terminated container's logs. Kubernetes reaps these when
+// the pod is replaced, so they must be captured at detection, not on demand.
+func (m *InstanceManager) CrashLogs(ctx context.Context, num int, tail int64) (io.ReadCloser, error) {
+	if m.runtime == nil {
+		return nil, ports.ErrNotImplemented
+	}
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil {
+		return nil, err
+	}
+	if inst == nil {
+		return nil, fmt.Errorf("instance %d not found", num)
+	}
+	if tail <= 0 {
+		tail = 100
+	}
+	return m.runtime.Logs(ctx, m.serverRef(*inst), ports.LogOptions{Tail: tail, Previous: true})
 }
 
 // ExecuteCommand executes a console command on an instance via the configured command executor.
@@ -1264,4 +1299,3 @@ func (m *InstanceManager) BackupSummary() (domain.BackupSummary, bool) {
 	}
 	return info, true
 }
-

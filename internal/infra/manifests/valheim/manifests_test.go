@@ -100,7 +100,7 @@ func TestValheimRenderBasic(t *testing.T) {
 	}
 }
 
-func TestValheimRenderStoppedWithoutMods(t *testing.T) {
+func TestValheimRenderStoppedSeedsEmptyModList(t *testing.T) {
 	inst := domain.Instance{
 		GameID: domain.GameValheim,
 		Number: 2,
@@ -116,8 +116,15 @@ func TestValheimRenderStoppedWithoutMods(t *testing.T) {
 		t.Fatalf("Render failed: %v", err)
 	}
 
-	if _, ok := files["mods.yaml"]; ok {
-		t.Errorf("expected no mods.yaml when modsTxt is empty")
+	mods, ok := files["mods.yaml"]
+	if !ok {
+		t.Fatal("mods.yaml must be rendered even with no mods: the install path patches this file, and it cannot patch what does not exist")
+	}
+	if !strings.Contains(string(mods), "# Mod list for Valheim Vanilla") {
+		t.Errorf("expected a placeholder mod list, got: %s", mods)
+	}
+	if !strings.Contains(string(mods), "name: valheim-valheim-vanilla-02-mods") {
+		t.Errorf("expected the instance ModsCMName, got: %s", mods)
 	}
 
 	dep := string(files["deployment.yaml"])
@@ -129,5 +136,55 @@ func TestValheimRenderStoppedWithoutMods(t *testing.T) {
 	}
 	if !strings.Contains(dep, "memory: 10Gi") {
 		t.Errorf("expected 10Gi limit for large tier: %s", dep)
+	}
+}
+
+func TestValheimDeploymentReconcilesMods(t *testing.T) {
+	inst := domain.Instance{
+		GameID: domain.GameValheim,
+		Number: 2,
+		Name:   "boppo",
+		Slug:   "boppo",
+		Tier:   domain.TierLarge,
+		State:  domain.StateRunning,
+	}
+
+	files, err := New("", "").Render(inst, "")
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	dep := string(files["deployment.yaml"])
+
+	if !strings.Contains(dep, "name: mod-reconciler") {
+		t.Fatal("deployment must run the mod reconciler: lloesche's image cannot install Thunderstore mods itself")
+	}
+	if !strings.Contains(dep, "MODS=/config-mods/mods.txt") {
+		t.Error("reconciler must read the mod list from the mounted ConfigMap")
+	}
+	if !strings.Contains(dep, "thunderstore.io/package/download/") {
+		t.Error("reconciler must fetch packages from Thunderstore")
+	}
+	if !strings.Contains(dep, "name: valheim-boppo-02-mods") {
+		t.Error("deployment must mount this instance's mods ConfigMap")
+	}
+}
+
+func TestValheimReadinessChecksTheGamePort(t *testing.T) {
+	inst := domain.Instance{
+		GameID: domain.GameValheim, Number: 1, Name: "lareira", Slug: "lareira",
+		Tier: domain.TierLarge, State: domain.StateRunning,
+	}
+
+	files, err := New("", "").Render(inst, "")
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	dep := string(files["deployment.yaml"])
+
+	if strings.Contains(dep, "pgrep -f valheim_server") {
+		t.Error("pgrep only proves the process exists: it reported Ready for ~3 min with no game ports bound during the 1.0 upgrade")
+	}
+	if !strings.Contains(dep, ":2456[[:space:]]") {
+		t.Error("readiness must check that the game port is actually bound")
 	}
 }

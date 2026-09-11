@@ -10,7 +10,7 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 		@nav()
 		<div
 			class="space-y-6"
-			data-signals="{step:1,name:'',seed:'',source:'modpack',loader:'neoforge',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false,redirect:''}"
+			data-signals="{step:1,name:'',seed:'',source:'modpack',loader:'',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false,redirect:''}"
 			data-effect="if ($redirect) { window.location.href = $redirect }"
 		>
 			<!-- Stepper progress header -->
@@ -80,7 +80,7 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						Name:        "source",
 						Value:       "assemble",
 						BindSignal:  "source",
-						OnClick:     "$source = 'assemble'; $step = 3",
+						OnClick:     "$source = 'assemble'; $loader = ''; $step = 3",
 						Icon:        "🔧",
 						Title:       "Assemble Your Own",
 						Description: "Pick your Minecraft release and add individual mods from Modrinth. A live compatibility analyzer recommends NeoForge or Fabric.",
@@ -182,6 +182,7 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						<label class="block text-xs font-medium text-zinc-300">Minecraft Version</label>
 						<select
 							data-bind="mc_version"
+							data-on:change="if ($cart.length > 0) { @post('/api/minecraft/wizard/cart/check') }"
 							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
 						>
 							for _, v := range availableVersions {
@@ -191,22 +192,78 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 					</div>
 					<div class="sm:col-span-2 rounded-xl border border-zinc-800 bg-zinc-900/90 p-4">
 						<div class="flex items-center justify-between text-xs">
-							<span class="font-medium text-zinc-300">Loader Compatibility</span>
-							<span class="text-zinc-400">Recommended: <strong class="uppercase text-zinc-200 font-bold" data-text="$bestLoader"></strong></span>
+							<span class="font-medium text-zinc-300">
+								Mod Loader <span class="text-red-400">*</span>
+							</span>
+							<div>
+								<span data-show="$neoFit > $fabFit" class="text-zinc-400">Recommended: <strong class="uppercase text-emerald-400 font-bold">NeoForge</strong></span>
+								<span data-show="$fabFit > $neoFit" class="text-zinc-400">Recommended: <strong class="uppercase text-emerald-400 font-bold">Fabric</strong></span>
+								<span data-show="$totalFitMods > 0 && $neoFit === $fabFit" class="text-zinc-400">Both 100% compatible: <strong class="text-zinc-200 font-medium">Admin Choice</strong></span>
+								<span data-show="$totalFitMods === 0" class="text-zinc-500">Choose preferred loader</span>
+							</div>
 						</div>
 						<div class="mt-3 grid grid-cols-2 gap-3 text-xs">
-							<div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-								<div class="flex justify-between font-mono">
-									<span>NeoForge</span>
-									<span data-text="$neoFit + '/' + $totalFitMods"></span>
+							<!-- NeoForge Option Card -->
+							<button
+								type="button"
+								data-on:click="$loader = 'neoforge'"
+								class="flex flex-col text-left rounded-xl border p-3 cursor-pointer transition select-none"
+								data-class="{'border-emerald-500 ring-1 ring-emerald-500 bg-emerald-950/20': $loader === 'neoforge', 'border-zinc-800 bg-zinc-950 hover:border-zinc-700': $loader !== 'neoforge'}"
+							>
+								<div class="flex items-center justify-between w-full">
+									<div class="flex items-center gap-2">
+										<div
+											class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition"
+											data-class="{'border-emerald-500 bg-emerald-500': $loader === 'neoforge', 'border-zinc-600 bg-zinc-800': $loader !== 'neoforge'}"
+										>
+											<div data-show="$loader === 'neoforge'" class="h-1.5 w-1.5 rounded-full bg-zinc-950"></div>
+										</div>
+										<span class="font-semibold text-zinc-100">NeoForge</span>
+									</div>
+									<span class="font-mono text-zinc-400" data-text="$neoFit + '/' + $totalFitMods"></span>
 								</div>
-							</div>
-							<div class="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
-								<div class="flex justify-between font-mono">
-									<span>Fabric</span>
-									<span data-text="$fabFit + '/' + $totalFitMods"></span>
+								<div class="mt-2.5 flex flex-wrap gap-1">
+									<span data-show="$neoFit > $fabFit" class="rounded border border-emerald-800 bg-emerald-950/80 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Recommended</span>
+									<span data-show="$totalFitMods > 0 && $neoFit === $fabFit && $neoFit === $totalFitMods" class="rounded border border-emerald-800/80 bg-emerald-950/50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">100% compatible</span>
+									<span data-show="$totalFitMods > 0 && $neoFit === $fabFit && $neoFit < $totalFitMods" class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">Equal match</span>
+									<span data-show="$totalFitMods > $neoFit" class="rounded border border-amber-800 bg-amber-950/80 px-1.5 py-0.5 text-[10px] font-medium text-amber-400" data-text="($totalFitMods - $neoFit) + ' incompatible'"></span>
 								</div>
-							</div>
+							</button>
+
+							<!-- Fabric Option Card -->
+							<button
+								type="button"
+								data-on:click="$loader = 'fabric'"
+								class="flex flex-col text-left rounded-xl border p-3 cursor-pointer transition select-none"
+								data-class="{'border-emerald-500 ring-1 ring-emerald-500 bg-emerald-950/20': $loader === 'fabric', 'border-zinc-800 bg-zinc-950 hover:border-zinc-700': $loader !== 'fabric'}"
+							>
+								<div class="flex items-center justify-between w-full">
+									<div class="flex items-center gap-2">
+										<div
+											class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition"
+											data-class="{'border-emerald-500 bg-emerald-500': $loader === 'fabric', 'border-zinc-600 bg-zinc-800': $loader !== 'fabric'}"
+										>
+											<div data-show="$loader === 'fabric'" class="h-1.5 w-1.5 rounded-full bg-zinc-950"></div>
+										</div>
+										<span class="font-semibold text-zinc-100">Fabric</span>
+									</div>
+									<span class="font-mono text-zinc-400" data-text="$fabFit + '/' + $totalFitMods"></span>
+								</div>
+								<div class="mt-2.5 flex flex-wrap gap-1">
+									<span data-show="$fabFit > $neoFit" class="rounded border border-emerald-800 bg-emerald-950/80 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Recommended</span>
+									<span data-show="$totalFitMods > 0 && $fabFit === $neoFit && $fabFit === $totalFitMods" class="rounded border border-emerald-800/80 bg-emerald-950/50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">100% compatible</span>
+									<span data-show="$totalFitMods > 0 && $fabFit === $neoFit && $fabFit < $totalFitMods" class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">Equal match</span>
+									<span data-show="$totalFitMods > $fabFit" class="rounded border border-amber-800 bg-amber-950/80 px-1.5 py-0.5 text-[10px] font-medium text-amber-400" data-text="($totalFitMods - $fabFit) + ' incompatible'"></span>
+								</div>
+							</button>
+						</div>
+						<div class="mt-2.5 flex items-center justify-between text-xs">
+							<p data-show="!$loader" class="text-amber-400 font-medium">
+								⚠️ Please click NeoForge or Fabric to choose your loader.
+							</p>
+							<p data-show="$loader" class="text-zinc-400">
+								Selected: <strong class="uppercase text-emerald-400 font-bold" data-text="$loader"></strong>
+							</p>
 						</div>
 					</div>
 				</div>
@@ -235,8 +292,9 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 				<!-- Selected Mods Cart -->
 				<div class="mt-6 border-t border-zinc-800/80 pt-4">
 					<h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Selected Mods (<span data-text="$cart.length"></span>)</h4>
-					<div id="wizard-mod-cart" class="mt-2 flex flex-wrap gap-2">
+					<div id="wizard-mod-cart" class="mt-2 flex flex-col gap-2">
 						<span data-show="$cart.length === 0" class="text-xs text-zinc-500">No mods added yet. Search above to add.</span>
+						<div id="wizard-cart-items" class="flex flex-wrap gap-2"></div>
 					</div>
 				</div>
 
@@ -250,7 +308,7 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 					@components.Button(components.ButtonProps{
 						Variant: components.VariantPrimary,
 						Size:    components.SizeMd,
-						OnClick: "$loader = $bestLoader; $step = 4",
+						OnClick: "if ($loader) { $step = 4 } else { alert('Please select a mod loader (NeoForge or Fabric) before proceeding') }",
 						Text:    "Next: Review →",
 					})
 				</div>
@@ -417,7 +475,7 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 							</div>
 							<div class="flex justify-between">
 								<dt class="text-zinc-500">Engine / Loader:</dt>
-								<dd class="font-medium uppercase text-zinc-200" data-text="$loader"></dd>
+								<dd class="font-medium uppercase text-zinc-200" data-text="$loader || 'Auto (From Pack)'"></dd>
 							</div>
 							<div class="flex justify-between">
 								<dt class="text-zinc-500">Minecraft Version:</dt>

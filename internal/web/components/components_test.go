@@ -302,4 +302,3 @@ func TestStepIndicator(t *testing.T) {
 		t.Errorf("expected signal data-class bindings, got %q", out)
 	}
 }
-

@@ -47,6 +47,28 @@ type Status struct {
 	Lifecycle Lifecycle
 	Available bool
 	StartedAt time.Time
+
+	// Failure carries what the runtime knows about the server dying. It is
+	// independent of Lifecycle (what the operator asked for) and of Available
+	// (whether players can connect now).
+	Failure Failure
+}
+
+// Failure is the runtime's account of the last time a server died. A runtime
+// that cannot report this leaves it zero.
+type Failure struct {
+	RestartCount  int32
+	WaitingReason string
+
+	ExitCode   int32
+	Reason     string
+	FinishedAt time.Time
+	OOMKilled  bool
+}
+
+// Crashed reports whether the runtime has seen this server die.
+func (f Failure) Crashed() bool {
+	return f.RestartCount > 0 || f.WaitingReason == "CrashLoopBackOff" || !f.FinishedAt.IsZero()
 }
 
 // Metrics is current resource usage. Zero values mean "unknown", not "idle" —
@@ -63,6 +85,10 @@ type LogOptions struct {
 	Tail int64
 	// Follow streams new lines until the context is cancelled.
 	Follow bool
+	// Previous reads the logs of the previous, terminated container instead of
+	// the running one. This is the only way to see why a server crashed, and
+	// the runtime discards it once the container is reaped.
+	Previous bool
 }
 
 // Runtime makes game servers run. Implementations: adapters/runtime/k8s and

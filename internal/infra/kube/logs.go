@@ -54,7 +54,21 @@ func (c *Client) StreamLogs(ctx context.Context, tail int64) (io.ReadCloser, err
 }
 
 // StreamDeploymentLogs follows logs for any deployment by app label.
+// LogQuery selects which log stream to read for a deployment's pod.
+type LogQuery struct {
+	Tail     int64
+	Follow   bool
+	Previous bool
+}
+
 func (c *Client) StreamDeploymentLogs(ctx context.Context, depName string, tail int64) (io.ReadCloser, error) {
+	return c.StreamDeploymentLogsQuery(ctx, depName, LogQuery{Tail: tail, Follow: true})
+}
+
+// StreamDeploymentLogsQuery reads a deployment pod's logs. With Previous set it
+// reads the terminated container instead of the running one, which is the only
+// place a crash reason survives.
+func (c *Client) StreamDeploymentLogsQuery(ctx context.Context, depName string, q LogQuery) (io.ReadCloser, error) {
 	pods, err := c.cs.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=" + depName,
 	})
@@ -75,8 +89,10 @@ func (c *Client) StreamDeploymentLogs(ctx context.Context, depName string, tail 
 	if container == "" && len(pod.Spec.Containers) > 0 {
 		container = pod.Spec.Containers[0].Name
 	}
+	tail := q.Tail
 	logOpts := &corev1.PodLogOptions{
-		Follow:    true,
+		Follow:    q.Follow,
+		Previous:  q.Previous,
 		TailLines: &tail,
 	}
 	if container != "" {
@@ -91,6 +107,14 @@ type PodStatus struct {
 	Phase     string
 	Ready     bool
 	StartedAt time.Time
+
+	RestartCount  int32
+	WaitingReason string
+
+	LastExitCode   int32
+	LastReason     string
+	LastFinishedAt time.Time
+	LastOOMKilled  bool
 }
 
 func (c *Client) PodStatus(ctx context.Context) (PodStatus, error) {
@@ -113,6 +137,21 @@ func (c *Client) DeploymentPodStatus(ctx context.Context, depName string) (PodSt
 	for _, cond := range p.Status.Conditions {
 		if cond.Type == corev1.PodReady {
 			ps.Ready = cond.Status == corev1.ConditionTrue
+		}
+	}
+	for _, cs := range p.Status.ContainerStatuses {
+		if cs.Name == "istio-proxy" {
+			continue
+		}
+		ps.RestartCount += cs.RestartCount
+		if w := cs.State.Waiting; w != nil && ps.WaitingReason == "" {
+			ps.WaitingReason = w.Reason
+		}
+		if t := cs.LastTerminationState.Terminated; t != nil && t.FinishedAt.Time.After(ps.LastFinishedAt) {
+			ps.LastExitCode = t.ExitCode
+			ps.LastReason = t.Reason
+			ps.LastFinishedAt = t.FinishedAt.Time
+			ps.LastOOMKilled = t.Reason == "OOMKilled"
 		}
 	}
 	return ps, nil

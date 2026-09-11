@@ -12,6 +12,7 @@ import (
 	"agrelha/internal/app/admins"
 	"agrelha/internal/app/games/minecraft"
 	"agrelha/internal/app/games/valheim"
+	"agrelha/internal/app/health"
 	"agrelha/internal/app/ingest"
 	"agrelha/internal/app/instances"
 	"agrelha/internal/app/modpack"
@@ -372,7 +373,21 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		}),
 	)
 
+	health.New(st, healthSources(&d)).Start(ctx)
+
 	return d, nil
+}
+
+// healthSources lists the game managers the health watcher scans. A manager with
+// no runtime (dev, or a game not configured) is left out rather than polled.
+func healthSources(d *Deps) []health.Source {
+	var out []health.Source
+	for _, m := range []*instances.InstanceManager{d.MCInstances, d.ValheimInstances} {
+		if m != nil {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func buildThunderstore(ctx context.Context, cfg *config.Config, st *store.Store) *thunderstore.Client {

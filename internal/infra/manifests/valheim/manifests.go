@@ -111,13 +111,14 @@ func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[
 	}
 	files["configs.yaml"] = cfgBuf.Bytes()
 
-	if strings.TrimSpace(modsTxt) != "" {
-		var modsBuf bytes.Buffer
-		if err := tmpl.ExecuteTemplate(&modsBuf, "mods.yaml.tmpl", data); err != nil {
-			return nil, fmt.Errorf("render mods: %w", err)
-		}
-		files["mods.yaml"] = modsBuf.Bytes()
+	if strings.TrimSpace(data.ModsTxt) == "" {
+		data.ModsTxt = fmt.Sprintf("# Mod list for %s\n", inst.Name)
 	}
+	var modsBuf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&modsBuf, "mods.yaml.tmpl", data); err != nil {
+		return nil, fmt.Errorf("render mods: %w", err)
+	}
+	files["mods.yaml"] = modsBuf.Bytes()
 
 	return files, nil
 }

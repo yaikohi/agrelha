@@ -167,4 +167,3 @@ func TestValheimBackups(t *testing.T) {
 		t.Errorf("file was not deleted from disk")
 	}
 }
-

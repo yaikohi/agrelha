@@ -261,4 +261,3 @@ func ParseR2Z(r io.ReaderAt, size int64) (*ImportedWorld, error) {
 	}
 	return world, nil
 }
-

@@ -56,6 +56,18 @@ func (s *Store) migrate() error {
 		kind       TEXT NOT NULL,          -- join|leave|restart|update|backup|crash
 		detail     TEXT
 	);
+	CREATE TABLE IF NOT EXISTS incidents (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		game_id       TEXT NOT NULL,
+		number        INTEGER NOT NULL,
+		at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		restart_count INTEGER NOT NULL DEFAULT 0,
+		exit_code     INTEGER NOT NULL DEFAULT 0,
+		reason        TEXT,
+		oom_killed    INTEGER NOT NULL DEFAULT 0,
+		log_tail      TEXT
+	);
+	CREATE INDEX IF NOT EXISTS idx_incidents_instance ON incidents(game_id, number, at DESC);
 	CREATE TABLE IF NOT EXISTS mod_index (
 		full_name     TEXT PRIMARY KEY,
 		namespace     TEXT,

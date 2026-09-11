@@ -33,6 +33,85 @@ spec:
           value: "gameserver"
           effect: "NoSchedule"
       initContainers:
+        - name: mod-reconciler
+          image: alpine:3.20
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              MODS=/config-mods/mods.txt
+              DEST=/config/bepinex/plugins/managed
+              CACHE=/config/bepinex/.cache
+
+              rm -rf "$DEST"
+              mkdir -p "$DEST" "$CACHE"
+
+              if [ ! -s "$MODS" ] || ! grep -qvE '^[[:space:]]*(#|$)' "$MODS"; then
+                echo ">> no mods declared - running clean BepInEx"
+                chown -R 1000:1000 /config/bepinex 2>/dev/null || true
+                exit 0
+              fi
+
+              apk add --no-cache curl unzip jq >/dev/null 2>&1
+
+              ACTIVE=$(mktemp)
+              grep -vE '^[[:space:]]*(#|$)' "$MODS" | tr -d '\r' | sed 's/[[:space:]]*$//; s/?$//' | while read -r entry; do
+                [ -n "$entry" ] || continue
+                case "$entry" in
+                  */*/*) ns=${entry%%/*}; rest=${entry#*/}; name=${rest%%/*}; ver=${rest#*/} ;;
+                  *-*)   ns=${entry%%-*}; name=${entry#*-}; ver="" ;;
+                  *)     echo "ERROR: cannot parse mod entry '$entry'" >&2; exit 1 ;;
+                esac
+
+                if [ -z "$ver" ]; then
+                  ver=$(curl -fsSL "https://thunderstore.io/api/experimental/package/$ns/$name/" | jq -re '.latest.version_number') || {
+                    echo "ERROR: could not resolve latest version of $ns/$name" >&2
+                    exit 1
+                  }
+                  echo ">> [resolved] $ns/$name -> $ver"
+                fi
+
+                zip="$CACHE/$ns-$name-$ver.zip"
+                echo "$ns-$name-$ver.zip" >> "$ACTIVE"
+
+                if [ ! -f "$zip" ]; then
+                  echo ">> [downloading] $ns/$name/$ver"
+                  tmpzip=$(mktemp)
+                  if curl -fsSL "https://thunderstore.io/package/download/$ns/$name/$ver/" -o "$tmpzip"; then
+                    mv "$tmpzip" "$zip"
+                  else
+                    rm -f "$tmpzip"
+                    echo "ERROR: failed to download $ns/$name/$ver" >&2
+                    exit 1
+                  fi
+                else
+                  echo ">> [cached] $ns/$name/$ver"
+                fi
+
+                tmp=$(mktemp -d)
+                unzip -oq "$zip" -d "$tmp"
+                mkdir -p "$DEST/$name"
+                find "$tmp" -iname '*.dll' -exec cp {} "$DEST/$name/" \;
+                rm -rf "$tmp"
+              done
+
+              for f in "$CACHE"/*.zip; do
+                [ -e "$f" ] || continue
+                if ! grep -qxF "$(basename "$f")" "$ACTIVE" 2>/dev/null; then
+                  echo ">> [pruning cache] $(basename "$f")"
+                  rm -f "$f"
+                fi
+              done
+              rm -f "$ACTIVE"
+
+              echo ">> installed $(find "$DEST" -iname '*.dll' | wc -l) plugin dll(s)"
+              chown -R 1000:1000 /config/bepinex 2>/dev/null || true
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+            - name: mods-config
+              mountPath: /config-mods
+              readOnly: true
         - name: sync-configs
           image: busybox:1.36
           command: ["sh", "-c"]
@@ -87,7 +166,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - pgrep -f valheim_server
+                - ss -lun | grep -qE ':2456[[:space:]]'
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 60
@@ -96,7 +175,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - pgrep -f valheim_server
+                - ss -lun | grep -qE ':2456[[:space:]]'
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3

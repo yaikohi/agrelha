@@ -57,3 +57,24 @@ func TestRenderInstanceManifests(t *testing.T) {
 		t.Errorf("service should have LB IP 192.168.20.225: %s", svc)
 	}
 }
+
+func TestMinecraftReadinessUsesMCHealth(t *testing.T) {
+	inst := domain.Instance{
+		Number: 1, Name: "almere", Slug: "almere",
+		Tier: domain.TierMedium, State: domain.StateRunning,
+		Loader: domain.LoaderNeoForge, MCVersion: "1.21.1",
+	}
+
+	files, err := Render(inst, "", "", "minecraft-modded")
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	dep := string(files["deployment.yaml"])
+
+	if strings.Contains(dep, "tcpSocket") {
+		t.Error("tcpSocket only proves the port is bound, not that the server answers")
+	}
+	if strings.Count(dep, `command: ["mc-health"]`) != 2 {
+		t.Errorf("both startup and readiness probes must use mc-health (the probe domain.RuntimeSpec already declares): %s", dep)
+	}
+}

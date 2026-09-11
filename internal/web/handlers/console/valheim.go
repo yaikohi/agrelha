@@ -150,4 +150,3 @@ func (h *Handler) ValheimLogsStream(c *fiber.Ctx) error {
 
 	return nil
 }
-
