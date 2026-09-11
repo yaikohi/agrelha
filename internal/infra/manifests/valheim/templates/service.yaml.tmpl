@@ -15,6 +15,7 @@ spec:
 {{- if .LBIP }}
   loadBalancerIP: {{ .LBIP }}
 {{- end }}
+  externalTrafficPolicy: Cluster
   selector:
     app: {{ .DeploymentName }}
   ports:
