@@ -446,3 +446,44 @@ func TestValheimInstanceManager(t *testing.T) {
 		t.Fatalf("expected valheim-instance-create audit action, got: %+v", audit.records)
 	}
 }
+
+type ipRepo struct{ items []domain.Instance }
+
+func (r *ipRepo) Upsert(i domain.Instance) error { r.items = append(r.items, i); return nil }
+func (r *ipRepo) Get(n int) (*domain.Instance, error) {
+	for i := range r.items {
+		if r.items[i].Number == n {
+			return &r.items[i], nil
+		}
+	}
+	return nil, nil
+}
+func (r *ipRepo) List() ([]domain.Instance, error)            { return r.items, nil }
+func (r *ipRepo) UpdateState(int, domain.InstanceState) error { return nil }
+func (r *ipRepo) Delete(int) error                            { return nil }
+
+func TestLBIPCollisionAcrossGamesIsRefused(t *testing.T) {
+	repo := &ipRepo{items: []domain.Instance{
+		{GameID: domain.GameValheim, Number: 2, Name: "boppo", LBIP: "192.168.20.227"},
+	}}
+	m := &InstanceManager{repo: repo, gameID: domain.GameMinecraft}
+
+	clash := domain.Instance{GameID: domain.GameMinecraft, Number: 3, Name: "bob", LBIP: "192.168.20.227"}
+	err := m.checkLBIPFree(clash)
+	if err == nil {
+		t.Fatal("a duplicate LB IP must be refused: cilium leaves the service <pending> with no error visible in agrelha")
+	}
+	if !strings.Contains(err.Error(), "boppo") {
+		t.Errorf("the error must name the instance holding the address, got: %v", err)
+	}
+
+	free := domain.Instance{GameID: domain.GameMinecraft, Number: 3, Name: "bob", LBIP: "192.168.20.243"}
+	if err := m.checkLBIPFree(free); err != nil {
+		t.Errorf("a free address must be allowed: %v", err)
+	}
+
+	same := domain.Instance{GameID: domain.GameValheim, Number: 2, Name: "boppo", LBIP: "192.168.20.227"}
+	if err := m.checkLBIPFree(same); err != nil {
+		t.Errorf("an instance must not collide with itself on update: %v", err)
+	}
+}

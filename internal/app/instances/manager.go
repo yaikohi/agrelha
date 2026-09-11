@@ -347,6 +347,10 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 	}
 	inst.EnsureDefaults(m.lbBaseIP)
 
+	if err := m.checkLBIPFree(inst); err != nil {
+		return nil, err
+	}
+
 	files, err := m.renderer.Render(inst, modsTxt)
 	if err != nil {
 		return nil, fmt.Errorf("render manifests: %w", err)
@@ -1016,6 +1020,31 @@ func (m *InstanceManager) InstanceLogs(ctx context.Context, num int, tail int64)
 		tail = 100
 	}
 	return m.runtime.Logs(ctx, m.serverRef(*inst), ports.LogOptions{Tail: tail, Follow: true})
+}
+
+// checkLBIPFree refuses an address another Instance already holds. Games
+// allocate from one flat pool with per-game bases, so overlapping ranges are
+// possible; without this the collision surfaces as a LoadBalancer stuck in
+// <pending> with no IP and no error anywhere in agrelha.
+func (m *InstanceManager) checkLBIPFree(inst domain.Instance) error {
+	if inst.LBIP == "" || m.repo == nil {
+		return nil
+	}
+	all, err := m.repo.List()
+	if err != nil {
+		return nil
+	}
+	for _, other := range all {
+		if other.LBIP != inst.LBIP {
+			continue
+		}
+		if other.GameID == inst.GameID && other.Number == inst.Number {
+			continue
+		}
+		return fmt.Errorf("address %s is already used by %s instance #%02d (%s): change the game's LB base so the ranges do not overlap",
+			inst.LBIP, other.GameID, other.Number, other.Name)
+	}
+	return nil
 }
 
 // RuntimeStatus reports what the runtime knows about an instance, including how
