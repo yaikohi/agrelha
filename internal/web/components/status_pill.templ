@@ -1,0 +1,95 @@
+package components
+
+import (
+	"fmt"
+	"strings"
+)
+
+type StatusPillProps struct {
+	State  string // "running", "stopped", "provisioning", "starting", "offline", "active", "disabled"
+	Label  string // Custom label text (if empty, derived from State)
+	Signal string // If Datastar signal-driven (e.g. "online")
+	Class  string
+}
+
+func (p StatusPillProps) pillClasses() string {
+	base := "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium select-none"
+	switch strings.ToLower(p.State) {
+	case "running", "online", "active":
+		base += " bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-800/50"
+	case "provisioning", "starting", "booting", "disabled":
+		base += " bg-amber-950/80 text-amber-300 ring-1 ring-amber-800/50"
+	case "error", "failed":
+		base += " bg-red-950/80 text-red-300 ring-1 ring-red-800/50"
+	case "stopped", "offline":
+		fallthrough
+	default:
+		base += " bg-zinc-800/80 text-zinc-400 ring-1 ring-zinc-700/50"
+	}
+	if p.Class != "" {
+		base = strings.Join([]string{base, p.Class}, " ")
+	}
+	return base
+}
+
+func (p StatusPillProps) dotClasses() string {
+	base := "h-1.5 w-1.5 rounded-full"
+	switch strings.ToLower(p.State) {
+	case "running", "online", "active":
+		return base + " bg-emerald-400 animate-pulse"
+	case "provisioning", "starting", "booting", "disabled":
+		return base + " bg-amber-400 animate-pulse"
+	case "error", "failed":
+		return base + " bg-red-400"
+	case "stopped", "offline":
+		fallthrough
+	default:
+		return base + " bg-zinc-500"
+	}
+}
+
+func (p StatusPillProps) displayLabel() string {
+	if p.Label != "" {
+		return p.Label
+	}
+	switch strings.ToLower(p.State) {
+	case "running":
+		return "Running"
+	case "stopped":
+		return "Stopped"
+	case "provisioning", "starting":
+		return "Starting…"
+	case "offline":
+		return "Offline"
+	case "online":
+		return "Online"
+	case "active":
+		return "Active"
+	case "disabled":
+		return "Disabled"
+	default:
+		return p.State
+	}
+}
+
+templ StatusPill(props StatusPillProps) {
+	if props.Signal != "" {
+		<span
+			class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium select-none"
+			data-class={ fmt.Sprintf("{'bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-800/50': $%s, 'bg-zinc-800/80 text-zinc-400 ring-1 ring-zinc-700/50': !$%s}", props.Signal, props.Signal) }
+		>
+			<span
+				class="h-1.5 w-1.5 rounded-full"
+				data-class={ fmt.Sprintf("{'bg-emerald-400 animate-pulse': $%s, 'bg-zinc-500': !$%s}", props.Signal, props.Signal) }
+			></span>
+			<span data-text={ fmt.Sprintf("$%s ? '%s' : 'Offline'", props.Signal, props.displayLabel()) }>
+				{ props.displayLabel() }
+			</span>
+		</span>
+	} else {
+		<span class={ props.pillClasses() }>
+			<span class={ props.dotClasses() }></span>
+			<span>{ props.displayLabel() }</span>
+		</span>
+	}
+}

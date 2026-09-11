@@ -1,0 +1,57 @@
+package components
+
+import (
+	"fmt"
+	"strings"
+)
+
+type ModalProps struct {
+	OpenSignal string // Datastar signal controlling visibility (e.g. "showEditor", "restoreModalOpen")
+	Title      string
+	Subtitle   string
+	MaxWidth   string // Tailwind max-w class, default "max-w-xl"
+	Class      string
+}
+
+func (p ModalProps) panelClasses() string {
+	maxW := "max-w-xl"
+	if p.MaxWidth != "" {
+		maxW = p.MaxWidth
+	}
+	base := fmt.Sprintf("rounded-2xl border border-zinc-800 bg-zinc-900/95 p-6 shadow-2xl space-y-4 %s w-full transition", maxW)
+	if p.Class != "" {
+		base = strings.Join([]string{base, p.Class}, " ")
+	}
+	return base
+}
+
+templ Modal(props ModalProps) {
+	<div
+		if props.OpenSignal != "" {
+			data-show={ "$" + props.OpenSignal }
+		}
+		class={ props.panelClasses() }
+	>
+		<div class="flex items-start justify-between border-b border-zinc-800/80 pb-3">
+			<div>
+				if props.Title != "" {
+					<h3 class="text-sm font-semibold text-zinc-100">{ props.Title }</h3>
+				}
+				if props.Subtitle != "" {
+					<p class="mt-0.5 text-xs text-zinc-400">{ props.Subtitle }</p>
+				}
+			</div>
+			if props.OpenSignal != "" {
+				<button
+					type="button"
+					data-on:click={ fmt.Sprintf("$%s = false", props.OpenSignal) }
+					class="rounded-lg p-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
+					title="Close"
+				>
+					✕
+				</button>
+			}
+		</div>
+		{ children... }
+	</div>
+}

@@ -1,0 +1,151 @@
+package components
+
+import (
+	"strings"
+)
+
+type ButtonVariant string
+
+const (
+	VariantPrimary   ButtonVariant = "primary"
+	VariantSecondary ButtonVariant = "secondary"
+	VariantSuccess   ButtonVariant = "success"
+	VariantWarning   ButtonVariant = "warning"
+	VariantDanger    ButtonVariant = "danger"
+	VariantGhost     ButtonVariant = "ghost"
+	VariantLink      ButtonVariant = "link"
+)
+
+type ButtonSize string
+
+const (
+	SizeXs ButtonSize = "xs"
+	SizeSm ButtonSize = "sm"
+	SizeMd ButtonSize = "md"
+	SizeLg ButtonSize = "lg"
+)
+
+type ButtonProps struct {
+	Variant       ButtonVariant
+	Size          ButtonSize
+	Type          string // "button", "submit" (default "button")
+	Href          string // If non-empty, renders an <a> tag
+	Target        string
+	Rel           string
+	Download      bool
+	OnClick       string // Evaluated by Datastar (data-on:click)
+	Indicator     string // Evaluated by Datastar (data-indicator)
+	Disabled      bool
+	DisabledTitle string
+	Class         string
+	ID            string
+	Text          string // Optional direct text if not passing children
+}
+
+func (p ButtonProps) variantClasses() string {
+	switch p.Variant {
+	case VariantPrimary:
+		return "bg-zinc-100 text-zinc-950 font-semibold shadow hover:bg-white"
+	case VariantSuccess:
+		return "bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-sm"
+	case VariantWarning:
+		return "border border-amber-800/60 bg-amber-950/30 text-amber-200 hover:bg-amber-900/50 font-medium"
+	case VariantDanger:
+		return "text-red-400 hover:bg-red-950/40 hover:text-red-300 font-medium"
+	case VariantGhost:
+		return "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 font-medium"
+	case VariantLink:
+		return "border border-zinc-800 bg-zinc-800/50 text-zinc-300 hover:bg-zinc-700 font-medium"
+	case VariantSecondary:
+		fallthrough
+	default:
+		return "border border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white font-medium"
+	}
+}
+
+func (p ButtonProps) sizeClasses() string {
+	switch p.Size {
+	case SizeXs:
+		return "px-2.5 py-1 text-xs rounded-lg"
+	case SizeSm:
+		return "px-3 py-1.5 text-xs rounded-lg"
+	case SizeLg:
+		return "px-5 py-2.5 text-sm rounded-xl"
+	case SizeMd:
+		fallthrough
+	default:
+		return "px-4 py-2 text-xs rounded-xl"
+	}
+}
+
+func (p ButtonProps) classes() string {
+	base := "inline-flex items-center justify-center transition select-none"
+	if p.Disabled {
+		base += " cursor-not-allowed opacity-50"
+	} else {
+		base += " cursor-pointer"
+	}
+	parts := []string{base, p.sizeClasses(), p.variantClasses()}
+	if p.Class != "" {
+		parts = append(parts, p.Class)
+	}
+	return strings.Join(parts, " ")
+}
+
+templ Button(props ButtonProps) {
+	if props.Href != "" {
+		<a
+			if props.ID != "" {
+				id={ props.ID }
+			}
+			href={ templ.SafeURL(props.Href) }
+			if props.Target != "" {
+				target={ props.Target }
+			}
+			if props.Rel != "" {
+				rel={ props.Rel }
+			}
+			if props.Download {
+				download
+			}
+			if props.OnClick != "" {
+				data-on:click={ props.OnClick }
+			}
+			class={ props.classes() }
+		>
+			if props.Text != "" {
+				{ props.Text }
+			}
+			{ children... }
+		</a>
+	} else {
+		<button
+			if props.ID != "" {
+				id={ props.ID }
+			}
+			if props.Type != "" {
+				type={ props.Type }
+			} else {
+				type="button"
+			}
+			if props.Disabled {
+				disabled
+			}
+			if props.DisabledTitle != "" {
+				title={ props.DisabledTitle }
+			}
+			if props.OnClick != "" {
+				data-on:click={ props.OnClick }
+			}
+			if props.Indicator != "" {
+				data-indicator={ props.Indicator }
+			}
+			class={ props.classes() }
+		>
+			if props.Text != "" {
+				{ props.Text }
+			}
+			{ children... }
+		</button>
+	}
+}

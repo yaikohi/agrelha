@@ -1,0 +1,59 @@
+package components
+
+import (
+	"fmt"
+)
+
+type BudgetBarProps struct {
+	UsedGiB        int
+	TotalBudgetGiB int
+	RunningCount   int
+	MaxRunning     int
+	TotalInstances int
+	MaxInstances   int
+	ActionHref     string
+	ActionText     string
+	Class          string
+}
+
+func (p BudgetBarProps) RAMPercent() int {
+	if p.TotalBudgetGiB <= 0 {
+		return 0
+	}
+	pct := (p.UsedGiB * 100) / p.TotalBudgetGiB
+	if pct > 100 {
+		return 100
+	}
+	return pct
+}
+
+templ BudgetBar(props BudgetBarProps) {
+	<div class="flex flex-wrap items-center gap-2">
+		<div class="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs">
+			<span class="text-zinc-500">RAM:</span>
+			<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d GiB", props.UsedGiB, props.TotalBudgetGiB) }</span>
+			<div class="ml-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800">
+				<div
+					class="h-full bg-zinc-300"
+					style={ fmt.Sprintf("width: %d%%", props.RAMPercent()) }
+				></div>
+			</div>
+		</div>
+		<div class="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs">
+			<span class="text-zinc-500">Running:</span>
+			<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d", props.RunningCount, props.MaxRunning) }</span>
+		</div>
+		<div class="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs">
+			<span class="text-zinc-500">Saved:</span>
+			<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d", props.TotalInstances, props.MaxInstances) }</span>
+		</div>
+		if props.ActionHref != "" {
+			@Button(ButtonProps{
+				Variant: VariantSecondary,
+				Size:    SizeSm,
+				Href:    props.ActionHref,
+				Text:    props.ActionText,
+			})
+		}
+	</div>
+}

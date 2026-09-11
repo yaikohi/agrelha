@@ -1,0 +1,53 @@
+package components
+
+import (
+	"strings"
+)
+
+type TabItem struct {
+	ID     string
+	Label  string
+	Href   string
+	Active bool
+	Badge  string
+}
+
+type TabBarProps struct {
+	Tabs  []TabItem
+	Class string
+}
+
+func (p TabBarProps) navClasses() string {
+	base := "-mb-px flex space-x-6 text-xs font-medium"
+	if p.Class != "" {
+		base = strings.Join([]string{base, p.Class}, " ")
+	}
+	return base
+}
+
+func tabStyle(active bool) string {
+	if active {
+		return "border-b-2 border-zinc-100 text-zinc-100 font-semibold pb-3"
+	}
+	return "border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 pb-3 transition"
+}
+
+templ TabBar(props TabBarProps) {
+	<div class="border-b border-zinc-800">
+		<nav class={ props.navClasses() }>
+			for _, tab := range props.Tabs {
+				<a
+					href={ templ.SafeURL(tab.Href) }
+					class={ tabStyle(tab.Active) }
+				>
+					{ tab.Label }
+					if tab.Badge != "" {
+						<span class="ml-1.5 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-normal text-zinc-400">
+							{ tab.Badge }
+						</span>
+					}
+				</a>
+			}
+		</nav>
+	</div>
+}

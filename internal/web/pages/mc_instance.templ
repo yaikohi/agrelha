@@ -1,6 +1,9 @@
 package pages
 
-import "fmt"
+import (
+	"fmt"
+	"agrelha/internal/web/components"
+)
 
 templ MinecraftInstanceDetail(d InstanceDetailUI) {
 	@Layout(d.Name + " · Minecraft") {
@@ -18,90 +21,47 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 					</div>
 					<div class="mt-1 flex items-center gap-3">
 						<h1 class="text-xl font-bold text-zinc-100">{ d.Name }</h1>
-						if d.State == "running" {
-							<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/80 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/50">
-								<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"></span>
-								Running
-							</span>
-						} else {
-							<span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-800/80 px-2.5 py-0.5 text-xs font-medium text-zinc-400 ring-1 ring-zinc-700/50">
-								<span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
-								Stopped
-							</span>
-						}
+						@components.StatusPill(components.StatusPillProps{State: d.State})
 					</div>
 				</div>
 
 				<!-- Header quick controls -->
 				<div class="flex items-center gap-2">
 					if d.State == "running" {
-						<button
-							type="button"
-							data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", d.Number) }
-							class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-900/50"
-						>
-							Stop Server
-						</button>
-						<button
-							type="button"
-							data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/restart')", d.Number) }
-							class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
-						>
-							Restart
-						</button>
+						@components.Button(components.ButtonProps{
+							Variant: components.VariantWarning,
+							Size:    components.SizeSm,
+							OnClick: fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", d.Number),
+							Text:    "Stop Server",
+						})
+						@components.Button(components.ButtonProps{
+							Variant: components.VariantSecondary,
+							Size:    components.SizeSm,
+							OnClick: fmt.Sprintf("@post('/api/minecraft/instances/%d/restart')", d.Number),
+							Text:    "Restart",
+						})
 					} else {
-						<button
-							type="button"
-							data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/start')", d.Number) }
-							class="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-500"
-						>
-							Start Server
-						</button>
+						@components.Button(components.ButtonProps{
+							Variant: components.VariantSuccess,
+							Size:    components.SizeSm,
+							OnClick: fmt.Sprintf("@post('/api/minecraft/instances/%d/start')", d.Number),
+							Text:    "Start Server",
+						})
 					}
 				</div>
 			</div>
 
-			<!-- Tabs Header -->
-			<div class="border-b border-zinc-800">
-				<nav class="-mb-px flex space-x-6 text-xs font-medium">
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/overview", d.Number)) }
-						class={ "pb-3 border-b-2 transition " + instanceTabStyle(d.ActiveTab == "overview") }
-					>
-						Overview
-					</a>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/mods", d.Number)) }
-						class={ "pb-3 border-b-2 transition " + instanceTabStyle(d.ActiveTab == "mods") }
-					>
-						Mods
-					</a>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/configs", d.Number)) }
-						class={ "pb-3 border-b-2 transition " + instanceTabStyle(d.ActiveTab == "configs") }
-					>
-						Configs
-					</a>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/console", d.Number)) }
-						class={ "pb-3 border-b-2 transition " + instanceTabStyle(d.ActiveTab == "console") }
-					>
-						Console & Logs
-					</a>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/backups", d.Number)) }
-						class={ "pb-3 border-b-2 transition " + instanceTabStyle(d.ActiveTab == "backups") }
-					>
-						Backups
-					</a>
-					<a
-						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/settings", d.Number)) }
-						class={ "pb-3 border-b-2 transition " + instanceTabStyle(d.ActiveTab == "settings") }
-					>
-						Settings
-					</a>
-				</nav>
-			</div>
+			<!-- Tabs Navigation -->
+			@components.TabBar(components.TabBarProps{
+				Tabs: []components.TabItem{
+					{Label: "Overview", Href: fmt.Sprintf("/minecraft/%d/overview", d.Number), Active: d.ActiveTab == "overview"},
+					{Label: "Mods", Href: fmt.Sprintf("/minecraft/%d/mods", d.Number), Active: d.ActiveTab == "mods"},
+					{Label: "Configs", Href: fmt.Sprintf("/minecraft/%d/configs", d.Number), Active: d.ActiveTab == "configs"},
+					{Label: "Console & Logs", Href: fmt.Sprintf("/minecraft/%d/console", d.Number), Active: d.ActiveTab == "console"},
+					{Label: "Backups", Href: fmt.Sprintf("/minecraft/%d/backups", d.Number), Active: d.ActiveTab == "backups"},
+					{Label: "Settings", Href: fmt.Sprintf("/minecraft/%d/settings", d.Number), Active: d.ActiveTab == "settings"},
+				},
+			})
 
 			<!-- TAB 1: OVERVIEW -->
 			if d.ActiveTab == "overview" {
@@ -699,11 +659,4 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 			}
 		</div>
 	}
-}
-
-func instanceTabStyle(active bool) string {
-	if active {
-		return "border-zinc-100 text-zinc-100 font-semibold"
-	}
-	return "border-transparent text-zinc-400 hover:text-zinc-200"
 }

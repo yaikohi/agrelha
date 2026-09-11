@@ -1,6 +1,9 @@
 package pages
 
-import "fmt"
+import (
+	"fmt"
+	"agrelha/internal/web/components"
+)
 
 templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 	@Layout("Create Minecraft World") {
@@ -11,53 +14,14 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 			data-effect="if ($redirect) { window.location.href = $redirect }"
 		>
 			<!-- Stepper progress header -->
-			<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-sm">
-				<div class="flex items-center justify-between text-xs font-medium">
-					<div
-						class="flex items-center gap-2"
-						data-class="{'text-zinc-100 font-semibold': $step == 1, 'text-zinc-500': $step != 1}"
-					>
-						<span
-							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-							data-class="{'bg-zinc-100 text-zinc-950 font-bold': $step == 1, 'bg-zinc-800 text-zinc-400': $step != 1}"
-						>1</span>
-						<span>Identity</span>
-					</div>
-					<div class="h-0.5 w-12 bg-zinc-800"></div>
-					<div
-						class="flex items-center gap-2"
-						data-class="{'text-zinc-100 font-semibold': $step == 2, 'text-zinc-500': $step != 2}"
-					>
-						<span
-							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-							data-class="{'bg-zinc-100 text-zinc-950 font-bold': $step == 2, 'bg-zinc-800 text-zinc-400': $step != 2}"
-						>2</span>
-						<span>World Type</span>
-					</div>
-					<div class="h-0.5 w-12 bg-zinc-800"></div>
-					<div
-						class="flex items-center gap-2"
-						data-class="{'text-zinc-100 font-semibold': $step == 3, 'text-zinc-500': $step != 3}"
-					>
-						<span
-							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-							data-class="{'bg-zinc-100 text-zinc-950 font-bold': $step == 3, 'bg-zinc-800 text-zinc-400': $step != 3}"
-						>3</span>
-						<span>Configure</span>
-					</div>
-					<div class="h-0.5 w-12 bg-zinc-800"></div>
-					<div
-						class="flex items-center gap-2"
-						data-class="{'text-zinc-100 font-semibold': $step == 4, 'text-zinc-500': $step != 4}"
-					>
-						<span
-							class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-							data-class="{'bg-zinc-100 text-zinc-950 font-bold': $step == 4, 'bg-zinc-800 text-zinc-400': $step != 4}"
-						>4</span>
-						<span>Review & Create</span>
-					</div>
-				</div>
-			</div>
+			@components.StepIndicator(components.StepIndicatorProps{
+				Steps: []components.StepItem{
+					{Number: 1, Label: "Identity"},
+					{Number: 2, Label: "World Type"},
+					{Number: 3, Label: "Configure"},
+					{Number: 4, Label: "Review & Create"},
+				},
+			})
 
 			<!-- STEP 1: IDENTITY -->
 			<div data-show="$step == 1" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
@@ -65,36 +29,32 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 				<p class="mt-1 text-xs text-zinc-400">Give your world a recognizable title and an optional seed.</p>
 
 				<div class="mt-6 max-w-md space-y-4">
-					<div>
-						<label class="block text-xs font-medium text-zinc-300">World Name <span class="text-red-400">*</span></label>
-						<input
-							type="text"
-							data-bind="name"
-							placeholder="e.g. Aetheria Realm, Cobblemon Valley"
-							required
-							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-						/>
-					</div>
-					<div>
-						<label class="block text-xs font-medium text-zinc-300">World Seed <span class="text-zinc-500">(optional)</span></label>
-						<input
-							type="text"
-							data-bind="seed"
-							placeholder="Leave empty for a random seed"
-							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-						/>
-					</div>
+					@components.Input(components.InputProps{
+						Label:       "World Name",
+						Required:    true,
+						Placeholder: "e.g. Aetheria Realm, Cobblemon Valley",
+						Bind:        "name",
+					})
+					@components.Input(components.InputProps{
+						Label:       "World Seed (optional)",
+						Placeholder: "Leave empty for a random seed",
+						Bind:        "seed",
+					})
 				</div>
 
 				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
-					<a href="/minecraft" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Cancel</a>
-					<button
-						type="button"
-						data-on:click="if ($name.trim() !== '') { $step = 2 } else { alert('Please enter a world name') }"
-						class="rounded-xl bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 shadow hover:bg-white"
-					>
-						Next: Choose World Type &rarr;
-					</button>
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantGhost,
+						Size:    components.SizeSm,
+						Href:    "/minecraft",
+						Text:    "← Cancel",
+					})
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantPrimary,
+						Size:    components.SizeMd,
+						OnClick: "if ($name.trim() !== '') { $step = 2 } else { alert('Please enter a world name') }",
+						Text:    "Next: Choose World Type →",
+					})
 				</div>
 			</div>
 
@@ -105,74 +65,57 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 
 				<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<!-- Path 1: Modpack -->
-					<div
-						data-on:click="$source = 'modpack'; $step = 3"
-						class="group cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-zinc-600 hover:bg-zinc-800/60"
-						data-class="{'border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60': $source == 'modpack'}"
-					>
-						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-950/50 text-2xl text-purple-400 ring-1 ring-purple-800/50">
-							📦
-						</div>
-						<h3 class="mt-4 text-base font-semibold text-zinc-100 group-hover:text-zinc-200">Install a Modpack</h3>
-						<p class="mt-1 text-xs leading-relaxed text-zinc-400">
-							Browse curated packs from Modpack Index with 1-click installation. The pack dictates the engine and Minecraft version automatically.
-						</p>
-					</div>
+					@components.OptionCard(components.OptionCardProps{
+						Name:        "source",
+						Value:       "modpack",
+						BindSignal:  "source",
+						OnClick:     "$source = 'modpack'; $step = 3",
+						Icon:        "📦",
+						Title:       "Install a Modpack",
+						Description: "Browse curated packs from Modpack Index with 1-click installation. The pack dictates the engine and Minecraft version automatically.",
+					})
 
 					<!-- Path 2: Assemble Your Own -->
-					<div
-						data-on:click="$source = 'assemble'; $step = 3"
-						class="group cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-zinc-600 hover:bg-zinc-800/60"
-						data-class="{'border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60': $source == 'assemble'}"
-					>
-						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-950/50 text-2xl text-sky-400 ring-1 ring-sky-800/50">
-							🔧
-						</div>
-						<h3 class="mt-4 text-base font-semibold text-zinc-100 group-hover:text-zinc-200">Assemble Your Own</h3>
-						<p class="mt-1 text-xs leading-relaxed text-zinc-400">
-							Pick your Minecraft release and add individual mods from Modrinth. A live compatibility analyzer recommends NeoForge or Fabric.
-						</p>
-					</div>
+					@components.OptionCard(components.OptionCardProps{
+						Name:        "source",
+						Value:       "assemble",
+						BindSignal:  "source",
+						OnClick:     "$source = 'assemble'; $step = 3",
+						Icon:        "🔧",
+						Title:       "Assemble Your Own",
+						Description: "Pick your Minecraft release and add individual mods from Modrinth. A live compatibility analyzer recommends NeoForge or Fabric.",
+					})
 
 					<!-- Path 3: Vanilla -->
-					<div
-						data-on:click="$source = 'vanilla'; $loader = 'vanilla'; $step = 3"
-						class="group cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-zinc-600 hover:bg-zinc-800/60"
-						data-class="{'border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60': $source == 'vanilla'}"
-					>
-						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-950/50 text-2xl text-amber-400 ring-1 ring-amber-800/50">
-							🌍
-						</div>
-						<h3 class="mt-4 text-base font-semibold text-zinc-100 group-hover:text-zinc-200">Vanilla</h3>
-						<p class="mt-1 text-xs leading-relaxed text-zinc-400">
-							Clean official Minecraft server without mods. Choose game mode, difficulty, world type, and server properties.
-						</p>
-					</div>
+					@components.OptionCard(components.OptionCardProps{
+						Name:        "source",
+						Value:       "vanilla",
+						BindSignal:  "source",
+						OnClick:     "$source = 'vanilla'; $loader = 'vanilla'; $step = 3",
+						Icon:        "🌍",
+						Title:       "Vanilla",
+						Description: "Clean official Minecraft server without mods. Choose game mode, difficulty, world type, and server properties.",
+					})
 
 					<!-- Path 4: Import -->
-					<div
-						data-on:click="$source = 'import'; $step = 3"
-						class="group cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-6 transition hover:border-zinc-600 hover:bg-zinc-800/60"
-						data-class="{'border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60': $source == 'import'}"
-					>
-						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800/60 text-2xl text-zinc-300 ring-1 ring-zinc-700/50">
-							📥
-						</div>
-						<h3 class="mt-4 text-base font-semibold text-zinc-100 group-hover:text-zinc-200">Import Existing World</h3>
-						<p class="mt-1 text-xs leading-relaxed text-zinc-400">
-							Upload a Modrinth <code class="text-zinc-300">.mrpack</code>, a Prism Launcher zip, or paste a list of mod slugs.
-						</p>
-					</div>
+					@components.OptionCard(components.OptionCardProps{
+						Name:        "source",
+						Value:       "import",
+						BindSignal:  "source",
+						OnClick:     "$source = 'import'; $step = 3",
+						Icon:        "📥",
+						Title:       "Import Existing World",
+						Description: "Upload a Modrinth .mrpack, a Prism Launcher zip, or paste a list of mod slugs.",
+					})
 				</div>
 
 				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
-					<button
-						type="button"
-						data-on:click="$step = 1"
-						class="text-xs text-zinc-400 hover:text-zinc-200"
-					>
-						&larr; Back to Identity
-					</button>
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantGhost,
+						Size:    components.SizeSm,
+						OnClick: "$step = 1",
+						Text:    "← Back to Identity",
+					})
 				</div>
 			</div>
 
@@ -197,15 +140,13 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						placeholder="Search modpacks (e.g. Cobblemon, All the Mods, Better MC)..."
 						class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
 					/>
-					<button
-						type="button"
-						data-indicator="packSearchLoading"
-						data-on:click="@post('/api/minecraft/wizard/modpacks/search')"
-						class="rounded-xl bg-zinc-800 px-5 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-white"
-					>
-						<span data-show="!$packSearchLoading">Search</span>
-						<span data-show="$packSearchLoading" class="animate-pulse">Searching...</span>
-					</button>
+					@components.Button(components.ButtonProps{
+						Variant:   components.VariantSecondary,
+						Size:      components.SizeMd,
+						Indicator: "packSearchLoading",
+						OnClick:   "@post('/api/minecraft/wizard/modpacks/search')",
+						Text:      "Search",
+					})
 				</div>
 
 				<div id="wizard-pack-results" class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -215,14 +156,18 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 				</div>
 
 				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
-					<button type="button" data-on:click="$step = 2" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
-					<button
-						type="button"
-						data-on:click="if ($pack_name != '') { $step = 4 } else { alert('Please select a modpack first') }"
-						class="rounded-xl bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 hover:bg-white"
-					>
-						Next: Review &rarr;
-					</button>
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantGhost,
+						Size:    components.SizeSm,
+						OnClick: "$step = 2",
+						Text:    "← Back",
+					})
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantPrimary,
+						Size:    components.SizeMd,
+						OnClick: "if ($pack_name != '') { $step = 4 } else { alert('Please select a modpack first') }",
+						Text:    "Next: Review →",
+					})
 				</div>
 			</div>
 
@@ -275,15 +220,13 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						placeholder="Search Modrinth mods (e.g. JEI, Waystones, Create, Sodium)..."
 						class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
 					/>
-					<button
-						type="button"
-						data-indicator="modSearchLoading"
-						data-on:click="@post('/api/minecraft/wizard/mods/search')"
-						class="rounded-xl bg-zinc-800 px-5 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-white"
-					>
-						<span data-show="!$modSearchLoading">Search</span>
-						<span data-show="$modSearchLoading" class="animate-pulse">Searching...</span>
-					</button>
+					@components.Button(components.ButtonProps{
+						Variant:   components.VariantSecondary,
+						Size:      components.SizeMd,
+						Indicator: "modSearchLoading",
+						OnClick:   "@post('/api/minecraft/wizard/mods/search')",
+						Text:      "Search",
+					})
 				</div>
 
 				<!-- Search results populated via Datastar SSE -->
@@ -298,14 +241,18 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 				</div>
 
 				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
-					<button type="button" data-on:click="$step = 2" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
-					<button
-						type="button"
-						data-on:click="$loader = $bestLoader; $step = 4"
-						class="rounded-xl bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 hover:bg-white"
-					>
-						Next: Review &rarr;
-					</button>
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantGhost,
+						Size:    components.SizeSm,
+						OnClick: "$step = 2",
+						Text:    "← Back",
+					})
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantPrimary,
+						Size:    components.SizeMd,
+						OnClick: "$loader = $bestLoader; $step = 4",
+						Text:    "Next: Review →",
+					})
 				</div>
 			</div>
 
@@ -365,8 +312,18 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 				</div>
 
 				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
-					<button type="button" data-on:click="$step = 2" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
-					<button type="button" data-on:click="$step = 4" class="rounded-xl bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 hover:bg-white">Next: Review &rarr;</button>
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantGhost,
+						Size:    components.SizeSm,
+						OnClick: "$step = 2",
+						Text:    "← Back",
+					})
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantPrimary,
+						Size:    components.SizeMd,
+						OnClick: "$step = 4",
+						Text:    "Next: Review →",
+					})
 				</div>
 			</div>
 
@@ -414,25 +371,29 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						<div data-show="$importError" class="mt-2 text-xs text-red-400" data-text="$importError"></div>
 					</div>
 					<div>
-						<label class="block text-xs font-medium text-zinc-300">Or Paste Mod List (<code class="text-zinc-400">mods.txt</code>)</label>
-						<textarea
-							data-bind="raw_mods"
-							rows="4"
-							placeholder="# Modpack: My Pack&#10;jei&#10;appleskin&#10;waystones"
-							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 font-mono text-xs text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-						></textarea>
+						@components.Textarea(components.TextareaProps{
+							Label:       "Or Paste Mod List (mods.txt)",
+							Rows:        4,
+							Placeholder: "# Modpack: My Pack\njei\nappleskin\nwaystones",
+							Bind:        "raw_mods",
+							Class:       "font-mono",
+						})
 					</div>
 				</div>
 
 				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
-					<button type="button" data-on:click="$step = 2" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
-					<button
-						type="button"
-						data-on:click="if ($raw_mods.trim() !== '' || $name !== '') { $step = 4 } else { alert('Please upload an archive or paste a mod list first') }"
-						class="rounded-xl bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 hover:bg-white"
-					>
-						Next: Review &rarr;
-					</button>
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantGhost,
+						Size:    components.SizeSm,
+						OnClick: "$step = 2",
+						Text:    "← Back",
+					})
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantPrimary,
+						Size:    components.SizeMd,
+						OnClick: "if ($raw_mods.trim() !== '' || $name !== '') { $step = 4 } else { alert('Please upload an archive or paste a mod list first') }",
+						Text:    "Next: Review →",
+					})
 				</div>
 			</div>
 
@@ -479,54 +440,50 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						</div>
 
 						<div class="mt-4 space-y-3">
-							<!-- Small: 4 GiB -->
-							<div
-								data-on:click="$tier = 'small'"
-								class="cursor-pointer rounded-lg border border-zinc-800 p-3 transition hover:border-zinc-700"
-								data-class="{'border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60': $tier == 'small'}"
-							>
-								<div class="flex items-center justify-between text-xs">
-									<span class="font-semibold text-zinc-200">Small (4 GiB)</span>
-									<span class="text-zinc-400">Light / Vanilla</span>
-								</div>
-							</div>
-
-							<!-- Medium: 8 GiB -->
-							<div
-								data-on:click="$tier = 'medium'"
-								class="cursor-pointer rounded-lg border border-zinc-800 p-3 transition hover:border-zinc-700"
-								data-class="{'border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60': $tier == 'medium'}"
-							>
-								<div class="flex items-center justify-between text-xs">
-									<span class="font-semibold text-zinc-200">Medium (8 GiB)</span>
-									<span class="text-zinc-300 font-medium">Recommended</span>
-								</div>
-							</div>
-
-							<!-- Large: 12 GiB -->
-							<div
-								data-on:click="$tier = 'large'"
-								class="cursor-pointer rounded-lg border border-zinc-800 p-3 transition hover:border-zinc-700"
-								data-class="{'border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60': $tier == 'large'}"
-							>
-								<div class="flex items-center justify-between text-xs">
-									<span class="font-semibold text-zinc-200">Large (12 GiB)</span>
-									<span class="text-zinc-400">150+ Mods / Heavy Pack</span>
-								</div>
-							</div>
+							@components.OptionCard(components.OptionCardProps{
+								Name:       "tier",
+								Value:      "small",
+								BindSignal: "tier",
+								OnClick:    "$tier = 'small'",
+								Title:      "Small",
+								Subtitle:   "Light / Vanilla",
+								Badge:      "4 GiB",
+							})
+							@components.OptionCard(components.OptionCardProps{
+								Name:       "tier",
+								Value:      "medium",
+								BindSignal: "tier",
+								OnClick:    "$tier = 'medium'",
+								Title:      "Medium",
+								Subtitle:   "Recommended",
+								Badge:      "8 GiB",
+							})
+							@components.OptionCard(components.OptionCardProps{
+								Name:       "tier",
+								Value:      "large",
+								BindSignal: "tier",
+								OnClick:    "$tier = 'large'",
+								Title:      "Large",
+								Subtitle:   "150+ Mods / Heavy Pack",
+								Badge:      "12 GiB",
+							})
 						</div>
 					</div>
 				</div>
 
 				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
-					<button type="button" data-on:click="$step = 3" class="text-xs text-zinc-400 hover:text-zinc-200">&larr; Back</button>
-					<button
-						type="button"
-						data-on:click="@post('/api/minecraft/wizard/create')"
-						class="rounded-xl bg-zinc-100 px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow hover:bg-white"
-					>
-						Create Instance & Launch
-					</button>
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantGhost,
+						Size:    components.SizeSm,
+						OnClick: "$step = 3",
+						Text:    "← Back",
+					})
+					@components.Button(components.ButtonProps{
+						Variant: components.VariantPrimary,
+						Size:    components.SizeMd,
+						OnClick: "@post('/api/minecraft/wizard/create')",
+						Text:    "Create Instance & Launch",
+					})
 				</div>
 			</div>
 		</div>

@@ -1,0 +1,52 @@
+package components
+
+import (
+	"strings"
+)
+
+type EmptyStateProps struct {
+	Icon        string // Emoji or icon character (e.g. "⚔️", "🌍")
+	Title       string
+	Description string
+	ActionHref  string
+	ActionText  string
+	ActionClick string
+	Class       string
+}
+
+func (p EmptyStateProps) containerClasses() string {
+	base := "flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 p-12 text-center"
+	if p.Class != "" {
+		base = strings.Join([]string{base, p.Class}, " ")
+	}
+	return base
+}
+
+templ EmptyState(props EmptyStateProps) {
+	<div class={ props.containerClasses() }>
+		if props.Icon != "" {
+			<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800/60 text-3xl text-zinc-300 ring-1 ring-zinc-700/60">
+				{ props.Icon }
+			</div>
+		}
+		if props.Title != "" {
+			<h2 class="text-lg font-semibold text-zinc-100">{ props.Title }</h2>
+		}
+		if props.Description != "" {
+			<p class="mx-auto mt-1 max-w-sm text-sm text-zinc-400">
+				{ props.Description }
+			</p>
+		}
+		if props.ActionText != "" {
+			@Button(ButtonProps{
+				Variant: VariantPrimary,
+				Size:    SizeLg,
+				Href:    props.ActionHref,
+				OnClick: props.ActionClick,
+				Text:    props.ActionText,
+				Class:   "mt-6",
+			})
+		}
+		{ children... }
+	</div>
+}

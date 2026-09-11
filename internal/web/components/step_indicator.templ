@@ -1,0 +1,49 @@
+package components
+
+import (
+	"fmt"
+	"strconv"
+)
+
+type StepItem struct {
+	Number int
+	Label  string
+}
+
+type StepIndicatorProps struct {
+	Signal string // Datastar signal name (default "step")
+	Steps  []StepItem
+	Class  string
+}
+
+func (p StepIndicatorProps) signalName() string {
+	if p.Signal != "" {
+		return p.Signal
+	}
+	return "step"
+}
+
+templ StepIndicator(props StepIndicatorProps) {
+	{{ sig := props.signalName() }}
+	<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-sm">
+		<div class="flex items-center justify-between text-xs font-medium">
+			for i, s := range props.Steps {
+				if i > 0 {
+					<div class="h-0.5 flex-1 max-w-[3.5rem] bg-zinc-800 mx-2"></div>
+				}
+				<div
+					class="flex items-center gap-2"
+					data-class={ fmt.Sprintf("{'text-zinc-100 font-semibold': $%s == %d, 'text-zinc-500': $%s != %d}", sig, s.Number, sig, s.Number) }
+				>
+					<span
+						class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
+						data-class={ fmt.Sprintf("{'bg-zinc-100 text-zinc-950 font-bold': $%s == %d, 'bg-zinc-800 text-zinc-400': $%s != %d}", sig, s.Number, sig, s.Number) }
+					>
+						{ strconv.Itoa(s.Number) }
+					</span>
+					<span>{ s.Label }</span>
+				</div>
+			}
+		</div>
+	</div>
+}

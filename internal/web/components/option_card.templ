@@ -1,0 +1,77 @@
+package components
+
+import (
+	"fmt"
+	"strings"
+)
+
+type OptionCardProps struct {
+	Name        string
+	Value       string
+	BindSignal  string // Datastar signal (e.g. "source" or "tier")
+	Title       string
+	Subtitle    string
+	Description string
+	Icon        string
+	Badge       string
+	OnClick     string
+	Class       string
+}
+
+func (p OptionCardProps) cardClasses() string {
+	base := "flex flex-col p-4 rounded-xl border cursor-pointer transition select-none hover:border-zinc-600 hover:bg-zinc-800/40"
+	if p.Class != "" {
+		base = strings.Join([]string{base, p.Class}, " ")
+	}
+	return base
+}
+
+templ OptionCard(props OptionCardProps) {
+	<label
+		class={ props.cardClasses() }
+		if props.BindSignal != "" && props.Value != "" {
+			data-class={ fmt.Sprintf("{'border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60': $%s == '%s', 'border-zinc-800 bg-zinc-900': $%s != '%s'}", props.BindSignal, props.Value, props.BindSignal, props.Value) }
+		}
+		if props.OnClick != "" {
+			data-on:click={ props.OnClick }
+		}
+	>
+		if props.Name != "" && props.Value != "" {
+			<input
+				type="radio"
+				name={ props.Name }
+				value={ props.Value }
+				if props.BindSignal != "" {
+					data-bind={ props.BindSignal }
+				}
+				class="sr-only"
+			/>
+		}
+		<div class="flex items-start justify-between">
+			<div class="flex items-center gap-3">
+				if props.Icon != "" {
+					<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-800/60 text-xl text-zinc-300 ring-1 ring-zinc-700/50">
+						{ props.Icon }
+					</div>
+				}
+				<div>
+					<div class="flex items-center gap-2">
+						<span class="text-sm font-semibold text-zinc-100">{ props.Title }</span>
+						if props.Badge != "" {
+							<span class="rounded bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-300">
+								{ props.Badge }
+							</span>
+						}
+					</div>
+					if props.Subtitle != "" {
+						<p class="text-xs text-zinc-400 mt-0.5">{ props.Subtitle }</p>
+					}
+				</div>
+			</div>
+		</div>
+		if props.Description != "" {
+			<p class="mt-2 text-xs leading-relaxed text-zinc-400">{ props.Description }</p>
+		}
+		{ children... }
+	</label>
+}

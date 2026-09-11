@@ -1,6 +1,9 @@
 package pages
 
-import "fmt"
+import (
+	"fmt"
+	"agrelha/internal/web/components"
+)
 
 templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 	@Layout("Minecraft") {
@@ -12,51 +15,26 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 					<h1 class="text-xl font-bold tracking-tight text-zinc-100">Minecraft Instances</h1>
 					<p class="mt-0.5 text-xs text-zinc-400">Manage up to 4 server worlds. Up to 2 can run concurrently.</p>
 				</div>
-				<div class="flex flex-wrap items-center gap-2">
-					<div class="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs">
-						<span class="text-zinc-500">RAM:</span>
-						<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d GiB", budget.UsedGiB, budget.TotalBudgetGiB) }</span>
-						<div class="ml-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800">
-							<div
-								class="h-full bg-zinc-300"
-								style={ fmt.Sprintf("width: %d%%", (budget.UsedGiB * 100) / budget.TotalBudgetGiB) }
-							></div>
-						</div>
-					</div>
-					<div class="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs">
-						<span class="text-zinc-500">Running:</span>
-						<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d", budget.RunningCount, budget.MaxRunning) }</span>
-					</div>
-					<div class="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs">
-						<span class="text-zinc-500">Saved:</span>
-						<span class="font-medium text-zinc-200">{ fmt.Sprintf("%d / %d", budget.TotalInstances, budget.MaxInstances) }</span>
-					</div>
-					<a
-						href="/minecraft/access"
-						class="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white"
-					>
-						Access (Whitelist / Ops)
-					</a>
-				</div>
+				@components.BudgetBar(components.BudgetBarProps{
+					UsedGiB:        budget.UsedGiB,
+					TotalBudgetGiB: budget.TotalBudgetGiB,
+					RunningCount:   budget.RunningCount,
+					MaxRunning:     budget.MaxRunning,
+					TotalInstances: budget.TotalInstances,
+					MaxInstances:   budget.MaxInstances,
+					ActionHref:     "/minecraft/access",
+					ActionText:     "Access (Whitelist / Ops)",
+				})
 			</div>
 
 			if len(instances) == 0 {
-				<!-- Empty state hero -->
-				<div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 p-12 text-center">
-					<div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800/60 text-3xl text-zinc-300 ring-1 ring-zinc-700/60">
-						🌍
-					</div>
-					<h2 class="text-lg font-semibold text-zinc-100">Create your first world</h2>
-					<p class="mx-auto mt-1 max-w-sm text-sm text-zinc-400">
-						Assemble a modded NeoForge/Fabric world, install a modpack, or start fresh with vanilla Minecraft.
-					</p>
-					<a
-						href="/minecraft/create"
-						class="mt-6 inline-flex items-center gap-2 rounded-xl bg-zinc-100 px-5 py-2.5 text-sm font-semibold text-zinc-950 shadow hover:bg-white"
-					>
-						<span>+</span> Create New World
-					</a>
-				</div>
+				@components.EmptyState(components.EmptyStateProps{
+					Icon:        "🌍",
+					Title:       "Create your first world",
+					Description: "Assemble a modded NeoForge/Fabric world, install a modpack, or start fresh with vanilla Minecraft.",
+					ActionHref:  "/minecraft/create",
+					ActionText:  "+ Create New World",
+				})
 			} else {
 				<!-- Instances grid -->
 				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -75,22 +53,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 										<p class="mt-0.5 font-mono text-xs text-zinc-400">{ inst.LBIP }:25565</p>
 									</div>
 									<div>
-										if inst.State == "running" {
-											<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/80 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/50">
-												<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"></span>
-												Running
-											</span>
-										} else if inst.State == "provisioning" {
-											<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-950/80 px-2.5 py-0.5 text-xs font-medium text-amber-300 ring-1 ring-amber-800/50">
-												<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"></span>
-												Starting…
-											</span>
-										} else {
-											<span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-800/80 px-2.5 py-0.5 text-xs font-medium text-zinc-400 ring-1 ring-zinc-700/50">
-												<span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
-												Stopped
-											</span>
-										}
+										@components.StatusPill(components.StatusPillProps{State: inst.State})
 									</div>
 								</div>
 
@@ -130,70 +93,66 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 							<!-- Actions & Direct Links -->
 							<div class="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/60 pt-3">
 								<div class="flex flex-wrap items-center gap-1.5">
-									<a
-										href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/overview", inst.Number)) }
-										class="rounded-lg border border-zinc-800 bg-zinc-800/80 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition"
-									>
-										Manage
-									</a>
-									<a
-										href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/configs", inst.Number)) }
-										class="rounded-lg border border-zinc-800/80 bg-zinc-900 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition"
-									>
-										Configs
-									</a>
-									<a
-										href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/mods", inst.Number)) }
-										class="rounded-lg border border-zinc-800/80 bg-zinc-900 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition"
-									>
-										Mods
-									</a>
-									<a
-										href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/console", inst.Number)) }
-										class="rounded-lg border border-zinc-800/80 bg-zinc-900 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition"
-									>
-										Console
-									</a>
+									@components.Button(components.ButtonProps{
+										Variant: components.VariantSecondary,
+										Size:    components.SizeXs,
+										Href:    fmt.Sprintf("/minecraft/%d/overview", inst.Number),
+										Text:    "Manage",
+									})
+									@components.Button(components.ButtonProps{
+										Variant: components.VariantLink,
+										Size:    components.SizeXs,
+										Href:    fmt.Sprintf("/minecraft/%d/configs", inst.Number),
+										Text:    "Configs",
+									})
+									@components.Button(components.ButtonProps{
+										Variant: components.VariantLink,
+										Size:    components.SizeXs,
+										Href:    fmt.Sprintf("/minecraft/%d/mods", inst.Number),
+										Text:    "Mods",
+									})
+									@components.Button(components.ButtonProps{
+										Variant: components.VariantLink,
+										Size:    components.SizeXs,
+										Href:    fmt.Sprintf("/minecraft/%d/console", inst.Number),
+										Text:    "Console",
+									})
 								</div>
 
 								<div class="flex items-center gap-2">
 									if inst.State == "running" {
-										<button
-											type="button"
-											data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", inst.Number) }
-											class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-1 text-xs font-medium text-amber-200 hover:bg-amber-900/50"
-										>
-											Stop
-										</button>
+										@components.Button(components.ButtonProps{
+											Variant: components.VariantWarning,
+											Size:    components.SizeXs,
+											OnClick: fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", inst.Number),
+											Text:    "Stop",
+										})
 									} else {
 										if inst.CanStart {
-											<button
-												type="button"
-												data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/start')", inst.Number) }
-												class="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500"
-											>
-												Start
-											</button>
+											@components.Button(components.ButtonProps{
+												Variant: components.VariantSuccess,
+												Size:    components.SizeXs,
+												OnClick: fmt.Sprintf("@post('/api/minecraft/instances/%d/start')", inst.Number),
+												Text:    "Start",
+											})
 										} else {
-											<button
-												type="button"
-												disabled
-												title={ inst.StartBlockedReason }
-												class="cursor-not-allowed rounded-lg bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-500"
-											>
-												Start
-											</button>
+											@components.Button(components.ButtonProps{
+												Variant:       components.VariantSecondary,
+												Size:          components.SizeXs,
+												Disabled:      true,
+												DisabledTitle: inst.StartBlockedReason,
+												Text:          "Start",
+											})
 										}
 									}
 
 									if inst.State != "running" {
-										<button
-											type="button"
-											data-on:click={ fmt.Sprintf("if (confirm('Delete instance #%02d (%s)? World data and configurations will be removed.')) @delete('/api/minecraft/instances/%d')", inst.Number, inst.Name, inst.Number) }
-											class="rounded-lg px-2.5 py-1 text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300"
-										>
-											Delete
-										</button>
+										@components.Button(components.ButtonProps{
+											Variant: components.VariantDanger,
+											Size:    components.SizeXs,
+											OnClick: fmt.Sprintf("if (confirm('Delete instance #%02d (%s)? World data and configurations will be removed.')) @delete('/api/minecraft/instances/%d')", inst.Number, inst.Name, inst.Number),
+											Text:    "Delete",
+										})
 									}
 								</div>
 							</div>

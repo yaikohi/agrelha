@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http/httptest"
 	"net/url"
@@ -106,23 +107,24 @@ func TestMCWizardPage(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	html := string(body)
+	rawHTML := string(body)
+	htmlContent := html.UnescapeString(rawHTML)
 
 	for _, want := range []string{"Create Minecraft World", "Step 1: Name Your World"} {
-		if !strings.Contains(html, want) {
+		if !strings.Contains(htmlContent, want) {
 			t.Errorf("wizard missing %q", want)
 		}
 	}
-	if strings.Contains(html, `data-on:submit.prevent`) {
+	if strings.Contains(rawHTML, `data-on:submit.prevent`) {
 		t.Errorf("wizard contains unsupported data-on:submit.prevent, which causes native page reloads")
 	}
-	if !strings.Contains(html, `@post('/api/minecraft/wizard/modpacks/search')`) {
+	if !strings.Contains(htmlContent, `@post('/api/minecraft/wizard/modpacks/search')`) {
 		t.Errorf("wizard missing modpack search @post handler")
 	}
-	if !strings.Contains(html, `@post('/api/minecraft/wizard/mods/search')`) {
+	if !strings.Contains(htmlContent, `@post('/api/minecraft/wizard/mods/search')`) {
 		t.Errorf("wizard missing mods search @post handler")
 	}
-	if !strings.Contains(html, `@post('/api/minecraft/wizard/create')`) {
+	if !strings.Contains(htmlContent, `@post('/api/minecraft/wizard/create')`) {
 		t.Errorf("wizard missing create @post handler")
 	}
 }
