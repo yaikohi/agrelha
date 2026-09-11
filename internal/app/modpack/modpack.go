@@ -73,8 +73,22 @@ func Build(profileName string, entries []string, configs map[string]string) ([]b
 }
 
 func parseEntry(entry string) (exportMod, bool) {
-	parts := strings.Split(strings.TrimSpace(entry), "/")
-	if len(parts) < 3 || parts[0] == "" || parts[1] == "" {
+	entry = strings.TrimSuffix(strings.TrimSpace(entry), "?")
+	if entry == "" || strings.HasPrefix(entry, "#") {
+		return exportMod{}, false
+	}
+
+	parts := strings.Split(entry, "/")
+	if len(parts) < 3 {
+		// agrelha stores mods as the Thunderstore full name "Namespace-Name",
+		// with no pinned version. Dropping those is how an exported profile
+		// ended up containing nothing but BepInEx.
+		if ns, name, ok := strings.Cut(entry, "-"); ok && ns != "" && name != "" {
+			return exportMod{Name: entry, Enabled: true}, true
+		}
+		return exportMod{}, false
+	}
+	if parts[0] == "" || parts[1] == "" {
 		return exportMod{}, false
 	}
 	v := parts[len(parts)-1]
@@ -97,4 +111,37 @@ func parseVersion(v string) versionNumber {
 		return n
 	}
 	return versionNumber{Major: get(0), Minor: get(1), Patch: get(2)}
+}
+
+// ResolveVersions turns bare Thunderstore full names ("Namespace-Name") into
+// pinned "Namespace/Name/Version" entries using latest.
+//
+// r2modman resolves a profile entry by exact version, so an unversioned mod is
+// reported as "not found on Thunderstore" and silently skipped on import.
+// Entries that already carry a version, and names that cannot be resolved, are
+// passed through untouched.
+func ResolveVersions(entries []string, latest func(fullName string) (string, bool)) []string {
+	if latest == nil {
+		return entries
+	}
+
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		trimmed := strings.TrimSuffix(strings.TrimSpace(e), "?")
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.Contains(trimmed, "/") {
+			out = append(out, e)
+			continue
+		}
+		ns, name, ok := strings.Cut(trimmed, "-")
+		if !ok || ns == "" || name == "" {
+			out = append(out, e)
+			continue
+		}
+		if v, found := latest(trimmed); found && v != "" {
+			out = append(out, ns+"/"+name+"/"+v)
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }

@@ -262,7 +262,11 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 	if h.cfg.ValheimInstances != nil {
 		if installed, err := h.cfg.ValheimInstances.GetInstalledMods(c.UserContext(), num); err == nil {
 			for _, m := range installed {
-				installedMap[strings.ToLower(strings.TrimSpace(m))] = true
+				// Entries may be pinned ("Ns/Name/1.2.0") or bare ("Ns-Name");
+				// both are the same mod, so compare on identity.
+				if ref, ok := domain.ParseModRef(m, domain.GameValheim); ok {
+					installedMap[ref.Key()] = true
+				}
 			}
 		}
 	}
@@ -281,7 +285,8 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 		if cleanIcon == "" {
 			cleanIcon = "/assets/img/valheim-icon.png"
 		}
-		isInstalled := installedMap[strings.ToLower(fullName)] || installedMap[strings.ToLower(r.Name)]
+		ref, _ := domain.ParseModRef(fullName, domain.GameValheim)
+		isInstalled := installedMap[ref.Key()]
 
 		var statusBadge string
 		var actionBtn string
@@ -584,8 +589,13 @@ func renderInstalledModsHTML(num int, mods []string) string {
 	sb.WriteString(`<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400"><tr><th class="px-4 py-2.5 font-medium">Mod Package</th><th class="px-4 py-2.5 font-medium text-right">Actions</th></tr></thead>`)
 	sb.WriteString(`<tbody class="divide-y divide-zinc-800/60">`)
 	for _, modSlug := range mods {
-		cleanSlug := html.EscapeString(modSlug)
-		jsSlug := strings.ReplaceAll(modSlug, "'", "\\'")
+		ref, _ := domain.ParseModRef(modSlug, domain.GameValheim)
+		label := ref.FullName()
+		if ref.Version != "" {
+			label += "  v" + ref.Version
+		}
+		cleanSlug := html.EscapeString(label)
+		jsSlug := strings.ReplaceAll(ref.FullName(), "'", "\\'")
 		sb.WriteString(fmt.Sprintf(`<tr class="hover:bg-zinc-800/30"><td class="px-4 py-2.5 font-mono text-zinc-200">%s</td><td class="px-4 py-2.5 text-right"><button type="button" data-on:click="@post('/api/valheim/%d/mods/remove?slug=%s', {payload: {slug: '%s'}})" class="text-red-400 hover:text-red-300">Remove</button></td></tr>`, cleanSlug, num, jsSlug, jsSlug))
 	}
 	sb.WriteString(`</tbody></table>`)

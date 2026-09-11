@@ -222,6 +222,21 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		instances.WithBackupsDir(cfg.BackupsDir),
 		instances.WithGlobalConfigsPath(cfg.ModConfigsPath),
 	)
+	if d.TS != nil {
+		valheimInstOpts = append(valheimInstOpts,
+			instances.WithVersionResolver(func(ctx context.Context, fullName string) (string, error) {
+				if hit, ok := d.TS.Get(fullName); ok && hit.Version != "" {
+					return hit.Version, nil
+				}
+				ns, name, ok := strings.Cut(fullName, "-")
+				if !ok {
+					return "", fmt.Errorf("not a thunderstore full name: %s", fullName)
+				}
+				v, _, err := d.TS.LatestVersion(ctx, ns, name)
+				return v, err
+			}),
+		)
+	}
 	if st != nil {
 		valheimInstOpts = append(valheimInstOpts,
 			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
@@ -292,16 +307,41 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	d.ValheimGame = valheim.New(
 		valheim.WithRuntime(valheimRuntime, d.ValheimRef),
 		valheim.WithPlayerCount(st.CountOnline),
-		valheim.WithBundleSource(func(ctx context.Context) ([]string, map[string]string, error) {
+		valheim.WithBundleSource(func(ctx context.Context, inst domain.Instance) ([]string, map[string]string, error) {
 			var entries []string
 			configs := map[string]string{}
-			if d.K8s != nil {
-				if data, err := d.K8s.ConfigMapData(ctx, "valheim-mods"); err == nil {
-					entries = mods.Parse(data["mods.txt"])
-				}
-				if cfgData, err := d.K8s.ConfigMapData(ctx, "valheim-mod-configs"); err == nil {
-					maps.Copy(configs, cfgData)
-				}
+			if d.K8s == nil {
+				return entries, configs, nil
+			}
+
+			// An Instance keeps its mods in its own ConfigMap; the bare names are
+			// the pre-instance server and are all a legacy export has to go on.
+			modsCM, configsCM := "valheim-mods", "valheim-mod-configs"
+			if inst.Number > 0 && inst.Slug != "" {
+				inst.GameID = domain.GameValheim
+				modsCM, configsCM = inst.ModsCMName(), inst.ConfigsCMName()
+			}
+
+			if data, err := d.K8s.ConfigMapData(ctx, modsCM); err == nil {
+				entries = modpack.ResolveVersions(mods.Parse(data["mods.txt"]), func(fullName string) (string, bool) {
+					if d.TS == nil {
+						return "", false
+					}
+					if hit, ok := d.TS.Get(fullName); ok && hit.Version != "" {
+						return hit.Version, true
+					}
+					ns, name, ok := strings.Cut(fullName, "-")
+					if !ok {
+						return "", false
+					}
+					v, _, err := d.TS.LatestVersion(ctx, ns, name)
+					return v, err == nil && v != ""
+				})
+			} else {
+				slog.Warn("valheim export: cannot read mod list", "configmap", modsCM, "err", err)
+			}
+			if cfgData, err := d.K8s.ConfigMapData(ctx, configsCM); err == nil {
+				maps.Copy(configs, cfgData)
 			}
 			return entries, configs, nil
 		}),

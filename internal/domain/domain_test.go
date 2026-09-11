@@ -332,3 +332,54 @@ func TestServiceNameMatchesDeploymentName(t *testing.T) {
 		}
 	}
 }
+
+func TestParseModRefHandlesBothGames(t *testing.T) {
+	cases := []struct {
+		entry string
+		game  GameID
+		key   string
+		full  string
+		ver   string
+	}{
+		{"Neobotics-SlayerSkills", GameValheim, "neobotics-slayerskills", "Neobotics-SlayerSkills", ""},
+		{"Neobotics/SlayerSkills/1.2.0", GameValheim, "neobotics-slayerskills", "Neobotics-SlayerSkills", "1.2.0"},
+		{"Smoothbrain-Mining?", GameValheim, "smoothbrain-mining", "Smoothbrain-Mining", ""},
+		{"cloth-config", GameMinecraft, "cloth-config", "cloth-config", ""},
+		{"xaeros-minimap", GameMinecraft, "xaeros-minimap", "xaeros-minimap", ""},
+		{"sodium", GameMinecraft, "sodium", "sodium", ""},
+	}
+	for _, c := range cases {
+		ref, ok := ParseModRef(c.entry, c.game)
+		if !ok {
+			t.Errorf("%q: not parsed", c.entry)
+			continue
+		}
+		if ref.Key() != c.key {
+			t.Errorf("%q key = %q, want %q", c.entry, ref.Key(), c.key)
+		}
+		if ref.FullName() != c.full {
+			t.Errorf("%q full = %q, want %q", c.entry, ref.FullName(), c.full)
+		}
+		if ref.Version != c.ver {
+			t.Errorf("%q version = %q, want %q", c.entry, ref.Version, c.ver)
+		}
+	}
+
+	for _, skip := range []string{"", "   ", "# a comment"} {
+		if _, ok := ParseModRef(skip, GameValheim); ok {
+			t.Errorf("%q must not parse as a mod", skip)
+		}
+	}
+}
+
+func TestModRefEntryPinsWhenVersionKnown(t *testing.T) {
+	if got := (ModRef{Namespace: "Smoothbrain", Name: "Mining", Version: "1.1.6"}).Entry(); got != "Smoothbrain/Mining/1.1.6" {
+		t.Errorf("got %q", got)
+	}
+	if got := (ModRef{Namespace: "Smoothbrain", Name: "Mining"}).Entry(); got != "Smoothbrain-Mining" {
+		t.Errorf("got %q", got)
+	}
+	if got := (ModRef{Name: "sodium"}).Entry(); got != "sodium" {
+		t.Errorf("got %q", got)
+	}
+}

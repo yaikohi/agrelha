@@ -25,7 +25,7 @@ type Game struct {
 	playerCountFn   func() (int, error)
 	statusProvider  func(context.Context) (domain.GameTelemetry, error)
 	contentResolver func(context.Context, domain.Instance) (domain.ContentSet, error)
-	bundleSource    func(context.Context) (entries []string, configs map[string]string, err error)
+	bundleSource    func(context.Context, domain.Instance) (entries []string, configs map[string]string, err error)
 }
 
 // Option configures a Valheim Game instance.
@@ -77,7 +77,7 @@ func WithContentResolver(fn func(context.Context, domain.Instance) (domain.Conte
 }
 
 // WithBundleSource sets a provider for mod entries and config files when exporting client bundles.
-func WithBundleSource(fn func(context.Context) ([]string, map[string]string, error)) Option {
+func WithBundleSource(fn func(context.Context, domain.Instance) ([]string, map[string]string, error)) Option {
 	return func(g *Game) {
 		g.bundleSource = fn
 	}
@@ -211,7 +211,7 @@ func (g *Game) ResolveContent(ctx context.Context, inst domain.Instance) (domain
 	}
 	var entries []string
 	if g.bundleSource != nil {
-		entries, _, _ = g.bundleSource(ctx)
+		entries, _, _ = g.bundleSource(ctx, inst)
 	}
 	var items []domain.ContentItem
 	for _, e := range entries {
@@ -248,7 +248,7 @@ func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (do
 	var configs map[string]string
 	if g.bundleSource != nil {
 		var err error
-		entries, configs, err = g.bundleSource(ctx)
+		entries, configs, err = g.bundleSource(ctx, inst)
 		if err != nil {
 			return domain.Bundle{}, fmt.Errorf("read valheim bundle source: %w", err)
 		}

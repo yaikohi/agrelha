@@ -11,6 +11,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/web/sse"
 )
 
@@ -57,7 +58,9 @@ func (h *Handler) MCInstanceModsSearch(c *fiber.Ctx) error {
 		}
 		if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), num); err == nil {
 			for _, m := range mods {
-				installed[strings.ToLower(strings.TrimSpace(m))] = true
+				if ref, ok := domain.ParseModRef(m, domain.GameMinecraft); ok {
+					installed[ref.Key()] = true
+				}
 			}
 		}
 	}
@@ -76,7 +79,8 @@ func (h *Handler) MCInstanceModsSearch(c *fiber.Ctx) error {
 		html.EscapeString(q), len(hits), html.EscapeString(mcVersion)))
 
 	for _, hit := range hits {
-		sb.WriteString(modCardHTML(num, hit, installed[strings.ToLower(hit.Slug)]))
+		ref, _ := domain.ParseModRef(hit.Slug, domain.GameMinecraft)
+		sb.WriteString(modCardHTML(num, hit, installed[ref.Key()]))
 	}
 	return patchModResults(c, sb.String())
 }

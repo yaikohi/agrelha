@@ -487,3 +487,76 @@ func TestLBIPCollisionAcrossGamesIsRefused(t *testing.T) {
 		t.Errorf("an instance must not collide with itself on update: %v", err)
 	}
 }
+
+type modStore struct{ txt string }
+
+func (s *modStore) Get(_ context.Context, _ string) (ports.Document, error) {
+	return ports.Document{Data: map[string]string{"mods.txt": s.txt}}, nil
+}
+func (s *modStore) Put(context.Context, string, ports.Document, string) error { return nil }
+func (s *modStore) Delete(context.Context, string, string) error              { return nil }
+func (s *modStore) PutTree(context.Context, string, map[string]ports.Document, string) error {
+	return nil
+}
+func (s *modStore) Patch(ctx context.Context, _ string, _ string, mutate func(*ports.Document) (bool, error)) (bool, error) {
+	doc := ports.Document{Data: map[string]string{"mods.txt": s.txt}}
+	changed, err := mutate(&doc)
+	if changed {
+		s.txt = doc.Data["mods.txt"]
+	}
+	return changed, err
+}
+
+func valheimModManager(st *modStore) *InstanceManager {
+	return &InstanceManager{
+		gameID:     domain.GameValheim,
+		stateStore: st,
+		repo:       &ipRepo{items: []domain.Instance{{GameID: domain.GameValheim, Number: 2, Name: "boppo"}}},
+		versionResolver: func(_ context.Context, fullName string) (string, error) {
+			return map[string]string{
+				"Smoothbrain-Mining":     "1.1.6",
+				"Neobotics-SlayerSkills": "1.2.0",
+			}[fullName], nil
+		},
+	}
+}
+
+func TestInstallPinsTheVersionItInstalled(t *testing.T) {
+	st := &modStore{txt: "# Mod list for boppo\n"}
+	m := valheimModManager(st)
+
+	if _, err := m.InstallMod(context.Background(), 2, "Smoothbrain-Mining"); err != nil {
+		t.Fatalf("InstallMod: %v", err)
+	}
+	if !strings.Contains(st.txt, "Smoothbrain/Mining/1.1.6") {
+		t.Fatalf("the installed version must be recorded, not guessed later:\n%s", st.txt)
+	}
+}
+
+func TestInstallDoesNotDuplicateAPinnedMod(t *testing.T) {
+	st := &modStore{txt: "# list\nSmoothbrain/Mining/1.1.6\n"}
+	m := valheimModManager(st)
+
+	added, err := m.InstallMod(context.Background(), 2, "Smoothbrain-Mining")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added != 0 || strings.Count(st.txt, "Mining") != 1 {
+		t.Errorf("installing an already-pinned mod duplicated it:\n%s", st.txt)
+	}
+}
+
+func TestRemoveMatchesAPinnedEntryByName(t *testing.T) {
+	st := &modStore{txt: "# list\nSmoothbrain/Mining/1.1.6\nNeobotics/SlayerSkills/1.2.0\n"}
+	m := valheimModManager(st)
+
+	if err := m.RemoveMod(context.Background(), 2, "Smoothbrain-Mining"); err != nil {
+		t.Fatalf("RemoveMod: %v", err)
+	}
+	if strings.Contains(st.txt, "Mining") {
+		t.Errorf("a pinned mod must be removable by its name:\n%s", st.txt)
+	}
+	if !strings.Contains(st.txt, "SlayerSkills") {
+		t.Errorf("removed the wrong mod:\n%s", st.txt)
+	}
+}

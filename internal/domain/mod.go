@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // ModProject represents a mod project from an upstream repository.
 type ModProject struct {
@@ -67,3 +70,66 @@ type ModSearchResult struct {
 
 // FullName returns owner/name identifier.
 func (r ModSearchResult) FullName() string { return r.Owner + "/" + r.Name }
+
+// ModRef identifies one installed mod independently of how its entry is
+// written. Valheim entries are Thunderstore packages, either the bare full name
+// "Namespace-Name" or the pinned "Namespace/Name/Version". Minecraft entries are
+// Modrinth slugs, which legitimately contain hyphens ("cloth-config"), so they
+// are never split on one.
+type ModRef struct {
+	Namespace string
+	Name      string
+	Version   string
+}
+
+func ParseModRef(entry string, game GameID) (ModRef, bool) {
+	entry = strings.TrimSuffix(strings.TrimSpace(entry), "?")
+	if entry == "" || strings.HasPrefix(entry, "#") {
+		return ModRef{}, false
+	}
+
+	if parts := strings.Split(entry, "/"); len(parts) >= 3 {
+		return ModRef{
+			Namespace: strings.Join(parts[:len(parts)-2], "/"),
+			Name:      parts[len(parts)-2],
+			Version:   parts[len(parts)-1],
+		}, true
+	}
+
+	if game == GameValheim {
+		if ns, name, ok := strings.Cut(entry, "-"); ok && ns != "" && name != "" {
+			return ModRef{Namespace: ns, Name: name}, true
+		}
+	}
+	return ModRef{Name: entry}, true
+}
+
+// Key is the identity two entries share when they are the same mod at different
+// versions. Removing and de-duplicating compare on this, never on the raw line.
+func (r ModRef) Key() string {
+	if r.Namespace == "" {
+		return strings.ToLower(r.Name)
+	}
+	return strings.ToLower(r.Namespace + "-" + r.Name)
+}
+
+// FullName is the Thunderstore "Namespace-Name" form, which is what r2modman
+// and agrelha's own search results use.
+func (r ModRef) FullName() string {
+	if r.Namespace == "" {
+		return r.Name
+	}
+	return r.Namespace + "-" + r.Name
+}
+
+// Entry renders the line to store in mods.txt: pinned when the version is
+// known, so an export reproduces exactly what the server runs.
+func (r ModRef) Entry() string {
+	if r.Namespace != "" && r.Version != "" {
+		return r.Namespace + "/" + r.Name + "/" + r.Version
+	}
+	if r.Namespace != "" {
+		return r.Namespace + "-" + r.Name
+	}
+	return r.Name
+}

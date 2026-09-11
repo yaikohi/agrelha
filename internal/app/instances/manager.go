@@ -43,6 +43,7 @@ type InstanceManager struct {
 	audit               ports.AuditRecorder
 	event               ports.EventRecorder
 	depResolver         func(ctx context.Context, slug, mcVersion, loader string) ([]string, error)
+	versionResolver     func(ctx context.Context, fullName string) (string, error)
 	modsReader          func(ctx context.Context, num int) ([]string, error)
 	configsReader       func(ctx context.Context, num int) (map[string]string, error)
 	globalConfigsReader func(ctx context.Context) (map[string]string, error)
@@ -88,6 +89,13 @@ func WithEvent(recorder ports.EventRecorder) Option {
 
 func WithDependencyResolver(fn func(ctx context.Context, slug, mcVersion, loader string) ([]string, error)) Option {
 	return func(m *InstanceManager) { m.depResolver = fn }
+}
+
+// WithVersionResolver lets the manager pin the version it installed. Without it
+// mods.txt records only a name, and an exported client profile has to guess the
+// version from upstream - which drifts from what the server actually runs.
+func WithVersionResolver(fn func(ctx context.Context, fullName string) (string, error)) Option {
+	return func(m *InstanceManager) { m.versionResolver = fn }
 }
 
 func WithModsReader(fn func(ctx context.Context, num int) ([]string, error)) Option {
@@ -666,19 +674,27 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 		cur := doc.Data["mods.txt"]
 		present := map[string]bool{}
 		for l := range strings.SplitSeq(cur, "\n") {
-			if t := strings.TrimSpace(strings.TrimSuffix(l, "?")); t != "" && !strings.HasPrefix(t, "#") {
-				present[t] = true
+			if ref, ok := domain.ParseModRef(l, m.gameID); ok {
+				present[ref.Key()] = true
 			}
 		}
 		var body strings.Builder
 		body.WriteString(strings.TrimRight(cur, "\n"))
 		for _, w := range wanted {
-			w = strings.TrimSpace(w)
-			if w != "" && !present[w] {
-				body.WriteString("\n" + w)
-				present[w] = true
-				addedCount++
+			ref, ok := domain.ParseModRef(w, m.gameID)
+			if !ok || present[ref.Key()] {
+				continue
 			}
+			if ref.Version == "" && m.versionResolver != nil {
+				if v, err := m.versionResolver(ctx, ref.FullName()); err == nil && v != "" {
+					ref.Version = v
+				} else if err != nil {
+					slog.Warn("could not pin mod version", "mod", ref.FullName(), "instance", num, "err", err)
+				}
+			}
+			body.WriteString("\n" + ref.Entry())
+			present[ref.Key()] = true
+			addedCount++
 		}
 		if addedCount == 0 {
 			return false, nil
@@ -713,12 +729,14 @@ func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, a
 		lines := strings.Split(cur, "\n")
 		var out []string
 		found := false
+		target, targetOK := domain.ParseModRef(slug, m.gameID)
 		for _, l := range lines {
-			if strings.TrimSpace(strings.TrimSuffix(l, "?")) != slug {
-				out = append(out, l)
-			} else {
+			ref, ok := domain.ParseModRef(l, m.gameID)
+			if targetOK && ok && ref.Key() == target.Key() {
 				found = true
+				continue
 			}
+			out = append(out, l)
 		}
 		if !found {
 			return false, nil

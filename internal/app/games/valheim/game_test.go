@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -204,7 +205,7 @@ func TestValheimTelemetry(t *testing.T) {
 
 func TestValheimResolveContentAndBundleSource(t *testing.T) {
 	g := New(
-		WithBundleSource(func(ctx context.Context) ([]string, map[string]string, error) {
+		WithBundleSource(func(ctx context.Context, _ domain.Instance) ([]string, map[string]string, error) {
 			return []string{"author/coolmod/1.2.0"}, map[string]string{"coolmod.cfg": "active=true"}, nil
 		}),
 	)
@@ -224,5 +225,53 @@ func TestValheimResolveContentAndBundleSource(t *testing.T) {
 	}
 	if bundle.Filename != "server-mods.r2z" {
 		t.Errorf("Filename = %q, want server-mods.r2z", bundle.Filename)
+	}
+}
+
+func TestExportClientBundleUsesTheInstancesMods(t *testing.T) {
+	var sawInstance domain.Instance
+	g := New(WithBundleSource(func(_ context.Context, inst domain.Instance) ([]string, map[string]string, error) {
+		sawInstance = inst
+		return []string{"Neobotics-SlayerSkills", "Smoothbrain-Mining"}, map[string]string{"mining.cfg": "x=1"}, nil
+	}))
+
+	inst := domain.Instance{GameID: domain.GameValheim, Number: 2, Name: "boppo", Slug: "boppo"}
+	bundle, err := g.ExportClientBundle(context.Background(), inst)
+	if err != nil {
+		t.Fatalf("ExportClientBundle: %v", err)
+	}
+
+	if sawInstance.Number != 2 || sawInstance.Slug != "boppo" {
+		t.Fatalf("the bundle source must be told which instance to export, got %+v", sawInstance)
+	}
+	if bundle.Filename != "boppo-mods.r2z" {
+		t.Errorf("filename = %q", bundle.Filename)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(bundle.Data), int64(len(bundle.Data)))
+	if err != nil {
+		t.Fatalf("bundle is not a zip: %v", err)
+	}
+	var manifest string
+	var names []string
+	for _, f := range zr.File {
+		names = append(names, f.Name)
+		if f.Name == "export.r2x" {
+			rc, _ := f.Open()
+			b, _ := io.ReadAll(rc)
+			rc.Close()
+			manifest = string(b)
+		}
+	}
+	if manifest == "" {
+		t.Fatalf("no export.r2x in the profile, entries: %v", names)
+	}
+	if !slices.Contains(names, "config/mining.cfg") {
+		t.Errorf("mod configs must ship with the profile, entries: %v", names)
+	}
+	for _, want := range []string{"SlayerSkills", "Mining", "BepInEx"} {
+		if !strings.Contains(manifest, want) {
+			t.Errorf("exported profile is missing %q — it shipped only BepInEx before this: %s", want, manifest)
+		}
 	}
 }
