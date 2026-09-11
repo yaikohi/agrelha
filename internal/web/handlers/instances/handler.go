@@ -29,6 +29,7 @@ type Config struct {
 	MCInstances             *instances.InstanceManager
 	MinecraftGame           ports.Game
 	SearchMods              SearchModsFunc
+	LastIncident            func(ctx context.Context, number int) (*domain.Incident, error)
 	Actor                   func(*fiber.Ctx) string
 	ApplyMinecraftAfterSync func(cmName, depName, key string, want func(string) bool)
 }

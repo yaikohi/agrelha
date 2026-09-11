@@ -63,6 +63,12 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 	}
 	d.Pack = packName
 
+	if h.cfg.LastIncident != nil {
+		if in, err := h.cfg.LastIncident(c.UserContext(), inst.Number); err == nil {
+			d.LastIncident = pages.IncidentView(in)
+		}
+	}
+
 	// Fetch installed mods if on mods tab or overview
 	if tab == "mods" || tab == "overview" {
 		if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), inst.Number); err == nil {

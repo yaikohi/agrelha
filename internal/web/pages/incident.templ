@@ -1,0 +1,44 @@
+package pages
+
+import "fmt"
+
+// IncidentPanel shows the last recorded failure of an Instance. It renders
+// nothing when there is none, so an operator only sees it when it matters.
+templ IncidentPanel(in *IncidentUI) {
+	if in != nil {
+		<div class="rounded-2xl border border-red-900/60 bg-red-950/20 p-5">
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div class="min-w-0">
+					<span class="text-xs font-medium uppercase tracking-wider text-red-300/80">Last failure</span>
+					<p class="mt-1 text-sm font-semibold text-red-100">{ in.Summary }</p>
+					<p class="mt-0.5 text-xs text-red-200/60">{ in.When }</p>
+				</div>
+				<div class="flex flex-wrap items-center gap-1.5">
+					if in.OOMKilled {
+						<span class="rounded border border-red-700/60 bg-red-950/60 px-2 py-0.5 text-[10px] font-medium text-red-200">Out of memory</span>
+					}
+					if in.RestartCount > 0 {
+						<span class="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
+							{ fmt.Sprintf("%d restarts", in.RestartCount) }
+						</span>
+					}
+					if in.ExitCode != 0 {
+						<span class="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
+							{ fmt.Sprintf("exit %d", in.ExitCode) }
+						</span>
+					}
+				</div>
+			</div>
+			if in.LogTail != "" {
+				<details class="mt-4">
+					<summary class="cursor-pointer text-xs text-red-200/70 hover:text-red-100">
+						Show the log from the crashed container
+					</summary>
+					<pre class="mt-2 max-h-80 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-300">{ in.LogTail }</pre>
+				</details>
+			} else {
+				<p class="mt-3 text-[11px] text-red-200/50">No log was captured — the container was replaced before agrelha could read it.</p>
+			}
+		</div>
+	}
+}

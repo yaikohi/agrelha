@@ -26,6 +26,7 @@ const instanceStatsTTL = 15 * time.Second
 
 // Config specifies dependencies for the Valheim instances handlers.
 type Config struct {
+	LastIncident          func(ctx context.Context, number int) (*domain.Incident, error)
 	ValheimInstances      *instances.InstanceManager
 	ValheimGame           ports.Game
 	TS                    ports.PackageCatalog

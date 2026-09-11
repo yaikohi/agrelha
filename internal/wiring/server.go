@@ -384,6 +384,7 @@ func buildValheimHandler(d Deps, applyValheimAfterSync func(string, string, stri
 		readme = d.Store
 	}
 	return valheimhttp.New(valheimhttp.Config{
+		LastIncident:          incidentReader(d, domain.GameValheim),
 		ValheimInstances:      d.ValheimInstances,
 		ValheimGame:           d.ValheimGame,
 		TS:                    cat,
@@ -502,6 +503,7 @@ func buildInstancesHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 	}
 
 	return instanceshttp.New(instanceshttp.Config{
+		LastIncident:            incidentReader(d, domain.GameMinecraft),
 		MCInstances:             d.MCInstances,
 		MinecraftGame:           d.MinecraftGame,
 		SearchMods:              searchMods,
@@ -702,4 +704,16 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 		InstanceStats:        instStats,
 		ValheimInstanceStats: vhInstStats,
 	})
+}
+
+// incidentReader exposes the last recorded failure of an Instance to the web
+// layer. Without a store there are no incidents, and the panel simply does not
+// render.
+func incidentReader(d Deps, game domain.GameID) func(context.Context, int) (*domain.Incident, error) {
+	if d.Store == nil {
+		return nil
+	}
+	return func(ctx context.Context, number int) (*domain.Incident, error) {
+		return d.Store.LastIncident(ctx, game, number)
+	}
 }

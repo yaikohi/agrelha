@@ -124,7 +124,7 @@ tick, for every Instance with Lifecycle `running`:
 | **2** ✅ | `Health`/`Incident` in `CONTEXT.md` and `internal/domain`; incidents table | The domain can express "running, offline, and here is why" |
 | **3** ✅ | Detection poller + log-tail capture + `crash` events | The existing history badge has a producer |
 | **4** ✅ | Deep probes per game in the templates | `pod.Ready` means "serving", and Availability stops lying |
-| **5** | Surface it: incident detail on the instance page, cause on the dashboard tile | The operator sees what happened without `kubectl` |
+| **5** ✅ | Surface it: incident detail on the instance page | The operator sees what happened without `kubectl` |
 
 Phase 4 is the one that fixes the reported symptom and is nearly free for
 Minecraft; phases 1–3 are what make the answer to *"what happened?"* exist at
@@ -228,3 +228,30 @@ being thrown away before phase 1.
 
 **Still open:** the four decisions above, plus surfacing incidents in the UI
 (phase 5). Nothing yet reads `ListIncidents`.
+
+## Phase 5 — done (2026-09-11)
+
+`pages.IncidentPanel` renders the last recorded failure at the top of an
+instance's Overview tab, for **both games**: a one-line cause from
+`Incident.Summary()`, the time, badges for out-of-memory / restart count / exit
+code, and the captured container log behind a `<details>`.
+
+- `pages.IncidentView` adapts `domain.Incident` and returns **nil** when there
+  is nothing to show, so the template branches on presence and a healthy
+  instance renders no panel at all.
+- Both detail handlers gained a `LastIncident` reader, wired in
+  `incidentReader(d, game)` — which returns nil without a store, so the panel
+  degrades to absent rather than erroring.
+- When the log tail is empty the panel says *"No log was captured — the
+  container was replaced before agrelha could read it"* instead of showing a
+  blank box. That case is real: capture races pod replacement.
+
+Five tests, including one asserting a nil incident renders literally nothing.
+
+**Not done: the dashboard tile hint.** The hub shows only *running* worlds, and
+a crashed instance is by definition not running, so the tile has nowhere to put
+a cause. Surfacing it there needs the hub to list stopped worlds too — an open
+product decision, not a missing implementation.
+
+**`ListIncidents` is still unread.** Only the latest incident is surfaced; the
+history of failures is stored and not yet shown anywhere.

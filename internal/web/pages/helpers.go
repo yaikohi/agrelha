@@ -2,6 +2,8 @@ package pages
 
 import "slices"
 
+import "agrelha/internal/domain"
+
 import "fmt"
 
 import "strings"
@@ -143,6 +145,18 @@ type InstanceDetailUI struct {
 	InstalledMods []string
 	ConfigFiles   []string
 	Backups       []BackupUI
+	LastIncident  *IncidentUI
+}
+
+// IncidentUI is the last recorded failure of an Instance, shown so the operator
+// can see why a server died without reaching for kubectl.
+type IncidentUI struct {
+	Summary      string
+	When         string
+	RestartCount int32
+	ExitCode     int32
+	OOMKilled    bool
+	LogTail      string
 }
 
 type BackupUI struct {
@@ -573,4 +587,20 @@ func ConnectAddress(ip string, port int) string {
 		return "awaiting address"
 	}
 	return fmt.Sprintf("%s:%d", ip, port)
+}
+
+// IncidentView adapts a recorded Incident for display. It returns nil when
+// there is nothing to show, so a template can branch on presence alone.
+func IncidentView(in *domain.Incident) *IncidentUI {
+	if in == nil {
+		return nil
+	}
+	return &IncidentUI{
+		Summary:      in.Summary(),
+		When:         in.At.Format("2006-01-02 15:04"),
+		RestartCount: in.RestartCount,
+		ExitCode:     in.ExitCode,
+		OOMKilled:    in.OOMKilled,
+		LogTail:      in.LogTail,
+	}
 }
