@@ -130,30 +130,30 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		instOpts = append(instOpts, instances.WithDependencyResolver(d.MR.ResolveRequiredDependencies))
 	}
 	if d.MCRconPool != nil {
+		rconExec := func(inst domain.Instance, cmd string) (string, error) {
+			addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(), cfg.MinecraftNamespace)
+			res, err := d.MCRconPool.ClientFor(addr).Execute(cmd)
+			if err != nil && inst.LBIP != "" {
+				res, err = d.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute(cmd)
+			}
+			return res, err
+		}
 		instOpts = append(instOpts,
 			instances.WithPreStopHook(func(ctx context.Context, inst domain.Instance) {
-				if inst.LBIP != "" {
-					_, _ = d.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute("/say Server stopping in 5 seconds...")
-				}
+				_, _ = rconExec(inst, "/say Server stopping in 5 seconds...")
 			}),
 			instances.WithPreDeleteHook(func(ctx context.Context, inst domain.Instance) {
-				if inst.LBIP != "" {
-					_, _ = d.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute("/say Server being deleted...")
-				}
+				_, _ = rconExec(inst, "/say Server being deleted...")
 			}),
 			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
-				if inst.LBIP == "" {
-					return 0, false
-				}
-				res, err := d.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute("/list")
+				res, err := rconExec(inst, "/list")
 				if err != nil {
 					return 0, false
 				}
 				return len(mcaccess.ParsePlayerList(res)), true
 			}),
 			instances.WithCommandExecutor(func(ctx context.Context, inst domain.Instance, cmd string) (string, error) {
-				addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(), cfg.MinecraftNamespace)
-				return d.MCRconPool.ClientFor(addr).Execute(cmd)
+				return rconExec(inst, cmd)
 			}),
 		)
 	}

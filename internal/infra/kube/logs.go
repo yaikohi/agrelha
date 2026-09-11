@@ -10,19 +10,33 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// podName finds the active pod by the app label.
+// podName finds the active pod by the app label or instance role.
 func (c *Client) podName(ctx context.Context) (string, error) {
 	dep := c.activeDeploymentName(ctx)
 	pods, err := c.cs.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=" + dep,
 	})
+	if err == nil && len(pods.Items) > 0 {
+		return pods.Items[0].Name, nil
+	}
+	role := "valheim-instance"
+	if c.namespace != "valheim" {
+		role = "mc-instance"
+	}
+	if rolePods, rErr := c.cs.CoreV1().Pods(c.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "role=" + role,
+	}); rErr == nil && len(rolePods.Items) > 0 {
+		for _, p := range rolePods.Items {
+			if p.Status.Phase == corev1.PodRunning {
+				return p.Name, nil
+			}
+		}
+		return rolePods.Items[0].Name, nil
+	}
 	if err != nil {
 		return "", err
 	}
-	if len(pods.Items) == 0 {
-		return "", fmt.Errorf("no pod for app=%s in %s", dep, c.namespace)
-	}
-	return pods.Items[0].Name, nil
+	return "", fmt.Errorf("no pod for app=%s in %s", dep, c.namespace)
 }
 
 // StreamLogs follows the pod's logs, starting with the last `tail` lines.

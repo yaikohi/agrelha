@@ -47,8 +47,9 @@ type Config struct {
 	Actor               func(*fiber.Ctx) string
 	BackupInfo          func() (BackupSummary, bool)
 	ModUpdates          func(context.Context) []pages.ModUpdate
-	PendingActive       func(context.Context) bool
-	InstanceStats       func(context.Context, []domain.Instance) map[int]InstanceStat
+	PendingActive        func(context.Context) bool
+	InstanceStats        func(context.Context, []domain.Instance) map[int]InstanceStat
+	ValheimInstanceStats func(context.Context, []domain.Instance) map[int]InstanceStat
 }
 
 // Handler serves the dashboard landing page and the continuous tile SSE stream.
@@ -137,7 +138,9 @@ func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 		valheimSummary.TotalBudgetGiB = 16
 		if insts, err := h.cfg.ValheimInstances.ListInstances(c.UserContext()); err == nil {
 			var stats map[int]InstanceStat
-			if h.cfg.InstanceStats != nil {
+			if h.cfg.ValheimInstanceStats != nil {
+				stats = h.cfg.ValheimInstanceStats(c.UserContext(), insts)
+			} else if h.cfg.InstanceStats != nil {
 				stats = h.cfg.InstanceStats(c.UserContext(), insts)
 			}
 			budget := h.cfg.ValheimInstances.Budget(insts)

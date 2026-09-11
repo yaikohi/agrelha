@@ -344,15 +344,14 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 	}
 
 	g := GameCardUI{
-		Icon:         "⚔️",
-		Accent:       "orange",
-		Title:        "Valheim Worlds",
-		AccessPill:   "🔒 Password",
-		Subtitle:     "Dedicated multi-world cluster",
-		OnlineSignal: "online",
-		AccessNote:   "Password required — ask the host on Discord.",
-		EmptyText:    "All Valheim worlds are currently offline.",
-		EmptyHint:    "Ask the server host on Discord to start a world!",
+		Icon:       "⚔️",
+		Accent:     "orange",
+		Title:      "Valheim Worlds",
+		AccessPill: "🔒 Password",
+		Subtitle:   "Dedicated multi-world cluster",
+		AccessNote: "Password required — ask the host on Discord.",
+		EmptyText:  "All Valheim worlds are currently offline.",
+		EmptyHint:  "Ask the server host on Discord to start a world!",
 	}
 
 	for _, inst := range vh.ActiveInstances {
@@ -372,11 +371,6 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
-		}
-		if inst.Number == 1 {
-			row.OnlineSignal = "online"
-			row.PlayersSignal = "players"
-			row.UptimeSignal = "uptime"
 		}
 		g.Rows = append(g.Rows, row)
 	}
@@ -550,26 +544,17 @@ func MinecraftActions(mc MinecraftSummaryUI) CardActionsUI {
 	return a
 }
 
-// NavGroupUI is one game's nav cluster. Both games expose the same sub-pages
-// (mods, configs, access), so the group renders from data and the two cannot
-// drift apart or use different words for the same thing.
+// NavGroupUI is one game's top navigation entry.
 type NavGroupUI struct {
 	Label string
 	Href  string
 	Links []ActionUI
 }
 
-// ValheimNav points at the console/logs page, mirroring how the Minecraft entry
-// points at its instance list; mods moves to its own sub-link.
 func ValheimNav() NavGroupUI {
 	return NavGroupUI{
 		Label: "Valheim",
 		Href:  "/valheim",
-		Links: []ActionUI{
-			{Label: "mods", Href: "/valheim/mods"},
-			{Label: "configs", Href: "/valheim/configs"},
-			{Label: "access", Href: "/valheim/access"},
-		},
 	}
 }
 
@@ -577,10 +562,5 @@ func MinecraftNav() NavGroupUI {
 	return NavGroupUI{
 		Label: "Minecraft",
 		Href:  "/minecraft",
-		Links: []ActionUI{
-			{Label: "mods", Href: "/minecraft/mods"},
-			{Label: "configs", Href: "/minecraft/configs"},
-			{Label: "access", Href: "/minecraft/access"},
-		},
 	}
 }

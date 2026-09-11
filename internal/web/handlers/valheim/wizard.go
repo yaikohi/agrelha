@@ -178,7 +178,7 @@ func (h *Handler) ValheimWizardCreate(c *fiber.Ctx) error {
 	var modsTxt string
 	if source == "scratch" || source == "modpack" {
 		var lines []string
-		for _, line := range strings.Split(rawMods, "\n") {
+		for line := range strings.SplitSeq(rawMods, "\n") {
 			line = strings.TrimSpace(line)
 			if line != "" && !strings.HasPrefix(line, "#") {
 				lines = append(lines, line)

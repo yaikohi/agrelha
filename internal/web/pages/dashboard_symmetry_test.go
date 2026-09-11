@@ -81,11 +81,24 @@ func TestFormatBadgesDifferButButtonDoesNot(t *testing.T) {
 	}
 }
 
-// Valheim is signal-driven, Minecraft is server-rendered. Both must work.
-func TestStatsRenderFromEitherSource(t *testing.T) {
-	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false))
-	if !strings.Contains(valheim, `data-text="$players"`) || !strings.Contains(valheim, `data-text="$uptime"`) {
-		t.Fatal("Valheim row must bind stats to live signals")
+func sampleValheim() ValheimSummaryUI {
+	return ValheimSummaryUI{
+		TotalInstances: 2, MaxInstances: 4,
+		RunningCount:   1, MaxRunning: 2,
+		UsedGiB:        6, TotalBudgetGiB: 16,
+		ActiveInstances: []InstanceUI{{
+			Number: 1, Name: "lareira-V2", LBIP: "192.168.20.224",
+			Source:       "modpack",
+			Players:      2, PlayersKnown: true, Uptime: "1h 30m",
+		}},
+	}
+}
+
+// Both Valheim and Minecraft cards are multi-instance and render stats from active instances.
+func TestStatsRenderFromActiveInstances(t *testing.T) {
+	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, sampleValheim()))
+	if !strings.Contains(valheim, ">2<") || !strings.Contains(valheim, "1h 30m") {
+		t.Fatal("Valheim row must print its instance stats")
 	}
 
 	minecraft := render(t, MinecraftCard(sampleMinecraft(), false))
@@ -102,15 +115,31 @@ func TestUnknownStatsDegradeToDash(t *testing.T) {
 	if strings.Count(out, ">—<") < 2 {
 		t.Fatal("unreachable stats must render as — rather than a misleading 0")
 	}
+
+	vh := sampleValheim()
+	vh.ActiveInstances[0].PlayersKnown = false
+	vh.ActiveInstances[0].Uptime = ""
+	outVh := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, vh))
+	if strings.Count(outVh, ">—<") < 2 {
+		t.Fatal("unreachable Valheim stats must render as — rather than a misleading 0")
+	}
 }
 
 func TestOfflineCardShowsEmptyStateAndOfflinePill(t *testing.T) {
-	out := render(t, MinecraftCard(MinecraftSummaryUI{MaxInstances: 4, MaxRunning: 2}, false))
-	if !strings.Contains(out, "All Minecraft worlds are currently offline.") {
-		t.Fatal("missing empty state")
+	outMC := render(t, MinecraftCard(MinecraftSummaryUI{MaxInstances: 4, MaxRunning: 2}, false))
+	if !strings.Contains(outMC, "All Minecraft worlds are currently offline.") {
+		t.Fatal("missing MC empty state")
 	}
-	if !strings.Contains(out, "Offline") {
+	if !strings.Contains(outMC, "Offline") {
 		t.Fatal("header pill should read Offline when nothing runs")
+	}
+
+	outVH := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, ValheimSummaryUI{MaxInstances: 4, MaxRunning: 2}))
+	if !strings.Contains(outVH, "All Valheim worlds are currently offline.") {
+		t.Fatal("missing Valheim empty state")
+	}
+	if !strings.Contains(outVH, "Offline") {
+		t.Fatal("Valheim header pill should read Offline when nothing runs")
 	}
 }
 
@@ -122,29 +151,15 @@ func TestServersOnlineLabelWording(t *testing.T) {
 	}
 }
 
-// The Valheim SSE "state" signal emits "Up" (or a pod phase) — never "running",
-// which is the Minecraft instance vocabulary. Binding the card to "state" made
-// a healthy server render as Offline. The card must bind to the normalised
-// boolean "online" signal instead, and never string-compare against a state.
-func TestValheimBindsToOnlineBooleanNotStateString(t *testing.T) {
-	out := render(t, ValheimCard("192.168.20.224:2456", "game-01", false))
+func TestBothCardsShowOnlinePillWhenRunning(t *testing.T) {
+	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, sampleValheim()))
+	if !strings.Contains(valheim, "1 online") {
+		t.Fatal("Valheim card header pill should read 1 online when an active instance runs")
+	}
 
-	if !strings.Contains(out, "$online") {
-		t.Fatal("Valheim card must bind to the normalised $online signal")
-	}
-	for _, stale := range []string{"=== 'running'", "!== 'running'", "$state ==="} {
-		if strings.Contains(out, stale) {
-			t.Fatalf("card still string-compares the state signal: %q", stale)
-		}
-	}
-	// templ HTML-escapes apostrophes in attributes; the browser unescapes them
-	// before Datastar evaluates the expression.
-	q := "&#39;"
-	if !strings.Contains(out, "$online ? "+q+"1 online"+q+" : "+q+"Offline"+q) {
-		t.Fatal("header pill must read from $online")
-	}
-	if !strings.Contains(out, "$online ? "+q+"Online"+q+" : "+q+"Offline"+q) {
-		t.Fatal("row status badge must read from $online")
+	minecraft := render(t, MinecraftCard(sampleMinecraft(), false))
+	if !strings.Contains(minecraft, "1 online") {
+		t.Fatal("Minecraft card header pill should read 1 online when an active instance runs")
 	}
 }
 
@@ -218,38 +233,18 @@ func renderNav(t *testing.T, g NavGroupUI) string {
 	return buf.String()
 }
 
-// Both games expose mods, configs and access pages, so both nav groups must
-// offer all three using the SAME words. Valheim previously said "admins" where
-// Minecraft said "access" for the same thing.
-func TestNavGroupsOfferTheSameSubPages(t *testing.T) {
-	valheim := renderNav(t, ValheimNav())
-	minecraft := renderNav(t, MinecraftNav())
-
-	for _, link := range []string{"mods", "configs", "access"} {
-		if !strings.Contains(valheim, ">"+link+"<") {
-			t.Errorf("Valheim nav missing %q", link)
-		}
-		if !strings.Contains(minecraft, ">"+link+"<") {
-			t.Errorf("Minecraft nav missing %q", link)
-		}
-	}
-	if strings.Contains(valheim, ">admins<") {
-		t.Error(`Valheim nav still says "admins"; both games must call it "access"`)
-	}
-}
-
-// The game entry itself leads to the server view (console/logs for Valheim,
-// instance list for Minecraft) — not to mods, which now has its own link.
-func TestNavGameEntriesLeadToServerViews(t *testing.T) {
+// The game entries lead directly to each game's world instances dashboard.
+func TestNavGameEntriesLeadToServerDashboards(t *testing.T) {
 	if got := ValheimNav().Href; got != "/valheim" {
-		t.Fatalf("Valheim nav entry = %q, want /valheim (console & logs)", got)
+		t.Fatalf("Valheim nav entry = %q, want /valheim", got)
 	}
 	if got := MinecraftNav().Href; got != "/minecraft" {
-		t.Fatalf("Minecraft nav entry = %q, want /minecraft (instances)", got)
+		t.Fatalf("Minecraft nav entry = %q, want /minecraft", got)
 	}
-	for _, g := range []NavGroupUI{ValheimNav(), MinecraftNav()} {
-		if g.Href == g.Links[0].Href {
-			t.Fatalf("%s: game entry and mods link point at the same page", g.Label)
-		}
+	if got := ValheimNav().Label; got != "Valheim" {
+		t.Fatalf("Valheim label = %q, want Valheim", got)
+	}
+	if got := MinecraftNav().Label; got != "Minecraft" {
+		t.Fatalf("Minecraft label = %q, want Minecraft", got)
 	}
 }

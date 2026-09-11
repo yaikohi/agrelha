@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -352,13 +353,7 @@ func TestValheimInstanceModsSearchAndInstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
-	for _, m := range installed {
-		if m == "Smoothbrain-Mining" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(installed, "Smoothbrain-Mining")
 	if !found {
 		t.Errorf("expected Smoothbrain-Mining to be in installed mods: %v", installed)
 	}

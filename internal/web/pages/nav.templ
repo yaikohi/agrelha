@@ -28,7 +28,13 @@ templ nav(admin ...bool) {
 				</a>
 
 				if isAdmin {
-					@navGroup(ValheimNav()) {
+					<div class="relative flex items-center">
+						<a
+							href="/valheim"
+							class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
+						>
+							Valheim
+						</a>
 
 						<!-- Valheim Updates Trigger Button -->
 						<button
@@ -79,10 +85,14 @@ templ nav(admin ...bool) {
 								>Update all</button>
 							</div>
 						</div>
-					}
+					</div>
 
-					@navGroup(MinecraftNav()) {
-					}
+					<a
+						href="/minecraft"
+						class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
+					>
+						Minecraft
+					</a>
 
 					<!-- History -->
 					<a

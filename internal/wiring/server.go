@@ -78,7 +78,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 	instancesH := buildInstancesHandler(cfg, d, applyMCAfterSync)
 	wizardH := buildWizardHandler(d)
 	valheimH := buildValheimHandler(d, applyValheimAfterSync, consoleH.ValheimConsole)
-	dashboardH := buildDashboardHandler(cfg, d, contentH, instancesH, backupsH)
+	dashboardH := buildDashboardHandler(cfg, d, contentH, instancesH, backupsH, valheimH)
 
 	return web.New(web.ServerConfig{
 		Auth:      d.Auth,
@@ -605,7 +605,7 @@ func buildWizardHandler(d Deps) *wizardhttp.Handler {
 	})
 }
 
-func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Handler, instancesH *instanceshttp.Handler, backupsH *backupshttp.Handler) *dashboardhttp.Handler {
+func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Handler, instancesH *instanceshttp.Handler, backupsH *backupshttp.Handler, valheimH *valheimhttp.Handler) *dashboardhttp.Handler {
 	var grafanaURL, valheimAddr, nodeName string
 	if cfg != nil {
 		grafanaURL = cfg.GrafanaDashboardURL
@@ -645,19 +645,35 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 			return res
 		}
 	}
+	var vhInstStats func(context.Context, []domain.Instance) map[int]dashboardhttp.InstanceStat
+	if valheimH != nil {
+		vhInstStats = func(ctx context.Context, insts []domain.Instance) map[int]dashboardhttp.InstanceStat {
+			raw := valheimH.InstanceStats(ctx, insts)
+			res := make(map[int]dashboardhttp.InstanceStat, len(raw))
+			for k, v := range raw {
+				res[k] = dashboardhttp.InstanceStat{
+					Players:      v.Players,
+					PlayersKnown: v.PlayersKnown,
+					Uptime:       v.Uptime,
+				}
+			}
+			return res
+		}
+	}
 	return dashboardhttp.New(dashboardhttp.Config{
-		GrafanaDashboardURL: grafanaURL,
-		ValheimAddress:      valheimAddr,
-		GameNodeName:        nodeName,
-		ValheimInstances:    d.ValheimInstances,
-		MCInstances:         d.MCInstances,
-		ValheimGame:         d.ValheimGame,
-		MinecraftGame:       d.MinecraftGame,
-		Auth:                d.Auth,
-		Actor:               actor,
-		BackupInfo:          bkInfo,
-		ModUpdates:          modUpdates,
-		PendingActive:       pendingActive,
-		InstanceStats:       instStats,
+		GrafanaDashboardURL:  grafanaURL,
+		ValheimAddress:       valheimAddr,
+		GameNodeName:         nodeName,
+		ValheimInstances:     d.ValheimInstances,
+		MCInstances:          d.MCInstances,
+		ValheimGame:          d.ValheimGame,
+		MinecraftGame:        d.MinecraftGame,
+		Auth:                 d.Auth,
+		Actor:                actor,
+		BackupInfo:           bkInfo,
+		ModUpdates:           modUpdates,
+		PendingActive:        pendingActive,
+		InstanceStats:        instStats,
+		ValheimInstanceStats: vhInstStats,
 	})
 }
