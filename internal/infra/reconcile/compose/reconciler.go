@@ -108,6 +108,18 @@ type ComposeService struct {
 	Ports         []string          `yaml:"ports,omitempty"`
 	Environment   map[string]string `yaml:"environment,omitempty"`
 	Volumes       []string          `yaml:"volumes,omitempty"`
+	Healthcheck   *ComposeHealth    `yaml:"healthcheck,omitempty"`
+}
+
+// ComposeHealth is a service healthcheck. The Docker runtime already reads
+// container health into Status.Available, so without one "Available" degrades
+// to "the process is running" - which is exactly the misreport the Kubernetes
+// probes were changed to avoid.
+type ComposeHealth struct {
+	Test     []string `yaml:"test"`
+	Interval string   `yaml:"interval,omitempty"`
+	Timeout  string   `yaml:"timeout,omitempty"`
+	Retries  int      `yaml:"retries,omitempty"`
 }
 
 // ComposeFile defines the top-level docker-compose structure.
@@ -148,6 +160,7 @@ func RenderCompose(serviceName string, spec domain.RuntimeSpec) ([]byte, error) 
 		Ports:         portsList,
 		Environment:   spec.Env,
 		Volumes:       volList,
+		Healthcheck:   healthcheckFor(spec.HealthProbe),
 	}
 
 	cf := ComposeFile{
@@ -184,4 +197,20 @@ func (r *Reconciler) WriteAndConverge(ctx context.Context, ref ports.ServerRef, 
 	}
 
 	return r.Converge(ctx, ref)
+}
+
+// healthcheckFor turns a game's declared probe command into a compose
+// healthcheck. The same string drives the Kubernetes probe, so both runtimes
+// agree on what "serving" means.
+func healthcheckFor(probe string) *ComposeHealth {
+	probe = strings.TrimSpace(probe)
+	if probe == "" {
+		return nil
+	}
+	return &ComposeHealth{
+		Test:     []string{"CMD-SHELL", probe},
+		Interval: "30s",
+		Timeout:  "5s",
+		Retries:  3,
+	}
 }

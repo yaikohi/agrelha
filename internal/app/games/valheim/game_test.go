@@ -322,3 +322,24 @@ func TestExportFallsBackWhenResolverFails(t *testing.T) {
 		t.Error("a failed lookup must still produce a profile")
 	}
 }
+
+func TestRuntimeSpecEnvMatchesTheInstance(t *testing.T) {
+	inst := domain.Instance{
+		GameID: domain.GameValheim, Number: 1, Name: "lareira-V2", Slug: "lareira-v2",
+		Source: domain.SourceVanilla, Seed: "piertje", Password: "hunter2",
+	}
+	spec := New().RuntimeSpec(inst)
+
+	// One env source: whatever Kubernetes gets, Docker gets.
+	for k, want := range inst.Env() {
+		if got := spec.Env[k]; got != want {
+			t.Errorf("RuntimeSpec.Env[%q] = %q, want %q — a second env map is how Docker silently loses password/seed/BEPINEX", k, got, want)
+		}
+	}
+	if spec.Env["BEPINEX"] != "false" {
+		t.Error("a vanilla world must reach the container without BepInEx")
+	}
+	if strings.Contains(spec.HealthProbe, "status.json") {
+		t.Error("status.json returns an empty body on Valheim 1.0; the probe must be the port-bound check")
+	}
+}

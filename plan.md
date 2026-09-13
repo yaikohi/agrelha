@@ -328,6 +328,16 @@ live cluster edits get reverted):
 
 ### P2 — features from the original design not yet built
 
+- [ ] **Docker runtime, end to end.** Designed 2026-09-13, not built — see
+      [docs/docker-runtime-plan.md](docs/docker-runtime-plan.md). Docker is missing
+      **one implementation of one port** (`SpecRenderer`) plus the wiring that
+      selects it; `StateStore`, `Reconciler` and `Runtime` already have both sides.
+      Also fixes three live gaps: `Reconciler.Converge` has zero callers,
+      `RuntimeSpec.Env` has drifted to a stale subset of `Instance.Env()` (no
+      password/seed/BEPINEX), and `RenderCompose` emits no healthcheck although the
+      Docker runtime already reads container health into `Available`.
+      Closes the Phase 8 caveat below.
+
 - [ ] **Crash detection + incident context.** Designed 2026-09-11, not built —
       see [docs/server-health-plan.md](docs/server-health-plan.md). Today
       `Available` is just `pod.Ready`, Valheim's readiness probe is `pgrep`

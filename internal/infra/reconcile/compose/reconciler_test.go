@@ -167,3 +167,32 @@ func TestComposeReconciler_WriteAndConverge(t *testing.T) {
 		t.Errorf("executedDir = %q, want %q", executedDir, expectedDir)
 	}
 }
+
+func TestRenderComposeEmitsAHealthcheck(t *testing.T) {
+	out, err := RenderCompose("valheim-boppo-02", domain.RuntimeSpec{
+		Image:       "lloesche/valheim-server:latest",
+		Ports:       []domain.PortSpec{{Name: "game", Port: 2456, Protocol: "UDP"}},
+		Env:         map[string]string{"SERVER_NAME": "boppo"},
+		HealthProbe: `ss -lun | grep -qE ':2456[[:space:]]'`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(out)
+	if !strings.Contains(body, "healthcheck:") {
+		t.Fatalf("without a healthcheck, Available degrades to 'process is running':\n%s", body)
+	}
+	if !strings.Contains(body, "CMD-SHELL") || !strings.Contains(body, "2456") {
+		t.Errorf("healthcheck must carry the game's declared probe:\n%s", body)
+	}
+}
+
+func TestRenderComposeOmitsHealthcheckWhenNoProbe(t *testing.T) {
+	out, err := RenderCompose("x", domain.RuntimeSpec{Image: "busybox"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "healthcheck:") {
+		t.Error("a game with no declared probe must not get an empty healthcheck")
+	}
+}

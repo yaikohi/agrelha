@@ -128,6 +128,7 @@ func (g *Game) Providers() []ports.ContentProvider {
 
 // RuntimeSpec defines the execution shape of a Minecraft server container.
 func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
+	inst.GameID = domain.GameMinecraft
 	return domain.RuntimeSpec{
 		Image: g.image,
 		Ports: []domain.PortSpec{

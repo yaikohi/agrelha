@@ -133,13 +133,16 @@ func (g *Game) Providers() []ports.ContentProvider {
 
 // RuntimeSpec defines the execution shape of a Valheim server container.
 func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
-	env := map[string]string{
-		"SERVER_NAME": inst.Name,
-		"WORLD_NAME":  inst.Slug,
-	}
-	if inst.MOTD != "" {
-		env["SERVER_PUBLIC"] = "true"
-	}
+	// Environment comes from the Instance, not from a second map maintained
+	// here: it is a property of the game server, identical whether it runs in a
+	// pod or a container. The copy that used to live here had already drifted -
+	// no password, no seed, no BEPINEX - so a Docker world would have silently
+	// ignored the Vanilla/Modded distinction.
+	// Env() branches on GameID, so a caller that omitted it would otherwise get
+	// Minecraft's environment out of the Valheim game. The manifests renderer
+	// makes the same assertion.
+	inst.GameID = domain.GameValheim
+	env := inst.Env()
 	return domain.RuntimeSpec{
 		Image: g.image,
 		Ports: []domain.PortSpec{
@@ -150,8 +153,11 @@ func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 			{Name: "config", MountPath: "/config", ReadOnly: false},
 			{Name: "data", MountPath: "/opt/valheim", ReadOnly: false},
 		},
-		Env:         env,
-		HealthProbe: "status.json",
+		Env: env,
+		// status.json returns an empty body on Valheim 1.0 while UDP 2457
+		// accumulates an unread backlog, so the port-bound check is the honest
+		// signal. Mirrors the readiness probe in the Kubernetes template.
+		HealthProbe: `ss -lun | grep -qE ':2456[[:space:]]'`,
 	}
 }
 
