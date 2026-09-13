@@ -367,6 +367,10 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 		return nil, err
 	}
 
+	if err := m.checkInstanceDirFree(ctx, inst.Number); err != nil {
+		return nil, err
+	}
+
 	files, err := m.renderer.Render(inst, modsTxt)
 	if err != nil {
 		return nil, fmt.Errorf("render manifests: %w", err)
@@ -1074,6 +1078,43 @@ func (m *InstanceManager) checkLBIPFree(inst domain.Instance) error {
 			inst.LBIP, other.GameID, other.Number, other.Name)
 	}
 	return nil
+}
+
+// checkInstanceDirFree refuses to render over an instance directory this agrelha
+// does not know about.
+//
+// The database decides instance numbering, but the repository is shared state: a
+// second agrelha pointed at the same repo starts from an empty database, sees
+// number 1 as free, and renders over a live World. That is not hypothetical - a
+// dev instance did exactly this to instance 01 and only the number-keyed PVC
+// naming saved the world data.
+func (m *InstanceManager) checkInstanceDirFree(ctx context.Context, num int) error {
+	if m.stateStore == nil {
+		return nil
+	}
+	path := fmt.Sprintf("%s/instance-%02d/slot.yaml", m.instancesRelPath, num)
+
+	doc, err := m.stateStore.Get(ctx, path)
+	if err != nil {
+		return nil // absent, or a store that cannot read: nothing to protect
+	}
+	if len(doc.Data) == 0 && len(doc.Raw) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("instance %02d already exists in %s as %q, but this agrelha's database does not know it: refusing to overwrite. Point at a different branch or repository, or reconcile the database first",
+		num, m.instancesRelPath, existingWorldName(doc))
+}
+
+// existingWorldName digs a human name out of a slot document so the refusal can
+// say which World it protected.
+func existingWorldName(doc ports.Document) string {
+	for _, key := range []string{"SERVER_NAME", "LEVEL", "WORLD_NAME"} {
+		if v := strings.TrimSpace(doc.Data[key]); v != "" {
+			return v
+		}
+	}
+	return "an unknown world"
 }
 
 // SaveInstance persists an Instance record as-is. It exists for one-time

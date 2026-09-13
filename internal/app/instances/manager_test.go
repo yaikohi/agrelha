@@ -7,6 +7,7 @@ import (
 	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -559,4 +560,90 @@ func TestRemoveMatchesAPinnedEntryByName(t *testing.T) {
 	if !strings.Contains(st.txt, "SlayerSkills") {
 		t.Errorf("removed the wrong mod:\n%s", st.txt)
 	}
+}
+
+// slotStore answers Get for exactly the paths it holds, and errors otherwise -
+// which is how the git and local stores behave for a missing document.
+type slotStore struct{ docs map[string]ports.Document }
+
+func (s *slotStore) Get(_ context.Context, path string) (ports.Document, error) {
+	if d, ok := s.docs[path]; ok {
+		return d, nil
+	}
+	return ports.Document{}, errors.New("not found")
+}
+func (s *slotStore) Put(context.Context, string, ports.Document, string) error { return nil }
+func (s *slotStore) Delete(context.Context, string, string) error              { return nil }
+func (s *slotStore) PutTree(context.Context, string, map[string]ports.Document, string) error {
+	return nil
+}
+func (s *slotStore) Patch(context.Context, string, string, func(*ports.Document) (bool, error)) (bool, error) {
+	return false, nil
+}
+
+func dirGuardManager(docs map[string]ports.Document) *InstanceManager {
+	return &InstanceManager{
+		gameID:           domain.GameValheim,
+		instancesRelPath: "manifests/valheim",
+		stateStore:       &slotStore{docs: docs},
+	}
+}
+
+func TestRefusesToRenderOverAForeignInstance(t *testing.T) {
+	m := dirGuardManager(map[string]ports.Document{
+		"manifests/valheim/instance-01/slot.yaml": {Data: map[string]string{"SERVER_NAME": "lareira-V2"}},
+	})
+
+	err := m.checkInstanceDirFree(context.Background(), 1)
+	if err == nil {
+		t.Fatal("must refuse: a second agrelha with an empty database would overwrite a live world")
+	}
+	if !strings.Contains(err.Error(), "lareira-V2") {
+		t.Errorf("the refusal must name the world it protected, got: %v", err)
+	}
+}
+
+func TestAllowsAFreeInstanceNumber(t *testing.T) {
+	m := dirGuardManager(map[string]ports.Document{
+		"manifests/valheim/instance-01/slot.yaml": {Data: map[string]string{"SERVER_NAME": "lareira-V2"}},
+	})
+	if err := m.checkInstanceDirFree(context.Background(), 2); err != nil {
+		t.Errorf("instance 02 is free: %v", err)
+	}
+}
+
+func TestEmptyDocumentIsNotAnInstance(t *testing.T) {
+	// The unconfigured store returns an empty document with no error; that must
+	// not read as "something is already there".
+	m := dirGuardManager(map[string]ports.Document{
+		"manifests/valheim/instance-01/slot.yaml": {Data: map[string]string{}},
+	})
+	if err := m.checkInstanceDirFree(context.Background(), 1); err != nil {
+		t.Errorf("an empty document must not block creation: %v", err)
+	}
+}
+
+// The incident: a dev agrelha with an empty database created "test1", was told
+// number 1 was free, and rendered over lareira-V2 in the shared repository.
+func TestCreateInstanceRefusesTheDevOverwriteScenario(t *testing.T) {
+	m := &InstanceManager{
+		gameID:           domain.GameValheim,
+		instancesRelPath: "manifests/valheim",
+		maxInstances:     4,
+		repo:             &ipRepo{}, // empty database, exactly like a fresh dev instance
+		stateStore: &slotStore{docs: map[string]ports.Document{
+			"manifests/valheim/instance-01/slot.yaml": {Data: map[string]string{"SERVER_NAME": "lareira-V2"}},
+		}},
+	}
+
+	_, err := m.CreateInstance(context.Background(), domain.Instance{
+		GameID: domain.GameValheim, Name: "test1", Tier: domain.TierSmall,
+	}, "")
+	if err == nil {
+		t.Fatal("CreateInstance overwrote a world the database did not know about")
+	}
+	if !strings.Contains(err.Error(), "lareira-V2") {
+		t.Errorf("error should name the world at risk: %v", err)
+	}
+	t.Logf("refused with: %v", err)
 }
