@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -30,17 +29,11 @@ type Config struct {
 	ConfigData     func(context.Context) (map[string]string, error)
 	Actor          func(*fiber.Ctx) string
 	ApplyAfterSync func(cmName, key string, check func(string) bool)
-	PendingActive  func(context.Context) bool
-	SetPending     func(entries []string)
 }
 
-// Handler serves routes and operations for mods, configs, updates, and exports.
+// Handler serves routes and operations for mod metadata, configs, and exports.
 type Handler struct {
 	cfg Config
-
-	pendMu  sync.Mutex
-	pendSet map[string]bool
-	pendAt  time.Time
 }
 
 // New constructs a new content Handler.
@@ -73,14 +66,7 @@ func (h *Handler) RegisterPublic(router fiber.Router) {
 
 // RegisterProtected mounts authenticated content management routes.
 func (h *Handler) RegisterProtected(router fiber.Router) {
-	router.Get("/mods", h.ModsPage)
 	router.Get("/mods/:namespace/:name", h.ModDetail)
-	router.Post("/mods/install", h.ModsInstall)
-	router.Post("/mods/remove", h.ModsRemove)
-	router.Post("/mods/update", h.ModsUpdateSelected)
-	router.Post("/mods/update-all", h.ModsUpdateAll)
-	router.Post("/mods/update/all", h.ModsUpdateAll)
-	router.Post("/mods/update/selected", h.ModsUpdateSelected)
 	router.Get("/configs", h.ConfigsPage)
 	router.Get("/configs/new", h.ConfigNew)
 	router.Get("/configs/edit", h.ConfigEdit)

@@ -725,6 +725,78 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 	return addedCount, nil
 }
 
+// ReplaceMods rewrites a world's whole mod list in one commit. Callers that
+// change several pins at once (a mod update and everything it drags with it)
+// use this rather than a sequence of installs, so the world never boots against
+// a half-applied set. It reports whether anything actually changed.
+func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []string, actor ...string) (bool, error) {
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil {
+		return false, err
+	}
+	if inst == nil {
+		return false, fmt.Errorf("instance %d not found", num)
+	}
+	if !inst.CanInstallMods() {
+		return false, inst.VanillaImmutableErr()
+	}
+	if m.stateStore == nil {
+		return false, ports.ErrNotImplemented
+	}
+
+	var body strings.Builder
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		body.WriteString(e + "\n")
+	}
+	next := body.String()
+
+	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	msg := fmt.Sprintf("%s: update mods on instance #%02d", m.gamePrefix(), num)
+	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
+		if doc.Data == nil {
+			doc.Data = make(map[string]string)
+		}
+		if doc.Data["mods.txt"] == next {
+			return false, nil
+		}
+		doc.Data["mods.txt"] = next
+		return true, nil
+	})
+	if err != nil {
+		return false, err
+	}
+	if !changed {
+		return false, nil
+	}
+
+	if m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-update", m.gamePrefix()), fmt.Sprintf("Updated mods on #%02d", num))
+	}
+	if m.afterSyncHook != nil {
+		want := make(map[string]bool, len(entries))
+		for _, e := range entries {
+			want[strings.TrimSpace(e)] = true
+		}
+		m.afterSyncHook(inst.ModsCMName(), m.serverRef(*inst).Name, "mods.txt", func(txt string) bool {
+			have := map[string]bool{}
+			for line := range strings.SplitSeq(txt, "\n") {
+				have[strings.TrimSpace(line)] = true
+			}
+			for e := range want {
+				if !have[e] {
+					return false
+				}
+			}
+			return true
+		})
+	}
+	return true, nil
+}
+
 func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, actor ...string) error {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {

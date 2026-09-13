@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
@@ -157,4 +158,43 @@ func isSemver(s string) bool {
 		}
 	}
 	return true
+}
+
+// ModUpdate is one installed mod whose upstream catalogue carries a newer
+// version than the entry pinned in the Instance's mod list.
+type ModUpdate struct {
+	Ref     ModRef
+	Current string
+	Latest  string
+}
+
+// CatalogKey is how the upstream package index keys this mod: "Namespace/Name",
+// matching ModSearchResult.FullName. It is deliberately not ModRef.FullName,
+// which is Thunderstore's hyphenated display form.
+func (r ModRef) CatalogKey() string {
+	if r.Namespace == "" {
+		return r.Name
+	}
+	return r.Namespace + "/" + r.Name
+}
+
+// VersionNewer reports whether version a is strictly newer than b. Versions are
+// compared segment by segment as numbers, so 1.10.0 sorts above 1.9.0.
+func VersionNewer(a, b string) bool {
+	as := strings.Split(strings.TrimSpace(a), ".")
+	bs := strings.Split(strings.TrimSpace(b), ".")
+	n := max(len(as), len(bs))
+	for i := range n {
+		var av, bv int
+		if i < len(as) {
+			av, _ = strconv.Atoi(strings.TrimSpace(as[i]))
+		}
+		if i < len(bs) {
+			bv, _ = strconv.Atoi(strings.TrimSpace(bs[i]))
+		}
+		if av != bv {
+			return av > bv
+		}
+	}
+	return false
 }

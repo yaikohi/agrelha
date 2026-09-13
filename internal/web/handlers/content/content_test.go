@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -16,64 +15,6 @@ import (
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
-
-func TestVersionNewer(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want bool
-	}{
-		{"2.25.0", "2.24.3", true},
-		{"2.24.3", "2.24.3", false},
-		{"2.24.3", "2.25.0", false},
-		{"1.0.0", "0.9.9", true},
-		{"5.4.2202", "5.4.900", true},
-		{"1.2", "1.2.0", false},
-		{"1.2.1", "1.2", true},
-	}
-	for _, c := range cases {
-		if got := VersionNewer(c.a, c.b); got != c.want {
-			t.Errorf("VersionNewer(%q,%q) = %v, want %v", c.a, c.b, got, c.want)
-		}
-	}
-}
-
-func TestPendingActive(t *testing.T) {
-	mk := func(modsTxt string) *Handler {
-		return New(Config{
-			InstalledMods: func(context.Context) ([]string, error) {
-				return mods.Parse(modsTxt), nil
-			},
-		})
-	}
-	committed := []string{"ValheimModding/Jotunn/2.25.0", "denikson/BepInExPack_Valheim/5.4.2202"}
-
-	// CM still holds old version -> pending
-	h := mk("denikson/BepInExPack_Valheim/5.4.2202\nValheimModding/Jotunn/2.24.3\n")
-	h.SetPending(committed)
-	if !h.PendingActive(context.Background()) {
-		t.Fatal("want pending=true while CM lags")
-	}
-
-	// CM reflects committed set -> not pending
-	h = mk("denikson/BepInExPack_Valheim/5.4.2202\nValheimModding/Jotunn/2.25.0\n")
-	h.SetPending(committed)
-	if h.PendingActive(context.Background()) {
-		t.Fatal("want pending=false once CM matches")
-	}
-	if h.pendSet != nil {
-		t.Fatal("pending should self-clear when satisfied")
-	}
-
-	// TTL lapse clears stuck pending
-	h = mk("ValheimModding/Jotunn/2.24.3\n")
-	h.SetPending(committed)
-	h.pendMu.Lock()
-	h.pendAt = time.Now().Add(-2 * PendingTTL)
-	h.pendMu.Unlock()
-	if h.PendingActive(context.Background()) {
-		t.Fatal("want pending=false after TTL")
-	}
-}
 
 type fakeCatalog struct {
 	items map[string]domain.ModSearchResult
@@ -100,36 +41,6 @@ func (f *fakeCatalog) ResolveTree(ctx context.Context, ns, name string) ([]strin
 type fakeAudit struct{}
 
 func (f *fakeAudit) RecordAudit(actor, action, detail string) error { return nil }
-
-func TestModUpdates(t *testing.T) {
-	cat := &fakeCatalog{
-		items: map[string]domain.ModSearchResult{
-			"denikson/BepInExPack_Valheim": {Owner: "denikson", Name: "BepInExPack_Valheim", Version: "5.4.2202"},
-			"ValheimModding/Jotunn":        {Owner: "ValheimModding", Name: "Jotunn", Version: "2.25.0"},
-		},
-	}
-
-	h := New(Config{
-		InstalledMods: func(context.Context) ([]string, error) {
-			return mods.Parse("# server\n" +
-				"denikson/BepInExPack_Valheim/5.4.2202\n" +
-				"ValheimModding/Jotunn/2.24.3\n"), nil
-		},
-		TS: cat,
-	})
-
-	ups := h.ModUpdates(context.Background())
-	if len(ups) != 1 {
-		t.Fatalf("want 1 update, got %d: %+v", len(ups), ups)
-	}
-	u := ups[0]
-	if u.Key != "ValheimModding/Jotunn" || u.Current != "2.24.3" || u.Latest != "2.25.0" {
-		t.Fatalf("unexpected update: %+v", u)
-	}
-	if u.Token != "ValheimModding_Jotunn" {
-		t.Fatalf("token = %q", u.Token)
-	}
-}
 
 func TestModpackExport(t *testing.T) {
 	h := New(Config{

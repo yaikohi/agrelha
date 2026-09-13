@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/app/instances"
+	"agrelha/internal/app/modupdates"
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
@@ -29,6 +30,7 @@ type Config struct {
 	LastIncident          func(ctx context.Context, number int) (*domain.Incident, error)
 	ValheimInstances      *instances.InstanceManager
 	ValheimGame           ports.Game
+	ModUpdates            *modupdates.Checker
 	TS                    ports.PackageCatalog
 	ReadmeCache           ports.ReadmeCache
 	Actor                 func(*fiber.Ctx) string
@@ -110,6 +112,8 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Post("/api/valheim/:num<int>/mods/detail", h.ValheimModDetail)
 	router.Post("/api/valheim/:num<int>/mods/install", h.ValheimInstanceModsInstall)
 	router.Post("/api/valheim/:num<int>/mods/remove", h.ValheimInstanceModsRemove)
+	router.Post("/api/valheim/:num<int>/mods/updates/check", h.ValheimModUpdatesCheck)
+	router.Post("/api/valheim/:num<int>/mods/updates/apply", h.ValheimModUpdatesApply)
 	router.Get("/api/valheim/:num<int>/configs/file", h.ValheimInstanceConfigGet)
 	router.Post("/api/valheim/:num<int>/configs/save", h.ValheimInstanceConfigSave)
 	router.Post("/api/valheim/:num<int>/configs/delete", h.ValheimInstanceConfigDelete)

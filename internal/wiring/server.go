@@ -30,7 +30,6 @@ import (
 	instanceshttp "agrelha/internal/web/handlers/instances"
 	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
-	"agrelha/internal/web/pages"
 )
 
 // BuildServer constructs the HTTP application with all handlers and background reconciliation loops.
@@ -391,6 +390,7 @@ func buildValheimHandler(d Deps, applyValheimAfterSync func(string, string, stri
 		ReadmeCache:           readme,
 		Actor:                 actor,
 		ApplyValheimAfterSync: applyValheimAfterSync,
+		ModUpdates:            d.ModUpdates,
 		LegacyConsole:         legacyConsole,
 	})
 }
@@ -652,12 +652,6 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 			LatestAt:   bi.LatestAt,
 		}, ok
 	}
-	var modUpdates func(context.Context) []pages.ModUpdate
-	var pendingActive func(context.Context) bool
-	if contentH != nil {
-		modUpdates = contentH.ModUpdates
-		pendingActive = contentH.PendingActive
-	}
 	var instStats func(context.Context, []domain.Instance) map[int]dashboardhttp.InstanceStat
 	if instancesH != nil {
 		instStats = func(ctx context.Context, insts []domain.Instance) map[int]dashboardhttp.InstanceStat {
@@ -699,8 +693,6 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 		Auth:                 d.Auth,
 		Actor:                actor,
 		BackupInfo:           bkInfo,
-		ModUpdates:           modUpdates,
-		PendingActive:        pendingActive,
 		InstanceStats:        instStats,
 		ValheimInstanceStats: vhInstStats,
 	})

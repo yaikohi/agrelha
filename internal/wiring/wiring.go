@@ -18,6 +18,7 @@ import (
 	"agrelha/internal/app/instances"
 	"agrelha/internal/app/modpack"
 	"agrelha/internal/app/mods"
+	"agrelha/internal/app/modupdates"
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/auth/local"
 	"agrelha/internal/infra/auth/oidc"
@@ -67,6 +68,7 @@ type Deps struct {
 	MCRconPool       *rcon.Pool
 	MCInstances      *instances.InstanceManager
 	ValheimInstances *instances.InstanceManager
+	ModUpdates       *modupdates.Checker
 	StateStore       ports.StateStore
 	Reconciler       ports.Reconciler
 }
@@ -226,12 +228,12 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	if d.TS != nil {
 		valheimInstOpts = append(valheimInstOpts,
 			instances.WithVersionResolver(func(ctx context.Context, fullName string) (string, error) {
-				if hit, ok := d.TS.Get(fullName); ok && hit.Version != "" {
-					return hit.Version, nil
-				}
 				ns, name, ok := strings.Cut(fullName, "-")
 				if !ok {
 					return "", fmt.Errorf("not a thunderstore full name: %s", fullName)
+				}
+				if hit, ok := d.TS.Get(ns + "/" + name); ok && hit.Version != "" {
+					return hit.Version, nil
 				}
 				v, _, err := d.TS.LatestVersion(ctx, ns, name)
 				switch {
@@ -431,6 +433,11 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	)
 
 	backfillValheimSource(ctx, &d)
+
+	if d.ValheimInstances != nil && d.TS != nil {
+		d.ModUpdates = modupdates.New(d.ValheimInstances, d.TS)
+		d.ModUpdates.Start(ctx)
+	}
 
 	health.New(st, healthSources(&d)).Start(ctx)
 

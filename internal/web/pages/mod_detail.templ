@@ -6,7 +6,7 @@ import (
 	"agrelha/internal/domain"
 )
 
-templ ModDetail(ns, name string, e domain.ModSearchResult, version string, deps []string, readmeHTML, tsURL string, installed, enabled bool) {
+templ ModDetail(ns, name string, e domain.ModSearchResult, version string, deps []string, readmeHTML, tsURL string) {
 	@Layout(ns + "/" + name) {
 		@nav()
 		<div class="mb-6 flex items-start gap-4">
@@ -26,17 +26,6 @@ templ ModDetail(ns, name string, e domain.ModSearchResult, version string, deps 
 					<p class="mt-2 rounded bg-red-900/50 px-3 py-2 text-sm text-red-200">⚠ This package is marked deprecated on Thunderstore.</p>
 				}
 			</div>
-			if enabled {
-				<form method="post" action="/mods/install">
-					<input type="hidden" name="namespace" value={ ns }/>
-					<input type="hidden" name="name" value={ name }/>
-					if installed {
-						<button class="rounded bg-zinc-700 px-4 py-2 text-sm hover:bg-zinc-600">Reinstall / update</button>
-					} else {
-						<button class="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600">Install +deps</button>
-					}
-				</form>
-			}
 		</div>
 		if len(deps) > 0 {
 			<section class="mb-6">
@@ -58,5 +47,13 @@ templ ModDetail(ns, name string, e domain.ModSearchResult, version string, deps 
 				<p class="rounded bg-zinc-900 p-5 text-sm text-zinc-500">No README available.</p>
 			}
 		</section>
+	}
+}
+
+templ icon(url string) {
+	if url != "" {
+		<img src={ url } alt="" class="h-10 w-10 flex-none rounded bg-zinc-800" loading="lazy"/>
+	} else {
+		<div class="h-10 w-10 flex-none rounded bg-zinc-800"></div>
 	}
 }

@@ -69,6 +69,10 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 		}
 	}
 
+	if tab == "mods" && !d.Vanilla {
+		h.ModUpdateState(c.UserContext(), &d, *inst)
+	}
+
 	// Fetch config files if on configs tab or overview
 	if tab == "configs" || tab == "overview" {
 		if cfgs, err := h.cfg.ValheimInstances.ListConfigs(c.UserContext(), inst.Number); err == nil {

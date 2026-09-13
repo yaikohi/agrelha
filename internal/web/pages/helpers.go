@@ -19,11 +19,29 @@ func ModKey(entry string) string {
 	return entry
 }
 
+// ModUpdate is one row of the Mod update panel: a mod the world has installed
+// at Current, published upstream at Latest.
 type ModUpdate struct {
-	Key     string
-	Current string
-	Latest  string
-	Token   string
+	Key      string
+	FullName string
+	Current  string
+	Latest   string
+	Token    string
+}
+
+// ModUpdateViews renders the checker's findings for the mods tab.
+func ModUpdateViews(ups []domain.ModUpdate) []ModUpdate {
+	out := make([]ModUpdate, 0, len(ups))
+	for _, u := range ups {
+		out = append(out, ModUpdate{
+			Key:      u.Ref.Key(),
+			FullName: u.Ref.FullName(),
+			Current:  u.Current,
+			Latest:   u.Latest,
+			Token:    UpdateToken(u.Ref.Key()),
+		})
+	}
+	return out
 }
 
 func UpdateToken(key string) string {
@@ -90,7 +108,11 @@ func HistoryLabel(kind string) string {
 	case "backup":
 		return "Backup"
 	case "update":
-		return "Update"
+		return "Server updated"
+	case "valheim-mod-update":
+		return "Mods updated"
+	case "mc-mod-update":
+		return "Minecraft: Mods updated"
 	case "crash":
 		return "Crash"
 	default:
@@ -138,6 +160,7 @@ type InstanceUI struct {
 	PlayersKnown       bool
 	Uptime             string
 	LBIP               string
+	ModUpdates         int
 	CanStart           bool
 	StartBlockedReason string
 }
@@ -146,12 +169,16 @@ type InstanceDetailUI struct {
 	InstanceUI
 	// Vanilla worlds run no Loader, so they have no Mods tab: gaining mods is a
 	// new Instance, not an edit (CONTEXT.md).
-	Vanilla       bool
-	ActiveTab     string // overview, mods, configs, console, backups, settings
-	InstalledMods []string
-	ConfigFiles   []string
-	Backups       []BackupUI
-	LastIncident  *IncidentUI
+	Vanilla        bool
+	ActiveTab      string // overview, mods, configs, console, backups, settings
+	InstalledMods  []string
+	ModUpdates     []ModUpdate
+	UpdatesPending bool
+	UpdatesChecked string
+	UpdatesError   string
+	ConfigFiles    []string
+	Backups        []BackupUI
+	LastIncident   *IncidentUI
 }
 
 // IncidentUI is the last recorded failure of an Instance, shown so the operator
@@ -602,4 +629,19 @@ func InstanceTabs(game string, num int, active string, vanilla bool) []component
 		})
 	}
 	return tabs
+}
+
+// updateClick guards an apply button behind a confirmation, but only when the
+// restart it causes would drop players who are connected right now.
+func updateClick(d InstanceDetailUI, post string) string {
+	call := fmt.Sprintf(post, d.Number)
+	if d.State != "running" || !d.PlayersKnown || d.Players <= 0 {
+		return call
+	}
+	noun := "players are"
+	if d.Players == 1 {
+		noun = "player is"
+	}
+	return fmt.Sprintf("if (confirm('%d %s connected to %s. Updating restarts the world and disconnects them. Continue?')) %s",
+		d.Players, noun, strings.ReplaceAll(d.Name, "'", "\\'"), call)
 }

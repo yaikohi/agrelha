@@ -27,6 +27,11 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 
 	budget := h.cfg.ValheimInstances.Budget(instances)
 
+	updateCounts := map[int]int{}
+	if h.cfg.ModUpdates != nil {
+		updateCounts = h.cfg.ModUpdates.Counts()
+	}
+
 	uiInstances := make([]pages.InstanceUI, 0, len(instances))
 	for _, inst := range instances {
 		canStart := true
@@ -56,6 +61,7 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 			State:              string(inst.State),
 			MOTD:               inst.MOTD,
 			LBIP:               inst.LBIP,
+			ModUpdates:         updateCounts[inst.Number],
 			CanStart:           canStart,
 			StartBlockedReason: blockedReason,
 		})

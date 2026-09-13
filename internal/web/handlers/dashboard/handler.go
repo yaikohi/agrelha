@@ -4,7 +4,6 @@ import (
 	"agrelha/internal/app/instances"
 	"agrelha/internal/domain"
 	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -46,8 +45,6 @@ type Config struct {
 	Auth                 ports.Auth
 	Actor                func(*fiber.Ctx) string
 	BackupInfo           func() (BackupSummary, bool)
-	ModUpdates           func(context.Context) []pages.ModUpdate
-	PendingActive        func(context.Context) bool
 	InstanceStats        func(context.Context, []domain.Instance) map[int]InstanceStat
 	ValheimInstanceStats func(context.Context, []domain.Instance) map[int]InstanceStat
 }
@@ -220,39 +217,14 @@ func (h *Handler) SSEMain(c *fiber.Ctx) error {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		lastListSig := "\x00"
 		push := func() bool {
-			var ups []pages.ModUpdate
-			if h.cfg.ModUpdates != nil {
-				ups = h.cfg.ModUpdates(ctx)
-			}
-			sig := h.TileSignals(ctx)
-			sig["updates"] = len(ups)
-			pending := false
-			if h.cfg.PendingActive != nil {
-				pending = h.cfg.PendingActive(ctx)
-			}
-			sig["updatePending"] = pending
-			if err := sse.PatchSignals(w, sig); err != nil {
+			if err := sse.PatchSignals(w, h.TileSignals(ctx)); err != nil {
 				reason = "client-gone"
 				slog.Debug("sse write failed", "rid", id, "frame", "signals", "err", err)
 				return false
 			}
 			tiles++
 			metrics.SSEFrames.WithLabelValues("signals").Inc()
-
-			if listSig := updatesSignature(ups); listSig != lastListSig {
-				var buf bytes.Buffer
-				if err := pages.UpdateList(ups).Render(ctx, &buf); err == nil {
-					if err := sse.InnerElement(w, "#update-list", buf.String()); err != nil {
-						reason = "client-gone"
-						slog.Debug("sse write failed", "rid", id, "frame", "update-list", "err", err)
-						return false
-					}
-					metrics.SSEFrames.WithLabelValues("update-list").Inc()
-					lastListSig = listSig
-				}
-			}
 			return true
 		}
 
@@ -266,17 +238,6 @@ func (h *Handler) SSEMain(c *fiber.Ctx) error {
 		}
 	})
 	return nil
-}
-
-func updatesSignature(ups []pages.ModUpdate) string {
-	var b bytes.Buffer
-	for _, u := range ups {
-		b.WriteString(u.Key)
-		b.WriteByte('@')
-		b.WriteString(u.Latest)
-		b.WriteByte(';')
-	}
-	return b.String()
 }
 
 // TileSignals computes the metric signals for live dashboard tiles.

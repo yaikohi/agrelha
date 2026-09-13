@@ -28,64 +28,12 @@ templ nav(admin ...bool) {
 				</a>
 
 				if isAdmin {
-					<div class="relative flex items-center">
-						<a
-							href="/valheim"
-							class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
-						>
-							Valheim
-						</a>
-
-						<!-- Valheim Updates Trigger Button -->
-						<button
-							type="button"
-							data-show="($updates > 0 || $updatePending)"
-							data-on:click="$showUpdates = !$showUpdates"
-							data-class="{'bg-amber-950/70 text-amber-300 border-amber-800/60 hover:bg-amber-900/60': !$updatePending, 'bg-amber-900/40 text-amber-200 border-amber-700/60': $updatePending}"
-							class="ml-1 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold transition"
-							title="Valheim Mod Updates"
-						>
-							<span data-show="!$updatePending" class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
-							<span data-show="$updatePending" class="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-							<span data-show="!$updatePending" data-text="$updates + ($updates === 1 ? ' update' : ' updates')"></span>
-							<span data-show="$updatePending">Updating…</span>
-						</button>
-
-						<!-- Valheim Updates Popover (anchored directly under Valheim) -->
-						<div
-							data-show="$showUpdates"
-							class="absolute left-0 top-9 z-40 w-80 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl"
-						>
-							<div class="flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-3.5 py-2.5">
-								<div class="flex items-center gap-2">
-									<span class="text-xs font-semibold text-zinc-200">Valheim Mod Updates</span>
-									<span class="rounded-full bg-amber-950 border border-amber-800/60 px-1.5 py-0.2 text-[10px] font-medium text-amber-300" data-text="$updates"></span>
-								</div>
-								<button type="button" data-on:click="$showUpdates = false" class="text-xs text-zinc-500 hover:text-zinc-200">✕</button>
-							</div>
-							<div data-show="$updatePending" class="flex items-center gap-2 border-b border-amber-800/50 bg-amber-950/40 px-3.5 py-2 text-xs text-amber-200">
-								<span class="h-2 w-2 animate-pulse rounded-full bg-amber-400"></span>
-								Update in progress — restarting once ArgoCD syncs.
-							</div>
-							<div id="update-list"></div>
-							<div class="flex items-center justify-end gap-2 border-t border-zinc-800 bg-zinc-950/60 px-3.5 py-2">
-								<button
-									type="button"
-									data-on:click="@post('/mods/update')"
-									data-attr="{disabled: $updatePending}"
-									data-class="{'opacity-40 pointer-events-none': $updatePending}"
-									class="rounded border border-zinc-700 px-2.5 py-1 text-xs hover:bg-zinc-800 transition"
-								>Update selected</button>
-								<button
-									type="button"
-									data-on:click="@post('/mods/update-all')"
-									data-attr="{disabled: $updatePending}"
-									data-class="{'opacity-40 pointer-events-none': $updatePending}"
-									class="rounded bg-emerald-700 px-2.5 py-1 text-xs font-medium hover:bg-emerald-600 transition"
-								>Update all</button>
-							</div>
-						</div>
-					</div>
+					<a
+						href="/valheim"
+						class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
+					>
+						Valheim
+					</a>
 
 					<a
 						href="/minecraft"
@@ -127,7 +75,6 @@ templ nav(admin ...bool) {
 }
 
 // navGroup renders one game's nav cluster: the game entry plus its sub-pages.
-// Children carry anything game-specific (e.g. Valheim's mod-update popover).
 templ navGroup(g NavGroupUI) {
 	<div class="relative flex items-center gap-1 rounded-lg border border-zinc-800/60 bg-zinc-900/60 px-2 py-0.5">
 		<a

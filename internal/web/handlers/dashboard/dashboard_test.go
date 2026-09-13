@@ -11,7 +11,6 @@ import (
 
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
-	"agrelha/internal/web/pages"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -58,18 +57,6 @@ func TestTileSignals(t *testing.T) {
 	}
 	if sig["backup"] == "—" {
 		t.Errorf("expected human ago for backup, got '—'")
-	}
-}
-
-func TestUpdatesSignature(t *testing.T) {
-	ups := []pages.ModUpdate{
-		{Key: "mod1", Latest: "1.0.1"},
-		{Key: "mod2", Latest: "2.3.0"},
-	}
-	sig := updatesSignature(ups)
-	want := "mod1@1.0.1;mod2@2.3.0;"
-	if sig != want {
-		t.Errorf("updatesSignature = %q, want %q", sig, want)
 	}
 }
 

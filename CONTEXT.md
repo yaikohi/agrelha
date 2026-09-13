@@ -86,6 +86,19 @@ An operator-chosen set of individual mods resolved from Modrinth, used when Sour
 is `modlist`. The operator picks the Loader and Minecraft version.
 _Avoid_: modpack, custom pack
 
+**Mod update**:
+A newer version of an already-installed mod exists upstream. Applying one repins
+the Mod list to that version, re-resolves the mod's dependencies, and restarts
+the World; it never changes the game itself. Only pinned entries can have one:
+an entry with no version recorded has nothing to compare against.
+_Avoid_: update (unqualified), upgrade, patch
+
+**Server update**:
+New game binaries, from the upstream image or the game's own store. Unrelated to
+the Mod list, and never triggered by applying a Mod update. The UI names which
+kind it means, because the two are the same word and different consequences.
+_Avoid_: update (unqualified), game update, version bump
+
 **Tier**:
 An Instance's memory allocation: small (4 GiB), medium (8 GiB), large (12 GiB).
 Tiers exist so concurrent Instances fit a fixed RAM budget.
