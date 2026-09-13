@@ -97,8 +97,14 @@ func ParseModRef(entry string, game GameID) (ModRef, bool) {
 	}
 
 	if game == GameValheim {
-		if ns, name, ok := strings.Cut(entry, "-"); ok && ns != "" && name != "" {
-			return ModRef{Namespace: ns, Name: name}, true
+		if ns, rest, ok := strings.Cut(entry, "-"); ok && ns != "" && rest != "" {
+			// Thunderstore's own copy button gives Namespace-Name-Version.
+			// Package names use underscores, never hyphens, so a trailing
+			// semver segment is the version rather than part of the name.
+			if name, version, ok := strings.Cut(rest, "-"); ok && isSemver(version) {
+				return ModRef{Namespace: ns, Name: name, Version: version}, true
+			}
+			return ModRef{Namespace: ns, Name: rest}, true
 		}
 	}
 	return ModRef{Name: entry}, true
@@ -132,4 +138,23 @@ func (r ModRef) Entry() string {
 		return r.Namespace + "-" + r.Name
 	}
 	return r.Name
+}
+
+// isSemver reports whether s looks like a Thunderstore version: major.minor.patch.
+func isSemver(s string) bool {
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" {
+			return false
+		}
+		for _, r := range p {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+	}
+	return true
 }

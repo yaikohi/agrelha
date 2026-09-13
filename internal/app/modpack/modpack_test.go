@@ -107,3 +107,26 @@ func TestResolvedVersionsReachTheProfile(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildKeepsVersionedThunderstoreIDs(t *testing.T) {
+	data, err := Build("boppo", []string{"blacks7ar-BowPlugin-1.8.7"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, _ := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	var m string
+	for _, f := range zr.File {
+		if f.Name == "export.r2x" {
+			rc, _ := f.Open()
+			b, _ := io.ReadAll(rc)
+			rc.Close()
+			m = string(b)
+		}
+	}
+	if !strings.Contains(m, "blacks7ar-BowPlugin") {
+		t.Errorf("mod dropped from profile:\n%s", m)
+	}
+	if !strings.Contains(m, "major: 1") || !strings.Contains(m, "patch: 7") {
+		t.Errorf("version must be parsed out, not left in the name:\n%s", m)
+	}
+}

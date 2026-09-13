@@ -83,7 +83,12 @@ func parseEntry(entry string) (exportMod, bool) {
 		// agrelha stores mods as the Thunderstore full name "Namespace-Name",
 		// with no pinned version. Dropping those is how an exported profile
 		// ended up containing nothing but BepInEx.
-		if ns, name, ok := strings.Cut(entry, "-"); ok && ns != "" && name != "" {
+		if ns, rest, ok := strings.Cut(entry, "-"); ok && ns != "" && rest != "" {
+			// Namespace-Name-Version is Thunderstore's own identifier; the r2x
+			// manifest wants the name and version separately.
+			if name, version, ok := strings.Cut(rest, "-"); ok && looksLikeVersion(version) {
+				return exportMod{Name: ns + "-" + name, Version: parseVersion(version), Enabled: true}, true
+			}
 			return exportMod{Name: entry, Enabled: true}, true
 		}
 		return exportMod{}, false
@@ -144,4 +149,17 @@ func ResolveVersions(entries []string, latest func(fullName string) (string, boo
 		out = append(out, e)
 	}
 	return out
+}
+
+func looksLikeVersion(s string) bool {
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, p := range parts {
+		if _, err := strconv.Atoi(p); err != nil {
+			return false
+		}
+	}
+	return true
 }

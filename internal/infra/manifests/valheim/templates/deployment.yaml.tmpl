@@ -60,7 +60,17 @@ spec:
                 [ -n "$entry" ] || continue
                 case "$entry" in
                   */*/*) ns=${entry%%/*}; rest=${entry#*/}; name=${rest%%/*}; ver=${rest#*/} ;;
-                  *-*)   ns=${entry%%-*}; name=${entry#*-}; ver="" ;;
+                  *-*)
+                    # Thunderstore's canonical id is Namespace-Name-Version, which
+                    # is what its own copy button gives you. Package names never
+                    # contain hyphens (they use underscores), so a trailing
+                    # semver segment is the version and not part of the name.
+                    ns=${entry%%-*}; rest=${entry#*-}
+                    case "$rest" in
+                      *-[0-9]*.[0-9]*.[0-9]*) name=${rest%-*}; ver=${rest##*-} ;;
+                      *)                      name=$rest;      ver="" ;;
+                    esac
+                    ;;
                   *)     echo "ERROR: cannot parse mod entry '$entry'" >&2; exit 1 ;;
                 esac
 
@@ -90,7 +100,15 @@ spec:
                 fi
 
                 tmp=$(mktemp -d)
-                unzip -oq "$zip" -d "$tmp"
+                # unzip exits 1 for warnings, not just errors - a mod packed on
+                # Windows warns about backslash separators and would otherwise
+                # take the whole server down under set -e. Only 2+ is fatal.
+                rc=0
+                unzip -oq "$zip" -d "$tmp" || rc=$?
+                if [ "$rc" -gt 1 ]; then
+                  echo "ERROR: cannot unpack $ns/$name/$ver (unzip exit $rc)" >&2
+                  exit 1
+                fi
                 mkdir -p "$DEST/$name"
                 find "$tmp" -iname '*.dll' -exec cp {} "$DEST/$name/" \;
                 rm -rf "$tmp"

@@ -404,3 +404,29 @@ func TestVanillaInstanceRefusesMods(t *testing.T) {
 		t.Errorf("modded must run BepInEx, got BEPINEX=%q", got)
 	}
 }
+
+func TestParseModRefAcceptsThunderstoresVersionedID(t *testing.T) {
+	cases := []struct{ entry, ns, name, ver string }{
+		{"blacks7ar-BowPlugin-1.8.7", "blacks7ar", "BowPlugin", "1.8.7"},
+		{"ArgusMagnus-ServersideQoL_AutoStore-2.0.8", "ArgusMagnus", "ServersideQoL_AutoStore", "2.0.8"},
+		{"Neobotics-SlayerSkills", "Neobotics", "SlayerSkills", ""},
+		{"Neobotics/SlayerSkills/1.2.0", "Neobotics", "SlayerSkills", "1.2.0"},
+	}
+	for _, c := range cases {
+		ref, ok := ParseModRef(c.entry, GameValheim)
+		if !ok || ref.Namespace != c.ns || ref.Name != c.name || ref.Version != c.ver {
+			t.Errorf("ParseModRef(%q) = %+v, want {%s %s %s}", c.entry, ref, c.ns, c.name, c.ver)
+		}
+	}
+	// All three spellings are the same mod.
+	a, _ := ParseModRef("blacks7ar-BowPlugin-1.8.7", GameValheim)
+	b, _ := ParseModRef("blacks7ar-BowPlugin", GameValheim)
+	c, _ := ParseModRef("blacks7ar/BowPlugin/1.8.7", GameValheim)
+	if a.Key() != b.Key() || b.Key() != c.Key() {
+		t.Errorf("same mod must share an identity: %q %q %q", a.Key(), b.Key(), c.Key())
+	}
+	// A Minecraft slug that merely looks versioned must not be split.
+	if ref, _ := ParseModRef("cloth-config", GameMinecraft); ref.Name != "cloth-config" {
+		t.Errorf("minecraft slug split: %+v", ref)
+	}
+}
