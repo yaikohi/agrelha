@@ -84,6 +84,27 @@ func (inst Instance) PackDefined() bool {
 // CanSetLoader and CanSetVersion encode the core invariant: when an Instance is
 // defined by a Pack, its Loader and Minecraft version are FACTS READ FROM THE
 // PACK, not settings.
+// IsVanilla reports whether the Instance runs without a Loader. On Valheim that
+// means no BepInEx, which is the only way Steam achievements stay earnable.
+func (inst Instance) IsVanilla() bool { return inst.Source == SourceVanilla }
+
+// CanInstallMods is false for a Vanilla Instance: gaining mods would revoke the
+// achievements its players earned against the promise Vanilla made, so it is a
+// different server (CONTEXT.md) reached by duplicating, not editing.
+func (inst Instance) CanInstallMods() bool { return !inst.IsVanilla() }
+
+// VanillaImmutableErr explains why a Vanilla Instance refuses mods.
+func (inst Instance) VanillaImmutableErr() error {
+	return fmt.Errorf("%s is a vanilla world: adding mods would disable achievements for everyone who plays it. Duplicate it to get a modded copy", inst.Name)
+}
+
+func boolText(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
 func (inst Instance) CanSetLoader() bool  { return !inst.PackDefined() }
 func (inst Instance) CanSetVersion() bool { return !inst.PackDefined() }
 
@@ -207,7 +228,7 @@ func (inst Instance) Env() map[string]string {
 			"WORLD_NAME":    inst.Slug,
 			"SERVER_PASS":   inst.Password,
 			"SERVER_PUBLIC": "true",
-			"BEPINEX":       "true",
+			"BEPINEX":       boolText(!inst.IsVanilla()),
 			"STATUS_HTTP":   "true",
 			"SERVER_ARGS":   "-savedir /config/worlds_local",
 			"TZ":            "Europe/Amsterdam",

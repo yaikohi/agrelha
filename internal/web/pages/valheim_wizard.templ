@@ -63,7 +63,7 @@ templ ValheimWizard(budget BudgetUI) {
 			<!-- STEP 2: CONTENT & MODS -->
 			<div data-show="$step == 2" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
 				<h2 class="text-lg font-bold text-zinc-100">Step 2: Content & Modding</h2>
-				<p class="mt-1 text-xs text-zinc-400">Choose between clean BepInEx, starter Thunderstore mods, or import an r2modman profile.</p>
+				<p class="mt-1 text-xs text-zinc-400">BepInEx disables Steam achievements, and cannot be added to a world later — so this choice is permanent.</p>
 
 				<div class="mt-6 space-y-6 max-w-3xl">
 					<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -71,22 +71,22 @@ templ ValheimWizard(budget BudgetUI) {
 							Name:        "source",
 							Value:       "vanilla",
 							BindSignal:  "source",
-							Title:       "Clean BepInEx",
-							Description: "Vanilla gameplay with BepInEx loader pre-installed for future mods.",
+							Title:       "Vanilla",
+							Description: "No BepInEx. Steam achievements stay earnable. Mods can never be added — duplicate the world instead.",
 						})
 						@components.OptionCard(components.OptionCardProps{
 							Name:        "source",
 							Value:       "scratch",
 							BindSignal:  "source",
-							Title:       "Custom Mods",
-							Description: "Browse Thunderstore community mods or add custom packages to your cart.",
+							Title:       "Modded (BepInEx)",
+							Description: "Browse Thunderstore mods or add packages by slug. Disables Steam achievements.",
 						})
 						@components.OptionCard(components.OptionCardProps{
 							Name:        "source",
 							Value:       "modpack",
 							BindSignal:  "source",
-							Title:       "Import Profile",
-							Description: "Import an existing .r2z or export.r2x Thunderstore modpack profile.",
+							Title:       "Import Profile (BepInEx)",
+							Description: "Start from an existing .r2z or export.r2x profile. Disables Steam achievements.",
 						})
 					</div>
 

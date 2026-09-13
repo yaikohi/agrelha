@@ -12,7 +12,10 @@ import (
 )
 
 const (
-	FallbackBepInExVersion = "5.4.2333"
+	// FallbackBepInExVersion is a last resort for when Thunderstore cannot be
+	// reached. It goes stale with every Valheim release, so the export resolves
+	// the real version first - see WithBepInExVersion.
+	FallbackBepInExVersion = "5.4.2350"
 	DefaultImage           = "lloesche/valheim-server:latest"
 )
 
@@ -26,6 +29,7 @@ type Game struct {
 	statusProvider  func(context.Context) (domain.GameTelemetry, error)
 	contentResolver func(context.Context, domain.Instance) (domain.ContentSet, error)
 	bundleSource    func(context.Context, domain.Instance) (entries []string, configs map[string]string, err error)
+	bepInExVersion  func(context.Context) (string, error)
 }
 
 // Option configures a Valheim Game instance.
@@ -74,6 +78,13 @@ func WithContentResolver(fn func(context.Context, domain.Instance) (domain.Conte
 	return func(g *Game) {
 		g.contentResolver = fn
 	}
+}
+
+// WithBepInExVersion resolves the BepInEx pack version to ship in an exported
+// profile. Without it the export falls back to a constant, which goes stale the
+// moment Valheim updates - a pre-1.0 BepInEx on a 1.0 game simply never loads.
+func WithBepInExVersion(fn func(context.Context) (string, error)) Option {
+	return func(g *Game) { g.bepInExVersion = fn }
 }
 
 // WithBundleSource sets a provider for mod entries and config files when exporting client bundles.
@@ -254,7 +265,13 @@ func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (do
 		}
 	}
 
-	modEntries := WithBepInEx(entries, FallbackBepInExVersion)
+	bepInExVer := ""
+	if g.bepInExVersion != nil {
+		if v, err := g.bepInExVersion(ctx); err == nil && v != "" {
+			bepInExVer = v
+		}
+	}
+	modEntries := WithBepInEx(entries, bepInExVer)
 	data, err := modpack.Build(name, modEntries, configs)
 	if err != nil {
 		return domain.Bundle{}, fmt.Errorf("build valheim client bundle: %w", err)

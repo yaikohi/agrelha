@@ -54,6 +54,7 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 		},
 		ActiveTab: tab,
 	}
+	d.Vanilla = inst.IsVanilla()
 
 	if h.cfg.LastIncident != nil {
 		if in, err := h.cfg.LastIncident(c.UserContext(), inst.Number); err == nil {

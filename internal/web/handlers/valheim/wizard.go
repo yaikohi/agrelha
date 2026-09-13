@@ -563,12 +563,20 @@ func (h *Handler) ValheimWizardCreate(c *fiber.Ctx) error {
 		modsTxt = strings.Join(deduped, "\n")
 	}
 
+	// Vanilla means no BepInEx, which is the only way achievements stay earnable
+	// and is immutable afterwards. Every other path installs the loader.
+	instSource := domain.SourceModlist
+	if source == "vanilla" && modsTxt == "" {
+		instSource = domain.SourceVanilla
+	}
+
 	inst := domain.Instance{
 		GameID:   domain.GameValheim,
 		Name:     name,
 		Password: password,
 		Seed:     seed,
 		Tier:     tier,
+		Source:   instSource,
 		State:    domain.StateRunning,
 	}
 

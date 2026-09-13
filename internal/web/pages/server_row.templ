@@ -71,7 +71,7 @@ templ serverRow(r ServerRowUI) {
 			</div>
 		</div>
 
-		if len(r.Launchers) > 0 {
+		if r.DownloadURL != "" && len(r.Launchers) > 0 {
 			<p class="mt-3 text-[11px] leading-relaxed text-zinc-400">
 				Import into
 				for i, l := range r.Launchers {
@@ -119,40 +119,11 @@ templ gameCard(g GameCardUI) {
 						{ g.Icon }
 					</div>
 					<div>
-						<div class="flex items-center gap-2">
-							<h2 class="text-base font-semibold text-zinc-100">{ g.Title }</h2>
-							if g.AccessPill != "" {
-								<span class="rounded-full border border-zinc-700/50 bg-zinc-800/80 px-2 py-0.5 text-[10px] font-medium text-zinc-400">{ g.AccessPill }</span>
-							}
-						</div>
+						<h2 class="text-base font-semibold text-zinc-100">{ g.Title }</h2>
 						if g.Subtitle != "" {
 							<p class="mt-0.5 text-xs text-zinc-400">{ g.Subtitle }</p>
 						}
 					</div>
-				</div>
-				<div>
-					if g.OnlineSignal != "" {
-						<span
-							class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-							data-class={ fmt.Sprintf("{'bg-emerald-950/80 text-emerald-300 ring-1 ring-emerald-800/50': $%s, 'bg-zinc-800 text-zinc-400': !$%s}", g.OnlineSignal, g.OnlineSignal) }
-						>
-							<span
-								class="h-1.5 w-1.5 rounded-full"
-								data-class={ fmt.Sprintf("{'bg-emerald-400 animate-pulse': $%s, 'bg-zinc-500': !$%s}", g.OnlineSignal, g.OnlineSignal) }
-							></span>
-							<span data-text={ fmt.Sprintf("$%s ? '1 online' : 'Offline'", g.OnlineSignal) }></span>
-						</span>
-					} else if g.OnlineCount() > 0 {
-						<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/80 px-2.5 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/50">
-							<span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-							{ ServersOnlineLabel(g.OnlineCount()) }
-						</span>
-					} else {
-						<span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-400">
-							<span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
-							{ ServersOnlineLabel(0) }
-						</span>
-					}
 				</div>
 			</div>
 

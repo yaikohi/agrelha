@@ -383,3 +383,24 @@ func TestModRefEntryPinsWhenVersionKnown(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestVanillaInstanceRefusesMods(t *testing.T) {
+	vanilla := Instance{GameID: GameValheim, Name: "lareira-V2", Source: SourceVanilla}
+	if vanilla.CanInstallMods() {
+		t.Error("a vanilla world must refuse mods: gaining them revokes achievements its players earned")
+	}
+	if vanilla.VanillaImmutableErr() == nil {
+		t.Error("the refusal must explain itself")
+	}
+	if got := vanilla.Env()["BEPINEX"]; got != "false" {
+		t.Errorf("vanilla must run without BepInEx, got BEPINEX=%q", got)
+	}
+
+	modded := Instance{GameID: GameValheim, Name: "boppo", Source: SourceModlist}
+	if !modded.CanInstallMods() {
+		t.Error("a modded world accepts mods")
+	}
+	if got := modded.Env()["BEPINEX"]; got != "true" {
+		t.Errorf("modded must run BepInEx, got BEPINEX=%q", got)
+	}
+}

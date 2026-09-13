@@ -27,6 +27,12 @@ The save data an Instance generates and plays on, stored at `/data/<LEVEL>`. One
 Instance owns exactly one World.
 _Avoid_: Save, level (except when naming itzg's `LEVEL` variable), map
 
+**Duplicate**:
+Creating a new Instance from an existing one, either by copying its World or by
+regenerating from the same Seed. The supported way to change what a World runs,
+since that is a new Instance by definition.
+_Avoid_: clone, fork, copy (as a noun)
+
 **Worlds** (player-facing only):
 The word the public dashboard uses for Instances, because that is what players
 call them. A deliberate UI synonym — never a separate concept, and never used in
@@ -40,14 +46,29 @@ _Avoid_: WorldType, level type
 ### Content
 
 **Loader**:
-The mod engine a server runs: NeoForge or Fabric. A property of the Instance, not
-of where its mods came from.
+The mod engine a server runs: NeoForge or Fabric for Minecraft, BepInEx for
+Valheim. A property of the Instance, not of where its mods came from. Minecraft
+names its Loader in the UI because there is a choice; Valheim's is implied by
+Modded, because BepInEx is the only one.
 _Avoid_: type, engine, modloader
 
 **Source**:
 How an Instance's content is defined: `modpack`, `modlist`, or `vanilla`. Orthogonal
 to Loader — a modpack has a Loader too.
 _Avoid_: type, mode, install method
+
+**Vanilla**:
+An Instance running with no Loader at all. On Valheim that means BepInEx is not
+installed, which is the only way Steam achievements remain earnable — so Vanilla
+is a promise to players, not merely an empty mod set. A Vanilla Instance's mod
+set is empty and cannot change.
+_Avoid_: unmodded, clean, stock
+
+**Modded**:
+An Instance running a Loader, whether or not any mods are installed yet. A Valheim
+world with BepInEx and zero mods is Modded: achievements are already off. Modded
+and Vanilla describe the Loader, never the size of the Mod list.
+_Avoid_: has mods, using mods
 
 **Pack**:
 A published, versioned collection of mods with its own configs, identified by a
@@ -131,7 +152,14 @@ the existing World, so presenting it as editable states something untrue.
 
 **Changing what an Instance runs means creating a new Instance.**
 Swapping the Pack or Loader under a played World is not an edit; it is a different
-server. The old World stays on its own PVC.
+server. The old World stays on its own PVC. Turning a Vanilla Instance Modded is
+exactly this change — it revokes achievements that were already earned against
+the promise Vanilla made — so it is offered as Duplicate, never as an edit.
+
+**A Vanilla Instance never gains mods.**
+The rule is enforced in the domain, not only in the UI: an install refused on the
+page must also be refused when the API is called directly. Duplicate is the
+supported path to a Modded copy.
 
 **Lifecycle is never compared with Availability**, and neither is compared with
 Kubernetes' `Phase`.

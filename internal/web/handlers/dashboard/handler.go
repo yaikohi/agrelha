@@ -109,6 +109,7 @@ func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 						Loader:    string(inst.Loader),
 						Source:    string(inst.Source),
 						MCVersion: inst.MCVersion,
+						HasMods:   hasMods(c.UserContext(), h.cfg.MCInstances, inst.Number),
 						Tier:      string(inst.Tier),
 						MemoryGiB: inst.MemoryGiB(),
 						State:     string(inst.State),
@@ -159,6 +160,8 @@ func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 						Name:      inst.Name,
 						Slug:      inst.Slug,
 						Password:  inst.Password,
+						Source:    string(inst.Source),
+						HasMods:   hasMods(c.UserContext(), h.cfg.ValheimInstances, inst.Number),
 						Seed:      inst.Seed,
 						Tier:      string(inst.Tier),
 						MemoryGiB: inst.MemoryGiB(),
@@ -339,4 +342,21 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 	}
 
 	return sig
+}
+
+// modLister is the slice of an instance manager the hub needs to tell whether a
+// World has anything to export.
+type modLister interface {
+	GetInstalledMods(ctx context.Context, num int) ([]string, error)
+}
+
+// hasMods reports whether a World has any mods to hand a player. A Modded World
+// with an empty list has nothing to download, which is separate from whether it
+// runs a Loader at all.
+func hasMods(ctx context.Context, m modLister, num int) bool {
+	if m == nil {
+		return false
+	}
+	mods, err := m.GetInstalledMods(ctx, num)
+	return err == nil && len(mods) > 0
 }

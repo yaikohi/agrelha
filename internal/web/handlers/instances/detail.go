@@ -61,6 +61,7 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 		},
 		ActiveTab: tab,
 	}
+	d.Vanilla = inst.IsVanilla()
 	d.Pack = packName
 
 	if h.cfg.LastIncident != nil {

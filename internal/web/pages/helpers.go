@@ -2,6 +2,8 @@ package pages
 
 import "slices"
 
+import "agrelha/internal/web/components"
+
 import "agrelha/internal/domain"
 
 import "fmt"
@@ -116,6 +118,7 @@ func HistoryBadge(source, kind string) string {
 
 type InstanceUI struct {
 	GameID             string
+	HasMods            bool
 	Number             int
 	Name               string
 	Slug               string
@@ -141,6 +144,9 @@ type InstanceUI struct {
 
 type InstanceDetailUI struct {
 	InstanceUI
+	// Vanilla worlds run no Loader, so they have no Mods tab: gaining mods is a
+	// new Instance, not an edit (CONTEXT.md).
+	Vanilla       bool
 	ActiveTab     string // overview, mods, configs, console, backups, settings
 	InstalledMods []string
 	ConfigFiles   []string
@@ -294,7 +300,6 @@ type GameCardUI struct {
 	Icon       string
 	Accent     string
 	Title      string
-	AccessPill string
 	Subtitle   string
 	Rows       []ServerRowUI
 	Extras     []string
@@ -352,6 +357,7 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 				Name:         "valheim",
 				LBIP:         strings.Split(addr, ":")[0],
 				Source:       "modpack",
+				HasMods:      true,
 				PlayersKnown: true,
 			}},
 		}
@@ -361,7 +367,6 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 		Icon:       "⚔️",
 		Accent:     "orange",
 		Title:      "Valheim Worlds",
-		AccessPill: "🔒 Password",
 		Subtitle:   "Dedicated multi-world cluster",
 		AccessNote: "Password required — ask the host on Discord.",
 		EmptyText:  "All Valheim worlds are currently offline.",
@@ -369,15 +374,10 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 	}
 
 	for _, inst := range vh.ActiveInstances {
-		versionBadge := "BepInEx · Modded"
-		if inst.Source == "vanilla" {
-			versionBadge = "Vanilla"
-		}
 		row := ServerRowUI{
 			Name:         inst.Name,
 			Address:      fmt.Sprintf("%s:2456", inst.LBIP),
-			VersionBadge: versionBadge,
-			DownloadURL:  fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number),
+			VersionBadge: modBadge(inst.Source, "BepInEx · Modded"),
 			DownloadFmt:  ".r2z",
 			Launchers:    []string{"r2modman", "Thunderstore Mod Manager"},
 			ImportSteps:  "Import → From file",
@@ -386,7 +386,7 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
 		}
-		g.Rows = append(g.Rows, row)
+		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number), inst.HasMods))
 	}
 
 	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", vh.TotalInstances, vh.MaxInstances)}
@@ -408,7 +408,6 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 		Icon:       "⛏️",
 		Accent:     "emerald",
 		Title:      "Minecraft Worlds",
-		AccessPill: "🛡️ Whitelist",
 		Subtitle:   "Dedicated multi-world cluster",
 		AccessNote: "Whitelist required — ask the host on Discord to get added.",
 		EmptyText:  "All Minecraft worlds are currently offline.",
@@ -416,11 +415,10 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 	}
 
 	for _, inst := range mc.ActiveInstances {
-		g.Rows = append(g.Rows, ServerRowUI{
+		row := ServerRowUI{
 			Name:         inst.Name,
 			Address:      fmt.Sprintf("%s:25565", inst.LBIP),
-			VersionBadge: fmt.Sprintf("%s · %s", inst.MCVersion, inst.Loader),
-			DownloadURL:  fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number),
+			VersionBadge: modBadge(inst.Source, fmt.Sprintf("%s · %s", inst.MCVersion, inst.Loader)),
 			DownloadFmt:  ".mrpack",
 			Launchers:    []string{"Prism Launcher", "Modrinth App"},
 			ImportSteps:  "Add Instance → Import from zip",
@@ -428,7 +426,8 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
-		})
+		}
+		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), inst.HasMods))
 	}
 
 	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", mc.TotalInstances, mc.MaxInstances)}
@@ -476,47 +475,16 @@ func actionStyle(kind string) string {
 }
 
 // ValheimActions is Valheim's footer, mirroring MinecraftActions.
+// ValheimActions is Valheim's footer. Lifecycle controls and per-instance links
+// deliberately live on the Manager, not here: a card spanning several Worlds has
+// no unambiguous target, and the buttons used to act on ActiveInstances[0].
 func ValheimActions(summary ...ValheimSummaryUI) CardActionsUI {
-	var vh ValheimSummaryUI
-	if len(summary) > 0 {
-		vh = summary[0]
-	} else {
-		// Fallback for tests calling without summary (assumes active instance 1)
-		vh = ValheimSummaryUI{
-			TotalInstances: 1,
-			MaxInstances:   4,
-			RunningCount:   1,
-			MaxRunning:     2,
-			ActiveInstances: []InstanceUI{{
-				Number: 1,
-				Name:   "valheim",
-			}},
-		}
-	}
-
 	a := CardActionsUI{
-		Links: []ActionUI{
-			{Label: "Access", Href: "/valheim/access", Kind: "link"},
-		},
+		Links:   []ActionUI{{Label: "Access", Href: "/valheim/access", Kind: "link"}},
 		Manager: ActionUI{Label: "Open Valheim Manager →", Href: "/valheim"},
 	}
-
-	if inst := vh.Primary(); inst != nil {
-		a.Lifecycle = []ActionUI{
-			{Label: "Restart", Script: fmt.Sprintf("@post('/api/valheim/instances/%d/restart')", inst.Number)},
-			{Label: "Stop", Script: fmt.Sprintf("@post('/api/valheim/instances/%d/stop')", inst.Number), Kind: "danger"},
-			{Label: "Start", Script: fmt.Sprintf("@post('/api/valheim/instances/%d/start')", inst.Number), Kind: "go"},
-		}
-		a.Special = []ActionUI{
-			{Label: "Update", Script: "@post('/server/update')", Kind: "special"},
-		}
-		a.Links = append([]ActionUI{
-			{Label: "Configs", Href: fmt.Sprintf("/valheim/%d/configs", inst.Number), Kind: "link"},
-		}, a.Links...)
-	} else {
-		a.Special = []ActionUI{
-			{Label: "+ Create World", Href: "/valheim/create", Kind: "special"},
-		}
+	if len(summary) == 0 || len(summary[0].ActiveInstances) == 0 {
+		a.Special = []ActionUI{{Label: "+ Create World", Href: "/valheim/create", Kind: "special"}}
 	}
 	return a
 }
@@ -533,27 +501,15 @@ func (m MinecraftSummaryUI) Primary() *InstanceUI {
 
 // MinecraftActions mirrors ValheimActions. Creating a world is Minecraft-only,
 // so it takes the Special slot when nothing is running.
-func MinecraftActions(mc MinecraftSummaryUI) CardActionsUI {
+// MinecraftActions mirrors ValheimActions: game-scoped links only. Per-World
+// lifecycle belongs on the Manager, where the target is named.
+func MinecraftActions(summary ...MinecraftSummaryUI) CardActionsUI {
 	a := CardActionsUI{
-		Links: []ActionUI{
-			{Label: "Access", Href: "/minecraft/access", Kind: "link"},
-		},
+		Links:   []ActionUI{{Label: "Access", Href: "/minecraft/access", Kind: "link"}},
 		Manager: ActionUI{Label: "Open Minecraft Manager →", Href: "/minecraft"},
 	}
-
-	if inst := mc.Primary(); inst != nil {
-		a.Lifecycle = []ActionUI{
-			{Label: "Restart", Script: fmt.Sprintf("@post('/api/minecraft/instances/%d/restart')", inst.Number)},
-			{Label: "Stop", Script: fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", inst.Number), Kind: "danger"},
-			{Label: "Start", Script: fmt.Sprintf("@post('/api/minecraft/instances/%d/start')", inst.Number), Kind: "go"},
-		}
-		a.Links = append([]ActionUI{
-			{Label: "Configs", Href: fmt.Sprintf("/minecraft/%d/configs", inst.Number), Kind: "link"},
-		}, a.Links...)
-	} else {
-		a.Special = []ActionUI{
-			{Label: "+ Create World", Href: "/minecraft/create", Kind: "special"},
-		}
+	if len(summary) == 0 || len(summary[0].ActiveInstances) == 0 {
+		a.Special = []ActionUI{{Label: "+ Create World", Href: "/minecraft/create", Kind: "special"}}
 	}
 	return a
 }
@@ -603,4 +559,47 @@ func IncidentView(in *domain.Incident) *IncidentUI {
 		OOMKilled:    in.OOMKilled,
 		LogTail:      in.LogTail,
 	}
+}
+
+// modBadge names what a World runs. Vanilla means no Loader at all - on Valheim,
+// no BepInEx, which is the only way achievements stay earnable - so it is worth
+// saying plainly rather than implying it from an empty mod list.
+func modBadge(source, modded string) string {
+	if source == string(domain.SourceVanilla) {
+		return "Vanilla"
+	}
+	return modded
+}
+
+// withModpack attaches the client-download link only when there is something to
+// download. A Modded World with no mods yet has nothing to hand a player.
+func withModpack(row ServerRowUI, url string, hasMods bool) ServerRowUI {
+	if hasMods {
+		row.DownloadURL = url
+	}
+	return row
+}
+
+// InstanceTabs lists an instance's tabs, omitting Mods for a Vanilla World.
+func InstanceTabs(game string, num int, active string, vanilla bool) []components.TabItem {
+	labels := []struct{ label, slug string }{
+		{"Overview", "overview"},
+		{"Mods", "mods"},
+		{"Configs", "configs"},
+		{"Console & Logs", "console"},
+		{"Backups", "backups"},
+		{"Settings", "settings"},
+	}
+	tabs := make([]components.TabItem, 0, len(labels))
+	for _, l := range labels {
+		if l.slug == "mods" && vanilla {
+			continue
+		}
+		tabs = append(tabs, components.TabItem{
+			Label:  l.label,
+			Href:   fmt.Sprintf("/%s/%d/%s", game, num, l.slug),
+			Active: active == l.slug,
+		})
+	}
+	return tabs
 }

@@ -23,7 +23,7 @@ func sampleMinecraft() MinecraftSummaryUI {
 		UsedGiB: 8, TotalBudgetGiB: 24,
 		ActiveInstances: []InstanceUI{{
 			Number: 1, Name: "ayyy", LBIP: "192.168.20.225",
-			MCVersion: "1.21.1", Loader: "neoforge",
+			MCVersion: "1.21.1", Loader: "neoforge", HasMods: true,
 			Players: 3, PlayersKnown: true, Uptime: "4h 2m",
 		}},
 	}
@@ -88,7 +88,7 @@ func sampleValheim() ValheimSummaryUI {
 		UsedGiB: 6, TotalBudgetGiB: 16,
 		ActiveInstances: []InstanceUI{{
 			Number: 1, Name: "lareira-V2", LBIP: "192.168.20.224",
-			Source:  "modpack",
+			Source: "modpack", HasMods: true,
 			Players: 2, PlayersKnown: true, Uptime: "1h 30m",
 		}},
 	}
@@ -125,21 +125,15 @@ func TestUnknownStatsDegradeToDash(t *testing.T) {
 	}
 }
 
-func TestOfflineCardShowsEmptyStateAndOfflinePill(t *testing.T) {
+func TestOfflineCardShowsEmptyStateWithoutAPill(t *testing.T) {
 	outMC := render(t, MinecraftCard(MinecraftSummaryUI{MaxInstances: 4, MaxRunning: 2}, false))
 	if !strings.Contains(outMC, "All Minecraft worlds are currently offline.") {
 		t.Fatal("missing MC empty state")
-	}
-	if !strings.Contains(outMC, "Offline") {
-		t.Fatal("header pill should read Offline when nothing runs")
 	}
 
 	outVH := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, ValheimSummaryUI{MaxInstances: 4, MaxRunning: 2}))
 	if !strings.Contains(outVH, "All Valheim worlds are currently offline.") {
 		t.Fatal("missing Valheim empty state")
-	}
-	if !strings.Contains(outVH, "Offline") {
-		t.Fatal("Valheim header pill should read Offline when nothing runs")
 	}
 }
 
@@ -151,15 +145,18 @@ func TestServersOnlineLabelWording(t *testing.T) {
 	}
 }
 
-func TestBothCardsShowOnlinePillWhenRunning(t *testing.T) {
-	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, sampleValheim()))
-	if !strings.Contains(valheim, "1 online") {
-		t.Fatal("Valheim card header pill should read 1 online when an active instance runs")
-	}
+// The header counter is gone: the rows themselves say which Worlds are online,
+// and a count only earns its place on an overview spanning more than one game.
+func TestNeitherCardShowsAHeaderCounterOrAccessPill(t *testing.T) {
+	both := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, sampleValheim())) +
+		render(t, MinecraftCard(sampleMinecraft(), false))
 
-	minecraft := render(t, MinecraftCard(sampleMinecraft(), false))
-	if !strings.Contains(minecraft, "1 online") {
-		t.Fatal("Minecraft card header pill should read 1 online when an active instance runs")
+	// The AccessNote sentence stays - it tells a player how to get in. It is the
+	// header tag that goes.
+	for _, gone := range []string{"1 online", "2 online", "🔒 Password", "🛡️ Whitelist"} {
+		if strings.Contains(both, gone) {
+			t.Errorf("%q should no longer render on the hub card", gone)
+		}
 	}
 }
 
@@ -172,14 +169,14 @@ func renderActions(t *testing.T, a CardActionsUI) string {
 	return buf.String()
 }
 
-// Both games have the same action set (both have configs and access pages, and
-// both have start/stop/restart endpoints), so the footers must offer the same
-// controls in the same order.
+// The footers hold only game-scoped controls. Lifecycle and Configs used to act
+// on ActiveInstances[0] - an unnamed World - so they moved to the Manager, where
+// the target is named.
 func TestBothFootersOfferTheSameActions(t *testing.T) {
 	valheim := renderActions(t, ValheimActions())
 	minecraft := renderActions(t, MinecraftActions(sampleMinecraft()))
 
-	for _, label := range []string{"Restart", "Stop", "Start", "Configs", "Access", "Manager"} {
+	for _, label := range []string{"Access", "Manager"} {
 		if !strings.Contains(valheim, label) {
 			t.Errorf("Valheim footer missing %q", label)
 		}
@@ -187,24 +184,33 @@ func TestBothFootersOfferTheSameActions(t *testing.T) {
 			t.Errorf("Minecraft footer missing %q", label)
 		}
 	}
+	for _, gone := range []string{"Restart", "Stop", "Start", "Configs", "Update"} {
+		if strings.Contains(valheim, gone) {
+			t.Errorf("Valheim footer still offers %q, which has no unambiguous target", gone)
+		}
+		if strings.Contains(minecraft, gone) {
+			t.Errorf("Minecraft footer still offers %q, which has no unambiguous target", gone)
+		}
+	}
 }
 
-// Game-specific controls belong in the marked Special slot, not mixed in.
-func TestGameSpecificActionsAreMarked(t *testing.T) {
-	valheim := renderActions(t, ValheimActions())
-	if !strings.Contains(valheim, "Update") {
-		t.Fatal("Valheim should still offer Update")
+// Nothing game-specific remains in the footer: Update pointed at the legacy
+// global endpoint, which no longer has a deployment behind it.
+func TestNoGameSpecificFooterActionsRemain(t *testing.T) {
+	// A populated card offers no lifecycle or per-instance controls...
+	if a := ValheimActions(sampleValheim()); len(a.Special) != 0 || len(a.Lifecycle) != 0 {
+		t.Errorf("valheim footer should hold only links when worlds exist: %+v", a)
 	}
-	if !strings.Contains(valheim, "border-dashed") {
-		t.Fatal("Update is Valheim-only and must use the marked Special styling")
+	if a := MinecraftActions(sampleMinecraft()); len(a.Special) != 0 || len(a.Lifecycle) != 0 {
+		t.Errorf("minecraft footer should hold only links when worlds exist: %+v", a)
 	}
 
-	idle := renderActions(t, MinecraftActions(MinecraftSummaryUI{MaxInstances: 4}))
-	if !strings.Contains(idle, "Create World") || !strings.Contains(idle, "border-dashed") {
-		t.Fatal("Create World is Minecraft-only and must use the marked Special styling")
+	// ...but an empty card still offers the one unambiguous action there is.
+	if a := ValheimActions(ValheimSummaryUI{}); len(a.Special) != 1 {
+		t.Error("an empty Valheim card must still offer + Create World")
 	}
-	if strings.Contains(idle, "Restart") {
-		t.Fatal("with no instance running there is nothing to restart")
+	if a := MinecraftActions(MinecraftSummaryUI{}); len(a.Special) != 1 {
+		t.Error("an empty Minecraft card must still offer + Create World")
 	}
 }
 
@@ -213,10 +219,10 @@ func TestActionRolesStyleIdentically(t *testing.T) {
 	valheim := renderActions(t, ValheimActions())
 	minecraft := renderActions(t, MinecraftActions(sampleMinecraft()))
 
+	// Only the link role survives in the footer; danger/go moved to the Manager
+	// with the lifecycle controls they styled.
 	for _, cls := range []string{
-		actionStyle("danger"), // Stop
-		actionStyle("go"),     // Start
-		actionStyle("link"),   // Configs / Access
+		actionStyle("link"), // Access
 	} {
 		if !strings.Contains(valheim, cls) || !strings.Contains(minecraft, cls) {
 			t.Fatalf("role styling %q is not shared by both footers", cls)

@@ -53,14 +53,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 
 			<!-- Tabs Navigation -->
 			@components.TabBar(components.TabBarProps{
-				Tabs: []components.TabItem{
-					{Label: "Overview", Href: fmt.Sprintf("/minecraft/%d/overview", d.Number), Active: d.ActiveTab == "overview"},
-					{Label: "Mods", Href: fmt.Sprintf("/minecraft/%d/mods", d.Number), Active: d.ActiveTab == "mods"},
-					{Label: "Configs", Href: fmt.Sprintf("/minecraft/%d/configs", d.Number), Active: d.ActiveTab == "configs"},
-					{Label: "Console & Logs", Href: fmt.Sprintf("/minecraft/%d/console", d.Number), Active: d.ActiveTab == "console"},
-					{Label: "Backups", Href: fmt.Sprintf("/minecraft/%d/backups", d.Number), Active: d.ActiveTab == "backups"},
-					{Label: "Settings", Href: fmt.Sprintf("/minecraft/%d/settings", d.Number), Active: d.ActiveTab == "settings"},
-				},
+				Tabs: InstanceTabs("minecraft", d.Number, d.ActiveTab, d.Vanilla),
 			})
 
 			<!-- TAB 1: OVERVIEW -->

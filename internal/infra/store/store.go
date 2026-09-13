@@ -121,6 +121,7 @@ func (s *Store) migrate() error {
 		motd          TEXT,
 		max_players   INTEGER DEFAULT 10,
 		lb_ip         TEXT,
+		source        TEXT NOT NULL DEFAULT '',
 		created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		last_used     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -141,6 +142,7 @@ func (s *Store) migrate() error {
 	for _, stmt := range []string{
 		`ALTER TABLE players ADD COLUMN online INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE players ADD COLUMN online_since TIMESTAMP`,
+		`ALTER TABLE valheim_instances ADD COLUMN source TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err

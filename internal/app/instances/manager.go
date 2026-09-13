@@ -650,6 +650,9 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 	if inst == nil {
 		return 0, fmt.Errorf("instance %d not found", num)
 	}
+	if !inst.CanInstallMods() {
+		return 0, inst.VanillaImmutableErr()
+	}
 
 	wanted := []string{slug}
 	if m.depResolver != nil {
@@ -1071,6 +1074,15 @@ func (m *InstanceManager) checkLBIPFree(inst domain.Instance) error {
 			inst.LBIP, other.GameID, other.Number, other.Name)
 	}
 	return nil
+}
+
+// SaveInstance persists an Instance record as-is. It exists for one-time
+// backfills; ordinary changes go through the operations that enforce the rules.
+func (m *InstanceManager) SaveInstance(inst domain.Instance) error {
+	if m.repo == nil {
+		return ports.ErrNotImplemented
+	}
+	return m.repo.Upsert(inst)
 }
 
 // RuntimeStatus reports what the runtime knows about an instance, including how

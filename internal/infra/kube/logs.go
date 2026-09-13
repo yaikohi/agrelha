@@ -203,3 +203,21 @@ func (c *Client) fetchServiceIP(ctx context.Context, name string) (string, error
 	}
 	return "", nil
 }
+
+// DeploymentEnv reads one environment variable from a deployment's first
+// container. It reports whether the variable is set at all, which is different
+// from it being set to the empty string.
+func (c *Client) DeploymentEnv(ctx context.Context, depName, key string) (string, bool, error) {
+	dep, err := c.cs.AppsV1().Deployments(c.namespace).Get(ctx, depName, metav1.GetOptions{})
+	if err != nil {
+		return "", false, err
+	}
+	for _, container := range dep.Spec.Template.Spec.Containers {
+		for _, e := range container.Env {
+			if e.Name == key {
+				return e.Value, true, nil
+			}
+		}
+	}
+	return "", false, nil
+}

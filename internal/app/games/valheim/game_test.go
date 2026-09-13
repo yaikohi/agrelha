@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"slices"
 	"strings"
@@ -273,5 +274,51 @@ func TestExportClientBundleUsesTheInstancesMods(t *testing.T) {
 		if !strings.Contains(manifest, want) {
 			t.Errorf("exported profile is missing %q — it shipped only BepInEx before this: %s", want, manifest)
 		}
+	}
+}
+
+func TestExportResolvesBepInExRatherThanHardcodingIt(t *testing.T) {
+	g := New(
+		WithBepInExVersion(func(context.Context) (string, error) { return "5.4.2350", nil }),
+		WithBundleSource(func(context.Context, domain.Instance) ([]string, map[string]string, error) {
+			return []string{"Neobotics/SlayerSkills/1.2.0"}, nil, nil
+		}),
+	)
+
+	b, err := g.ExportClientBundle(context.Background(), domain.Instance{GameID: domain.GameValheim, Number: 2, Name: "boppo", Slug: "boppo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, _ := zip.NewReader(bytes.NewReader(b.Data), int64(len(b.Data)))
+	var m string
+	for _, f := range zr.File {
+		if f.Name == "export.r2x" {
+			rc, _ := f.Open()
+			x, _ := io.ReadAll(rc)
+			rc.Close()
+			m = string(x)
+		}
+	}
+	if !strings.Contains(m, "denikson-BepInExPack_Valheim") {
+		t.Fatalf("BepInEx must be mod #1:\n%s", m)
+	}
+	if !strings.Contains(m, "patch: 2350") {
+		t.Errorf("must ship the resolved version, not the constant — a pre-1.0 BepInEx never loads on 1.0:\n%s", m)
+	}
+}
+
+func TestExportFallsBackWhenResolverFails(t *testing.T) {
+	g := New(
+		WithBepInExVersion(func(context.Context) (string, error) { return "", errors.New("offline") }),
+		WithBundleSource(func(context.Context, domain.Instance) ([]string, map[string]string, error) {
+			return nil, nil, nil
+		}),
+	)
+	b, err := g.ExportClientBundle(context.Background(), domain.Instance{GameID: domain.GameValheim, Number: 1, Name: "x", Slug: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(b.Data, []byte("r2x")) && len(b.Data) == 0 {
+		t.Error("a failed lookup must still produce a profile")
 	}
 }

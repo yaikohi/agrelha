@@ -137,8 +137,8 @@ func (s *Store) DeleteInstance(number int) error {
 func (s *Store) UpsertValheimInstance(inst InstanceRecord) error {
 	_, err := s.db.Exec(`
 		INSERT INTO valheim_instances (
-			number, name, slug, seed, password, tier, state, motd, max_players, lb_ip, last_used
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			number, name, slug, seed, password, tier, state, motd, max_players, lb_ip, source, last_used
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(number) DO UPDATE SET
 			name        = excluded.name,
 			slug        = excluded.slug,
@@ -149,9 +149,10 @@ func (s *Store) UpsertValheimInstance(inst InstanceRecord) error {
 			motd        = excluded.motd,
 			max_players = excluded.max_players,
 			lb_ip       = excluded.lb_ip,
+			source      = excluded.source,
 			last_used   = CURRENT_TIMESTAMP`,
 		inst.Number, inst.Name, inst.Slug, inst.Seed, inst.Password,
-		inst.Tier, inst.State, inst.MOTD, inst.MaxPlayers, inst.LBIP,
+		inst.Tier, inst.State, inst.MOTD, inst.MaxPlayers, inst.LBIP, inst.Source,
 	)
 	return err
 }
@@ -160,7 +161,7 @@ func (s *Store) GetValheimInstance(number int) (*InstanceRecord, error) {
 	row := s.db.QueryRow(`
 		SELECT number, name, slug, COALESCE(seed,''), COALESCE(password,''),
 		       tier, state, COALESCE(motd,''), COALESCE(max_players,10),
-		       COALESCE(lb_ip,''), created_at, last_used
+		       COALESCE(lb_ip,''), COALESCE(source,''), created_at, last_used
 		FROM valheim_instances WHERE number = ?`, number)
 
 	var inst InstanceRecord
@@ -168,7 +169,7 @@ func (s *Store) GetValheimInstance(number int) (*InstanceRecord, error) {
 	err := row.Scan(
 		&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Password,
 		&inst.Tier, &inst.State, &inst.MOTD, &inst.MaxPlayers,
-		&inst.LBIP, &created, &used,
+		&inst.LBIP, &inst.Source, &created, &used,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -185,7 +186,7 @@ func (s *Store) ListValheimInstances() ([]InstanceRecord, error) {
 	rows, err := s.db.Query(`
 		SELECT number, name, slug, COALESCE(seed,''), COALESCE(password,''),
 		       tier, state, COALESCE(motd,''), COALESCE(max_players,10),
-		       COALESCE(lb_ip,''), created_at, last_used
+		       COALESCE(lb_ip,''), COALESCE(source,''), created_at, last_used
 		FROM valheim_instances ORDER BY number ASC`)
 	if err != nil {
 		return nil, err
@@ -199,7 +200,7 @@ func (s *Store) ListValheimInstances() ([]InstanceRecord, error) {
 		if err := rows.Scan(
 			&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Password,
 			&inst.Tier, &inst.State, &inst.MOTD, &inst.MaxPlayers,
-			&inst.LBIP, &created, &used,
+			&inst.LBIP, &inst.Source, &created, &used,
 		); err != nil {
 			return nil, err
 		}
