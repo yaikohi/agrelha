@@ -1,63 +1,164 @@
 # agrelha
 
-Single-user web UI to manage the Valheim gameserver running on the `yaya` Talos
-cluster. Go + Fiber + templ + Tailwind + **Datastar** (SSE). Deployed via GitOps
-from [yaya-ops](https://codeberg.org/ykhi/yaya-ops); image hosted in the
-self-hosted Zot registry at `registry.ykhi.xyz/agrelha`.
+Web control panel for dedicated game servers. Runs several **Valheim** and
+**Minecraft** worlds side by side within a fixed RAM budget: create them, install
+mods, edit configs, watch logs, take backups, and hand players a matching client
+profile.
+
+Go + Fiber + templ + Tailwind + **Datastar** (SSE), an embedded SQLite database,
+and no runtime dependencies beyond the container. Deploy to Kubernetes with the
+[Helm chart](deploy/helm/agrelha) or via GitOps; a Docker/Compose path exists but
+is not finished (see [Status](#status-and-whats-planned)). AGPL-3.0-only.
 
 ## Screenshots
 
 ### Homepage
 ![homepage](images/homepage.png)
 
-### Mod management
-![mod-management](images/mod-management.png)
-
-### Configuration
-![](images/configuration.png)
-
-### Admin management
-![](images/admin-management.png)
-
 ### History page
 ![](images/history.png)
 
+
+#### Valheim
+![](images/valheim-homepage.png)
+
+##### Mod management
+![valheim-mod-management](images/valheim-mod-management.png)
+
+##### Configuration
+![](images/valheim-bepinex-configuration.png)
+
+##### Access management
+![](images/valheim-access-management.png)
+
+
+#### Minecraft
+![](images/minecraft-homepage.png)
+
+##### Mod management
+![](images/minecraft-mod-management.png)
+
+##### Configuration
+![](images/minecraft-configuration.png)
+
+##### Access management
+![](images/minecraft-access-management.png)
+
 ## Architecture — two-plane hybrid
 
-The `valheim` ArgoCD app has `selfHeal: true`, so live cluster edits get reverted.
-agrelha therefore treats state and actions differently:
+agrelha separates **what a server should be** from **what it is doing right now**,
+because the two have different owners and different failure modes.
 
-- **Declarative plane (git):** mods (`valheim-mods` ConfigMap), mod `.cfg` files
-  (`valheim-mod-configs`), and the admin list (`valheim-admins`) → agrelha commits
-  to `yaya-ops@main` (Codeberg bot token) → ArgoCD syncs → rollout. After each
-  commit a background watcher polls the live ConfigMap until ArgoCD reconciles,
-  then rolls the pod so the change actually takes effect.
-- **Imperative plane (k8s API):** restart / stop / start / logs / pod metrics →
-  `client-go` against a ServiceAccount scoped to the `valheim` namespace (no exec).
+- **Declarative plane** — mods, configs and access are desired state. agrelha
+  writes them to a store and something else reconciles: commits to git for
+  ArgoCD to sync, or local files for Compose. Live cluster edits would be
+  reverted by `selfHeal`, so agrelha never makes them.
+- **Imperative plane** — start, stop, restart, logs and metrics act on the
+  running server directly, through `client-go` or the Docker API.
 
-Auth: in-app **Zitadel OIDC**, single permitted identity (`ALLOWED_EMAIL`),
-stateless HMAC-signed session cookies. Persistence: embedded **SQLite** (modernc,
-no cgo) holding the player roster/presence, action audit, server-event timeline,
-and the Thunderstore mod index + README cache.
+Both planes sit behind ports, so the runtime is a wiring choice rather than a
+rewrite:
+
+| Port | Kubernetes | Docker |
+|---|---|---|
+| `StateStore` — where desired state lives | git | local files |
+| `Reconciler` — how it becomes real | ArgoCD | Compose |
+| `Runtime` — start/stop/logs/metrics | client-go | Docker API |
+| `SpecRenderer` — what desired state looks like | manifests | *planned* |
+
+Layers run `domain → ports → app → infra / web`, with dependencies pointing
+inward and an architecture test that fails the build on a forbidden import.
+
+**Auth** is OIDC (any provider) with an allow-list, or local Argon2id accounts
+when there is no IdP. **Persistence** is embedded SQLite (modernc, no cgo):
+player roster and presence, audit log, server events, crash incidents, and the
+mod index cache.
+
+## Who it's for
+
+agrelha began as one person's control plane for one homelab. The goal is a panel
+someone else can install without adopting that homelab. Three audiences, in
+shipping order:
+
+| # | Audience | Status |
+|---|---|---|
+| 1 | **GitOps homelabbers on Kubernetes** — git owns desired state, the cluster owns actions | **Supported.** This is what agrelha runs on today |
+| 2 | **Self-hosters on Docker / Compose** | **Partial** — adapters exist and the app boots, but no game server reaches a container yet. See [docs/docker-runtime-plan.md](docs/docker-runtime-plan.md) |
+| 3 | **Friend-group admins who want no infrastructure** | Not a third adapter — audience 2 plus a good install story |
+
+It manages **Valheim** and **Minecraft** side by side, several worlds per game,
+within a fixed RAM budget.
 
 ## Features
 
-- **Dashboard** — live tiles (online players, CPU, memory, uptime) and a live log
-  tail over SSE; last-backup summary from the NFS-mounted NAS export; Restart /
-  Update / Stop / Start controls; deep-link to the Grafana Valheim dashboard.
-- **Mods** — search/browse Thunderstore (background-indexed, instant), per-mod
-  detail pages (README, dependencies), install-with-dependency-resolution and
-  remove (git-committed). **Update detection**: a red dot + popover show which
-  installed mods have newer versions (current → latest) with Update all / Update
-  selected (full dependency re-resolve, auto-restart). **Modpack export**:
-  download a `.r2z` profile of the installed mods + configs to import into
-  r2modman / Thunderstore Mod Manager.
-- **Configs** — edit mod `.cfg` files (the `valheim-mod-configs` ConfigMap).
-- **Admins** — grant/revoke in-game admin by Steam64, picked from the auto-built
-  player roster or entered manually.
-- **History** — merged audit + server-event timeline.
-- **Observability** — structured `slog` logging; Prometheus `/metrics` (HTTP, SSE,
-  control-action, and Go runtime series) scraped into the cluster's InfluxDB.
+Everything below works today for **both games** unless noted.
+
+**Worlds**
+- Several worlds per game, each with its own deployment, volume, service and
+  config. Numbered slots with a RAM budget and a concurrency cap; tiers are
+  small (4 GiB), medium (8) and large (12).
+- Creation wizard — identity, content, tier — or import an existing `.r2z`,
+  `export.r2x`, `.mrpack` or Prism instance zip.
+- Start / stop / restart per world, gated by the budget so a start that cannot
+  fit is refused with a reason rather than OOM-killed.
+- **Valheim: Vanilla or Modded.** Vanilla runs without BepInEx, which is the only
+  way Steam achievements stay earnable, and is immutable afterwards.
+
+**Mods**
+- Search Modrinth (Minecraft) and Thunderstore (Valheim) by name, install with
+  automatic dependency resolution, remove.
+- Versions are **pinned at install time**, so an export reproduces exactly what
+  the server runs rather than guessing "latest".
+- Client profile export — `.mrpack` for Prism / Modrinth App, `.r2z` for
+  r2modman / Thunderstore Mod Manager — so players match the server mod-for-mod.
+- Per-world mod config editing.
+
+**Operations**
+- Console and live log streaming over SSE; RCON for Minecraft.
+- Backups: create, download, delete, restore in place, or restore into a new
+  world.
+- **Crash detection** — when a server dies, agrelha records an incident with the
+  exit code, restart count, OOM flag and the log tail captured from the
+  *terminated* container, and shows the cause on the world's page.
+- Health is a real protocol check (`mc-health`, Valheim game-port bind), so
+  "Online" means players can connect rather than "the process exists".
+
+**Access**
+- Minecraft: whitelist and operators. Valheim: admin list by Steam64 and a server
+  password. Player roster built automatically from server logs.
+
+**The panel itself**
+- Player-facing hub listing joinable worlds and their connect addresses;
+  operator views behind auth.
+- Sign in with OIDC, or local accounts (Argon2id) when you have no IdP.
+- Audit and event history — who did what, and what the servers did.
+- Structured `slog` logging and a Prometheus `/metrics` endpoint.
+
+## Status and what's planned
+
+agrelha runs daily on the cluster it was built for. Two structural projects are
+complete and proven by tests rather than assertion:
+
+- **Modularization** (phases 0-9) — ports and adapters, a domain layer, a
+  composition root, Helm chart and compose file. [docs/modularization-plan.md](docs/modularization-plan.md)
+- **Architecture cleanup** (phases A-I) — `domain / ports / app / infra / web`,
+  enforced by an architecture test whose violation ledger is now **empty**.
+  [docs/architecture-cleanup-plan.md](docs/architecture-cleanup-plan.md)
+
+Planned, designed but not built:
+
+| Feature | State | Plan |
+|---|---|---|
+| **Docker runtime, end to end** | Phase 1 of 7 done. Adapters exist; nothing renders a compose file yet | [docs/docker-runtime-plan.md](docs/docker-runtime-plan.md) |
+| **Mod-combination compatibility gate** | Designed. Static Modrinth-metadata checks before a world is created, plus an optional boot smoke test | [docs/mod-compatibility-plan.md](docs/mod-compatibility-plan.md) |
+| **Duplicate a world** | Designed. Copy the world or start fresh from the same seed — the supported way to make a Vanilla world Modded | [CONTEXT.md](CONTEXT.md) |
+| **Incident history** | Incidents are recorded and only the latest is shown | [docs/server-health-plan.md](docs/server-health-plan.md) |
+| **Backups on Docker** | Out of scope until the volume model is settled | [docs/docker-runtime-plan.md](docs/docker-runtime-plan.md) |
+| **Zero-downtime HA (rqlite)** | Sketched only | [plan.md](plan.md) |
+
+Known limits worth stating plainly: CurseForge packs that block third-party
+distribution can never be installed automatically, and Valheim mod compatibility
+cannot be checked before boot because Thunderstore exposes no game-version field.
 
 ## Layout
 
@@ -116,18 +217,35 @@ Key env vars (see `.env.example`): `OIDC_*` + `ALLOWED_EMAIL` (auth),
 `VALHEIM_NAMESPACE` / `VALHEIM_DEPLOYMENT` (imperative plane),
 `BACKUPS_DIR`, `INFLUXDB_URL`, `GRAFANA_DASHBOARD_URL`, `LOG_LEVEL` / `LOG_FORMAT`.
 
+## Install
+
+Kubernetes, via the chart — the namespaces you list must already exist, and
+agrelha is never granted cluster-wide permissions:
+
+```sh
+helm install agrelha ./deploy/helm/agrelha \
+  --namespace agrelha --create-namespace \
+  --set image.repository=ghcr.io/OWNER/agrelha \
+  --set 'gameNamespaces={valheim,minecraft}'
+```
+
+Every configuration key has a default, so nothing is required beyond `RUNTIME`
+when running off Kubernetes. See [deploy/README.md](deploy/README.md) for the
+Docker path and [docs/configuration.md](docs/configuration.md) for what each key
+turns on.
+
 ## Ship
 
 ```sh
-task build:image TAG=0.8.7      # docker build + push to registry.ykhi.xyz/agrelha
-# then bump the image tag in yaya-ops manifests/agrelha-app.yaml and commit
+task build:image TAG=0.26.2     # docker build + push; TAG stamps the binary
+# then bump the image tag wherever your GitOps repo declares it
 ```
 
-See `plan.md` for the full feature/version changelog and remaining work.
+See `plan.md` for the version changelog and remaining work.
 
 ## Licence
 
-AGPL-3.0-only. Copyright (C) 2026 ykhi <agrelha@ykhi.xyz>. See [LICENSE](LICENSE).
+AGPL-3.0-only. Copyright (C) 2026 ykhi <ykhi@proton.me>. See [LICENSE](LICENSE).
 
 If you modify agrelha and let other people use it over a network, section 13
 obliges you to offer them your source. agrelha ships a footer link for exactly

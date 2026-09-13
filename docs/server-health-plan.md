@@ -1,6 +1,8 @@
 # Detecting and explaining crashed servers
 
-Status: **designed, not implemented.** Grilled 2026-09-11.
+Status: **phases 1-5 implemented** (2026-09-11). Detection, capture and the
+incident panel are live; the dashboard-tile hint is dropped and `ListIncidents`
+is still unread.
 
 A server whose game process has died — or which never started serving — reports
 **Online** in agrelha, because the pod is running. This is the gate that makes
