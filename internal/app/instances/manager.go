@@ -693,10 +693,17 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 				continue
 			}
 			if ref.Version == "" && m.versionResolver != nil {
-				if v, err := m.versionResolver(ctx, ref.FullName()); err == nil && v != "" {
+				v, err := m.versionResolver(ctx, ref.FullName())
+				switch {
+				case err != nil:
+					// Installing a mod that cannot be resolved writes a line that
+					// only fails at boot, as a crash loop. Refuse here, where the
+					// operator is present and nothing is broken yet.
+					return false, fmt.Errorf("cannot install %s: %w", ref.FullName(), err)
+				case v == "":
+					return false, fmt.Errorf("no mod named %s exists", ref.FullName())
+				default:
 					ref.Version = v
-				} else if err != nil {
-					slog.Warn("could not pin mod version", "mod", ref.FullName(), "instance", num, "err", err)
 				}
 			}
 			body.WriteString("\n" + ref.Entry())
@@ -1142,9 +1149,10 @@ func (m *InstanceManager) RuntimeStatus(ctx context.Context, num int) (ports.Sta
 	return m.runtime.Status(ctx, m.serverRef(*inst))
 }
 
-// CrashLogs reads the terminated container's logs. Kubernetes reaps these when
+// CrashLogs reads the terminated container's logs. step names a setup container
+// when the failure happened before the server started; empty reads the server. Kubernetes reaps these when
 // the pod is replaced, so they must be captured at detection, not on demand.
-func (m *InstanceManager) CrashLogs(ctx context.Context, num int, tail int64) (io.ReadCloser, error) {
+func (m *InstanceManager) CrashLogs(ctx context.Context, num int, tail int64, step ...string) (io.ReadCloser, error) {
 	if m.runtime == nil {
 		return nil, ports.ErrNotImplemented
 	}
@@ -1158,7 +1166,11 @@ func (m *InstanceManager) CrashLogs(ctx context.Context, num int, tail int64) (i
 	if tail <= 0 {
 		tail = 100
 	}
-	return m.runtime.Logs(ctx, m.serverRef(*inst), ports.LogOptions{Tail: tail, Previous: true})
+	container := ""
+	if len(step) > 0 {
+		container = step[0]
+	}
+	return m.runtime.Logs(ctx, m.serverRef(*inst), ports.LogOptions{Tail: tail, Previous: true, Container: container})
 }
 
 // ExecuteCommand executes a console command on an instance via the configured command executor.

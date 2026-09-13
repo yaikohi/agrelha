@@ -17,6 +17,7 @@ type fakeSource struct {
 	status    map[int]ports.Status
 	logs      map[int]string
 	logCalls  int
+	logStep   string
 }
 
 func (f *fakeSource) GameID() domain.GameID { return f.game }
@@ -26,8 +27,11 @@ func (f *fakeSource) ListInstances(context.Context) ([]domain.Instance, error) {
 func (f *fakeSource) RuntimeStatus(_ context.Context, num int) (ports.Status, error) {
 	return f.status[num], nil
 }
-func (f *fakeSource) CrashLogs(_ context.Context, num int, _ int64) (io.ReadCloser, error) {
+func (f *fakeSource) CrashLogs(_ context.Context, num int, _ int64, step ...string) (io.ReadCloser, error) {
 	f.logCalls++
+	if len(step) > 0 {
+		f.logStep = step[0]
+	}
 	return io.NopCloser(strings.NewReader(f.logs[num])), nil
 }
 
@@ -120,5 +124,41 @@ func TestSameFailureIsNotRecordedTwice(t *testing.T) {
 	src.status[2] = ports.Status{Failure: ports.Failure{RestartCount: 5, ExitCode: 137, FinishedAt: fin}}
 	if n := w.Check(context.Background()); n != 1 {
 		t.Errorf("a further restart is a new failure and must be recorded, got %d", n)
+	}
+}
+
+func TestInitFailureIsRecordedAsItsOwnKindOfFailure(t *testing.T) {
+	src := &fakeSource{
+		game:      domain.GameValheim,
+		instances: []domain.Instance{{Number: 2, Name: "boppo"}},
+		status: map[int]ports.Status{2: {
+			Lifecycle: ports.LifecycleRunning,
+			Failure: ports.Failure{
+				InitRestartCount: 5, InitStep: "mod-reconciler",
+				WaitingReason: "CrashLoopBackOff", ExitCode: 1,
+			},
+		}},
+		logs: map[int]string{2: "ERROR: could not resolve latest version of blacks7ar/BowPlugin"},
+	}
+	rec := newRec()
+
+	if n := New(rec, []Source{src}).Check(context.Background()); n != 1 {
+		t.Fatalf("an init crash-loop must be recorded, got %d incidents", n)
+	}
+	in := rec.recorded[0]
+	if in.Step != "mod-reconciler" {
+		t.Errorf("the failing step must be recorded: %+v", in)
+	}
+	if in.RestartCount != 5 {
+		t.Errorf("init attempts must be counted, got %d", in.RestartCount)
+	}
+	if !strings.Contains(in.Summary(), "never started") {
+		t.Errorf("summary must not read as a game crash: %q", in.Summary())
+	}
+	if !strings.Contains(in.LogTail, "BowPlugin") {
+		t.Error("the init container's log is where the cause lives")
+	}
+	if src.logStep != "mod-reconciler" {
+		t.Errorf("logs must be read from the failing step, not the server container (got %q) — the server never started, so it has none", src.logStep)
 	}
 }

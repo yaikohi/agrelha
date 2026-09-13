@@ -25,7 +25,7 @@ type Source interface {
 	GameID() domain.GameID
 	ListInstances(ctx context.Context) ([]domain.Instance, error)
 	RuntimeStatus(ctx context.Context, num int) (ports.Status, error)
-	CrashLogs(ctx context.Context, num int, tail int64) (io.ReadCloser, error)
+	CrashLogs(ctx context.Context, num int, tail int64, step ...string) (io.ReadCloser, error)
 }
 
 // Recorder persists what the watcher finds.
@@ -116,11 +116,12 @@ func (w *Watcher) checkOne(ctx context.Context, src Source, inst domain.Instance
 		GameID:       src.GameID(),
 		Number:       inst.Number,
 		At:           time.Now(),
-		RestartCount: st.Failure.RestartCount,
+		RestartCount: restartCount(st.Failure),
 		ExitCode:     st.Failure.ExitCode,
 		Reason:       failureReason(st.Failure),
 		OOMKilled:    st.Failure.OOMKilled,
-		LogTail:      w.captureTail(ctx, src, inst.Number),
+		Step:         st.Failure.InitStep,
+		LogTail:      w.captureTail(ctx, src, inst.Number, st.Failure.InitStep),
 	}
 
 	if _, err := w.rec.RecordIncident(ctx, in); err != nil {
@@ -136,10 +137,22 @@ func isNew(f ports.Failure, last *domain.Incident) bool {
 	if last == nil {
 		return true
 	}
-	if f.RestartCount > last.RestartCount {
+	if restartCount(f) > last.RestartCount {
+		return true
+	}
+	if f.InitStep != last.Step {
 		return true
 	}
 	return f.FinishedAt.After(last.At)
+}
+
+// restartCount reports the attempts that matter for this failure. A setup step
+// that never let the server start is counted on its own tally.
+func restartCount(f ports.Failure) int32 {
+	if f.FailedBeforeStart() {
+		return f.InitRestartCount
+	}
+	return f.RestartCount
 }
 
 func failureReason(f ports.Failure) string {
@@ -149,8 +162,8 @@ func failureReason(f ports.Failure) string {
 	return f.Reason
 }
 
-func (w *Watcher) captureTail(ctx context.Context, src Source, num int) string {
-	rc, err := src.CrashLogs(ctx, num, w.tail)
+func (w *Watcher) captureTail(ctx context.Context, src Source, num int, step string) string {
+	rc, err := src.CrashLogs(ctx, num, w.tail, step)
 	if err != nil {
 		return ""
 	}

@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -233,7 +234,13 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 					return "", fmt.Errorf("not a thunderstore full name: %s", fullName)
 				}
 				v, _, err := d.TS.LatestVersion(ctx, ns, name)
-				return v, err
+				switch {
+				case errors.Is(err, thunderstore.ErrNotFound):
+					return "", fmt.Errorf("no such mod on Thunderstore")
+				case err != nil:
+					return "", fmt.Errorf("could not reach Thunderstore: %w", err)
+				}
+				return v, nil
 			}),
 		)
 	}

@@ -430,3 +430,18 @@ func TestParseModRefAcceptsThunderstoresVersionedID(t *testing.T) {
 		t.Errorf("minecraft slug split: %+v", ref)
 	}
 }
+
+func TestIncidentSummaryDistinguishesSetupFromCrash(t *testing.T) {
+	setup := Incident{Step: "mod-reconciler", RestartCount: 5}
+	if got := setup.Summary(); !strings.Contains(got, "Mod install") || !strings.Contains(got, "never started") {
+		t.Errorf("a failed mod install must not read as a game crash: %q", got)
+	}
+
+	crash := Incident{RestartCount: 5, Reason: "CrashLoopBackOff"}
+	if got := crash.Summary(); strings.Contains(got, "never started") {
+		t.Errorf("a real crash must not claim the server never started: %q", got)
+	}
+	if setup.Summary() == crash.Summary() {
+		t.Error("the two failures need different fixes and must read differently")
+	}
+}

@@ -3,6 +3,7 @@ package thunderstore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -53,6 +54,10 @@ type expVersion struct {
 	Dependencies  []string `json:"dependencies"`
 }
 
+// ErrNotFound means the package does not exist, as distinct from Thunderstore
+// being unreachable. The two need different responses from an operator.
+var ErrNotFound = errors.New("package not found")
+
 func (c *Client) getJSON(ctx context.Context, url string, v any) error {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	resp, err := c.http.Do(req)
@@ -60,6 +65,9 @@ func (c *Client) getJSON(ctx context.Context, url string, v any) error {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+		return fmt.Errorf("%s: %w", url, ErrNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%s -> %s", url, resp.Status)
 	}

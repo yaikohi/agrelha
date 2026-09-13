@@ -72,6 +72,9 @@ func (r *Runtime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status
 			Reason:        ps.LastReason,
 			FinishedAt:    ps.LastFinishedAt,
 			OOMKilled:     ps.LastOOMKilled,
+
+			InitRestartCount: ps.InitRestartCount,
+			InitStep:         ps.InitStep,
 		}
 	}
 	if ip, err := r.c.ServiceIP(ctx, ref.Name); err != nil {
@@ -103,9 +106,10 @@ func (r *Runtime) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogO
 		tail = 200
 	}
 	return r.c.StreamDeploymentLogsQuery(ctx, ref.Name, k8sclient.LogQuery{
-		Tail:     tail,
-		Follow:   opts.Follow,
-		Previous: opts.Previous,
+		Tail:      tail,
+		Follow:    opts.Follow,
+		Previous:  opts.Previous,
+		Container: opts.Container,
 	})
 }
 

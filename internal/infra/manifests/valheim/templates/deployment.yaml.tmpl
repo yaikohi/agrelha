@@ -55,6 +55,53 @@ spec:
 
               apk add --no-cache curl unzip jq >/dev/null 2>&1
 
+              # Thunderstore being down and a mod being deleted are different
+              # problems. curl -f collapses both into exit 22, so ask for the
+              # status: 404/410 is permanent and reported at once, 5xx and
+              # connection failures are retried. Kubernetes retries a failed
+              # init container too, but its backoff grows to five minutes -
+              # far too blunt for a momentary blip.
+              ATTEMPTS=3
+              RETRY_SLEEP=3
+
+              http_get() { # url outfile -> prints status
+                # curl already prints 000 for a connection failure, so only
+                # substitute when it printed nothing at all.
+                code=$(curl -sSL -o "$2" -w '%{http_code}' "$1" 2>/dev/null) || true
+                [ -n "$code" ] || code=000
+                printf '%s' "$code"
+              }
+
+              fetch_file() { # url outfile
+                url=$1; out=$2; n=1
+                while :; do
+                  code=$(http_get "$url" "$out")
+                  case "$code" in
+                    2??) return 0 ;;
+                    404|410)
+                      echo "ERROR: $url no longer exists on Thunderstore (HTTP $code)" >&2
+                      return 1 ;;
+                  esac
+                  if [ "$n" -ge "$ATTEMPTS" ]; then
+                    echo "ERROR: $url failed after $n attempts (last HTTP $code)" >&2
+                    return 1
+                  fi
+                  echo ">> [retry $n/$ATTEMPTS] HTTP $code from $url"
+                  n=$((n+1)); sleep "$RETRY_SLEEP"
+                done
+              }
+
+              fetch_latest() { # ns name -> prints version
+                body=$(mktemp)
+                if ! fetch_file "https://thunderstore.io/api/experimental/package/$1/$2/" "$body"; then
+                  rm -f "$body"; return 1
+                fi
+                ver=$(jq -re '.latest.version_number' < "$body" 2>/dev/null) || {
+                  echo "ERROR: $1/$2 returned no version" >&2; rm -f "$body"; return 1
+                }
+                rm -f "$body"; printf '%s' "$ver"
+              }
+
               ACTIVE=$(mktemp)
               grep -vE '^[[:space:]]*(#|$)' "$MODS" | tr -d '\r' | sed 's/[[:space:]]*$//; s/?$//' | while read -r entry; do
                 [ -n "$entry" ] || continue
@@ -75,10 +122,7 @@ spec:
                 esac
 
                 if [ -z "$ver" ]; then
-                  ver=$(curl -fsSL "https://thunderstore.io/api/experimental/package/$ns/$name/" | jq -re '.latest.version_number') || {
-                    echo "ERROR: could not resolve latest version of $ns/$name" >&2
-                    exit 1
-                  }
+                  ver=$(fetch_latest "$ns" "$name") || exit 1
                   echo ">> [resolved] $ns/$name -> $ver"
                 fi
 
@@ -88,11 +132,10 @@ spec:
                 if [ ! -f "$zip" ]; then
                   echo ">> [downloading] $ns/$name/$ver"
                   tmpzip=$(mktemp)
-                  if curl -fsSL "https://thunderstore.io/package/download/$ns/$name/$ver/" -o "$tmpzip"; then
+                  if fetch_file "https://thunderstore.io/package/download/$ns/$name/$ver/" "$tmpzip"; then
                     mv "$tmpzip" "$zip"
                   else
                     rm -f "$tmpzip"
-                    echo "ERROR: failed to download $ns/$name/$ver" >&2
                     exit 1
                   fi
                 else

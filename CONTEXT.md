@@ -110,8 +110,23 @@ The player-facing rendering of Availability. The only state words that appear in
 the UI.
 _Avoid_: Up, Down, Active
 
-Lifecycle and Availability are never compared to each other and never share a
-field. Kubernetes' own `Phase` ("Running", "Pending") belongs to neither — it is
+**Health**:
+What is known to have gone wrong with an Instance, independent of what the
+operator asked for (Lifecycle) and of whether players can connect right now
+(Availability). An Instance can be Lifecycle `running`, Availability offline, and
+carry a last Incident explaining why — three independent facts, each worth
+showing.
+_Avoid_: status, state (unqualified), error
+
+**Incident**:
+One recorded failure of an Instance: when it happened, how it ended (exit code,
+out of memory, crash loop, a mod that could not be installed) and the log tail
+captured at the moment of detection. A failure that starts the server and a
+failure that prevents it starting are both Incidents.
+_Avoid_: crash (that is one kind of Incident), error, event
+
+Lifecycle, Availability and Health are never compared to each other and never
+share a field. Kubernetes' own `Phase` ("Running", "Pending") belongs to neither — it is
 an input to Availability, and its capital-R "Running" must never be confused with
 Lifecycle's lowercase `running`.
 

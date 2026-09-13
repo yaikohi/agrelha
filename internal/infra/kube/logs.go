@@ -56,9 +56,10 @@ func (c *Client) StreamLogs(ctx context.Context, tail int64) (io.ReadCloser, err
 // StreamDeploymentLogs follows logs for any deployment by app label.
 // LogQuery selects which log stream to read for a deployment's pod.
 type LogQuery struct {
-	Tail     int64
-	Follow   bool
-	Previous bool
+	Tail      int64
+	Follow    bool
+	Previous  bool
+	Container string
 }
 
 func (c *Client) StreamDeploymentLogs(ctx context.Context, depName string, tail int64) (io.ReadCloser, error) {
@@ -79,8 +80,11 @@ func (c *Client) StreamDeploymentLogsQuery(ctx context.Context, depName string, 
 		return nil, fmt.Errorf("no pod found for app=%s in %s", depName, c.namespace)
 	}
 	pod := pods.Items[0]
-	container := ""
+	container := q.Container
 	for _, cnt := range pod.Spec.Containers {
+		if container != "" {
+			break
+		}
 		if cnt.Name == "valheim" || cnt.Name == "minecraft" {
 			container = cnt.Name
 			break
@@ -115,6 +119,12 @@ type PodStatus struct {
 	LastReason     string
 	LastFinishedAt time.Time
 	LastOOMKilled  bool
+
+	// Init failures are counted separately: a server that crashed five times and
+	// a mod install that failed five times call for different responses, and a
+	// single number would conflate them.
+	InitRestartCount int32
+	InitStep         string
 }
 
 func (c *Client) PodStatus(ctx context.Context) (PodStatus, error) {
@@ -139,6 +149,25 @@ func (c *Client) DeploymentPodStatus(ctx context.Context, depName string) (PodSt
 			ps.Ready = cond.Status == corev1.ConditionTrue
 		}
 	}
+	for _, cs := range p.Status.InitContainerStatuses {
+		if cs.RestartCount == 0 && cs.State.Waiting == nil {
+			continue // completed normally
+		}
+		ps.InitRestartCount += cs.RestartCount
+		if ps.InitStep == "" && (cs.RestartCount > 0 || isBlocked(cs)) {
+			ps.InitStep = cs.Name
+		}
+		if t := cs.LastTerminationState.Terminated; t != nil && t.FinishedAt.Time.After(ps.LastFinishedAt) {
+			ps.LastExitCode = t.ExitCode
+			ps.LastReason = t.Reason
+			ps.LastFinishedAt = t.FinishedAt.Time
+			ps.LastOOMKilled = t.Reason == "OOMKilled"
+		}
+		if w := cs.State.Waiting; w != nil && ps.WaitingReason == "" && w.Reason != "PodInitializing" {
+			ps.WaitingReason = w.Reason
+		}
+	}
+
 	for _, cs := range p.Status.ContainerStatuses {
 		if cs.Name == "istio-proxy" {
 			continue
@@ -220,4 +249,12 @@ func (c *Client) DeploymentEnv(ctx context.Context, depName, key string) (string
 		}
 	}
 	return "", false, nil
+}
+
+// isBlocked reports whether an init container is stuck rather than merely
+// waiting its turn. PodInitializing means "an earlier step is still running",
+// which is not a failure.
+func isBlocked(cs corev1.ContainerStatus) bool {
+	w := cs.State.Waiting
+	return w != nil && w.Reason != "" && w.Reason != "PodInitializing"
 }

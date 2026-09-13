@@ -69,12 +69,23 @@ type Failure struct {
 	Reason     string
 	FinishedAt time.Time
 	OOMKilled  bool
+
+	// InitRestartCount and InitStep describe a failure that happened before the
+	// server started at all - a mod install, say. Kept apart from RestartCount
+	// so "the game crashed" and "setup failed" stay distinguishable.
+	InitRestartCount int32
+	InitStep         string
 }
 
 // Crashed reports whether the runtime has seen this server die.
 func (f Failure) Crashed() bool {
-	return f.RestartCount > 0 || f.WaitingReason == "CrashLoopBackOff" || !f.FinishedAt.IsZero()
+	return f.RestartCount > 0 || f.InitRestartCount > 0 ||
+		f.WaitingReason == "CrashLoopBackOff" || !f.FinishedAt.IsZero()
 }
+
+// FailedBeforeStart reports whether the server never ran because a setup step
+// failed. Such a failure needs a different fix from a server that crashed.
+func (f Failure) FailedBeforeStart() bool { return f.InitRestartCount > 0 || f.InitStep != "" }
 
 // Metrics is current resource usage. Zero values mean "unknown", not "idle" —
 // not every runtime can report this.
@@ -90,6 +101,10 @@ type LogOptions struct {
 	Tail int64
 	// Follow streams new lines until the context is cancelled.
 	Follow bool
+	// Container selects a specific container by name. Empty picks the game
+	// server. A setup step's logs live in its own container, and the server
+	// container has none when that step never let it start.
+	Container string
 	// Previous reads the logs of the previous, terminated container instead of
 	// the running one. This is the only way to see why a server crashed, and
 	// the runtime discards it once the container is reaped.
