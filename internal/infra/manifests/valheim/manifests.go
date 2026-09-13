@@ -105,6 +105,13 @@ func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[
 	}
 	files["slot.yaml"] = slotBuf.Bytes()
 
+	// A Vanilla world has no Loader, so its mod list and BepInEx config map
+	// would be objects that exist only to stay empty. Valheim "configs" are
+	// BepInEx plugin configs, which is why they go too.
+	if inst.IsVanilla() {
+		return files, nil
+	}
+
 	var cfgBuf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&cfgBuf, "configs.yaml.tmpl", data); err != nil {
 		return nil, fmt.Errorf("render configs: %w", err)
