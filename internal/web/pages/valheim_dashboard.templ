@@ -60,7 +60,7 @@ templ ValheimDashboard(instances []InstanceUI, budget BudgetUI) {
 								<!-- Badges: Game, Tier, Password, Version -->
 								<div class="mt-4 flex flex-wrap gap-1.5">
 									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-300 ring-1 ring-zinc-700/60">Valheim</span>
-									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-300">BepInEx</span>
+									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-300">{ modBadge(inst.Source, "BepInEx") }</span>
 
 									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
 										{ fmt.Sprintf("%s (%d GiB)", inst.Tier, inst.MemoryGiB) }

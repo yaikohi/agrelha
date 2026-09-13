@@ -541,13 +541,22 @@ func backfillValheimSource(ctx context.Context, d *Deps) {
 	if d.ValheimInstances == nil || d.K8s == nil {
 		return
 	}
-	instances, err := d.ValheimInstances.ListInstances(ctx)
+	// Ask the store which rows were never written, not the repository: it
+	// normalises an empty Source to modlist on read, so inst.Source is never "".
+	missing, err := d.Store.ValheimInstancesMissingSource()
 	if err != nil {
-		slog.Warn("valheim source backfill: cannot list instances", "err", err)
+		slog.Warn("valheim source backfill: cannot query instances", "err", err)
 		return
 	}
-	for _, inst := range instances {
-		if inst.Source != "" {
+	if len(missing) == 0 {
+		return
+	}
+	slog.Info("valheim source backfill: instances without a stored source", "numbers", missing)
+
+	for _, num := range missing {
+		inst, err := d.ValheimInstances.GetInstance(ctx, num)
+		if err != nil || inst == nil {
+			slog.Warn("valheim source backfill: cannot load instance", "instance", num, "err", err)
 			continue
 		}
 		source := domain.SourceModlist
@@ -558,7 +567,7 @@ func backfillValheimSource(ctx context.Context, d *Deps) {
 			source = domain.SourceVanilla
 		}
 		inst.Source = source
-		if err := d.ValheimInstances.SaveInstance(inst); err != nil {
+		if err := d.ValheimInstances.SaveInstance(*inst); err != nil {
 			slog.Warn("valheim source backfill: cannot save", "instance", inst.Number, "err", err)
 			continue
 		}

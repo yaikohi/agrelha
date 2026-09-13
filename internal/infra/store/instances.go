@@ -220,3 +220,25 @@ func (s *Store) DeleteValheimInstance(number int) error {
 	_, err := s.db.Exec(`DELETE FROM valheim_instances WHERE number = ?`, number)
 	return err
 }
+
+// ValheimInstancesMissingSource lists instance numbers whose Source column was
+// never written. It exists because the repository normalises an empty Source to
+// modlist on read, so a caller can never tell "unset" from "explicitly modded" -
+// which silently defeated the one-time backfill.
+func (s *Store) ValheimInstancesMissingSource() ([]int, error) {
+	rows, err := s.db.Query(`SELECT number FROM valheim_instances WHERE COALESCE(source,'') = '' ORDER BY number`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []int
+	for rows.Next() {
+		var n int
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}

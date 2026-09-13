@@ -49,6 +49,7 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 			Name:               inst.Name,
 			Slug:               inst.Slug,
 			Password:           inst.Password,
+			Source:             string(inst.Source),
 			Seed:               inst.Seed,
 			Tier:               string(inst.Tier),
 			MemoryGiB:          inst.MemoryGiB(),
