@@ -17,6 +17,7 @@ import (
 	"agrelha/internal/ports"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/valyala/fasthttp"
 )
 
 type fakeRuntime struct {
@@ -484,3 +485,63 @@ func TestValheimLogsStream(t *testing.T) {
 		t.Errorf("valheim unconf response = %s", string(bodyUnconf))
 	}
 }
+
+func TestConsoleEdges(t *testing.T) {
+	// 1. Actor fallback
+	h := New(Config{})
+	app := fiber.New()
+	var fastCtx fasthttp.RequestCtx
+	c := app.AcquireCtx(&fastCtx)
+	defer app.ReleaseCtx(c)
+
+	if a := h.cfg.Actor(c); a != "-" {
+		t.Errorf("expected '-', got %q", a)
+	}
+	c.Locals("actor", "admin")
+	if a := h.cfg.Actor(c); a != "admin" {
+		t.Errorf("expected 'admin', got %q", a)
+	}
+
+	// 2. MCRconCommand with nil MCInstances
+	hNil := New(Config{})
+	appNil := fiber.New()
+	appNil.Post("/minecraft/rcon/:num", hNil.MCRconCommand)
+	reqRcon := httptest.NewRequest(http.MethodPost, "/minecraft/rcon/1", nil)
+	respRcon, err := appNil.Test(reqRcon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyRcon, _ := io.ReadAll(respRcon.Body)
+	if !strings.Contains(string(bodyRcon), "Instance manager unconfigured") {
+		t.Errorf("expected unconfigured error toast, got: %s", string(bodyRcon))
+	}
+
+	// 3. MCLogsStream with nil MCInstances
+	appNil.Get("/minecraft/:num/logs", hNil.MCLogsStream)
+	reqLogs := httptest.NewRequest(http.MethodGet, "/minecraft/1/logs", nil)
+	respLogs, err := appNil.Test(reqLogs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyLogs, _ := io.ReadAll(respLogs.Body)
+	if !strings.Contains(string(bodyLogs), "Logs unavailable") {
+		t.Errorf("expected Logs unavailable, got: %s", string(bodyLogs))
+	}
+
+	// 4. SSELogs write failure (client-gone)
+	rt := &fakeRuntime{logLines: "line 1\nline 2\n"}
+	hSSE := New(Config{
+		ValheimRuntime: rt,
+		ValheimRef:     ports.ServerRef{Name: "valheim", Scope: "valheim"},
+	})
+	var sseCtx fasthttp.RequestCtx
+	cSSE := app.AcquireCtx(&sseCtx)
+	defer app.ReleaseCtx(cSSE)
+
+	if err := hSSE.SSELogs(cSSE); err != nil {
+		t.Fatal(err)
+	}
+	_ = sseCtx.Response.CloseBodyStream()
+	time.Sleep(50 * time.Millisecond)
+}
+

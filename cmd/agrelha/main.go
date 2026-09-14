@@ -37,7 +37,8 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	slog.Info("agrelha listening", "version", build.Version, "addr", cfg.ListenAddr, "log_level", cfg.LogLevel, "log_format", cfg.LogFormat)
+	slog.Info("agrelha listening", "version", build.Version, "commit", build.Commit, "built", build.Date,
+		"addr", cfg.ListenAddr, "log_level", cfg.LogLevel, "log_format", cfg.LogFormat)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

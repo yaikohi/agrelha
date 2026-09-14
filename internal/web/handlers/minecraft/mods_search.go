@@ -12,7 +12,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/domain"
-	"agrelha/internal/web/sse"
 )
 
 const modResultsSelector = "#mc-mod-results"
@@ -132,7 +131,7 @@ func patchModResults(c *fiber.Ctx, content string) error {
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	if err := sse.InnerElement(w, modResultsSelector, content); err != nil {
+	if err := innerElement(w, modResultsSelector, content); err != nil {
 		return err
 	}
 	return c.Send(buf.Bytes())

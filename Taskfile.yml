@@ -9,6 +9,16 @@ vars:
   GO_BINARY: main
   VERSION: dev
   IMAGE: registry.ykhi.xyz/agrelha
+  TAG_PREFIX: v
+  GIT_REMOTE: origin
+  # Both fall back to a placeholder inside the container image build, where
+  # .dockerignore keeps .git out of the context.
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
+  DIRTY:
+    sh: test -z "$(git status --porcelain 2>/dev/null)" && echo "" || echo "-dirty"
+  BUILD_DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
 
 tasks:
   default:
@@ -34,15 +44,25 @@ tasks:
   go:build:
     desc: "templ generate + go build"
     deps: [tailwind:build, assets:datastar]
+    # Deliberately not fingerprinted with sources/generates. The stamped version
+    # is an input that no source file records, so a fingerprint would report
+    # "up to date" and hand back a binary labelled `dev` after you asked for a
+    # release. Go's own build cache already makes the repeat build cheap.
     cmds:
       - templ generate
-      - go build -ldflags "-X agrelha/internal/platform/build.Version={{.VERSION}}" -o {{.GO_BINARY}} {{.GO_MAIN}}
-    sources:
-      - "**/*.go"
-      - "**/*.templ"
-      - "{{.CSS_IN}}"
-    generates:
-      - "{{.GO_BINARY}}"
+      - >-
+        CGO_ENABLED=0 go build -trimpath
+        -ldflags "-s -w
+        -X agrelha/internal/platform/build.Version={{.VERSION}}
+        -X agrelha/internal/platform/build.Commit={{.COMMIT}}{{.DIRTY}}
+        -X agrelha/internal/platform/build.Date={{.BUILD_DATE}}"
+        -o {{.GO_BINARY}} {{.GO_MAIN}}
+
+  version:
+    desc: "Print what a build would stamp right now"
+    silent: true
+    cmds:
+      - 'echo "version={{.VERSION}} commit={{.COMMIT}}{{.DIRTY}} date={{.BUILD_DATE}}"'
 
   tailwind:build:
     desc: "Build Tailwind CSS (v4 CLI)"
@@ -115,12 +135,52 @@ tasks:
 
   # --- Image ---
   build:image:
-    desc: "Build + push the container image to Zot. Usage: task build:image TAG=0.1.0"
-    vars:
-      TAG: '{{.TAG | default "dev"}}'
+    desc: "Build + push the image, then tag the release. Usage: task build:image TAG=0.28.0"
+    deps: [release:check]
     cmds:
       - docker build --build-arg VERSION={{.TAG}} -t {{.IMAGE}}:{{.TAG}} .
       - docker push {{.IMAGE}}:{{.TAG}}
+      # Tag last: a tag for an image that never reached the registry points at
+      # nothing anyone can run. Pass SKIP_TAG=1 for a throwaway push.
+      - task: tag
+
+  release:check:
+    desc: "Verify a version can be released from this tree. Usage: task release:check TAG=0.28.0"
+    silent: true
+    # build:image and tag both depend on this; once per invocation is enough.
+    run: once
+    requires:
+      vars: [TAG]
+    preconditions:
+      - sh: 'echo "{{.TAG}}" | grep -Eq "^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$"'
+        msg: 'TAG must be a semver version such as 0.28.0 — got "{{.TAG}}". The image tag and the git tag are the same string, so a loose one desyncs them.'
+      - sh: '[ -n "{{.ALLOW_DIRTY}}" ] || [ -z "$(git status --porcelain)" ]'
+        msg: "Working tree is dirty, so a tag here would describe a state no one else can check out. Commit first, or pass ALLOW_DIRTY=1 to build anyway."
+      - sh: '! git rev-parse -q --verify "refs/tags/{{.TAG_PREFIX}}{{.TAG}}" >/dev/null || [ "$(git rev-parse "refs/tags/{{.TAG_PREFIX}}{{.TAG}}^{commit}")" = "$(git rev-parse HEAD)" ]'
+        msg: "Tag {{.TAG_PREFIX}}{{.TAG}} already exists on a different commit. Pick a new version rather than moving a tag that may already be deployed."
+    cmds:
+      - 'echo "release:check: {{.TAG}} is releasable from {{.COMMIT}}"'
+
+  tag:
+    desc: "Create the annotated git tag for a version. Usage: task tag TAG=0.28.0"
+    deps: [release:check]
+    status:
+      # Already tagged at this commit: nothing to do, so a re-run is harmless.
+      - '[ -n "{{.SKIP_TAG}}" ] || [ "$(git rev-parse -q --verify "refs/tags/{{.TAG_PREFIX}}{{.TAG}}^{commit}" 2>/dev/null)" = "$(git rev-parse HEAD)" ]'
+    cmds:
+      - git tag -a "{{.TAG_PREFIX}}{{.TAG}}" -m "agrelha {{.TAG}}"
+      - 'echo "tagged {{.TAG_PREFIX}}{{.TAG}} at {{.COMMIT}} — publish it with: task tag:push TAG={{.TAG}}"'
+
+  tag:push:
+    desc: "Push one version tag to the remote. Usage: task tag:push TAG=0.28.0"
+    requires:
+      vars: [TAG]
+    preconditions:
+      - sh: 'git rev-parse -q --verify "refs/tags/{{.TAG_PREFIX}}{{.TAG}}" >/dev/null'
+        msg: "No local tag {{.TAG_PREFIX}}{{.TAG}} to push — run `task tag TAG={{.TAG}}` first."
+    prompt: "Push {{.TAG_PREFIX}}{{.TAG}} to {{.GIT_REMOTE}}? A published tag is effectively permanent."
+    cmds:
+      - git push {{.GIT_REMOTE}} "{{.TAG_PREFIX}}{{.TAG}}"
 
   clean:
     desc: "Remove build artifacts"

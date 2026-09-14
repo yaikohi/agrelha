@@ -3,6 +3,7 @@ package access
 import (
 	mcaccess "agrelha/internal/app/access"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"agrelha/internal/ports"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/valyala/fasthttp"
 )
 
 type memStateStore struct {
@@ -355,11 +357,15 @@ func TestAccessValheimPasswords(t *testing.T) {
 
 type mockAccessConsole struct {
 	responses map[string]string
+	errs      map[string]error
 	executed  []string
 }
 
 func (m *mockAccessConsole) Execute(cmd string) (string, error) {
 	m.executed = append(m.executed, cmd)
+	if err, ok := m.errs[cmd]; ok && err != nil {
+		return "", err
+	}
 	if resp, ok := m.responses[cmd]; ok {
 		return resp, nil
 	}
@@ -515,4 +521,303 @@ func TestMCAccessHTMLFormsAndErrors(t *testing.T) {
 		t.Errorf("unconf JSON expected 503, got %d", respUnconfJSON.StatusCode)
 	}
 }
+
+type failPatchStore struct {
+	ports.StateStore
+}
+
+func (f *failPatchStore) Patch(ctx context.Context, path, msg string, mutate func(*ports.Document) (bool, error)) (bool, error) {
+	return false, errors.New("git patch error")
+}
+
+type failConsole struct{}
+
+func (f *failConsole) Execute(cmd string) (string, error) {
+	return "", errors.New("rcon failure")
+}
+
+type mockPlayerReader struct {
+	players []domain.Player
+}
+
+func (m mockPlayerReader) ListPlayers() ([]domain.Player, error) {
+	return m.players, nil
+}
+
+func TestAccessRemainingEdges(t *testing.T) {
+	app := fiber.New()
+
+	// 1. Actor fallback
+	hActor := New(Config{})
+	var fastCtx fasthttp.RequestCtx
+	c := app.AcquireCtx(&fastCtx)
+	defer app.ReleaseCtx(c)
+
+	if a := hActor.cfg.Actor(c); a != "-" {
+		t.Errorf("expected '-', got %q", a)
+	}
+	c.Locals("actor", "superadmin")
+	if a := hActor.cfg.Actor(c); a != "superadmin" {
+		t.Errorf("expected 'superadmin', got %q", a)
+	}
+
+	// 2. AdminsPage with Players, Admins, and Valheim instances with empty LBIP
+	dbPath := filepath.Join(t.TempDir(), "access_edges.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mockPlayers := mockPlayerReader{
+		players: []domain.Player{{SteamID: "76561198000000001", Character: "Valkyrie"}},
+	}
+	state := newMemStateStore()
+	adm := admins.New(state, "valheim-admins.yaml", admins.WithAudit(st))
+	_, _ = adm.Grant(context.Background(), "76561198000000001", "admin")
+
+	vhRepo := store.NewValheimInstanceRepo(st)
+	_ = vhRepo.Upsert(domain.Instance{
+		Number: 1, Name: "Midgard", State: domain.StateRunning, GameID: domain.GameValheim, Password: "secret", LBIP: "",
+	})
+	vhMgr := instances.NewInstanceManager(vhRepo, nil, nil, 16, 4, 2, "manifests/valheim", "192.168.20.224", nil, "valheim", instances.WithGameID(domain.GameValheim))
+
+	var capturedFilter func(string) bool
+	hFull := New(Config{
+		Admins:           adm,
+		Players:          mockPlayers,
+		ValheimInstances: vhMgr,
+		ApplyAfterSync: func(cmName, key string, want func(string) bool) {
+			capturedFilter = want
+		},
+	})
+	appFull := fiber.New()
+	hFull.Register(appFull)
+
+	respAdmins, err := appFull.Test(httptest.NewRequest(http.MethodGet, "/admins", nil))
+	if err != nil || respAdmins.StatusCode != http.StatusOK {
+		t.Fatalf("GET /admins failed: %v, status: %d", err, respAdmins.StatusCode)
+	}
+
+	// 3. Valheim AdminsGrant and AdminsRevoke
+	// 3a. Empty steam_id
+	respGrantEmpty, _ := appFull.Test(httptest.NewRequest(http.MethodPost, "/admins/grant", strings.NewReader("steam_id=")))
+	if respGrantEmpty.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("empty grant status = %d, want 303", respGrantEmpty.StatusCode)
+	}
+	respRevokeEmpty, _ := appFull.Test(httptest.NewRequest(http.MethodPost, "/admins/revoke", strings.NewReader("steam_id=")))
+	if respRevokeEmpty.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("empty revoke status = %d, want 303", respRevokeEmpty.StatusCode)
+	}
+
+	// 3b. Grant when already an admin (unchanged branch)
+	reqGrantAgain := httptest.NewRequest(http.MethodPost, "/admins/grant", strings.NewReader("steam_id=76561198000000001"))
+	reqGrantAgain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respGrantAgain, _ := appFull.Test(reqGrantAgain)
+	if respGrantAgain.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("grant again status = %d, want 303", respGrantAgain.StatusCode)
+	}
+
+	// 3c. Grant new admin with ApplyAfterSync filter exercise
+	reqGrantNew := httptest.NewRequest(http.MethodPost, "/admins/grant", strings.NewReader("steam_id=76561198000000002"))
+	reqGrantNew.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respGrantNew, _ := appFull.Test(reqGrantNew)
+	if respGrantNew.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("grant new status = %d, want 303", respGrantNew.StatusCode)
+	}
+	if capturedFilter != nil {
+		if !capturedFilter("76561198000000002") {
+			t.Errorf("expected filter true for matching ID")
+		}
+		if capturedFilter("other_id") {
+			t.Errorf("expected filter false for non-matching ID")
+		}
+	}
+
+	// 3d. Revoke admin with ApplyAfterSync filter exercise
+	capturedFilter = nil
+	reqRevokeNew := httptest.NewRequest(http.MethodPost, "/admins/revoke", strings.NewReader("steam_id=76561198000000002"))
+	reqRevokeNew.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respRevokeNew, _ := appFull.Test(reqRevokeNew)
+	if respRevokeNew.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("revoke new status = %d, want 303", respRevokeNew.StatusCode)
+	}
+	if capturedFilter != nil {
+		if !capturedFilter("other_id") {
+			t.Errorf("expected filter true for non-matching ID on revoke")
+		}
+		if capturedFilter("76561198000000002") {
+			t.Errorf("expected filter false for matching ID on revoke")
+		}
+	}
+
+	// 3e. Revoke admin when not an admin (unchanged branch)
+	reqRevokeAgain := httptest.NewRequest(http.MethodPost, "/admins/revoke", strings.NewReader("steam_id=76561198000000002"))
+	reqRevokeAgain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respRevokeAgain, _ := appFull.Test(reqRevokeAgain)
+	if respRevokeAgain.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("revoke again status = %d, want 303", respRevokeAgain.StatusCode)
+	}
+
+	// 3f. AdminsGrant and AdminsRevoke with store error
+	failAdm := admins.New(&failPatchStore{}, "valheim-admins.yaml")
+	hFailAdm := New(Config{Admins: failAdm})
+	appFailAdm := fiber.New()
+	hFailAdm.Register(appFailAdm)
+
+	reqFailGrant := httptest.NewRequest(http.MethodPost, "/admins/grant", strings.NewReader("steam_id=123"))
+	reqFailGrant.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respFailGrant, _ := appFailAdm.Test(reqFailGrant)
+	if respFailGrant.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("fail grant status = %d, want 303", respFailGrant.StatusCode)
+	}
+
+	reqFailRevoke := httptest.NewRequest(http.MethodPost, "/admins/revoke", strings.NewReader("steam_id=123"))
+	reqFailRevoke.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respFailRevoke, _ := appFailAdm.Test(reqFailRevoke)
+	if respFailRevoke.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("fail revoke status = %d, want 303", respFailRevoke.StatusCode)
+	}
+
+	// 4. Minecraft Access: empty usernames for deop, whitelist add, whitelist remove
+	hMC := New(Config{
+		MCAccess: mcaccess.NewAccessManager(newMemStateStore(), "access.yaml", nil),
+	})
+	appMC := fiber.New()
+	hMC.Register(appMC)
+
+	endpoints := []string{
+		"/api/minecraft/access/deop",
+		"/api/minecraft/access/whitelist/add",
+		"/api/minecraft/access/whitelist/remove",
+	}
+	for _, ep := range endpoints {
+		reqHTML := httptest.NewRequest(http.MethodPost, ep, strings.NewReader("username="))
+		reqHTML.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		reqHTML.Header.Set("Accept", "text/html")
+		respHTML, _ := appMC.Test(reqHTML)
+		if respHTML.StatusCode != fiber.StatusSeeOther {
+			t.Errorf("%s empty user HTML status = %d, want 303", ep, respHTML.StatusCode)
+		}
+
+		reqJSON := httptest.NewRequest(http.MethodPost, ep, strings.NewReader("username="))
+		reqJSON.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		reqJSON.Header.Set("Accept", "application/json")
+		respJSON, _ := appMC.Test(reqJSON)
+		if respJSON.StatusCode != fiber.StatusBadRequest {
+			t.Errorf("%s empty user JSON status = %d, want 400", ep, respJSON.StatusCode)
+		}
+	}
+
+	// 5. Minecraft Access: Patch/Git errors (HTML and JSON)
+	hMCFail := New(Config{
+		MCAccess: mcaccess.NewAccessManager(&failPatchStore{}, "access.yaml", nil),
+	})
+	appMCFail := fiber.New()
+	hMCFail.Register(appMCFail)
+
+	allOps := []string{
+		"/api/minecraft/access/op",
+		"/api/minecraft/access/deop",
+		"/api/minecraft/access/whitelist/add",
+		"/api/minecraft/access/whitelist/remove",
+	}
+	for _, ep := range allOps {
+		reqHTML := httptest.NewRequest(http.MethodPost, ep, strings.NewReader("username=alex"))
+		reqHTML.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		reqHTML.Header.Set("Accept", "text/html")
+		respHTML, _ := appMCFail.Test(reqHTML)
+		if respHTML.StatusCode != fiber.StatusSeeOther {
+			t.Errorf("%s fail HTML status = %d, want 303", ep, respHTML.StatusCode)
+		}
+
+		reqJSON := httptest.NewRequest(http.MethodPost, ep, strings.NewReader("username=alex"))
+		reqJSON.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		reqJSON.Header.Set("Accept", "application/json")
+		respJSON, _ := appMCFail.Test(reqJSON)
+		if respJSON.StatusCode != fiber.StatusInternalServerError {
+			t.Errorf("%s fail JSON status = %d, want 500", ep, respJSON.StatusCode)
+		}
+	}
+
+	// 6. Whitelist Toggle: console error
+	hToggleFail := New(Config{
+		MCAccess: mcaccess.NewAccessManager(newMemStateStore(), "access.yaml", &failConsole{}),
+	})
+	appToggleFail := fiber.New()
+	hToggleFail.Register(appToggleFail)
+
+	reqToggleFailHTML := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
+	reqToggleFailHTML.Header.Set("Accept", "text/html")
+	respToggleFailHTML, _ := appToggleFail.Test(reqToggleFailHTML)
+	if respToggleFailHTML.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("toggle fail HTML status = %d, want 303", respToggleFailHTML.StatusCode)
+	}
+
+	reqToggleFailJSON := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
+	reqToggleFailJSON.Header.Set("Accept", "application/json")
+	respToggleFailJSON, _ := appToggleFail.Test(reqToggleFailJSON)
+	if respToggleFailJSON.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("toggle fail JSON status = %d, want 500", respToggleFailJSON.StatusCode)
+	}
+
+	// 7. Whitelist Toggle: turned off branch (!target)
+	mockConsoleOff := &mockAccessConsole{
+		responses: map[string]string{
+			"/whitelist on":  "Whitelist is already turned on",
+			"/whitelist off": "Whitelist is now turned off",
+		},
+	}
+	hToggleOff := New(Config{
+		MCAccess: mcaccess.NewAccessManager(newMemStateStore(), "access.yaml", mockConsoleOff),
+	})
+	appToggleOff := fiber.New()
+	hToggleOff.Register(appToggleOff)
+
+	reqToggleOffHTML := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
+	reqToggleOffHTML.Header.Set("Accept", "text/html")
+	respToggleOffHTML, _ := appToggleOff.Test(reqToggleOffHTML)
+	if respToggleOffHTML.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("toggle off HTML status = %d, want 303", respToggleOffHTML.StatusCode)
+	}
+
+	reqToggleOffJSON := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
+	reqToggleOffJSON.Header.Set("Accept", "application/json")
+	respToggleOffJSON, _ := appToggleOff.Test(reqToggleOffJSON)
+	if respToggleOffJSON.StatusCode != fiber.StatusOK {
+		t.Errorf("toggle off JSON status = %d, want 200", respToggleOffJSON.StatusCode)
+	}
+	bodyToggleOffJSON, _ := io.ReadAll(respToggleOffJSON.Body)
+	if !strings.Contains(string(bodyToggleOffJSON), `"enforced":false`) {
+		t.Errorf("expected enforced:false, got %s", string(bodyToggleOffJSON))
+	}
+
+	// 8. Whitelist Toggle: SetWhitelistEnforced error
+	mockConsoleSetErr := &mockAccessConsole{
+		responses: map[string]string{
+			"/whitelist on": "Whitelist is already turned on",
+		},
+		errs: map[string]error{
+			"/whitelist off": errors.New("cannot set whitelist"),
+		},
+	}
+	hToggleSetErr := New(Config{
+		MCAccess: mcaccess.NewAccessManager(newMemStateStore(), "access.yaml", mockConsoleSetErr),
+	})
+	appToggleSetErr := fiber.New()
+	hToggleSetErr.Register(appToggleSetErr)
+
+	reqSetErrHTML := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
+	reqSetErrHTML.Header.Set("Accept", "text/html")
+	respSetErrHTML, _ := appToggleSetErr.Test(reqSetErrHTML)
+	if respSetErrHTML.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("set err HTML status = %d, want 303", respSetErrHTML.StatusCode)
+	}
+
+	reqSetErrJSON := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
+	reqSetErrJSON.Header.Set("Accept", "application/json")
+	respSetErrJSON, _ := appToggleSetErr.Test(reqSetErrJSON)
+	if respSetErrJSON.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("set err JSON status = %d, want 500", respSetErrJSON.StatusCode)
+	}
+}
+
 

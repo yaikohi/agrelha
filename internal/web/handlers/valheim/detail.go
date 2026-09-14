@@ -14,7 +14,6 @@ import (
 	"agrelha/internal/web/mdrender"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
-	"agrelha/internal/web/sse"
 )
 
 // ValheimInstancePage renders the Valheim instance detail tab view.
@@ -168,8 +167,8 @@ func (h *Handler) ValheimInstanceModsRemove(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	_ = sse.InnerElement(w, "#installed-mods-container", renderInstalledModsHTML(num, updatedMods))
-	_ = sse.PatchSignals(w, map[string]any{
+	_ = innerElement(w, "#installed-mods-container", renderInstalledModsHTML(num, updatedMods))
+	_ = patchSignals(w, map[string]any{
 		"toast":     fmt.Sprintf("Removed %s. Updating...", slug),
 		"toastkind": "ok",
 	})
@@ -214,8 +213,8 @@ func (h *Handler) ValheimInstanceModsInstall(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	_ = sse.InnerElement(w, "#installed-mods-container", renderInstalledModsHTML(num, updatedMods))
-	_ = sse.PatchSignals(w, map[string]any{
+	_ = innerElement(w, "#installed-mods-container", renderInstalledModsHTML(num, updatedMods))
+	_ = patchSignals(w, map[string]any{
 		"toast":     fmt.Sprintf("Installed %s (+%d mods). Updating...", slug, added),
 		"toastkind": "ok",
 	})
@@ -522,10 +521,10 @@ func (h *Handler) ValheimModDetail(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	if err := sse.InnerElement(w, "#valheim-mod-detail-content", drawerContent); err != nil {
+	if err := innerElement(w, "#valheim-mod-detail-content", drawerContent); err != nil {
 		return err
 	}
-	if err := sse.PatchSignals(w, map[string]any{
+	if err := patchSignals(w, map[string]any{
 		"showModDetail": true,
 	}); err != nil {
 		return err
@@ -585,7 +584,7 @@ func ssePatchElements(c *fiber.Ctx, selector, content string) error {
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	if err := sse.InnerElement(w, selector, content); err != nil {
+	if err := innerElement(w, selector, content); err != nil {
 		return err
 	}
 	return c.Send(buf.Bytes())

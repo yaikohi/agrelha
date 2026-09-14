@@ -26,12 +26,15 @@ import (
 )
 
 type mockRuntime struct {
-	status ports.Status
+	status     ports.Status
+	startErr   error
+	stopErr    error
+	restartErr error
 }
 
-func (m *mockRuntime) Start(ctx context.Context, ref ports.ServerRef) error   { return nil }
-func (m *mockRuntime) Stop(ctx context.Context, ref ports.ServerRef) error    { return nil }
-func (m *mockRuntime) Restart(ctx context.Context, ref ports.ServerRef) error { return nil }
+func (m *mockRuntime) Start(ctx context.Context, ref ports.ServerRef) error   { return m.startErr }
+func (m *mockRuntime) Stop(ctx context.Context, ref ports.ServerRef) error    { return m.stopErr }
+func (m *mockRuntime) Restart(ctx context.Context, ref ports.ServerRef) error { return m.restartErr }
 func (m *mockRuntime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status, error) {
 	return m.status, nil
 }
@@ -46,7 +49,11 @@ func (m *mockRuntime) WatchAvailability(ctx context.Context, ref ports.ServerRef
 }
 
 type mockPackageCatalog struct {
-	results []domain.ModSearchResult
+	results   []domain.ModSearchResult
+	searchErr error
+	readmeErr error
+	latestErr error
+	treeErr   error
 }
 
 func (m *mockPackageCatalog) Get(fullName string) (domain.ModSearchResult, bool) {
@@ -58,22 +65,37 @@ func (m *mockPackageCatalog) Get(fullName string) (domain.ModSearchResult, bool)
 	return domain.ModSearchResult{}, false
 }
 func (m *mockPackageCatalog) Search(ctx context.Context, query string, limit int) ([]domain.ModSearchResult, error) {
+	if m.searchErr != nil {
+		return nil, m.searchErr
+	}
 	return m.results, nil
 }
 func (m *mockPackageCatalog) Ready() bool { return true }
 func (m *mockPackageCatalog) LatestVersion(ctx context.Context, ns, name string) (string, []string, error) {
-	return "1.2.0", []string{"denikson-BepInExPack_Valheim-5.4.2202"}, nil
+	if m.latestErr != nil {
+		return "", nil, m.latestErr
+	}
+	return "1.2.0", []string{"denikson-BepInExPack_Valheim-5.4.2202", "Author-OtherMod-1.0.0"}, nil
 }
 func (m *mockPackageCatalog) Readme(ctx context.Context, ns, name, version string) (string, error) {
+	if m.readmeErr != nil {
+		return "", m.readmeErr
+	}
 	return "# " + name + "\n\nAwesome Valheim mod by " + ns, nil
 }
 func (m *mockPackageCatalog) ResolveTree(ctx context.Context, ns, name string) ([]string, error) {
+	if m.treeErr != nil {
+		return nil, m.treeErr
+	}
 	return nil, nil
 }
 
 type memStateStore struct {
-	mu   sync.Mutex
-	docs map[string]*ports.Document
+	mu       sync.Mutex
+	docs     map[string]*ports.Document
+	patchErr error
+	putErr   error
+	delErr   error
 }
 
 func newMemStateStore() *memStateStore {
@@ -93,6 +115,9 @@ func (m *memStateStore) Get(ctx context.Context, path string) (ports.Document, e
 func (m *memStateStore) Put(ctx context.Context, path string, doc ports.Document, msg string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.putErr != nil {
+		return m.putErr
+	}
 	m.docs[path] = &doc
 	return nil
 }
@@ -100,6 +125,9 @@ func (m *memStateStore) Put(ctx context.Context, path string, doc ports.Document
 func (m *memStateStore) Patch(ctx context.Context, path string, msg string, mutate func(doc *ports.Document) (bool, error)) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.patchErr != nil {
+		return false, m.patchErr
+	}
 	doc, ok := m.docs[path]
 	if !ok {
 		doc = &ports.Document{Data: make(map[string]string)}
@@ -111,6 +139,9 @@ func (m *memStateStore) Patch(ctx context.Context, path string, msg string, muta
 func (m *memStateStore) Delete(ctx context.Context, path string, msg string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.delErr != nil {
+		return m.delErr
+	}
 	delete(m.docs, path)
 	return nil
 }
@@ -118,6 +149,9 @@ func (m *memStateStore) Delete(ctx context.Context, path string, msg string) err
 func (m *memStateStore) PutTree(ctx context.Context, dirPath string, docs map[string]ports.Document, msg string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.putErr != nil {
+		return m.putErr
+	}
 	for fname, doc := range docs {
 		rel := filepath.Join(dirPath, fname)
 		d := doc
@@ -142,7 +176,7 @@ func (m *memStateStore) PutTree(ctx context.Context, dirPath string, docs map[st
 	return nil
 }
 
-func setupTestValheimHandler(t *testing.T) (*Handler, *store.Store, *instances.InstanceManager) {
+func setupTestValheimHandlerFull(t *testing.T) (*Handler, *store.Store, *instances.InstanceManager, *mockRuntime, *memStateStore, *mockPackageCatalog, string) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "valheim-test.db"))
 	if err != nil {
@@ -153,6 +187,7 @@ func setupTestValheimHandler(t *testing.T) (*Handler, *store.Store, *instances.I
 		status: ports.Status{Lifecycle: ports.LifecycleRunning, Available: true},
 	}
 
+	bDir := t.TempDir()
 	mockState := newMemStateStore()
 	mgr := instances.NewInstanceManager(
 		store.NewValheimInstanceRepo(st), mockState, rt,
@@ -160,7 +195,15 @@ func setupTestValheimHandler(t *testing.T) (*Handler, *store.Store, *instances.I
 		valheimmanifests.New("ykhi.xyz/gameserver=true", "valheim"),
 		"valheim",
 		instances.WithGameID(domain.GameValheim),
-		instances.WithBackupsDir(t.TempDir()),
+		instances.WithBackupsDir(bDir),
+		instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
+			path := fmt.Sprintf("manifests/valheim/instance-%02d/configs.yaml", num)
+			doc, _ := mockState.Get(ctx, path)
+			if doc.Data == nil {
+				return make(map[string]string), nil
+			}
+			return doc.Data, nil
+		}),
 		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
 			path := fmt.Sprintf("manifests/valheim/instance-%02d/mods.yaml", num)
 			doc, _ := mockState.Get(ctx, path)
@@ -191,6 +234,11 @@ func setupTestValheimHandler(t *testing.T) (*Handler, *store.Store, *instances.I
 		TS:               mockTS,
 	})
 
+	return h, st, mgr, rt, mockState, mockTS, bDir
+}
+
+func setupTestValheimHandler(t *testing.T) (*Handler, *store.Store, *instances.InstanceManager) {
+	h, st, mgr, _, _, _, _ := setupTestValheimHandlerFull(t)
 	return h, st, mgr
 }
 

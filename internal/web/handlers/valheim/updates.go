@@ -14,7 +14,6 @@ import (
 	"agrelha/internal/domain"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
-	"agrelha/internal/web/sse"
 )
 
 // ModUpdateState fills in the mod-update half of an instance view: what the
@@ -172,7 +171,7 @@ func (h *Handler) pushUpdatePanel(c *fiber.Ctx, inst domain.Instance, msg, kind 
 	h.ModUpdateState(c.UserContext(), &d, inst)
 
 	var panel bytes.Buffer
-	if err := pages.ModUpdatePanel(d).Render(c.UserContext(), &panel); err != nil {
+	if err := renderUpdatePanel(c.UserContext(), d, &panel); err != nil {
 		return shared.SSEToast(c, "err", "Render failed: "+err.Error(), nil)
 	}
 
@@ -180,10 +179,10 @@ func (h *Handler) pushUpdatePanel(c *fiber.Ctx, inst domain.Instance, msg, kind 
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	if err := sse.InnerElement(w, "#mod-updates-panel", panel.String()); err != nil {
+	if err := innerElement(w, "#mod-updates-panel", panel.String()); err != nil {
 		return err
 	}
-	if err := sse.PatchSignals(w, map[string]any{
+	if err := patchSignals(w, map[string]any{
 		"toast":     msg,
 		"toastkind": kind,
 		"selected":  map[string]any{},

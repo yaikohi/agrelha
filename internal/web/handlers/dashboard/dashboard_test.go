@@ -221,15 +221,11 @@ func TestDashboardPageWithInstances(t *testing.T) {
 	}
 }
 
-type failWriter struct{}
-
-func (f *failWriter) Write(p []byte) (n int, err error) {
-	return 0, io.ErrClosedPipe
-}
-
 func TestDashboardSSEMain(t *testing.T) {
+	// Test interval <= 0 fallback and initial push failure via CloseBodyStream
 	h := New(Config{
 		ModUpdateTotal: func() int { return 4 },
+		SSEInterval:    0,
 	})
 	app := fiber.New()
 
@@ -242,7 +238,8 @@ func TestDashboardSSEMain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _ = fastCtx.Response.WriteTo(&failWriter{})
+	_ = fastCtx.Response.CloseBodyStream()
+	time.Sleep(50 * time.Millisecond)
 }
 
 type mockModLister struct {
@@ -269,4 +266,82 @@ func TestHasModsHelper(t *testing.T) {
 		t.Errorf("expected true for non-empty mods")
 	}
 }
+
+type failAfterWriteOnce struct {
+	writes int
+}
+
+func (f *failAfterWriteOnce) Write(p []byte) (int, error) {
+	f.writes++
+	if f.writes > 3 {
+		return 0, io.ErrClosedPipe
+	}
+	return len(p), nil
+}
+
+func TestDashboardRemainingEdges(t *testing.T) {
+	app := fiber.New()
+
+	// 1. Default Actor helper
+	h := New(Config{})
+	var fastCtx fasthttp.RequestCtx
+	c := app.AcquireCtx(&fastCtx)
+	defer app.ReleaseCtx(c)
+
+	if a := h.cfg.Actor(c); a != "-" {
+		t.Errorf("expected '-', got %q", a)
+	}
+	c.Locals("actor", "admin-user")
+	if a := h.cfg.Actor(c); a != "admin-user" {
+		t.Errorf("expected 'admin-user', got %q", a)
+	}
+
+	// 2. Valheim fallback to InstanceStats
+	st, err := store.Open(filepath.Join(t.TempDir(), "dash2.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	vhRepo := store.NewValheimInstanceRepo(st)
+	_ = vhRepo.Upsert(domain.Instance{
+		Number: 1, Name: "V1", State: domain.StateRunning, GameID: domain.GameValheim,
+	})
+	vhMgr := instances.NewInstanceManager(
+		vhRepo, nil, nil, 16, 4, 2, "manifests/valheim", "192.168.20.224", nil, "valheim",
+		instances.WithGameID(domain.GameValheim),
+	)
+
+	var statsCalled bool
+	hStats := New(Config{
+		ValheimInstances: vhMgr,
+		InstanceStats: func(ctx context.Context, insts []domain.Instance) map[int]InstanceStat {
+			statsCalled = true
+			return map[int]InstanceStat{1: {Players: 1, PlayersKnown: true}}
+		},
+	})
+	app.Get("/stats-fallback", hStats.DashboardPage)
+	reqStats := httptest.NewRequest(http.MethodGet, "/stats-fallback", nil)
+	respStats, err := app.Test(reqStats)
+	if err != nil || respStats.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected response: %v, %d", err, respStats.StatusCode)
+	}
+	if !statsCalled {
+		t.Errorf("expected InstanceStats called as fallback for Valheim")
+	}
+
+	// 3. SSEMain loop tick failure
+	hSSE := New(Config{
+		SSEInterval: 1 * time.Millisecond,
+	})
+	var sseCtx fasthttp.RequestCtx
+	c2 := app.AcquireCtx(&sseCtx)
+	defer app.ReleaseCtx(c2)
+
+	if err := hSSE.SSEMain(c2); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = sseCtx.Response.WriteTo(&failAfterWriteOnce{})
+}
+
 

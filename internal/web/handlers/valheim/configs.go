@@ -11,7 +11,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/web/shared"
-	"agrelha/internal/web/sse"
 )
 
 var valheimCfgNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._\-/]*\.(cfg|json|yaml|yml|txt|ini|properties)$`)
@@ -43,7 +42,7 @@ func (h *Handler) ValheimInstanceConfigGet(c *fiber.Ctx) error {
 		"isNew":        false,
 		"showEditor":   true,
 	}
-	if err := sse.PatchSignals(w, signals); err != nil {
+	if err := patchSignals(w, signals); err != nil {
 		return err
 	}
 	return c.Send(buf.Bytes())
@@ -65,15 +64,15 @@ func (h *Handler) ValheimInstanceConfigSave(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 
-	fileName := strings.TrimSpace(req.File)
+	fileName := strings.Clone(strings.TrimSpace(req.File))
 	if fileName == "" {
-		fileName = strings.TrimSpace(c.FormValue("file"))
+		fileName = strings.Clone(strings.TrimSpace(c.FormValue("file")))
 	}
 	if !valheimCfgNameRe.MatchString(fileName) {
 		return shared.SSEToast(c, "err", "Invalid config file name. Must end in .cfg, .json, .yaml, etc.", nil)
 	}
 
-	content := strings.ReplaceAll(req.Content, "\r\n", "\n")
+	content := strings.Clone(strings.ReplaceAll(req.Content, "\r\n", "\n"))
 
 	changed, err := h.cfg.ValheimInstances.SaveConfig(c.UserContext(), num, fileName, content, h.cfg.Actor(c))
 	if err != nil {
@@ -105,12 +104,12 @@ func (h *Handler) ValheimInstanceConfigDelete(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 
-	fileName := strings.TrimSpace(req.File)
+	fileName := strings.Clone(strings.TrimSpace(req.File))
 	if fileName == "" {
-		fileName = strings.TrimSpace(c.FormValue("file"))
+		fileName = strings.Clone(strings.TrimSpace(c.FormValue("file")))
 	}
 	if fileName == "" {
-		fileName = strings.TrimSpace(c.Query("file"))
+		fileName = strings.Clone(strings.TrimSpace(c.Query("file")))
 	}
 	if !valheimCfgNameRe.MatchString(fileName) {
 		return shared.SSEToast(c, "err", "Invalid config file name.", nil)

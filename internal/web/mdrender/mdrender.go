@@ -21,6 +21,9 @@ var (
 	)
 
 	policy = buildPolicy()
+
+	parseFragment = html.ParseFragment
+	renderHTML    = html.Render
 )
 
 func buildPolicy() *bluemonday.Policy {
@@ -58,14 +61,14 @@ func Render(src string) string {
 
 func proxyImages(fragment string) string {
 	body := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := html.ParseFragment(strings.NewReader(fragment), body)
+	nodes, err := parseFragment(strings.NewReader(fragment), body)
 	if err != nil {
 		return fragment
 	}
 	var buf bytes.Buffer
 	for _, n := range nodes {
 		rewriteImg(n)
-		if err := html.Render(&buf, n); err != nil {
+		if err := renderHTML(&buf, n); err != nil {
 			return fragment
 		}
 	}

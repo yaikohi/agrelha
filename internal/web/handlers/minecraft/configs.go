@@ -12,7 +12,6 @@ import (
 
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
-	"agrelha/internal/web/sse"
 )
 
 var mcCfgNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._\-/]*\.(toml|json|json5|yaml|yml|cfg|txt|properties|ini)$`)
@@ -128,7 +127,7 @@ func (h *Handler) MCInstanceConfigGet(c *fiber.Ctx) error {
 		"isNew":        false,
 		"showEditor":   true,
 	}
-	if err := sse.PatchSignals(w, signals); err != nil {
+	if err := patchSignals(w, signals); err != nil {
 		return err
 	}
 	return c.Send(buf.Bytes())

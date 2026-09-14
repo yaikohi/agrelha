@@ -109,27 +109,38 @@ func (h *Handler) ImageProxy(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadGateway, "fetch failed")
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
 		return fiber.NewError(fiber.StatusBadGateway, "upstream "+resp.Status)
 	}
 	ct := resp.Header.Get("Content-Type")
 	if !strings.HasPrefix(ct, "image/") {
+		_ = resp.Body.Close()
 		return fiber.NewError(fiber.StatusUnsupportedMediaType, "not an image")
 	}
 
 	c.Set(fiber.HeaderContentType, ct)
 	c.Set(fiber.HeaderCacheControl, "public, max-age=604800, immutable")
 	c.Set("X-Content-Type-Options", "nosniff")
-	return c.SendStream(io.LimitReader(resp.Body, maxImageBytes))
+	return c.SendStream(limitReadCloser{
+		Reader: io.LimitReader(resp.Body, maxImageBytes),
+		Closer: resp.Body,
+	})
 }
+
+type limitReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
+var lookupIP = net.LookupIP
 
 // PublicHost verifies that a given hostname does not resolve to private or loopback IP ranges.
 func PublicHost(host string) bool {
 	if host == "" {
 		return false
 	}
-	ips, err := net.LookupIP(host)
+	ips, err := lookupIP(host)
 	if err != nil || len(ips) == 0 {
 		return false
 	}

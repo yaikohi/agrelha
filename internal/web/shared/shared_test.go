@@ -1,13 +1,18 @@
 package shared
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/gofiber/fiber/v2"
+
+	"agrelha/internal/ports"
 )
 
 func TestFlashSetAndTake(t *testing.T) {
@@ -146,5 +151,127 @@ func TestRequestLoggerAndID(t *testing.T) {
 	id := string(buf[:n])
 	if id == "" || id == "-" {
 		t.Errorf("expected generated request ID, got %q", id)
+	}
+}
+
+type mockAuth struct {
+	authenticated bool
+}
+
+func (m *mockAuth) Middleware() fiber.Handler         { return func(c *fiber.Ctx) error { return c.Next() } }
+func (m *mockAuth) IsAuthenticated(c *fiber.Ctx) bool { return m.authenticated }
+func (m *mockAuth) Login(c *fiber.Ctx) error          { return nil }
+func (m *mockAuth) Callback(c *fiber.Ctx) error       { return nil }
+func (m *mockAuth) Logout(c *fiber.Ctx) error         { return nil }
+
+func TestSharedRemainingEdges(t *testing.T) {
+	app := fiber.New()
+
+	// 1. TakeFlash with corrupt base64
+	app.Get("/take-corrupt", func(c *fiber.Ctx) error {
+		k, m := TakeFlash(c)
+		return c.SendString(k + ":" + m)
+	})
+	reqCorrupt := httptest.NewRequest(http.MethodGet, "/take-corrupt", nil)
+	reqCorrupt.AddCookie(&http.Cookie{Name: flashCookie, Value: "!!!not-valid-base64!!!"})
+	respCorrupt, _ := app.Test(reqCorrupt)
+	body := make([]byte, 50)
+	n, _ := respCorrupt.Body.Read(body)
+	if string(body[:n]) != ":" {
+		t.Errorf("expected empty flash on corrupt cookie, got %q", string(body[:n]))
+	}
+
+	// 2. IsAdmin with Auth implementation
+	app.Get("/is-admin-auth", func(c *fiber.Ctx) error {
+		var auth ports.Auth = &mockAuth{authenticated: c.Query("admin") == "1"}
+		if IsAdmin(auth, c) {
+			return c.SendString("true")
+		}
+		return c.SendString("false")
+	})
+	reqAuthTrue := httptest.NewRequest(http.MethodGet, "/is-admin-auth?admin=1", nil)
+	respAuthTrue, _ := app.Test(reqAuthTrue)
+	n, _ = respAuthTrue.Body.Read(body)
+	if string(body[:n]) != "true" {
+		t.Errorf("expected true, got %q", string(body[:n]))
+	}
+	reqAuthFalse := httptest.NewRequest(http.MethodGet, "/is-admin-auth?admin=0", nil)
+	respAuthFalse, _ := app.Test(reqAuthFalse)
+	n, _ = respAuthFalse.Body.Read(body)
+	if string(body[:n]) != "false" {
+		t.Errorf("expected false, got %q", string(body[:n]))
+	}
+
+	// 3. Render
+	app.Get("/render", func(c *fiber.Ctx) error {
+		comp := templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+			_, err := w.Write([]byte("<h1>Hello Templ</h1>"))
+			return err
+		})
+		return Render(c, comp)
+	})
+	reqRender := httptest.NewRequest(http.MethodGet, "/render", nil)
+	respRender, _ := app.Test(reqRender)
+	n, _ = respRender.Body.Read(body)
+	if !strings.Contains(string(body[:n]), "Hello Templ") {
+		t.Errorf("expected rendered html, got %q", string(body[:n]))
+	}
+	if ct := respRender.Header.Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Errorf("expected text/html content type, got %s", ct)
+	}
+
+	// 4. SSEToast
+	app.Get("/toast", func(c *fiber.Ctx) error {
+		return SSEToast(c, "info", "Server started", map[string]any{"custom": 123})
+	})
+	reqToast := httptest.NewRequest(http.MethodGet, "/toast", nil)
+	respToast, _ := app.Test(reqToast)
+	bufToast := make([]byte, 200)
+	n, _ = respToast.Body.Read(bufToast)
+	toastBody := string(bufToast[:n])
+	if !strings.Contains(toastBody, "event: datastar-patch-signals") || !strings.Contains(toastBody, "Server started") {
+		t.Errorf("unexpected toast body: %s", toastBody)
+	}
+	if ct := respToast.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Errorf("expected text/event-stream, got %s", ct)
+	}
+
+	// 5. RequestLogger branches
+	logApp := fiber.New()
+	logApp.Use(RequestLogger())
+	logApp.Get("/healthz", func(c *fiber.Ctx) error { return c.SendString("ok") })
+	logApp.Get("/metrics", func(c *fiber.Ctx) error { return c.SendString("metrics") })
+	logApp.Get("/assets/style.css", func(c *fiber.Ctx) error { return c.SendString("css") })
+	logApp.Get("/redirect", func(c *fiber.Ctx) error {
+		c.Locals("actor", "bob")
+		return c.Redirect("/destination")
+	})
+	logApp.Get("/err400", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusBadRequest).SendString("bad")
+	})
+	logApp.Get("/err500", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusInternalServerError).SendString("server err")
+	})
+	logApp.Get("/datastar", func(c *fiber.Ctx) error {
+		return c.SendString("ds")
+	})
+
+	for _, path := range []string{"/healthz", "/metrics", "/assets/style.css", "/redirect", "/err400", "/err500"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		_, _ = logApp.Test(req)
+	}
+	reqDS := httptest.NewRequest(http.MethodGet, "/datastar", nil)
+	reqDS.Header.Set("Datastar-Request", "true")
+	_, _ = logApp.Test(reqDS)
+
+	// 6. RequestID when not set
+	emptyCtxApp := fiber.New()
+	emptyCtxApp.Get("/empty-rid", func(c *fiber.Ctx) error {
+		return c.SendString(RequestID(c))
+	})
+	respEmptyRID, _ := emptyCtxApp.Test(httptest.NewRequest(http.MethodGet, "/empty-rid", nil))
+	n, _ = respEmptyRID.Body.Read(body)
+	if string(body[:n]) != "-" {
+		t.Errorf("expected '-', got %q", string(body[:n]))
 	}
 }

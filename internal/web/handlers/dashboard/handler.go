@@ -48,6 +48,7 @@ type Config struct {
 	BackupInfo           func() (BackupSummary, bool)
 	InstanceStats        func(context.Context, []domain.Instance) map[int]InstanceStat
 	ValheimInstanceStats func(context.Context, []domain.Instance) map[int]InstanceStat
+	SSEInterval          time.Duration
 }
 
 // Handler serves the dashboard landing page and the continuous tile SSE stream.
@@ -215,7 +216,11 @@ func (h *Handler) SSEMain(c *fiber.Ctx) error {
 				"reason", reason, "tiles", tiles, "dur_ms", time.Since(start).Milliseconds())
 		}()
 
-		ticker := time.NewTicker(5 * time.Second)
+		interval := h.cfg.SSEInterval
+		if interval <= 0 {
+			interval = 5 * time.Second
+		}
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
 		push := func() bool {

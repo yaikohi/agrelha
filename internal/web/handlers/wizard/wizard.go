@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"mime/multipart"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"agrelha/internal/app/instances"
 	"agrelha/internal/app/modpack"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
@@ -58,12 +60,25 @@ func (h *Handler) MCWizardPage(c *fiber.Ctx) error {
 	return shared.Render(c, pages.MinecraftWizard(releases, budgetUI))
 }
 
+var (
+	sleep        = time.Sleep
+	innerElement = sse.InnerElement
+	patchSignals = sse.PatchSignals
+	openFile     = func(fh *multipart.FileHeader) (multipart.File, error) { return fh.Open() }
+	readAll      = io.ReadAll
+	parseMrpack  = modpack.ParseMrpack
+	provisioningStatus = func(m *instances.InstanceManager, ctx context.Context, num int) (string, bool, error) {
+		return m.ProvisioningStatus(ctx, num)
+	}
+	bodyParser = func(c *fiber.Ctx, out any) error { return c.BodyParser(out) }
+)
+
 func ssePatchElements(c *fiber.Ctx, selector, content string) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	if err := sse.InnerElement(w, selector, content); err != nil {
+	if err := innerElement(w, selector, content); err != nil {
 		return err
 	}
 	return c.Send(buf.Bytes())
@@ -251,31 +266,33 @@ func (h *Handler) MCWizardCartCheck(c *fiber.Ctx) error {
 	})
 }
 
+type wizardCreateReq struct {
+	Name         string `json:"name" form:"name"`
+	Source       string `json:"source" form:"source"`
+	Loader       string `json:"loader" form:"loader"`
+	MCVersion    string `json:"mc_version" form:"mc_version"`
+	Tier         string `json:"tier" form:"tier"`
+	Seed         string `json:"seed" form:"seed"`
+	MOTD         string `json:"motd" form:"motd"`
+	Difficulty   string `json:"difficulty" form:"difficulty"`
+	Gamemode     string `json:"gamemode" form:"gamemode"`
+	WorldType    string `json:"world_type" form:"world_type"`
+	PackName     string `json:"pack_name" form:"pack_name"`
+	PackRef      string `json:"pack_ref" form:"pack_ref"`
+	PackProvider string `json:"pack_provider" form:"pack_provider"`
+	PackID       string `json:"pack_id" form:"pack_id"`
+	RawMods      string `json:"raw_mods" form:"raw_mods"`
+	Cart         any    `json:"cart" form:"cart"`
+}
+
 // MCWizardCreate creates a world according to the wizard parameters.
 func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 	if h.cfg.MCInstances == nil {
 		return shared.SSEToast(c, "err", "Instance manager not configured.", nil)
 	}
 
-	var req struct {
-		Name         string `json:"name" form:"name"`
-		Source       string `json:"source" form:"source"`
-		Loader       string `json:"loader" form:"loader"`
-		MCVersion    string `json:"mc_version" form:"mc_version"`
-		Tier         string `json:"tier" form:"tier"`
-		Seed         string `json:"seed" form:"seed"`
-		MOTD         string `json:"motd" form:"motd"`
-		Difficulty   string `json:"difficulty" form:"difficulty"`
-		Gamemode     string `json:"gamemode" form:"gamemode"`
-		WorldType    string `json:"world_type" form:"world_type"`
-		PackName     string `json:"pack_name" form:"pack_name"`
-		PackRef      string `json:"pack_ref" form:"pack_ref"`
-		PackProvider string `json:"pack_provider" form:"pack_provider"`
-		PackID       string `json:"pack_id" form:"pack_id"`
-		RawMods      string `json:"raw_mods" form:"raw_mods"`
-		Cart         any    `json:"cart" form:"cart"`
-	}
-	_ = c.BodyParser(&req)
+	var req wizardCreateReq
+	_ = bodyParser(c, &req)
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -504,7 +521,7 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		for range 60 {
-			phase, isReady, err := h.cfg.MCInstances.ProvisioningStatus(context.Background(), inst.Number)
+			phase, isReady, err := provisioningStatus(h.cfg.MCInstances, context.Background(), inst.Number)
 			if err != nil {
 				phase = "syncing"
 				isReady = false
@@ -520,7 +537,7 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 			if isReady {
 				break
 			}
-			time.Sleep(3 * time.Second)
+			sleep(3 * time.Second)
 		}
 	})
 
@@ -536,13 +553,13 @@ func ssePatch(c *fiber.Ctx, signals map[string]any, fragments map[string]string)
 	w := bufio.NewWriter(&buf)
 
 	if len(signals) > 0 {
-		if err := sse.PatchSignals(w, signals); err != nil {
+		if err := patchSignals(w, signals); err != nil {
 			return err
 		}
 	}
 
 	for selector, markup := range fragments {
-		if err := sse.InnerElement(w, selector, markup); err != nil {
+		if err := innerElement(w, selector, markup); err != nil {
 			return err
 		}
 	}
@@ -557,13 +574,13 @@ func (h *Handler) MCWizardImport(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "No file uploaded: " + err.Error()})
 	}
 
-	f, err := fileHeader.Open()
+	f, err := openFile(fileHeader)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to open file: " + err.Error()})
 	}
 	defer f.Close()
 
-	data, err := io.ReadAll(f)
+	data, err := readAll(f)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to read file: " + err.Error()})
 	}
@@ -572,9 +589,9 @@ func (h *Handler) MCWizardImport(c *fiber.Ctx) error {
 	var world *modpack.ImportedWorld
 
 	if ext == ".mrpack" {
-		world, err = modpack.ParseMrpack(bytes.NewReader(data), int64(len(data)))
+		world, err = parseMrpack(bytes.NewReader(data), int64(len(data)))
 	} else if ext == ".zip" {
-		if w, mrErr := modpack.ParseMrpack(bytes.NewReader(data), int64(len(data))); mrErr == nil {
+		if w, mrErr := parseMrpack(bytes.NewReader(data), int64(len(data))); mrErr == nil {
 			world = w
 		} else {
 			world, err = modpack.ParsePrismZip(bytes.NewReader(data), int64(len(data)))
@@ -582,7 +599,7 @@ func (h *Handler) MCWizardImport(c *fiber.Ctx) error {
 	} else if ext == ".txt" {
 		world = modpack.ParseRawModList(string(data))
 	} else {
-		if w, zipErr := modpack.ParseMrpack(bytes.NewReader(data), int64(len(data))); zipErr == nil {
+		if w, zipErr := parseMrpack(bytes.NewReader(data), int64(len(data))); zipErr == nil {
 			world = w
 		} else if w, pErr := modpack.ParsePrismZip(bytes.NewReader(data), int64(len(data))); pErr == nil {
 			world = w

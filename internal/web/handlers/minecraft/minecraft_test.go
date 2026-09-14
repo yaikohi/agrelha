@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -25,7 +26,9 @@ import (
 )
 
 type mockMCStateStore struct {
-	docs map[string]ports.Document
+	docs     map[string]ports.Document
+	patchErr error
+	putErr   error
 }
 
 func (s *mockMCStateStore) Get(_ context.Context, path string) (ports.Document, error) {
@@ -42,6 +45,9 @@ func (s *mockMCStateStore) Put(_ context.Context, path string, doc ports.Documen
 	return nil
 }
 func (s *mockMCStateStore) Patch(ctx context.Context, path, msg string, fn func(*ports.Document) (bool, error)) (bool, error) {
+	if s.patchErr != nil {
+		return false, s.patchErr
+	}
 	if s.docs == nil {
 		s.docs = make(map[string]ports.Document)
 	}
@@ -63,6 +69,9 @@ func (s *mockMCStateStore) Delete(_ context.Context, path, _ string) error {
 	return nil
 }
 func (s *mockMCStateStore) PutTree(_ context.Context, _ string, tree map[string]ports.Document, _ string) error {
+	if s.putErr != nil {
+		return s.putErr
+	}
 	if s.docs == nil {
 		s.docs = make(map[string]ports.Document)
 	}
@@ -72,7 +81,9 @@ func (s *mockMCStateStore) PutTree(_ context.Context, _ string, tree map[string]
 	return nil
 }
 
-func setupTestInstancesHandler(t *testing.T) (*Handler, *store.Store, *k8s.Client, *instances.InstanceManager) {
+var testBackupsDir string
+
+func setupTestInstancesHandlerWithState(t *testing.T) (*Handler, *store.Store, *k8s.Client, *instances.InstanceManager, *mockMCStateStore) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -94,14 +105,18 @@ func setupTestInstancesHandler(t *testing.T) (*Handler, *store.Store, *k8s.Clien
 				"server.properties": "difficulty=normal\n",
 			},
 		},
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "mc-ducktopia-01", Namespace: "minecraft-modded"},
+		},
 	)
 
 	mck8s := k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded")
 	mockState := &mockMCStateStore{docs: make(map[string]ports.Document)}
+	testBackupsDir = t.TempDir()
 	var mgr *instances.InstanceManager
 	mgr = instances.NewInstanceManager(
 		store.NewInstanceRepo(st), mockState, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded",
-		instances.WithBackupsDir(t.TempDir()),
+		instances.WithBackupsDir(testBackupsDir),
 		instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
 			inst, err := mgr.GetInstance(ctx, num)
 			if err != nil {
@@ -126,6 +141,11 @@ func setupTestInstancesHandler(t *testing.T) (*Handler, *store.Store, *k8s.Clien
 		MCInstances: mgr,
 	})
 
+	return h, st, mck8s, mgr, mockState
+}
+
+func setupTestInstancesHandler(t *testing.T) (*Handler, *store.Store, *k8s.Client, *instances.InstanceManager) {
+	h, st, mck8s, mgr, _ := setupTestInstancesHandlerWithState(t)
 	return h, st, mck8s, mgr
 }
 

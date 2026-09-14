@@ -27,6 +27,8 @@ type Handler struct {
 	cfg Config
 }
 
+var readDir = os.ReadDir
+
 // New creates a new backup Handler.
 func New(cfg Config) *Handler {
 	if cfg.Actor == nil {
@@ -63,7 +65,7 @@ func (h *Handler) BackupInfo() (domain.BackupSummary, bool) {
 	if h.cfg.BackupsDir == "" {
 		return domain.BackupSummary{}, false
 	}
-	entries, err := os.ReadDir(h.cfg.BackupsDir)
+	entries, err := readDir(h.cfg.BackupsDir)
 	if err != nil {
 		return domain.BackupSummary{}, false
 	}

@@ -1,6 +1,6 @@
 [tools]
 "aqua:go-task/task" = "latest"
-go = "1.27.1"
+go = "1.26.7"
 "go:github.com/a-h/templ/cmd/templ" = "latest"
 "go:github.com/air-verse/air" = "latest"
 bun = "latest"

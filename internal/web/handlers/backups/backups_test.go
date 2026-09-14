@@ -2,6 +2,7 @@ package backups
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/valyala/fasthttp"
 
 	"agrelha/internal/app/instances"
 	"agrelha/internal/domain"
@@ -442,4 +444,308 @@ func TestBackupInfoWithDirFiles(t *testing.T) {
 		t.Errorf("expected 2 backups, got %d", sum.Count)
 	}
 }
+
+type mockDirEntry struct {
+	name  string
+	isDir bool
+	err   error
+}
+
+func (m mockDirEntry) Name() string               { return m.name }
+func (m mockDirEntry) IsDir() bool                { return m.isDir }
+func (m mockDirEntry) Type() os.FileMode          { return 0 }
+func (m mockDirEntry) Info() (os.FileInfo, error) { return nil, m.err }
+
+func TestBackupsEdges(t *testing.T) {
+	// 1. Actor fallback
+	hActor := New(Config{})
+	app := fiber.New()
+	var fastCtx fasthttp.RequestCtx
+	c := app.AcquireCtx(&fastCtx)
+	defer app.ReleaseCtx(c)
+
+	if a := hActor.cfg.Actor(c); a != "-" {
+		t.Errorf("expected '-', got %q", a)
+	}
+	c.Locals("actor", "admin")
+	if a := hActor.cfg.Actor(c); a != "admin" {
+		t.Errorf("expected 'admin', got %q", a)
+	}
+
+	// 2. BackupInfo edge cases
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	mcRepo := store.NewInstanceRepo(st)
+	_ = mcRepo.Upsert(domain.Instance{
+		Number: 1, Name: "MC", State: domain.StateRunning, GameID: domain.GameMinecraft,
+	})
+	mcMgr := instances.NewInstanceManager(mcRepo, nil, nil, 32, 8, 4, "manifests/minecraft-modded", "192.168.20.225", nil, "minecraft-modded", instances.WithBackupsDir(t.TempDir()))
+	hMC := New(Config{MCInstances: mcMgr})
+	if _, ok := hMC.BackupInfo(); !ok {
+		t.Errorf("expected BackupInfo ok = true with MCInstances")
+	}
+
+	origReadDir := readDir
+	defer func() { readDir = origReadDir }()
+	readDir = func(string) ([]os.DirEntry, error) {
+		return nil, errors.New("read error")
+	}
+	hErr := New(Config{BackupsDir: "/some/dir"})
+	if _, ok := hErr.BackupInfo(); ok {
+		t.Errorf("expected BackupInfo ok = false on readDir error")
+	}
+
+	readDir = func(string) ([]os.DirEntry, error) {
+		return []os.DirEntry{mockDirEntry{name: "broken", isDir: false, err: errors.New("info err")}}, nil
+	}
+	if sum, ok := hErr.BackupInfo(); !ok || sum.Count != 0 {
+		t.Errorf("expected count = 0 on broken entry info, got %v, ok=%v", sum, ok)
+	}
+
+	// 3. Routing edge cases
+	appRoutes := fiber.New()
+	hRoutes := New(Config{
+		MCInstances: mcMgr,
+	})
+	appRoutes.Post("/test/mc/:num/create", hRoutes.Create)
+	appRoutes.Post("/test/mc/:num/restore-inplace", hRoutes.RestoreInPlace)
+	appRoutes.Post("/test/mc/:num/restore-new", hRoutes.RestoreNew)
+
+	// mc create invalid num
+	resp, _ := appRoutes.Test(httptest.NewRequest(http.MethodPost, "/test/mc/abc/create", nil))
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Invalid instance number") {
+		t.Errorf("expected invalid instance number: %s", string(body))
+	}
+
+	// mc restore-inplace unconfigured
+	hUnconf := New(Config{})
+	appUnconf := fiber.New()
+	appUnconf.Post("/test/mc/:num/restore-inplace", hUnconf.RestoreInPlace)
+	resp, _ = appUnconf.Test(httptest.NewRequest(http.MethodPost, "/test/mc/1/restore-inplace", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Instance manager unconfigured") {
+		t.Errorf("expected unconfigured: %s", string(body))
+	}
+
+	// mc restore-inplace invalid num
+	resp, _ = appRoutes.Test(httptest.NewRequest(http.MethodPost, "/test/mc/abc/restore-inplace", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Invalid instance number") {
+		t.Errorf("expected invalid instance number: %s", string(body))
+	}
+
+	// mc restore-new unconfigured
+	appUnconf.Post("/test/mc/:num/restore-new", hUnconf.RestoreNew)
+	resp, _ = appUnconf.Test(httptest.NewRequest(http.MethodPost, "/test/mc/1/restore-new", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Instance manager unconfigured") {
+		t.Errorf("expected unconfigured: %s", string(body))
+	}
+
+	// mc restore-new invalid num
+	resp, _ = appRoutes.Test(httptest.NewRequest(http.MethodPost, "/test/mc/abc/restore-new", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Invalid instance number") {
+		t.Errorf("expected invalid instance number: %s", string(body))
+	}
+
+	// mc restore-new manager error
+	reqNewErr := httptest.NewRequest(http.MethodPost, "/test/mc/999/restore-new", strings.NewReader(`{"name":"World","tier":"medium","archive":"arch.tar.gz"}`))
+	reqNewErr.Header.Set("Content-Type", "application/json")
+	resp, _ = appRoutes.Test(reqNewErr)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "not found") {
+		t.Errorf("expected error from restore-new: %s", string(body))
+	}
+
+	// mc restore-inplace archive from form value and query
+	reqForm := httptest.NewRequest(http.MethodPost, "/test/mc/1/restore-inplace", strings.NewReader("archive=arch.tar.gz"))
+	reqForm.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_, _ = appRoutes.Test(reqForm)
+
+	reqQuery := httptest.NewRequest(http.MethodPost, "/test/mc/1/restore-inplace?archive=arch.tar.gz", nil)
+	_, _ = appRoutes.Test(reqQuery)
+
+	reqNoArchive := httptest.NewRequest(http.MethodPost, "/test/mc/1/restore-inplace", nil)
+	_, _ = appRoutes.Test(reqNoArchive)
+
+	// 4. MC Delete edges
+	hDelMC := New(Config{MCInstances: mcMgr})
+	appDelMC := fiber.New()
+	appDelMC.Post("/api/minecraft/:num/backups/delete", hDelMC.Delete)
+	reqDelErr := httptest.NewRequest(http.MethodPost, "/api/minecraft/1/backups/delete", strings.NewReader(`{"file":"missing.tar.gz"}`))
+	reqDelErr.Header.Set("Content-Type", "application/json")
+	resp, _ = appDelMC.Test(reqDelErr)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "invalid or unauthorized backup file name") && !strings.Contains(string(body), "not found") {
+		t.Errorf("expected delete error: %s", string(body))
+	}
+
+	dir := t.TempDir()
+	hDirOnly := New(Config{BackupsDir: dir})
+	appDirOnly := fiber.New()
+	appDirOnly.Post("/api/minecraft/:num/backups/delete", hDirOnly.Delete)
+	reqUnsafe := httptest.NewRequest(http.MethodPost, "/api/minecraft/1/backups/delete", strings.NewReader(`{"file":"../unsafe.tar.gz"}`))
+	reqUnsafe.Header.Set("Content-Type", "application/json")
+	resp, _ = appDirOnly.Test(reqUnsafe)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "invalid backup file name") {
+		t.Errorf("expected invalid backup file name: %s", string(body))
+	}
+
+	reqMissingFile := httptest.NewRequest(http.MethodPost, "/api/minecraft/1/backups/delete", strings.NewReader(`{"file":"mc-backup-01-20260901-120000.tar.gz"}`))
+	reqMissingFile.Header.Set("Content-Type", "application/json")
+	resp, _ = appDirOnly.Test(reqMissingFile)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Failed to delete backup") {
+		t.Errorf("expected Failed to delete backup: %s", string(body))
+	}
+
+	appUnconf.Post("/api/minecraft/:num/backups/delete", hUnconf.Delete)
+	reqUnconfDel := httptest.NewRequest(http.MethodPost, "/api/minecraft/1/backups/delete", strings.NewReader(`{"file":"safe.tar.gz"}`))
+	reqUnconfDel.Header.Set("Content-Type", "application/json")
+	resp, _ = appUnconf.Test(reqUnconfDel)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Backups directory unconfigured") {
+		t.Errorf("expected Backups directory unconfigured: %s", string(body))
+	}
+
+	// 5. Valheim edges
+	vhRepo := store.NewValheimInstanceRepo(st)
+	_ = vhRepo.Upsert(domain.Instance{
+		Number: 1, Name: "Valheim", State: domain.StateRunning, GameID: domain.GameValheim,
+	})
+	vhMgr := instances.NewInstanceManager(vhRepo, nil, nil, 16, 4, 2, "manifests/valheim", "192.168.20.224", nil, "valheim", instances.WithGameID(domain.GameValheim))
+	hVH := New(Config{ValheimInstances: vhMgr})
+	appVH := fiber.New()
+	appVH.Post("/test/vh/:num/create", hVH.ValheimCreate)
+	appVH.Post("/test/vh/:num/restore-inplace", hVH.ValheimRestoreInPlace)
+	appVH.Post("/test/vh/:num/restore-new", hVH.ValheimRestoreNew)
+	appVH.Post("/test/vh/:num/delete", hVH.ValheimDelete)
+
+	appUnconf.Post("/test/vh/:num/create", hUnconf.ValheimCreate)
+	resp, _ = appUnconf.Test(httptest.NewRequest(http.MethodPost, "/test/vh/1/create", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Valheim instance manager unconfigured") {
+		t.Errorf("expected unconfigured: %s", string(body))
+	}
+
+	resp, _ = appVH.Test(httptest.NewRequest(http.MethodPost, "/test/vh/abc/create", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Invalid instance number") {
+		t.Errorf("expected invalid num: %s", string(body))
+	}
+
+	resp, _ = appVH.Test(httptest.NewRequest(http.MethodPost, "/test/vh/999/create", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "not found") {
+		t.Errorf("expected not found: %s", string(body))
+	}
+
+	appUnconf.Post("/test/vh/:num/restore-inplace", hUnconf.ValheimRestoreInPlace)
+	resp, _ = appUnconf.Test(httptest.NewRequest(http.MethodPost, "/test/vh/1/restore-inplace", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Valheim instance manager unconfigured") {
+		t.Errorf("expected unconfigured: %s", string(body))
+	}
+
+	resp, _ = appVH.Test(httptest.NewRequest(http.MethodPost, "/test/vh/abc/restore-inplace", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Invalid instance number") {
+		t.Errorf("expected invalid num: %s", string(body))
+	}
+
+	reqFormVH := httptest.NewRequest(http.MethodPost, "/test/vh/1/restore-inplace", strings.NewReader("archive=arch.tar.gz"))
+	reqFormVH.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_, _ = appVH.Test(reqFormVH)
+
+	reqQueryVH := httptest.NewRequest(http.MethodPost, "/test/vh/1/restore-inplace?archive=arch.tar.gz", nil)
+	_, _ = appVH.Test(reqQueryVH)
+
+	reqNoArchiveVH := httptest.NewRequest(http.MethodPost, "/test/vh/1/restore-inplace", nil)
+	_, _ = appVH.Test(reqNoArchiveVH)
+
+	reqErrVH := httptest.NewRequest(http.MethodPost, "/test/vh/999/restore-inplace", strings.NewReader(`{"archive":"arch.tar.gz"}`))
+	reqErrVH.Header.Set("Content-Type", "application/json")
+	resp, _ = appVH.Test(reqErrVH)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "not found") {
+		t.Errorf("expected not found: %s", string(body))
+	}
+
+	appUnconf.Post("/test/vh/:num/restore-new", hUnconf.ValheimRestoreNew)
+	resp, _ = appUnconf.Test(httptest.NewRequest(http.MethodPost, "/test/vh/1/restore-new", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Valheim instance manager unconfigured") {
+		t.Errorf("expected unconfigured: %s", string(body))
+	}
+
+	resp, _ = appVH.Test(httptest.NewRequest(http.MethodPost, "/test/vh/abc/restore-new", nil))
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Invalid instance number") {
+		t.Errorf("expected invalid num: %s", string(body))
+	}
+
+	reqNewVHErr := httptest.NewRequest(http.MethodPost, "/test/vh/999/restore-new", strings.NewReader(`{"name":"VNew","tier":"small","archive":"arch.tar.gz"}`))
+	reqNewVHErr.Header.Set("Content-Type", "application/json")
+	resp, _ = appVH.Test(reqNewVHErr)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "not found") {
+		t.Errorf("expected not found: %s", string(body))
+	}
+
+	reqDelForm := httptest.NewRequest(http.MethodPost, "/test/vh/1/delete", strings.NewReader("file=arch.tar.gz"))
+	reqDelForm.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_, _ = appVH.Test(reqDelForm)
+
+	reqDelQuery := httptest.NewRequest(http.MethodPost, "/test/vh/1/delete?file=arch.tar.gz", nil)
+	_, _ = appVH.Test(reqDelQuery)
+
+	reqEmptyVH := httptest.NewRequest(http.MethodPost, "/test/vh/1/delete", strings.NewReader(`{"file":""}`))
+	reqEmptyVH.Header.Set("Content-Type", "application/json")
+	resp, _ = appVH.Test(reqEmptyVH)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "File name required") {
+		t.Errorf("expected File name required: %s", string(body))
+	}
+
+	reqDelMissVH := httptest.NewRequest(http.MethodPost, "/test/vh/1/delete", strings.NewReader(`{"file":"missing.tar.gz"}`))
+	reqDelMissVH.Header.Set("Content-Type", "application/json")
+	resp, _ = appVH.Test(reqDelMissVH)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "not found") && !strings.Contains(string(body), "backups directory unconfigured") {
+		t.Errorf("expected not found: %s", string(body))
+	}
+
+	appDirOnly.Post("/api/valheim/:num/backups/delete", hDirOnly.ValheimDelete)
+	reqVHUnsafe := httptest.NewRequest(http.MethodPost, "/api/valheim/1/backups/delete", strings.NewReader(`{"file":"../unsafe.tar.gz"}`))
+	reqVHUnsafe.Header.Set("Content-Type", "application/json")
+	resp, _ = appDirOnly.Test(reqVHUnsafe)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "invalid backup file name") {
+		t.Errorf("expected invalid backup file name: %s", string(body))
+	}
+
+	reqVHMiss := httptest.NewRequest(http.MethodPost, "/api/valheim/1/backups/delete", strings.NewReader(`{"file":"valheim-world-01-20260901-120000.tar.gz"}`))
+	reqVHMiss.Header.Set("Content-Type", "application/json")
+	resp, _ = appDirOnly.Test(reqVHMiss)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Failed to delete backup") {
+		t.Errorf("expected Failed to delete backup: %s", string(body))
+	}
+
+	appUnconf.Post("/api/valheim/:num/backups/delete", hUnconf.ValheimDelete)
+	reqVHUnconf := httptest.NewRequest(http.MethodPost, "/api/valheim/1/backups/delete", strings.NewReader(`{"file":"safe.tar.gz"}`))
+	reqVHUnconf.Header.Set("Content-Type", "application/json")
+	resp, _ = appUnconf.Test(reqVHUnconf)
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Backups directory unconfigured") {
+		t.Errorf("expected Backups directory unconfigured: %s", string(body))
+	}
+}
+
 

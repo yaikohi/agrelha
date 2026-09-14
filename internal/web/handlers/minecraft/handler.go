@@ -3,6 +3,7 @@ package minecraft
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -12,6 +13,16 @@ import (
 	"agrelha/internal/app/modupdates"
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
+	"agrelha/internal/web/pages"
+	"agrelha/internal/web/sse"
+)
+
+var (
+	innerElement      = sse.InnerElement
+	patchSignals      = sse.PatchSignals
+	renderUpdatePanel = func(ctx context.Context, d pages.InstanceDetailUI, w io.Writer) error {
+		return pages.ModUpdatePanel(d).Render(ctx, w)
+	}
 )
 
 // InstanceStat holds cached per-instance stats for players, status, and uptime.

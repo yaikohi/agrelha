@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGET=82.0
+TARGET=89.0
 ENFORCE=false
 RUN_TESTS=true
 

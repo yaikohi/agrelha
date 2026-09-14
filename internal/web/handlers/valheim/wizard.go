@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"html"
-	"io"
 	"strconv"
 	"strings"
 
@@ -16,7 +15,6 @@ import (
 	"agrelha/internal/web/mdrender"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
-	"agrelha/internal/web/sse"
 )
 
 // ValheimWizardPage renders the Valheim creation wizard page.
@@ -248,8 +246,8 @@ func (h *Handler) ValheimWizardCartSync(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	_ = sse.InnerElement(w, "#wizard-valheim-cart-items", renderWizardCartHTML(valid))
-	_ = sse.PatchSignals(w, map[string]any{
+	_ = innerElement(w, "#wizard-valheim-cart-items", renderWizardCartHTML(valid))
+	_ = patchSignals(w, map[string]any{
 		"cart": valid,
 	})
 	_ = w.Flush()
@@ -414,10 +412,10 @@ func (h *Handler) ValheimWizardModDetail(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	if err := sse.InnerElement(w, "#wizard-valheim-mod-detail-content", drawerContent); err != nil {
+	if err := innerElement(w, "#wizard-valheim-mod-detail-content", drawerContent); err != nil {
 		return err
 	}
-	if err := sse.PatchSignals(w, map[string]any{
+	if err := patchSignals(w, map[string]any{
 		"showWizardModDetail": true,
 	}); err != nil {
 		return err
@@ -435,7 +433,7 @@ func (h *Handler) ValheimWizardImport(c *fiber.Ctx) error {
 		})
 	}
 
-	f, err := fh.Open()
+	f, err := openFormFile(fh)
 	if err != nil {
 		return shared.SSEToast(c, "err", "Failed to open uploaded file: "+err.Error(), map[string]any{
 			"importError": err.Error(),
@@ -443,7 +441,7 @@ func (h *Handler) ValheimWizardImport(c *fiber.Ctx) error {
 	}
 	defer f.Close()
 
-	buf, err := io.ReadAll(f)
+	buf, err := readFormFile(f)
 	if err != nil {
 		return shared.SSEToast(c, "err", "Read upload failed: "+err.Error(), map[string]any{
 			"importError": err.Error(),
@@ -461,7 +459,7 @@ func (h *Handler) ValheimWizardImport(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	var respBuf bytes.Buffer
 	w := bufio.NewWriter(&respBuf)
-	_ = sse.InnerElement(w, "#wizard-valheim-cart-items", renderWizardCartHTML(imported.Slugs))
+	_ = innerElement(w, "#wizard-valheim-cart-items", renderWizardCartHTML(imported.Slugs))
 
 	signals := map[string]any{
 		"toast":       fmt.Sprintf("Imported %d mods from profile!", len(imported.Slugs)),
@@ -474,7 +472,7 @@ func (h *Handler) ValheimWizardImport(c *fiber.Ctx) error {
 	if imported.Name != "" {
 		signals["name"] = imported.Name
 	}
-	_ = sse.PatchSignals(w, signals)
+	_ = patchSignals(w, signals)
 	_ = w.Flush()
 	return c.Send(respBuf.Bytes())
 }
