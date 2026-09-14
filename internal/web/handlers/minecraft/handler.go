@@ -1,4 +1,4 @@
-package instances
+package minecraft
 
 import (
 	"context"
@@ -42,7 +42,7 @@ type Handler struct {
 	instStats instanceStatsCache
 }
 
-// New creates a new instances Handler.
+// New creates a new Minecraft Handler.
 func New(cfg Config) *Handler {
 	if cfg.Actor == nil {
 		cfg.Actor = func(c *fiber.Ctx) string {

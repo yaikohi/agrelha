@@ -26,7 +26,7 @@ import (
 	consolehttp "agrelha/internal/web/handlers/console"
 	contenthttp "agrelha/internal/web/handlers/content"
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
-	instanceshttp "agrelha/internal/web/handlers/instances"
+	minecrafthttp "agrelha/internal/web/handlers/minecraft"
 	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
 )
@@ -73,10 +73,10 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 	backupsH := buildBackupsHandler(cfg, d)
 	consoleH := buildConsoleHandler(d)
 	contentH := buildContentHandler(cfg, d, applyAfterSync)
-	instancesH := buildInstancesHandler(cfg, d, applyMCAfterSync)
+	minecraftH := buildMinecraftHandler(cfg, d, applyMCAfterSync)
 	wizardH := buildWizardHandler(d)
 	valheimH := buildValheimHandler(d, applyValheimAfterSync, consoleH.ValheimConsole)
-	dashboardH := buildDashboardHandler(cfg, d, contentH, instancesH, backupsH, valheimH)
+	dashboardH := buildDashboardHandler(cfg, d, contentH, minecraftH, backupsH, valheimH)
 
 	return web.New(web.ServerConfig{
 		Auth:      d.Auth,
@@ -85,7 +85,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 		Console:   consoleH,
 		Content:   contentH,
 		Dashboard: dashboardH,
-		Instances: instancesH,
+		Minecraft: minecraftH,
 		Valheim:   valheimH,
 		Wizard:    wizardH,
 	})
@@ -427,7 +427,7 @@ func buildContentHandler(cfg *config.Config, d Deps, applyAfterSync func(string,
 	})
 }
 
-func buildInstancesHandler(cfg *config.Config, d Deps, applyMCAfterSync func(string, string, string, func(string) bool)) *instanceshttp.Handler {
+func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(string, string, string, func(string) bool)) *minecrafthttp.Handler {
 	if d.MCInstances != nil {
 		var opts []instances.Option
 		if cfg != nil && cfg.BackupsDir != "" {
@@ -470,16 +470,16 @@ func buildInstancesHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 			d.MCInstances.ApplyOptions(opts...)
 		}
 	}
-	var searchMods instanceshttp.SearchModsFunc
+	var searchMods minecrafthttp.SearchModsFunc
 	if d.MR != nil {
-		searchMods = func(ctx context.Context, query, mcVersion string) ([]instanceshttp.ModHit, error) {
+		searchMods = func(ctx context.Context, query, mcVersion string) ([]minecrafthttp.ModHit, error) {
 			res, err := d.MR.Search(ctx, query, mcVersion, "", 20, 0)
 			if err != nil {
 				return nil, err
 			}
-			hits := make([]instanceshttp.ModHit, 0, len(res.Hits))
+			hits := make([]minecrafthttp.ModHit, 0, len(res.Hits))
 			for _, h := range res.Hits {
-				hits = append(hits, instanceshttp.ModHit{
+				hits = append(hits, minecrafthttp.ModHit{
 					Slug:        h.Slug,
 					Title:       h.Title,
 					Description: h.Description,
@@ -490,7 +490,7 @@ func buildInstancesHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 		}
 	}
 
-	return instanceshttp.New(instanceshttp.Config{
+	return minecrafthttp.New(minecrafthttp.Config{
 		LastIncident:            incidentReader(d, domain.GameMinecraft),
 		MCInstances:             d.MCInstances,
 		MinecraftGame:           d.MinecraftGame,
@@ -622,7 +622,7 @@ func buildWizardHandler(d Deps) *wizardhttp.Handler {
 	})
 }
 
-func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Handler, instancesH *instanceshttp.Handler, backupsH *backupshttp.Handler, valheimH *valheimhttp.Handler) *dashboardhttp.Handler {
+func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Handler, minecraftH *minecrafthttp.Handler, backupsH *backupshttp.Handler, valheimH *valheimhttp.Handler) *dashboardhttp.Handler {
 	var grafanaURL, valheimAddr, nodeName string
 	if cfg != nil {
 		grafanaURL = cfg.GrafanaDashboardURL
@@ -642,9 +642,9 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 		}, ok
 	}
 	var instStats func(context.Context, []domain.Instance) map[int]dashboardhttp.InstanceStat
-	if instancesH != nil {
+	if minecraftH != nil {
 		instStats = func(ctx context.Context, insts []domain.Instance) map[int]dashboardhttp.InstanceStat {
-			raw := instancesH.InstanceStats(ctx, insts)
+			raw := minecraftH.InstanceStats(ctx, insts)
 			res := make(map[int]dashboardhttp.InstanceStat, len(raw))
 			for k, v := range raw {
 				res[k] = dashboardhttp.InstanceStat{

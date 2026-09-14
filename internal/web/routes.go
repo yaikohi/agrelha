@@ -13,7 +13,7 @@ import (
 	consolehttp "agrelha/internal/web/handlers/console"
 	contenthttp "agrelha/internal/web/handlers/content"
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
-	instanceshttp "agrelha/internal/web/handlers/instances"
+	minecrafthttp "agrelha/internal/web/handlers/minecraft"
 	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
 	"agrelha/internal/web/metrics"
@@ -28,7 +28,7 @@ type ServerConfig struct {
 	Console   *consolehttp.Handler
 	Content   *contenthttp.Handler
 	Dashboard *dashboardhttp.Handler
-	Instances *instanceshttp.Handler
+	Minecraft *minecrafthttp.Handler
 	Valheim   *valheimhttp.Handler
 	Wizard    *wizardhttp.Handler
 }
@@ -65,8 +65,8 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 	if cfg.Content != nil {
 		cfg.Content.RegisterPublic(app)
 	}
-	if cfg.Instances != nil {
-		cfg.Instances.RegisterPublic(app)
+	if cfg.Minecraft != nil {
+		cfg.Minecraft.RegisterPublic(app)
 	}
 	if cfg.Valheim != nil {
 		cfg.Valheim.RegisterPublic(app)
@@ -93,8 +93,8 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 	if cfg.Content != nil {
 		cfg.Content.RegisterProtected(protected)
 	}
-	if cfg.Instances != nil {
-		cfg.Instances.RegisterProtected(protected)
+	if cfg.Minecraft != nil {
+		cfg.Minecraft.RegisterProtected(protected)
 	}
 	if cfg.Wizard != nil {
 		cfg.Wizard.Register(protected)
