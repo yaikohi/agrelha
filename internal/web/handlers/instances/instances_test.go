@@ -1,10 +1,8 @@
 package instances
 
 import (
-	"agrelha/internal/app/instances"
-	"agrelha/internal/domain"
-	"agrelha/internal/infra/manifests"
 	"context"
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"path/filepath"
@@ -16,7 +14,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"agrelha/internal/app/instances"
+	"agrelha/internal/app/modupdates"
+	"agrelha/internal/domain"
 	"agrelha/internal/infra/kube"
+	"agrelha/internal/infra/manifests"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
@@ -252,4 +254,57 @@ func TestMCInstanceExportWithGameEngine(t *testing.T) {
 		t.Errorf("Content-Disposition = %s, want ducktopia-1.21.1.mrpack", disp)
 	}
 	_ = mgr
+}
+
+type mockModUpdatesCatalog struct {
+	versions map[string]string
+}
+
+func (m *mockModUpdatesCatalog) LatestVersion(ctx context.Context, ns, name string) (string, []string, error) {
+	return "", nil, nil
+}
+func (m *mockModUpdatesCatalog) ResolveTree(ctx context.Context, ns, name string) ([]string, error) {
+	return nil, nil
+}
+func (m *mockModUpdatesCatalog) LatestVersionForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error) {
+	key := fmt.Sprintf("%s|%s", ref.Name, inst.Loader)
+	return m.versions[key], nil, nil
+}
+func (m *mockModUpdatesCatalog) ResolveTreeForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) ([]string, error) {
+	return nil, nil
+}
+
+func TestMCModUpdatesEndpoints(t *testing.T) {
+	h, st, _, mgr := setupTestInstancesHandler(t)
+	defer st.Close()
+
+	repo := store.NewInstanceRepo(st)
+	_ = repo.Upsert(domain.Instance{
+		Number: 1, Name: "Ducktopia", Slug: "ducktopia",
+		GameID: domain.GameMinecraft, Loader: domain.LoaderFabric, MCVersion: "1.21.1", Source: domain.SourceModlist,
+	})
+
+	cat := &mockModUpdatesCatalog{
+		versions: map[string]string{
+			"jei|fabric": "15.0.0",
+		},
+	}
+	h.cfg.ModUpdates = modupdates.New(mgr, cat, modupdates.WithGameID(domain.GameMinecraft), modupdates.WithRestorePoints(st))
+
+	app := fiber.New()
+	h.RegisterProtected(app)
+
+	// 1. Check updates
+	req := httptest.NewRequest("POST", "/api/minecraft/1/mods/updates/check", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("check failed: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("check status = %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "mod-updates-panel") {
+		t.Errorf("expected mod-updates-panel in response: %s", string(body))
+	}
 }

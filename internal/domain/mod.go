@@ -97,6 +97,16 @@ func ParseModRef(entry string, game GameID) (ModRef, bool) {
 		}, true
 	}
 
+	if game == GameMinecraft {
+		if slug, version, ok := strings.Cut(entry, ":"); ok && slug != "" && version != "" {
+			return ModRef{Name: slug, Version: version}, true
+		}
+		if parts := strings.Split(entry, "/"); len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return ModRef{Name: parts[0], Version: parts[1]}, true
+		}
+		return ModRef{Name: entry}, true
+	}
+
 	if game == GameValheim {
 		if ns, rest, ok := strings.Cut(entry, "-"); ok && ns != "" && rest != "" {
 			// Thunderstore's own copy button gives Namespace-Name-Version.
@@ -137,6 +147,9 @@ func (r ModRef) Entry() string {
 	}
 	if r.Namespace != "" {
 		return r.Namespace + "-" + r.Name
+	}
+	if r.Version != "" {
+		return r.Name + ":" + r.Version
 	}
 	return r.Name
 }
@@ -179,24 +192,99 @@ func (r ModRef) CatalogKey() string {
 }
 
 // VersionNewer reports whether version a is strictly newer than b. Versions are
-// compared segment by segment as numbers, so 1.10.0 sorts above 1.9.0.
+// compared segment by segment as numbers, ignoring 'v' prefixes and build metadata (+...).
 func VersionNewer(a, b string) bool {
-	as := strings.Split(strings.TrimSpace(a), ".")
-	bs := strings.Split(strings.TrimSpace(b), ".")
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	if a == b {
+		return false
+	}
+	if a == "" {
+		return false
+	}
+	if b == "" || b == "(unpinned)" || b == "unpinned" {
+		return true
+	}
+
+	// Strip leading 'v' or 'V'
+	a = strings.TrimPrefix(strings.TrimPrefix(a, "v"), "V")
+	b = strings.TrimPrefix(strings.TrimPrefix(b, "v"), "V")
+
+	// Separate build metadata (+...)
+	baseA, buildA, _ := strings.Cut(a, "+")
+	baseB, buildB, _ := strings.Cut(b, "+")
+
+	// Separate prerelease (-...)
+	coreA, preA, hasPreA := strings.Cut(baseA, "-")
+	coreB, preB, hasPreB := strings.Cut(baseB, "-")
+
+	as := strings.Split(coreA, ".")
+	bs := strings.Split(coreB, ".")
 	n := max(len(as), len(bs))
 	for i := range n {
 		var av, bv int
+		var aRem, bRem string
 		if i < len(as) {
-			av, _ = strconv.Atoi(strings.TrimSpace(as[i]))
+			av, aRem = parseLeadingInt(as[i])
 		}
 		if i < len(bs) {
-			bv, _ = strconv.Atoi(strings.TrimSpace(bs[i]))
+			bv, bRem = parseLeadingInt(bs[i])
 		}
 		if av != bv {
 			return av > bv
 		}
+		if aRem != bRem && aRem != "" && bRem != "" {
+			return aRem > bRem
+		}
 	}
+
+	// Cores are numerically identical
+	if hasPreA != hasPreB {
+		// SemVer: a version without prerelease is newer than one with prerelease
+		return !hasPreA && hasPreB
+	}
+	if hasPreA && hasPreB && preA != preB {
+		return preA > preB
+	}
+
+	// Cores and prereleases are identical; compare build metadata if present
+	if buildA != buildB && buildA != "" && buildB != "" {
+		bldAs := strings.Split(buildA, ".")
+		bldBs := strings.Split(buildB, ".")
+		bn := max(len(bldAs), len(bldBs))
+		for i := range bn {
+			var bav, bbv int
+			var baRem, bbRem string
+			if i < len(bldAs) {
+				bav, baRem = parseLeadingInt(bldAs[i])
+			}
+			if i < len(bldBs) {
+				bbv, bbRem = parseLeadingInt(bldBs[i])
+			}
+			if bav != bbv {
+				return bav > bbv
+			}
+			if baRem != bbRem && baRem != "" && bbRem != "" {
+				return baRem > bbRem
+			}
+		}
+		return buildA > buildB
+	}
+
 	return false
+}
+
+func parseLeadingInt(s string) (int, string) {
+	s = strings.TrimSpace(s)
+	i := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i == 0 {
+		return 0, s
+	}
+	val, _ := strconv.Atoi(s[:i])
+	return val, s[i:]
 }
 
 // ModRestorePoint is the way back from one Mod update: the list as it was

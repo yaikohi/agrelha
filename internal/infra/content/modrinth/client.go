@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"agrelha/internal/domain"
+	"agrelha/internal/ports"
 )
 
 const (
@@ -105,6 +106,9 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 
 		defer resp.Body.Close()
 
+		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
+			return fmt.Errorf("%s: %w", reqURL, ports.ErrPackageNotFound)
+		}
 		if resp.StatusCode != http.StatusOK {
 			return fmt.Errorf("%s returned status %s", reqURL, resp.Status)
 		}
@@ -294,3 +298,87 @@ func (c *Client) ResolveRequiredDependencies(ctx context.Context, idOrSlug, mcVe
 	}
 	return resolved, nil
 }
+
+// LatestVersion satisfies the modupdates.Catalog interface.
+func (c *Client) LatestVersion(ctx context.Context, ns, name string) (string, []string, error) {
+	slug := name
+	if slug == "" {
+		slug = ns
+	}
+	vers, err := c.GetProjectVersions(ctx, slug, "", "neoforge")
+	if err != nil {
+		return "", nil, err
+	}
+	if len(vers) == 0 {
+		return "", nil, nil
+	}
+	return vers[0].VersionNum, nil, nil
+}
+
+// ResolveTree satisfies the modupdates.Catalog interface.
+func (c *Client) ResolveTree(ctx context.Context, ns, name string) ([]string, error) {
+	slug := name
+	if slug == "" {
+		slug = ns
+	}
+	return c.ResolveRequiredDependencies(ctx, slug, "", "neoforge")
+}
+
+// LatestVersionForInstance returns the latest version number and its dependency project slugs
+// compatible with the instance's MCVersion and Loader.
+func (c *Client) LatestVersionForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error) {
+	slug := ref.Name
+	if slug == "" {
+		slug = ref.Namespace
+	}
+	loader := string(domain.NormalizeLoader(string(inst.Loader)))
+	mcVer := inst.MCVersion
+
+	vers, err := c.GetProjectVersions(ctx, slug, mcVer, loader)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(vers) == 0 {
+		return "", nil, nil
+	}
+
+	latest := vers[0]
+	var deps []string
+	for _, d := range latest.Dependencies {
+		if d.DependencyType == "required" && d.ProjectID != nil {
+			depProj, err := c.GetProject(ctx, *d.ProjectID)
+			if err == nil && depProj != nil {
+				deps = append(deps, depProj.Slug)
+			}
+		}
+	}
+	return latest.VersionNum, deps, nil
+}
+
+// ResolveTreeForInstance returns the required dependencies for a mod on this instance,
+// formatted with their latest compatible versions (e.g. "slug:version") where available.
+func (c *Client) ResolveTreeForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) ([]string, error) {
+	slug := ref.Name
+	if slug == "" {
+		slug = ref.Namespace
+	}
+	loader := string(domain.NormalizeLoader(string(inst.Loader)))
+	mcVer := inst.MCVersion
+
+	depSlugs, err := c.ResolveRequiredDependencies(ctx, slug, mcVer, loader)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []string
+	for _, depSlug := range depSlugs {
+		depVers, err := c.GetProjectVersions(ctx, depSlug, mcVer, loader)
+		if err == nil && len(depVers) > 0 {
+			results = append(results, depSlug+":"+depVers[0].VersionNum)
+		} else {
+			results = append(results, depSlug)
+		}
+	}
+	return results, nil
+}
+

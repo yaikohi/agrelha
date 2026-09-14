@@ -50,7 +50,13 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 			packProvider = string(inst.Pack.Provider)
 		}
 
+		updateCount := 0
+		if h.cfg.ModUpdates != nil {
+			updateCount = h.cfg.ModUpdates.Count(inst.Number)
+		}
+
 		uiInstances = append(uiInstances, pages.InstanceUI{
+			GameID:             string(domain.GameMinecraft),
 			Number:             inst.Number,
 			Name:               inst.Name,
 			Slug:               inst.Slug,
@@ -66,6 +72,7 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 			State:              string(inst.State),
 			MOTD:               inst.MOTD,
 			LBIP:               inst.LBIP,
+			ModUpdates:         updateCount,
 			CanStart:           canStart,
 			StartBlockedReason: blockedReason,
 		})

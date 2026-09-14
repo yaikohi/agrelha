@@ -209,6 +209,11 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 							</form>
 						</details>
 					}
+					if !d.PackDefined() {
+						<div id="mod-updates-panel">
+							@ModUpdatePanel(d)
+						</div>
+					}
 					<div class="flex items-center justify-between">
 						<div>
 							<h2 class="text-base font-semibold text-zinc-100">Installed Mods</h2>

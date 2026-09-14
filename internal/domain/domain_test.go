@@ -347,6 +347,8 @@ func TestParseModRefHandlesBothGames(t *testing.T) {
 		{"cloth-config", GameMinecraft, "cloth-config", "cloth-config", ""},
 		{"xaeros-minimap", GameMinecraft, "xaeros-minimap", "xaeros-minimap", ""},
 		{"sodium", GameMinecraft, "sodium", "sodium", ""},
+		{"sodium:0.6.0+mc1.21.1", GameMinecraft, "sodium", "sodium", "0.6.0+mc1.21.1"},
+		{"fabric-api/0.100.0+1.21.1", GameMinecraft, "fabric-api", "fabric-api", "0.100.0+1.21.1"},
 	}
 	for _, c := range cases {
 		ref, ok := ParseModRef(c.entry, c.game)
@@ -381,6 +383,33 @@ func TestModRefEntryPinsWhenVersionKnown(t *testing.T) {
 	}
 	if got := (ModRef{Name: "sodium"}).Entry(); got != "sodium" {
 		t.Errorf("got %q", got)
+	}
+	if got := (ModRef{Name: "sodium", Version: "0.6.0+mc1.21.1"}).Entry(); got != "sodium:0.6.0+mc1.21.1" {
+		t.Errorf("got %q, want sodium:0.6.0+mc1.21.1", got)
+	}
+}
+
+func TestVersionNewerSemverAndMetadata(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"0.6.1+mc1.21.1", "0.6.0+mc1.21.1", true},
+		{"0.6.0+mc1.21.1", "0.5.11+mc1.21", true},
+		{"0.6.0+mc1.21.1", "0.6.0+mc1.21.1", false},
+		{"v1.2.3", "1.2.0", true},
+		{"1.2.0", "v1.2.3", false},
+		{"1.0.0", "(unpinned)", true},
+		{"1.0.0", "", true},
+		{"", "1.0.0", false},
+		{"1.0.0", "1.0.0-beta.1", true},
+		{"1.0.0-beta.2", "1.0.0-beta.1", true},
+		{"1.0.0-beta.1", "1.0.0", false},
+	}
+	for _, c := range cases {
+		if got := VersionNewer(c.a, c.b); got != c.want {
+			t.Errorf("VersionNewer(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
 	}
 }
 

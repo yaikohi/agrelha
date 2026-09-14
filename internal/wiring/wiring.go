@@ -69,6 +69,7 @@ type Deps struct {
 	MCInstances      *instances.InstanceManager
 	ValheimInstances *instances.InstanceManager
 	ModUpdates       *modupdates.Checker
+	MCModUpdates     *modupdates.Checker
 	StateStore       ports.StateStore
 	Reconciler       ports.Reconciler
 }
@@ -437,6 +438,13 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	if d.ValheimInstances != nil && d.TS != nil {
 		d.ModUpdates = modupdates.New(d.ValheimInstances, d.TS, modupdates.WithRestorePoints(st))
 		d.ModUpdates.Start(ctx)
+	}
+	if d.MCInstances != nil && d.MR != nil {
+		d.MCModUpdates = modupdates.New(d.MCInstances, d.MR,
+			modupdates.WithGameID(domain.GameMinecraft),
+			modupdates.WithRestorePoints(st),
+		)
+		d.MCModUpdates.Start(ctx)
 	}
 
 	health.New(st, healthSources(&d)).Start(ctx)

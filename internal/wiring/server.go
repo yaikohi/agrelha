@@ -497,6 +497,7 @@ func buildInstancesHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 		SearchMods:              searchMods,
 		Actor:                   actor,
 		ApplyMinecraftAfterSync: applyMCAfterSync,
+		ModUpdates:              d.MCModUpdates,
 	})
 }
 
@@ -671,8 +672,17 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 		}
 	}
 	var modUpdateTotal func() int
-	if d.ModUpdates != nil {
-		modUpdateTotal = d.ModUpdates.Total
+	if d.ModUpdates != nil || d.MCModUpdates != nil {
+		modUpdateTotal = func() int {
+			tot := 0
+			if d.ModUpdates != nil {
+				tot += d.ModUpdates.Total()
+			}
+			if d.MCModUpdates != nil {
+				tot += d.MCModUpdates.Total()
+			}
+			return tot
+		}
 	}
 	return dashboardhttp.New(dashboardhttp.Config{
 		ModUpdateTotal:       modUpdateTotal,

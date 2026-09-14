@@ -1,5 +1,6 @@
 # build artifacts
 /main
+.task/
 tmp/
 build-errors.log
 coverage.out

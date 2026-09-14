@@ -432,3 +432,151 @@ func TestRefreshSkipsVanillaWorlds(t *testing.T) {
 		t.Errorf("asked upstream %d times about a Vanilla world, want 0", cat.calls)
 	}
 }
+
+type fakeInstanceCatalog struct {
+	fakeCatalog
+	instanceVersions map[string]string
+	instanceTrees    map[string][]string
+}
+
+func (f *fakeInstanceCatalog) LatestVersionForInstance(_ context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error) {
+	key := fmt.Sprintf("%s|%s|%s", ref.Name, inst.MCVersion, inst.Loader)
+	v, ok := f.instanceVersions[key]
+	if !ok {
+		return "", nil, nil
+	}
+	return v, nil, nil
+}
+
+func (f *fakeInstanceCatalog) ResolveTreeForInstance(_ context.Context, ref domain.ModRef, inst domain.Instance) ([]string, error) {
+	key := fmt.Sprintf("%s|%s|%s", ref.Name, inst.MCVersion, inst.Loader)
+	return f.instanceTrees[key], nil
+}
+
+func TestRefreshFiltersByInstanceLoader(t *testing.T) {
+	insts := &fakeInstances{
+		insts: []domain.Instance{
+			{Number: 1, Name: "FabricWorld", GameID: domain.GameMinecraft, Loader: domain.LoaderFabric, MCVersion: "1.21.1", Source: domain.SourceModlist},
+			{Number: 2, Name: "NeoWorld", GameID: domain.GameMinecraft, Loader: domain.LoaderNeoForge, MCVersion: "1.21.1", Source: domain.SourceModlist},
+		},
+		entries: map[int][]string{
+			1: {"sodium:0.5.11+mc1.21"},
+			2: {"sodium:0.5.11+mc1.21"},
+		},
+	}
+	cat := &fakeInstanceCatalog{
+		instanceVersions: map[string]string{
+			"sodium|1.21.1|fabric":   "0.5.11+mc1.21", // no newer version for fabric
+			"sodium|1.21.1|neoforge": "0.6.0+mc1.21.1", // newer version available for neoforge
+		},
+	}
+
+	c := New(insts, cat, WithGameID(domain.GameMinecraft))
+
+	repFabric, err := c.RefreshOne(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("RefreshOne(1): %v", err)
+	}
+	if len(repFabric.Updates) != 0 {
+		t.Errorf("Fabric world must NOT show updates when only NeoForge has one: got %+v", repFabric.Updates)
+	}
+
+	repNeo, err := c.RefreshOne(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("RefreshOne(2): %v", err)
+	}
+	if len(repNeo.Updates) != 1 {
+		t.Fatalf("NeoForge world must show 1 update, got %d", len(repNeo.Updates))
+	}
+	u := repNeo.Updates[0]
+	if u.Ref.Name != "sodium" || u.Current != "0.5.11+mc1.21" || u.Latest != "0.6.0+mc1.21.1" {
+		t.Errorf("unexpected update: %+v", u)
+	}
+}
+
+func TestMinecraftModUpdatesApplyAndUndo(t *testing.T) {
+	insts := &fakeInstances{
+		insts: []domain.Instance{
+			{Number: 2, Name: "NeoWorld", GameID: domain.GameMinecraft, Loader: domain.LoaderNeoForge, MCVersion: "1.21.1", Source: domain.SourceModlist},
+		},
+		entries: map[int][]string{
+			2: {"sodium:0.5.11+mc1.21", "cloth-config:15.0.127"},
+		},
+	}
+	cat := &fakeInstanceCatalog{
+		instanceVersions: map[string]string{
+			"sodium|1.21.1|neoforge":       "0.6.0+mc1.21.1",
+			"cloth-config|1.21.1|neoforge": "15.0.127",
+		},
+	}
+	rs := &fakeRestore{}
+
+	ctx := context.Background()
+	c := New(insts, cat, WithGameID(domain.GameMinecraft), WithRestorePoints(rs))
+
+	applied, err := c.Apply(ctx, 2, []string{"sodium"}, "tester")
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(applied) != 1 {
+		t.Fatalf("applied = %d, want 1", len(applied))
+	}
+
+	wantWrote := []string{"sodium:0.6.0+mc1.21.1", "cloth-config:15.0.127"}
+	if strings.Join(insts.wrote[2], ",") != strings.Join(wantWrote, ",") {
+		t.Errorf("wrote = %v, want %v", insts.wrote[2], wantWrote)
+	}
+
+	// Now undo
+	insts.entries[2] = insts.wrote[2]
+	rp, err := c.Undo(ctx, 2, "tester")
+	if err != nil {
+		t.Fatalf("Undo: %v", err)
+	}
+	wantReverted := []string{"sodium:0.5.11+mc1.21", "cloth-config:15.0.127"}
+	if strings.Join(rp.Previous, ",") != strings.Join(wantReverted, ",") {
+		t.Errorf("reverted = %v, want %v", rp.Previous, wantReverted)
+	}
+}
+
+func TestMinecraftUnpinnedModCanBeUpdatedAndPinned(t *testing.T) {
+	insts := &fakeInstances{
+		insts: []domain.Instance{
+			{Number: 3, Name: "BobWorld", GameID: domain.GameMinecraft, Loader: domain.LoaderFabric, MCVersion: "1.21.1", Source: domain.SourceModlist},
+		},
+		entries: map[int][]string{
+			3: {"xaeros-minimap"},
+		},
+	}
+	cat := &fakeInstanceCatalog{
+		instanceVersions: map[string]string{
+			"xaeros-minimap|1.21.1|fabric": "24.7.1",
+		},
+	}
+
+	ctx := context.Background()
+	c := New(insts, cat, WithGameID(domain.GameMinecraft))
+
+	rep, err := c.RefreshOne(ctx, 3)
+	if err != nil {
+		t.Fatalf("RefreshOne: %v", err)
+	}
+	if len(rep.Updates) != 1 {
+		t.Fatalf("want 1 update for unpinned Minecraft mod, got %d", len(rep.Updates))
+	}
+	if rep.Updates[0].Current != "(unpinned)" || rep.Updates[0].Latest != "24.7.1" {
+		t.Errorf("unexpected update: %+v", rep.Updates[0])
+	}
+
+	applied, err := c.Apply(ctx, 3, nil, "tester")
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(applied) != 1 {
+		t.Fatalf("applied = %d, want 1", len(applied))
+	}
+	wantWrote := []string{"xaeros-minimap:24.7.1"}
+	if strings.Join(insts.wrote[3], ",") != strings.Join(wantWrote, ",") {
+		t.Errorf("wrote = %v, want %v", insts.wrote[3], wantWrote)
+	}
+}

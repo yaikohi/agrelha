@@ -32,6 +32,12 @@ type Catalog interface {
 	ResolveTree(ctx context.Context, ns, name string) ([]string, error)
 }
 
+// InstanceCatalog resolves versions and dependencies using world context (MC version, loader).
+type InstanceCatalog interface {
+	LatestVersionForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error)
+	ResolveTreeForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) ([]string, error)
+}
+
 // Instances is the set of worlds the checker watches, and the way it rewrites
 // the mod list of one of them.
 type Instances interface {
@@ -101,6 +107,11 @@ func WithRestorePoints(r RestorePoints) Option {
 	return func(c *Checker) { c.restore = r }
 }
 
+// WithGameID sets the game ID the checker watches (default GameValheim).
+func WithGameID(id domain.GameID) Option {
+	return func(c *Checker) { c.gameID = id }
+}
+
 // New builds a Checker over the given worlds and catalogue.
 func New(insts Instances, cat Catalog, opts ...Option) *Checker {
 	c := &Checker{
@@ -149,7 +160,7 @@ func (c *Checker) Refresh(ctx context.Context) {
 		return
 	}
 	for _, inst := range insts {
-		if inst.IsVanilla() {
+		if inst.IsVanilla() || inst.PackDefined() {
 			continue
 		}
 		if _, err := c.RefreshOne(ctx, inst.Number); err != nil {
@@ -174,7 +185,56 @@ func (c *Checker) RefreshOne(ctx context.Context, num int) (Report, error) {
 	return rep, err
 }
 
+func (c *Checker) getInstance(ctx context.Context, num int) (domain.Instance, error) {
+	if ig, ok := c.insts.(interface {
+		GetInstance(context.Context, int) (*domain.Instance, error)
+	}); ok {
+		inst, err := ig.GetInstance(ctx, num)
+		if err == nil && inst != nil {
+			return *inst, nil
+		}
+	}
+	all, err := c.insts.ListInstances(ctx)
+	if err != nil {
+		return domain.Instance{Number: num, GameID: c.gameID}, nil
+	}
+	for _, inst := range all {
+		if inst.Number == num {
+			return inst, nil
+		}
+	}
+	return domain.Instance{Number: num, GameID: c.gameID}, nil
+}
+
+func (c *Checker) latestVersionForRef(ctx context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error) {
+	if ic, ok := c.cat.(InstanceCatalog); ok {
+		return ic.LatestVersionForInstance(ctx, ref, inst)
+	}
+	if c.cat != nil {
+		return c.cat.LatestVersion(ctx, ref.Namespace, ref.Name)
+	}
+	return "", nil, nil
+}
+
+func (c *Checker) resolveTreeForRef(ctx context.Context, ref domain.ModRef, inst domain.Instance) ([]string, error) {
+	if ic, ok := c.cat.(InstanceCatalog); ok {
+		return ic.ResolveTreeForInstance(ctx, ref, inst)
+	}
+	if c.cat != nil {
+		return c.cat.ResolveTree(ctx, ref.Namespace, ref.Name)
+	}
+	return nil, nil
+}
+
 func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
+	inst, err := c.getInstance(ctx, num)
+	if err != nil {
+		return Report{}, err
+	}
+	if inst.IsVanilla() || inst.PackDefined() {
+		return Report{At: time.Now()}, nil
+	}
+
 	entries, err := c.insts.GetInstalledMods(ctx, num)
 	if err != nil {
 		return Report{}, err
@@ -182,8 +242,11 @@ func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
 
 	var refs []domain.ModRef
 	for _, e := range entries {
-		ref, ok := domain.ParseModRef(e, domain.GameValheim)
-		if !ok || ref.Namespace == "" {
+		ref, ok := domain.ParseModRef(e, c.gameID)
+		if !ok {
+			continue
+		}
+		if c.gameID == domain.GameValheim && ref.Namespace == "" {
 			continue
 		}
 		refs = append(refs, ref)
@@ -209,7 +272,7 @@ func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			v, _, err := c.cat.LatestVersion(ctx, ref.Namespace, ref.Name)
+			v, _, err := c.latestVersionForRef(ctx, ref, inst)
 			results[i] = result{ref: ref, latest: v, err: err}
 		}()
 	}
@@ -223,12 +286,19 @@ func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
 			rep.Unreachable = append(rep.Unreachable, r.ref)
 		default:
 			rep.Checked++
-			if r.ref.Version == "" || r.latest == "" {
+			if r.latest == "" {
 				continue
 			}
-			if domain.VersionNewer(r.latest, r.ref.Version) {
+			if c.gameID == domain.GameValheim && r.ref.Version == "" {
+				continue
+			}
+			currentVer := r.ref.Version
+			if currentVer == "" {
+				currentVer = "(unpinned)"
+			}
+			if domain.VersionNewer(r.latest, currentVer) {
 				rep.Updates = append(rep.Updates, domain.ModUpdate{
-					Ref: r.ref, Current: r.ref.Version, Latest: r.latest,
+					Ref: r.ref, Current: currentVer, Latest: r.latest,
 				})
 			}
 		}
@@ -394,6 +464,11 @@ func (c *Checker) Apply(ctx context.Context, num int, keys []string, actor strin
 		return nil, fmt.Errorf("none of the selected mods have an update")
 	}
 
+	inst, err := c.getInstance(ctx, num)
+	if err != nil {
+		return nil, err
+	}
+
 	previous, err := c.insts.GetInstalledMods(ctx, num)
 	if err != nil {
 		return nil, err
@@ -402,7 +477,7 @@ func (c *Checker) Apply(ctx context.Context, num int, keys []string, actor strin
 	order := make([]string, 0, len(previous))
 	byKey := map[string]domain.ModRef{}
 	for _, e := range previous {
-		ref, ok := domain.ParseModRef(e, domain.GameValheim)
+		ref, ok := domain.ParseModRef(e, c.gameID)
 		if !ok {
 			continue
 		}
@@ -413,12 +488,12 @@ func (c *Checker) Apply(ctx context.Context, num int, keys []string, actor strin
 	}
 
 	for _, t := range targets {
-		resolved, err := c.cat.ResolveTree(ctx, t.Ref.Namespace, t.Ref.Name)
+		resolved, err := c.resolveTreeForRef(ctx, t.Ref, inst)
 		if err != nil {
 			return nil, fmt.Errorf("cannot resolve %s: %w", t.Ref.FullName(), err)
 		}
 		for _, r := range resolved {
-			ref, ok := domain.ParseModRef(r, domain.GameValheim)
+			ref, ok := domain.ParseModRef(r, c.gameID)
 			if !ok || ref.Version == "" {
 				continue
 			}

@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/app/instances"
+	"agrelha/internal/app/modupdates"
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
@@ -32,6 +33,7 @@ type Config struct {
 	LastIncident            func(ctx context.Context, number int) (*domain.Incident, error)
 	Actor                   func(*fiber.Ctx) string
 	ApplyMinecraftAfterSync func(cmName, depName, key string, want func(string) bool)
+	ModUpdates              *modupdates.Checker
 }
 
 // Handler provides HTTP endpoints for Minecraft instances lifecycle, wizard, and configs.
@@ -97,6 +99,9 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Post("/api/minecraft/:num<int>/mods/search", h.MCInstanceModsSearch)
 	router.Post("/api/minecraft/:num<int>/mods/install", h.MCInstanceModsInstall)
 	router.Post("/api/minecraft/:num<int>/mods/remove", h.MCInstanceModsRemove)
+	router.Post("/api/minecraft/:num<int>/mods/updates/check", h.MCModUpdatesCheck)
+	router.Post("/api/minecraft/:num<int>/mods/updates/apply", h.MCModUpdatesApply)
+	router.Post("/api/minecraft/:num<int>/mods/updates/undo", h.MCModUpdatesUndo)
 	router.Get("/api/minecraft/:num<int>/configs/file", h.MCInstanceConfigGet)
 	router.Post("/api/minecraft/:num<int>/configs/save", h.MCInstanceConfigSave)
 	router.Post("/api/minecraft/:num<int>/configs/delete", h.MCInstanceConfigDelete)

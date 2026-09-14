@@ -80,6 +80,16 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 											{ inst.Pack }
 										</span>
 									}
+
+									if inst.ModUpdates > 0 {
+										<a
+											href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/mods", inst.Number)) }
+											class="rounded bg-amber-950/60 px-2 py-0.5 text-[11px] font-medium text-amber-300 ring-1 ring-amber-800/60 hover:bg-amber-900/60 transition"
+											title="Newer versions of installed mods are published on Modrinth"
+										>
+											{ fmt.Sprintf("↻ %d mod update(s)", inst.ModUpdates) }
+										</a>
+									}
 								</div>
 
 								if inst.Seed != "" {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
 )
@@ -43,6 +44,7 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
+			GameID:       string(domain.GameMinecraft),
 			Number:       inst.Number,
 			Name:         inst.Name,
 			Slug:         inst.Slug,
@@ -75,6 +77,7 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 		if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), inst.Number); err == nil {
 			d.InstalledMods = mods
 		}
+		h.ModUpdateState(c.UserContext(), &d, *inst)
 	}
 
 	// Fetch config files if on configs tab or overview

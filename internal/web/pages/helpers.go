@@ -648,6 +648,22 @@ func InstanceTabs(game string, num int, active string, vanilla bool) []component
 	return tabs
 }
 
+// GamePath returns the route prefix for the instance's game ("minecraft" or "valheim").
+func (d InstanceDetailUI) GamePath() string {
+	if d.GameID == string(domain.GameMinecraft) || d.GameID == "minecraft" {
+		return "minecraft"
+	}
+	return "valheim"
+}
+
+// UpstreamCatalogName returns the user-facing name of the upstream package index ("Modrinth" or "Thunderstore").
+func (d InstanceDetailUI) UpstreamCatalogName() string {
+	if d.GamePath() == "minecraft" {
+		return "Modrinth"
+	}
+	return "Thunderstore"
+}
+
 // updateClick guards an apply button behind a confirmation, but only when the
 // restart it causes would drop players who are connected right now.
 func updateClick(d InstanceDetailUI, post string) string {
@@ -655,7 +671,7 @@ func updateClick(d InstanceDetailUI, post string) string {
 }
 
 func undoClick(d InstanceDetailUI) string {
-	call := fmt.Sprintf("@post('/api/valheim/%d/mods/updates/undo')", d.Number)
+	call := fmt.Sprintf("@post('/api/%s/%d/mods/updates/undo')", d.GamePath(), d.Number)
 	return confirmIfPlayers(d, call, "Reverting")
 }
 

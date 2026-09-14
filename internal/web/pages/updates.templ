@@ -11,7 +11,7 @@ templ ModUpdatePanel(d InstanceDetailUI) {
 					<span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-900/60 text-sm font-bold text-red-300">!</span>
 					<div class="min-w-0">
 						<h2 class="text-sm font-semibold text-red-200">
-							{ fmt.Sprintf("%d installed mod(s) are no longer published on Thunderstore", len(d.ModsMissing)) }
+							{ fmt.Sprintf("%d installed mod(s) are no longer published on %s", len(d.ModsMissing), d.UpstreamCatalogName()) }
 						</h2>
 						<p class="mt-0.5 text-xs text-red-300/80">
 							This world will fail to boot on its next restart — the setup step cannot download a package that no longer exists. Remove them, or pin a version you still have.
@@ -49,14 +49,14 @@ templ ModUpdatePanel(d InstanceDetailUI) {
 					}
 					<button
 						type="button"
-						data-on:click={ fmt.Sprintf("@post('/api/valheim/%d/mods/updates/check')", d.Number) }
+						data-on:click={ fmt.Sprintf("@post('/api/%s/%d/mods/updates/check')", d.GamePath(), d.Number) }
 						class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition"
 					>Check now</button>
 				</div>
 			</div>
 			if len(d.ModsUnreachable) > 0 {
 				<div class="border-b border-zinc-800 bg-zinc-950/40 px-4 py-2.5 text-xs text-zinc-400">
-					Couldn't reach Thunderstore for
+					Couldn't reach { d.UpstreamCatalogName() } for
 					<span class="font-mono text-zinc-300">{ strings.Join(d.ModsUnreachable, ", ") }</span>
 					— these were not checked.
 				</div>
@@ -82,13 +82,13 @@ templ ModUpdatePanel(d InstanceDetailUI) {
 				<div class="flex items-center justify-end gap-2 border-t border-zinc-800 bg-zinc-950/60 px-4 py-2.5">
 					<button
 						type="button"
-						data-on:click={ updateClick(d, "@post('/api/valheim/%d/mods/updates/apply', {payload: {selected: $selected}})") }
+						data-on:click={ updateClick(d, "@post('/api/"+d.GamePath()+"/%d/mods/updates/apply', {payload: {selected: $selected}})") }
 						disabled?={ d.UpdatesPending }
 						class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition disabled:opacity-40"
 					>Update selected</button>
 					<button
 						type="button"
-						data-on:click={ updateClick(d, "@post('/api/valheim/%d/mods/updates/apply', {payload: {all: true}})") }
+						data-on:click={ updateClick(d, "@post('/api/"+d.GamePath()+"/%d/mods/updates/apply', {payload: {all: true}})") }
 						disabled?={ d.UpdatesPending }
 						class="rounded-lg bg-emerald-700 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600 transition disabled:opacity-40"
 					>Update all</button>

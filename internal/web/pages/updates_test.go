@@ -35,6 +35,32 @@ func TestPanelShowsEachPinTransition(t *testing.T) {
 	}
 }
 
+func TestPanelRendersMinecraftModrinthEndpoints(t *testing.T) {
+	got := renderPanel(t, InstanceDetailUI{
+		InstanceUI:      InstanceUI{Number: 3, Name: "bob", GameID: "minecraft"},
+		ModUpdates:      []ModUpdate{{Key: "sodium", FullName: "sodium", Current: "(unpinned)", Latest: "0.6.0+mc1.21.1", Token: "sodium"}},
+		ModsMissing:     []string{"deleted-mod"},
+		ModsUnreachable: []string{"slow-mod"},
+		CanUndo:         true,
+		UndoWhen:        "5m ago",
+	})
+	for _, want := range []string{
+		"1 mod update(s) available",
+		"sodium",
+		"(unpinned)",
+		"0.6.0+mc1.21.1",
+		"/api/minecraft/3/mods/updates/apply",
+		"/api/minecraft/3/mods/updates/check",
+		"/api/minecraft/3/mods/updates/undo",
+		"published on Modrinth",
+		"Couldn't reach Modrinth for",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("panel missing %q in:\n%s", want, got)
+		}
+	}
+}
+
 // The restart is only disruptive when someone is on the world, so that is the
 // only time the operator is stopped to confirm it.
 func TestConfirmOnlyWhenPlayersWouldBeDropped(t *testing.T) {
