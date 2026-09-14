@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -52,6 +53,12 @@ type prismMetaIndex struct {
 	Versions []prismMetaVersion `json:"versions"`
 }
 
+var (
+	prismMetaURL            = "https://meta.prismlauncher.org/v1/net.neoforged/index.json"
+	mrpackJSONMarshalIndent = json.MarshalIndent
+	mrpackNewZipWriter      = func(w io.Writer) zipWriter { return zip.NewWriter(w) }
+)
+
 // ResolveNeoForgeVersion finds the best matching NeoForge release version for a given Minecraft version.
 func ResolveNeoForgeVersion(ctx context.Context, mcVersion, requestedVersion string) string {
 	requestedVersion = strings.TrimSpace(requestedVersion)
@@ -60,9 +67,9 @@ func ResolveNeoForgeVersion(ctx context.Context, mcVersion, requestedVersion str
 	}
 
 	// Try querying Prism Launcher's official NeoForge metadata
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://meta.prismlauncher.org/v1/net.neoforged/index.json", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, prismMetaURL, nil)
 	if err == nil {
-		req.Header.Set("User-Agent", "agrelha/0.9.0 (https://github.com/ykhi/yaya-ops)")
+		req.Header.Set("User-Agent", "agrelha/0.27.2 (https://github.com/ykhi/agrelha)")
 		client := &http.Client{Timeout: 10 * time.Second}
 		if resp, err := client.Do(req); err == nil && resp.StatusCode == http.StatusOK {
 			defer resp.Body.Close()
@@ -308,13 +315,13 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 		index.Files = append(index.Files, rf.file)
 	}
 
-	indexJSON, err := json.MarshalIndent(index, "", "  ")
+	indexJSON, err := mrpackJSONMarshalIndent(index, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal modrinth.index.json: %w", err)
 	}
 
 	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
+	zw := mrpackNewZipWriter(&buf)
 
 	// 1. Write modrinth.index.json
 	iw, err := zw.Create("modrinth.index.json")

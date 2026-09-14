@@ -343,3 +343,111 @@ func TestRuntimeSpecEnvMatchesTheInstance(t *testing.T) {
 		t.Error("status.json returns an empty body on Valheim 1.0; the probe must be the port-bound check")
 	}
 }
+
+type fakeValheimRuntime struct {
+	status ports.Status
+	statErr error
+}
+
+func (f *fakeValheimRuntime) Status(context.Context, ports.ServerRef) (ports.Status, error) {
+	return f.status, f.statErr
+}
+func (f *fakeValheimRuntime) Metrics(context.Context, ports.ServerRef) (ports.Metrics, error) {
+	return ports.Metrics{CPUMillicores: 100, MemoryMiB: 512, Known: true}, nil
+}
+func (f *fakeValheimRuntime) Start(context.Context, ports.ServerRef) error    { return nil }
+func (f *fakeValheimRuntime) Stop(context.Context, ports.ServerRef) error     { return nil }
+func (f *fakeValheimRuntime) Restart(context.Context, ports.ServerRef) error  { return nil }
+func (f *fakeValheimRuntime) Logs(context.Context, ports.ServerRef, ports.LogOptions) (io.ReadCloser, error) {
+	return nil, nil
+}
+func (f *fakeValheimRuntime) WatchAvailability(context.Context, ports.ServerRef, time.Duration) error {
+	return nil
+}
+
+func TestValheimTelemetryAndOptions(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. WithStatusProvider
+	gStatus := New(WithStatusProvider(func(ctx context.Context) (domain.GameTelemetry, error) {
+		return domain.GameTelemetry{State: "Custom"}, nil
+	}))
+	tele, err := gStatus.Telemetry(ctx)
+	if err != nil || tele.State != "Custom" {
+		t.Errorf("expected Custom telemetry, got %+v, err %v", tele, err)
+	}
+
+	// 2. WithContentResolver & ResolveContent
+	gContent := New(WithContentResolver(func(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
+		return domain.ContentSet{Items: []domain.ContentItem{{Name: "Resolved"}}}, nil
+	}))
+	cs, err := gContent.ResolveContent(ctx, domain.Instance{})
+	if err != nil || len(cs.Items) != 1 || cs.Items[0].Name != "Resolved" {
+		t.Errorf("unexpected ResolveContent: %+v, err %v", cs, err)
+	}
+
+	// 3. WithProvider
+	gProv := New(WithProvider(nil))
+	if len(gProv.providers) != 1 {
+		t.Errorf("expected 1 provider registered")
+	}
+
+	// 4. Telemetry with LifecycleStopped
+	rtStopped := &fakeValheimRuntime{status: ports.Status{Lifecycle: ports.LifecycleStopped, Available: false}}
+	gStopped := New(WithRuntime(rtStopped, ports.ServerRef{Name: "v1"}))
+	teleStopped, _ := gStopped.Telemetry(ctx)
+	if teleStopped.State != "Stopped" || teleStopped.Online {
+		t.Errorf("expected Stopped telemetry, got %+v", teleStopped)
+	}
+
+	// 5. Telemetry with custom Lifecycle string
+	rtPending := &fakeValheimRuntime{status: ports.Status{Lifecycle: ports.Lifecycle("CrashLoopBackOff"), Available: false}}
+	gPending := New(WithRuntime(rtPending, ports.ServerRef{Name: "v1"}))
+	telePending, _ := gPending.Telemetry(ctx)
+	if telePending.State != "CrashLoopBackOff" {
+		t.Errorf("expected CrashLoopBackOff state, got %+v", telePending)
+	}
+
+	// 6. ExportClientBundle default name/slug and bundleSource error
+	gErrSource := New(WithBundleSource(func(context.Context, domain.Instance) ([]string, map[string]string, error) {
+		return nil, nil, context.Canceled
+	}))
+	if _, err := gErrSource.ExportClientBundle(ctx, domain.Instance{}); err == nil {
+		t.Errorf("expected error when bundleSource fails")
+	}
+
+	// 7. ExportClientBundle default Name/Slug
+	gDef := New(WithBundleSource(func(context.Context, domain.Instance) ([]string, map[string]string, error) {
+		return nil, nil, nil
+	}))
+	b, err := gDef.ExportClientBundle(ctx, domain.Instance{})
+	if err != nil || b.Filename != "valheim-mods.r2z" {
+		t.Errorf("expected valheim-mods.r2z filename, got %s, err %v", b.Filename, err)
+	}
+
+	// 8. Providers()
+	if len(gDef.Providers()) != 0 {
+		t.Errorf("expected empty providers by default")
+	}
+
+	// 9. BuildClientBundle success
+	bundle, err := gDef.BuildClientBundle("MyProfile", []string{"mod1"}, nil, "1.0.0")
+	if err != nil || bundle.Filename != "myprofile-mods.r2z" {
+		t.Errorf("unexpected BuildClientBundle: %+v, err %v", bundle, err)
+	}
+
+	// 10. modpackBuild error in ExportClientBundle and BuildClientBundle
+	oldBuild := modpackBuild
+	modpackBuild = func(profileName string, entries []string, configs map[string]string) ([]byte, error) {
+		return nil, errors.New("simulated zip failure")
+	}
+	defer func() { modpackBuild = oldBuild }()
+
+	if _, err := gDef.ExportClientBundle(ctx, domain.Instance{}); err == nil {
+		t.Errorf("expected error in ExportClientBundle when modpackBuild fails")
+	}
+	if _, err := gDef.BuildClientBundle("fail", nil, nil, ""); err == nil {
+		t.Errorf("expected error in BuildClientBundle when modpackBuild fails")
+	}
+}
+

@@ -51,3 +51,30 @@ func TestCheckCartCompatibilityEmpty(t *testing.T) {
 		t.Errorf("BestLoader = %s, want neoforge", compat.BestLoader)
 	}
 }
+
+type errResolver struct{}
+
+func (e *errResolver) GetProjects(ctx context.Context, idsOrSlugs []string) ([]domain.ModProject, error) {
+	return nil, context.Canceled
+}
+
+func TestCheckCartCompatibilityFabricAndError(t *testing.T) {
+	// 1. Error / empty projects fallback
+	errCompat := CheckCartCompatibility(context.Background(), &errResolver{}, []string{"mod1", "mod2"}, "1.21.1")
+	if errCompat.BestLoader != "neoforge" || errCompat.TotalMods != 2 {
+		t.Errorf("unexpected error fallback: %+v", errCompat)
+	}
+
+	// 2. FabricFit > NeoForgeFit -> BestLoader = "fabric"
+	resolver := &mockProjectResolver{
+		projects: []domain.ModProject{
+			{Slug: "sodium", Loaders: []string{"fabric"}},
+			{Slug: "lithium", Loaders: []string{"fabric"}},
+		},
+	}
+	fabCompat := CheckCartCompatibility(context.Background(), resolver, []string{"sodium", "lithium"}, "1.21.1")
+	if fabCompat.BestLoader != "fabric" {
+		t.Errorf("BestLoader = %s, want fabric", fabCompat.BestLoader)
+	}
+}
+

@@ -49,18 +49,41 @@ func (f *fakeCatalog) ResolveTree(_ context.Context, ns, name string) ([]string,
 }
 
 type fakeInstances struct {
-	insts   []domain.Instance
-	entries map[int][]string
-	wrote   map[int][]string
-	details map[int]string
-	err     error
+	insts                     []domain.Instance
+	entries                   map[int][]string
+	wrote                     map[int][]string
+	details                   map[int]string
+	err                       error
+	listErr                   error
+	replaceErr                error
+	getInstErr                error
+	installedErr              error
+	failInstalledAfterReplace bool
+}
+
+func (f *fakeInstances) GetInstance(_ context.Context, num int) (*domain.Instance, error) {
+	if f.getInstErr != nil {
+		return nil, f.getInstErr
+	}
+	for _, inst := range f.insts {
+		if inst.Number == num {
+			return &inst, nil
+		}
+	}
+	return nil, nil
 }
 
 func (f *fakeInstances) ListInstances(context.Context) ([]domain.Instance, error) {
-	return f.insts, nil
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.insts, f.err
 }
 
 func (f *fakeInstances) GetInstalledMods(_ context.Context, num int) ([]string, error) {
+	if f.installedErr != nil {
+		return nil, f.installedErr
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -68,20 +91,53 @@ func (f *fakeInstances) GetInstalledMods(_ context.Context, num int) ([]string, 
 }
 
 func (f *fakeInstances) ReplaceMods(_ context.Context, num int, entries []string, detail string, _ ...string) (bool, error) {
+	if f.replaceErr != nil {
+		return false, f.replaceErr
+	}
 	if f.wrote == nil {
 		f.wrote = map[int][]string{}
 		f.details = map[int]string{}
 	}
 	f.wrote[num] = entries
 	f.details[num] = detail
+	if f.failInstalledAfterReplace {
+		f.installedErr = fmt.Errorf("fail after replace")
+	}
+	return true, nil
+}
+
+type plainInstances struct {
+	insts   []domain.Instance
+	entries map[int][]string
+	listErr error
+}
+
+func (p *plainInstances) ListInstances(context.Context) ([]domain.Instance, error) {
+	if p.listErr != nil {
+		return nil, p.listErr
+	}
+	return p.insts, nil
+}
+
+func (p *plainInstances) GetInstalledMods(_ context.Context, num int) ([]string, error) {
+	return p.entries[num], nil
+}
+
+func (p *plainInstances) ReplaceMods(context.Context, int, []string, string, ...string) (bool, error) {
 	return true, nil
 }
 
 type fakeRestore struct {
-	points map[int]*domain.ModRestorePoint
+	points   map[int]*domain.ModRestorePoint
+	saveErr  error
+	clearErr error
+	getErr   error
 }
 
 func (f *fakeRestore) SaveRestorePoint(_ domain.GameID, number int, previous, applied []string) error {
+	if f.saveErr != nil {
+		return f.saveErr
+	}
 	if f.points == nil {
 		f.points = map[int]*domain.ModRestorePoint{}
 	}
@@ -90,10 +146,16 @@ func (f *fakeRestore) SaveRestorePoint(_ domain.GameID, number int, previous, ap
 }
 
 func (f *fakeRestore) RestorePoint(_ domain.GameID, number int) (*domain.ModRestorePoint, error) {
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
 	return f.points[number], nil
 }
 
 func (f *fakeRestore) ClearRestorePoint(_ domain.GameID, number int) error {
+	if f.clearErr != nil {
+		return f.clearErr
+	}
 	delete(f.points, number)
 	return nil
 }
@@ -663,7 +725,269 @@ func TestCheckerMethodsAndEdges(t *testing.T) {
 	}
 
 	// 8. Refresh error when ListInstances fails
-	errInsts := &fakeInstances{err: fmt.Errorf("storage error")}
+	errInsts := &fakeInstances{listErr: fmt.Errorf("storage error")}
 	cErr := New(errInsts, cat)
 	cErr.Refresh(ctx)
 }
+
+func TestCheckerAllEdgeCases(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Refresh with failing RefreshOne
+	failingRefreshInsts := &fakeInstances{
+		insts: []domain.Instance{{Number: 1, Name: "broken", Source: domain.SourceModlist}},
+		err:   fmt.Errorf("read error"),
+	}
+	cat := &fakeCatalog{}
+	cRefreshFail := New(failingRefreshInsts, cat)
+	cRefreshFail.Refresh(ctx)
+
+	// 2. RefreshOne / Apply guards on nil receiver or components
+	var nilChecker *Checker
+	if _, err := nilChecker.RefreshOne(ctx, 1); err != nil {
+		t.Errorf("expected nil error on nil checker RefreshOne")
+	}
+	if _, err := nilChecker.Apply(ctx, 1, nil, "actor"); err == nil {
+		t.Errorf("expected error on nil checker Apply")
+	}
+
+	cNilCat := New(failingRefreshInsts, nil)
+	if _, err := cNilCat.Apply(ctx, 1, nil, "actor"); err == nil {
+		t.Errorf("expected error on Apply with nil catalog")
+	}
+
+	// 3. compute on Vanilla and PackDefined instances
+	vanillaInsts := &fakeInstances{
+		insts: []domain.Instance{
+			{Number: 1, Source: domain.SourceVanilla},
+			{Number: 2, Source: domain.SourceModpack, Pack: &domain.Pack{Name: "pack"}},
+			{Number: 3, Source: domain.SourceModlist}, // empty mods
+		},
+		entries: map[int][]string{
+			3: {"bareword"},
+		},
+	}
+	cVanilla := New(vanillaInsts, cat, WithGameID(domain.GameValheim))
+	rep1, _ := cVanilla.RefreshOne(ctx, 1)
+	if rep1.Total != 0 {
+		t.Errorf("expected 0 mods on vanilla")
+	}
+	rep2, _ := cVanilla.RefreshOne(ctx, 2)
+	if rep2.Total != 0 {
+		t.Errorf("expected 0 mods on modpack")
+	}
+	rep3, _ := cVanilla.RefreshOne(ctx, 3)
+	if rep3.Total != 0 {
+		t.Errorf("expected 0 valid mods on invalid entries")
+	}
+
+	// 4. Pending when GetInstalledMods fails
+	cPendingFail := New(failingRefreshInsts, cat)
+	cPendingFail.markPending(1, []string{"mod1"})
+	if !cPendingFail.Pending(ctx, 1) {
+		t.Errorf("expected Pending=true when GetInstalledMods fails")
+	}
+
+	// 5. Apply error branches:
+	// 5a. available empty and RefreshOne fails
+	cApplyFail1 := New(failingRefreshInsts, cat)
+	if _, err := cApplyFail1.Apply(ctx, 1, nil, "actor"); err == nil {
+		t.Errorf("expected error when available empty and RefreshOne fails")
+	}
+
+	// 5b. available empty after RefreshOne succeeds
+	emptyInsts := &fakeInstances{
+		insts: []domain.Instance{{Number: 1, Source: domain.SourceVanilla}},
+	}
+	cApplyEmpty := New(emptyInsts, cat)
+	if targets, err := cApplyEmpty.Apply(ctx, 1, nil, "actor"); err != nil || targets != nil {
+		t.Errorf("expected nil targets and nil err when available is empty")
+	}
+
+	// 5c. ReplaceMods fails in Apply
+	goodCat := &fakeCatalog{
+		latest: map[string]string{"ns/mod": "2.0.0"},
+		tree:   map[string][]string{"ns/mod": {"ns/mod/2.0.0", "invalid/tree/entry", "ns/nover"}},
+		down:   map[string]bool{},
+	}
+	failReplaceInsts := &fakeInstances{
+		insts:      []domain.Instance{{Number: 1, Source: domain.SourceModlist}},
+		entries:    map[int][]string{1: {"ns/mod/1.0.0", "invalid-entry"}},
+		replaceErr: fmt.Errorf("git write failed"),
+	}
+	restore := &fakeRestore{
+		saveErr:  fmt.Errorf("save error"),
+		clearErr: fmt.Errorf("clear error"),
+	}
+	cReplaceFail := New(failReplaceInsts, goodCat, WithRestorePoints(restore))
+	cReplaceFail.snap[1] = snapshot{report: Report{Updates: []domain.ModUpdate{{
+		Ref: domain.ModRef{Namespace: "ns", Name: "mod", Version: "1.0.0"}, Latest: "2.0.0",
+	}}}}
+	if _, err := cReplaceFail.Apply(ctx, 1, nil, "actor"); err == nil {
+		t.Errorf("expected error when ReplaceMods fails in Apply")
+	}
+
+	// 5d. resolveTree error in Apply
+	cTreeFail := New(failReplaceInsts, cat)
+	cTreeFail.snap[1] = snapshot{report: Report{Updates: []domain.ModUpdate{{
+		Ref: domain.ModRef{Namespace: "ns", Name: "mod", Version: "1.0.0"}, Latest: "2.0.0",
+	}}}}
+	if _, err := cTreeFail.Apply(ctx, 1, nil, "actor"); err == nil {
+		t.Errorf("expected error when resolveTree fails in Apply")
+	}
+
+	// 6. Undo error branches
+	goodInsts := &fakeInstances{
+		insts:   []domain.Instance{{Number: 1, Source: domain.SourceModlist}},
+		entries: map[int][]string{1: {"ns/mod/2.0.0"}},
+	}
+	restoreGood := &fakeRestore{
+		points: map[int]*domain.ModRestorePoint{
+			1: {Previous: []string{"ns/mod/1.0.0"}, Applied: []string{"ns/mod/2.0.0"}},
+		},
+	}
+	cUndoFail := New(goodInsts, goodCat, WithRestorePoints(restoreGood))
+	// ReplaceMods fails in Undo
+	goodInsts.replaceErr = fmt.Errorf("replace fail")
+	if _, err := cUndoFail.Undo(ctx, 1, "actor"); err == nil {
+		t.Errorf("expected error when ReplaceMods fails in Undo")
+	}
+	goodInsts.replaceErr = nil
+
+	// Undo succeeds with clearErr and RefreshOne warning
+	restoreGood.clearErr = fmt.Errorf("clear error")
+	goodCat.down["ns/mod"] = true
+	if rp, err := cUndoFail.Undo(ctx, 1, "actor"); err != nil || rp == nil {
+		t.Errorf("expected Undo to succeed even with warning logs: %v", err)
+	}
+	goodCat.down["ns/mod"] = false
+
+	// 7. RestoreAvailable edge cases:
+	// GetInstalledMods error
+	goodInsts.err = fmt.Errorf("read err")
+	restoreGood.points[1] = &domain.ModRestorePoint{Applied: []string{"ns/mod/2.0.0"}}
+	cRestoreFail := New(goodInsts, goodCat, WithRestorePoints(restoreGood))
+	if _, err := cRestoreFail.RestoreAvailable(ctx, 1); err == nil {
+		t.Errorf("expected error from RestoreAvailable when GetInstalledMods fails")
+	}
+
+	// !rp.Matches and ClearRestorePoint fails
+	goodInsts.err = nil
+	goodInsts.entries[1] = []string{"completely/different/1.0.0"}
+	restoreGood.clearErr = fmt.Errorf("clear err")
+	rp, err := cRestoreFail.RestoreAvailable(ctx, 1)
+	if err != nil || rp != nil {
+		t.Errorf("expected nil rp when entries do not match: %v, err: %v", rp, err)
+	}
+
+	// saveRestorePoint error logging
+	cSaveFail := New(goodInsts, goodCat, WithRestorePoints(restore))
+	cSaveFail.saveRestorePoint(1, []string{"old"}, []string{"new"})
+
+	// 8. Start with ticker and nil guards
+	nilChecker.Start(ctx)
+	cNilCat.Start(ctx)
+
+	cStart := New(goodInsts, goodCat, WithInterval(5*time.Millisecond))
+	startCtx, cancelStart := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancelStart()
+	cStart.Start(startCtx)
+	<-startCtx.Done()
+
+	// 9. Refresh logs warning when RefreshOne fails on an instance
+	failOneInsts := &fakeInstances{
+		insts:        []domain.Instance{{Number: 10, Source: domain.SourceModlist}},
+		installedErr: fmt.Errorf("read fail"),
+	}
+	cRefreshFailOne := New(failOneInsts, cat)
+	cRefreshFailOne.Refresh(ctx)
+
+	// 10. getInstance fallback without GetInstance interface
+	plain := &plainInstances{
+		insts:   []domain.Instance{{Number: 1, Source: domain.SourceModlist}},
+		entries: map[int][]string{1: {"ns/mod/1.0.0"}},
+	}
+	cPlain := New(plain, goodCat)
+	_ = cPlain.getInstance(ctx, 1) // found
+	_ = cPlain.getInstance(ctx, 2) // not found
+	plain.listErr = fmt.Errorf("list fail")
+	_ = cPlain.getInstance(ctx, 1) // list err
+
+	// 11. cat == nil in latestVersionForRef & resolveTreeForRef
+	cNoCat := New(goodInsts, nil)
+	_, _, _ = cNoCat.latestVersionForRef(ctx, domain.ModRef{Namespace: "ns", Name: "mod"}, domain.Instance{})
+	_, _ = cNoCat.resolveTreeForRef(ctx, domain.ModRef{Namespace: "ns", Name: "mod"}, domain.Instance{})
+
+	// 11b. ParseModRef failure in compute and Apply
+	badRefInsts := &fakeInstances{
+		insts:   []domain.Instance{{Number: 1, Source: domain.SourceModlist}},
+		entries: map[int][]string{1: {"# comment", "valid/mod/1.0.0"}},
+	}
+	cBadRef := New(badRefInsts, goodCat)
+	_, _ = cBadRef.RefreshOne(ctx, 1)
+	cBadRef.snap[1] = snapshot{report: Report{Updates: []domain.ModUpdate{{
+		Ref: domain.ModRef{Namespace: "valid", Name: "mod", Version: "1.0.0"}, Latest: "2.0.0",
+	}}}}
+	_, _ = cBadRef.Apply(ctx, 1, nil, "actor")
+
+	// 12. Apply with GetInstalledMods error
+	failPreviousInsts := &fakeInstances{
+		insts:   []domain.Instance{{Number: 1, Source: domain.SourceModlist}},
+		entries: map[int][]string{1: {"valid/mod/1.0.0"}},
+	}
+	cPreviousFail := New(failPreviousInsts, goodCat)
+	cPreviousFail.snap[1] = snapshot{report: Report{Updates: []domain.ModUpdate{{
+		Ref: domain.ModRef{Namespace: "valid", Name: "mod", Version: "1.0.0"}, Latest: "2.0.0",
+	}}}}
+	failPreviousInsts.err = fmt.Errorf("fail previous")
+	if _, err := cPreviousFail.Apply(ctx, 1, nil, "actor"); err == nil {
+		t.Errorf("expected error in Apply when GetInstalledMods fails")
+	}
+
+	// 13. Multiple missing and unreachable mods to test sorting
+	multiErrCat := &fakeCatalog{
+		down:   map[string]bool{"ns/unreach1": true, "ns/unreach2": true},
+		latest: map[string]string{"ns/empty": ""},
+	}
+	multiErrInsts := &fakeInstances{
+		insts: []domain.Instance{{Number: 1, Source: domain.SourceModlist}},
+		entries: map[int][]string{1: {
+			"ns/miss2/1.0.0", "ns/miss1/1.0.0",
+			"ns/unreach2/1.0.0", "ns/unreach1/1.0.0",
+			"ns/empty/1.0.0",
+		}},
+	}
+	cMulti := New(multiErrInsts, multiErrCat)
+	_, _ = cMulti.RefreshOne(ctx, 1)
+
+	// 14. Report on nil checker and Pending on unknown instance
+	if rep := nilChecker.Report(1); rep.Total != 0 {
+		t.Errorf("expected empty report on nil checker")
+	}
+	if cMulti.Pending(ctx, 999) {
+		t.Errorf("expected false pending for unknown number")
+	}
+
+	// 15. Undo with RestoreAvailable error
+	restoreErr := &fakeRestore{getErr: fmt.Errorf("restore error")}
+	cUndoErr := New(goodInsts, goodCat, WithRestorePoints(restoreErr))
+	if _, err := cUndoErr.Undo(ctx, 1, "actor"); err == nil {
+		t.Errorf("expected error when RestoreAvailable fails in Undo")
+	}
+
+	// 16. Undo when RefreshOne fails after successful replace
+	undoFailInsts := &fakeInstances{
+		entries:                   map[int][]string{1: {"valid/mod/2.0.0"}},
+		failInstalledAfterReplace: true,
+	}
+	restoreUndo := &fakeRestore{
+		points: map[int]*domain.ModRestorePoint{
+			1: {Previous: []string{"valid/mod/1.0.0"}, Applied: []string{"valid/mod/2.0.0"}},
+		},
+	}
+	cUndoRefreshFail := New(undoFailInsts, goodCat, WithRestorePoints(restoreUndo))
+	if _, err := cUndoRefreshFail.Undo(ctx, 1, "actor"); err != nil {
+		t.Errorf("expected Undo to succeed even if RefreshOne fails: %v", err)
+	}
+}
+

@@ -105,4 +105,100 @@ func TestModsOperations(t *testing.T) {
 	if store.doc.Data["mods.txt"] != "mod/a/1.0\nmod/b/2.0\n" {
 		t.Fatalf("unexpected mods.txt after Replace: %q", store.doc.Data["mods.txt"])
 	}
+
+	// 6. Replace unchanged -> returns false
+	changed, err = mgr.Replace(ctx, []string{"mod/b/2.0", "mod/a/1.0"})
+	if err != nil || changed {
+		t.Fatalf("expected changed=false when replacing with identical mods, got %v, err: %v", changed, err)
+	}
+
+	// Replace with empty strings and duplicate entries
+	_, _ = mgr.Replace(ctx, []string{"", "mod/c/1.0", "mod/c/1.0"})
+
+	// InstalledMods on non-nil doc.Data
+	mods, err := mgr.InstalledMods(ctx)
+	if err != nil || len(mods) != 1 || mods[0] != "mod/c/1.0" {
+		t.Fatalf("unexpected InstalledMods: %v, err: %v", mods, err)
+	}
+
+	// 7. Remove nonexistent -> returns false
+	changed, err = mgr.Remove(ctx, "nonexistent/mod")
+	if err != nil || changed {
+		t.Fatalf("expected changed=false when removing nonexistent mod, got %v, err: %v", changed, err)
+	}
 }
+
+type failingStore struct {
+	getErr error
+}
+
+func (f *failingStore) Get(context.Context, string) (ports.Document, error) {
+	return ports.Document{}, f.getErr
+}
+func (f *failingStore) Put(context.Context, string, ports.Document, string) error { return nil }
+func (f *failingStore) Delete(context.Context, string, string) error              { return nil }
+func (f *failingStore) PutTree(context.Context, string, map[string]ports.Document, string) error {
+	return nil
+}
+func (f *failingStore) Patch(ctx context.Context, path, msg string, fn func(*ports.Document) (bool, error)) (bool, error) {
+	var doc ports.Document
+	return fn(&doc)
+}
+
+func TestModsEdgeCasesAndErrors(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Nil Manager
+	var nilMgr *Manager
+	mods, err := nilMgr.InstalledMods(ctx)
+	if err != nil || mods != nil {
+		t.Errorf("expected nil mods from nil manager, got %v, err: %v", mods, err)
+	}
+
+	// 2. WithModReader
+	readerMgr := New(nil, "", WithModReader(func(ctx context.Context) ([]string, error) {
+		return []string{"mod1", "mod2"}, nil
+	}))
+	mods, err = readerMgr.InstalledMods(ctx)
+	if err != nil || len(mods) != 2 {
+		t.Errorf("unexpected InstalledMods with reader: %v, err: %v", mods, err)
+	}
+
+	// 3. Nil store returns ErrNotImplemented
+	nilStoreMgr := New(nil, "")
+	if _, err := nilStoreMgr.InstalledMods(ctx); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for InstalledMods, got %v", err)
+	}
+	if _, err := nilStoreMgr.Install(ctx, []string{"m1"}); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for Install, got %v", err)
+	}
+	if _, err := nilStoreMgr.Replace(ctx, []string{"m1"}); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for Replace, got %v", err)
+	}
+	if _, err := nilStoreMgr.Remove(ctx, "m1"); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for Remove, got %v", err)
+	}
+
+	// 4. Get error and nil doc.Data in InstalledMods
+	getFailMgr := New(&failingStore{getErr: context.Canceled}, "path")
+	if _, err := getFailMgr.InstalledMods(ctx); err != context.Canceled {
+		t.Errorf("expected Get error, got %v", err)
+	}
+
+	nilDataMgr := New(&memoryStateStore{doc: ports.Document{Data: nil}}, "path")
+	mods, err = nilDataMgr.InstalledMods(ctx)
+	if err != nil || mods != nil {
+		t.Errorf("expected nil mods on nil doc.Data, got %v, err: %v", mods, err)
+	}
+
+	// 5. Install & Replace on empty doc.Data
+	nilDocStore := &failingStore{}
+	emptyMgr := New(nilDocStore, "path")
+	if _, err := emptyMgr.Install(ctx, []string{"author/mod/1.0"}); err != nil {
+		t.Errorf("Install on nil doc failed: %v", err)
+	}
+	if _, err := emptyMgr.Replace(ctx, []string{"author/mod/1.0"}); err != nil {
+		t.Errorf("Replace on nil doc failed: %v", err)
+	}
+}
+

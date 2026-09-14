@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"agrelha/internal/app/modpack"
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
@@ -199,3 +200,99 @@ func TestMinecraftBundleBuilder(t *testing.T) {
 		t.Errorf("Data unexpected: %s", string(b.Data))
 	}
 }
+
+type fakeMCRuntime struct {
+	status ports.Status
+}
+
+func (f *fakeMCRuntime) Status(context.Context, ports.ServerRef) (ports.Status, error) {
+	return f.status, nil
+}
+func (f *fakeMCRuntime) Metrics(context.Context, ports.ServerRef) (ports.Metrics, error) {
+	return ports.Metrics{}, nil
+}
+func (f *fakeMCRuntime) Start(context.Context, ports.ServerRef) error    { return nil }
+func (f *fakeMCRuntime) Stop(context.Context, ports.ServerRef) error     { return nil }
+func (f *fakeMCRuntime) Restart(context.Context, ports.ServerRef) error  { return nil }
+func (f *fakeMCRuntime) Logs(context.Context, ports.ServerRef, ports.LogOptions) (io.ReadCloser, error) {
+	return nil, nil
+}
+func (f *fakeMCRuntime) WatchAvailability(context.Context, ports.ServerRef, time.Duration) error {
+	return nil
+}
+
+func TestMinecraftEdgeCasesAndOptions(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. WithProvider & Providers()
+	gProv := New(WithProvider(nil))
+	if len(gProv.Providers()) != 1 {
+		t.Errorf("expected 1 provider, got %d", len(gProv.Providers()))
+	}
+
+	// 2. WithStatusProvider
+	gStat := New(WithStatusProvider(func(ctx context.Context) (domain.GameTelemetry, error) {
+		return domain.GameTelemetry{State: "CustomMC"}, nil
+	}))
+	tele, err := gStat.Telemetry(ctx)
+	if err != nil || tele.State != "CustomMC" {
+		t.Errorf("unexpected status provider telemetry: %+v, err %v", tele, err)
+	}
+
+	// 3. WithContentResolver & ResolveContent
+	gContent := New(WithContentResolver(func(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
+		return domain.ContentSet{Items: []domain.ContentItem{{Name: "ModItem"}}}, nil
+	}))
+	cs, err := gContent.ResolveContent(ctx, domain.Instance{})
+	if err != nil || len(cs.Items) != 1 {
+		t.Errorf("unexpected custom ResolveContent: %+v, err %v", cs, err)
+	}
+	// Default ResolveContent without resolver
+	csDef, err := New().ResolveContent(ctx, domain.Instance{})
+	if err != nil || len(csDef.Items) != 0 {
+		t.Errorf("unexpected default ResolveContent: %+v, err %v", csDef, err)
+	}
+
+	// 4. activeInstanceFn with custom loader (e.g. Forge)
+	gForge := New(WithActiveInstance(func(context.Context) (domain.Loader, string) {
+		return domain.Loader("Forge"), "MyPack"
+	}))
+	teleForge, _ := gForge.Telemetry(ctx)
+	if teleForge.Loader != "Forge" || teleForge.PackName != "MyPack" {
+		t.Errorf("unexpected Forge loader telemetry: %+v", teleForge)
+	}
+
+	// 5. Telemetry with LifecycleStopped and custom Lifecycle
+	rtStopped := &fakeMCRuntime{status: ports.Status{Lifecycle: ports.LifecycleStopped, Available: false}}
+	gStopped := New(WithRuntime(rtStopped, ports.ServerRef{Name: "mc"}))
+	teleStopped, _ := gStopped.Telemetry(ctx)
+	if teleStopped.State != "Stopped" || teleStopped.Online {
+		t.Errorf("expected Stopped telemetry, got %+v", teleStopped)
+	}
+
+	rtPending := &fakeMCRuntime{status: ports.Status{Lifecycle: ports.Lifecycle("CrashLoopBackOff"), Available: false}}
+	gPending := New(WithRuntime(rtPending, ports.ServerRef{Name: "mc"}))
+	telePending, _ := gPending.Telemetry(ctx)
+	if telePending.State != "CrashLoopBackOff" {
+		t.Errorf("expected CrashLoopBackOff telemetry, got %+v", telePending)
+	}
+
+	// 6. ExportClientBundle default without bundleBuilder (defaults for loader & mcVersion)
+	gDefaultExport := New()
+	b, err := gDefaultExport.ExportClientBundle(ctx, domain.Instance{Name: "DefaultWorld", Slug: "default-world"})
+	if err != nil || b.Filename != "default-world.mrpack" {
+		t.Errorf("unexpected default ExportClientBundle: %+v, err %v", b, err)
+	}
+
+	// 7. ExportClientBundle error when buildMrpack fails
+	oldMrpack := buildMrpack
+	buildMrpack = func(ctx context.Context, client modpack.ModrinthProvider, name, mcVersion, loader, loaderVersion string, mods []string, overrides map[string]string) ([]byte, error) {
+		return nil, context.Canceled
+	}
+	defer func() { buildMrpack = oldMrpack }()
+
+	if _, err := gDefaultExport.ExportClientBundle(ctx, domain.Instance{Name: "FailWorld", Slug: "fail-world"}); err == nil {
+		t.Errorf("expected error in ExportClientBundle when buildMrpack fails")
+	}
+}
+

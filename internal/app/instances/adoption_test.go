@@ -2,6 +2,7 @@ package instances
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"path/filepath"
 	"testing"
@@ -121,5 +122,72 @@ func TestAdoptLegacyValheim_NoWorkload(t *testing.T) {
 	insts, _ = repo.List()
 	if len(insts) != 0 {
 		t.Fatalf("expected 0 instances in repo, got %d", len(insts))
+	}
+}
+
+type mockRepoForAdoption struct {
+	getInst   *domain.Instance
+	getErr    error
+	upsertErr error
+}
+
+func (m *mockRepoForAdoption) List() ([]domain.Instance, error) { return nil, nil }
+func (m *mockRepoForAdoption) Get(num int) (*domain.Instance, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	return m.getInst, nil
+}
+func (m *mockRepoForAdoption) Upsert(inst domain.Instance) error {
+	return m.upsertErr
+}
+func (m *mockRepoForAdoption) UpdateState(num int, state domain.InstanceState) error {
+	return nil
+}
+func (m *mockRepoForAdoption) Delete(num int) error { return nil }
+
+type mockRuntimeErr struct {
+	mockRuntimeForAdoption
+	statusErr error
+}
+
+func (m *mockRuntimeErr) Status(ctx context.Context, ref ports.ServerRef) (ports.Status, error) {
+	return ports.Status{}, m.statusErr
+}
+
+func TestAdoptLegacyValheimEdgeCases(t *testing.T) {
+	ctx := context.Background()
+	ref := ports.ServerRef{Name: "valheim"}
+	rt := &mockRuntimeForAdoption{status: ports.Status{Lifecycle: ports.LifecycleRunning}}
+
+	// 1. repo.Get error
+	repoGetErr := &mockRepoForAdoption{getErr: fmt.Errorf("db fail")}
+	if _, err := AdoptLegacyValheim(ctx, repoGetErr, rt, ref, "1.2.3.4", "Name"); err == nil {
+		t.Errorf("expected error when repo.Get fails")
+	}
+
+	// 2. rt.Status error
+	rtErr := &mockRuntimeErr{statusErr: fmt.Errorf("status fail")}
+	repoOk := &mockRepoForAdoption{}
+	if inst, err := AdoptLegacyValheim(ctx, repoOk, rtErr, ref, "1.2.3.4", "Name"); err != nil || inst != nil {
+		t.Errorf("expected nil when status errors: %v, %v", inst, err)
+	}
+
+	// 3. serverName == "" and slug fallback
+	repoUpsertErr := &mockRepoForAdoption{upsertErr: fmt.Errorf("upsert fail")}
+	if _, err := AdoptLegacyValheim(ctx, repoUpsertErr, rt, ref, "1.2.3.4", ""); err == nil {
+		t.Errorf("expected error when repo.Upsert fails")
+	}
+
+	// 4. slug == "default" or empty
+	repoDefault := &mockRepoForAdoption{}
+	inst, err := AdoptLegacyValheim(ctx, repoDefault, rt, ref, "1.2.3.4", "default")
+	if err != nil || inst == nil || inst.Slug != "server" {
+		t.Errorf("expected slug 'server' for default name, got %+v, err: %v", inst, err)
+	}
+
+	// 5. empty ref
+	if inst, err := AdoptLegacyValheim(ctx, repoDefault, rt, ports.ServerRef{}, "1.2.3.4", "name"); err != nil || inst != nil {
+		t.Errorf("expected nil for empty ref")
 	}
 }

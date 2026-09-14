@@ -140,4 +140,80 @@ func TestAdminManagerOptions(t *testing.T) {
 	if len(audit.audits) != 2 || audit.audits[1] != "admin-user:admin-revoke:999" {
 		t.Errorf("expected audit entry for revoke: %v", audit.audits)
 	}
+
+	// Actor fallback to "-"
+	_, _ = mgrAudit.Grant(ctx, "777")
+	if len(audit.audits) < 3 || audit.audits[2] != "-:admin-grant:777" {
+		t.Errorf("expected '-' actor: %v", audit.audits)
+	}
 }
+
+type failingStateStore struct {
+	getErr   error
+	patchErr error
+}
+
+func (f *failingStateStore) Get(ctx context.Context, path string) (ports.Document, error) {
+	return ports.Document{}, f.getErr
+}
+func (f *failingStateStore) Put(ctx context.Context, path string, doc ports.Document, msg string) error {
+	return nil
+}
+func (f *failingStateStore) Patch(ctx context.Context, path string, msg string, mutate func(doc *ports.Document) (bool, error)) (bool, error) {
+	if f.patchErr != nil {
+		return false, f.patchErr
+	}
+	// Call mutate on empty doc with nil Data to test nil doc.Data handling
+	var doc ports.Document
+	_, _ = mutate(&doc)
+	return true, nil
+}
+func (f *failingStateStore) Delete(ctx context.Context, path string, msg string) error { return nil }
+func (f *failingStateStore) PutTree(ctx context.Context, dirPath string, docs map[string]ports.Document, msg string) error {
+	return nil
+}
+
+func TestAdminManagerErrorBranches(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Nil store returns ErrNotImplemented
+	nilMgr := New(nil, "")
+	if _, err := nilMgr.List(ctx); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for List, got %v", err)
+	}
+	if _, err := nilMgr.Grant(ctx, "123"); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for Grant, got %v", err)
+	}
+	if _, err := nilMgr.Revoke(ctx, "123"); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for Revoke, got %v", err)
+	}
+
+	// 2. Get error
+	getFailMgr := New(&failingStateStore{getErr: context.Canceled}, "path")
+	if _, err := getFailMgr.List(ctx); err != context.Canceled {
+		t.Errorf("expected Get error, got %v", err)
+	}
+
+	// 3. Patch error
+	patchFailMgr := New(&failingStateStore{patchErr: context.Canceled}, "path")
+	if _, err := patchFailMgr.Grant(ctx, "123"); err != context.Canceled {
+		t.Errorf("expected Grant patch error, got %v", err)
+	}
+	if _, err := patchFailMgr.Revoke(ctx, "123"); err != context.Canceled {
+		t.Errorf("expected Revoke patch error, got %v", err)
+	}
+
+	// 4. Nil doc.Data
+	nilDataMgr := New(&memoryStateStore{doc: ports.Document{Data: nil}}, "path")
+	list, err := nilDataMgr.List(ctx)
+	if err != nil || list != nil {
+		t.Errorf("expected nil list for nil Data, got %v, err: %v", list, err)
+	}
+
+	// 5. Grant and Revoke on nil doc.Data
+	nilDocStore := &failingStateStore{} // patchErr is nil, calls mutate with nil doc.Data
+	nilDocMgr := New(nilDocStore, "path")
+	_, _ = nilDocMgr.Grant(ctx, "123")
+	_, _ = nilDocMgr.Revoke(ctx, "123")
+}
+

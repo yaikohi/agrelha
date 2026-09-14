@@ -3,6 +3,7 @@ package domain
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBudget(t *testing.T) {
@@ -474,3 +475,185 @@ func TestIncidentSummaryDistinguishesSetupFromCrash(t *testing.T) {
 		t.Error("the two failures need different fixes and must read differently")
 	}
 }
+
+func TestDomainEdgeCasesAndHelpers(t *testing.T) {
+	// 1. Budget defaults and CanCreate
+	bZero := CalculateBudget(nil, 0, 0, 0)
+	if bZero.TotalBudgetGiB != DefaultTotalBudgetGiB || bZero.MaxRunning != DefaultMaxRunning || bZero.MaxInstances != DefaultMaxInstances {
+		t.Errorf("expected default budget values, got %+v", bZero)
+	}
+	bNotFull := CalculateBudget(nil, 24, 2, 4)
+	if err := bNotFull.CanCreate(); err != nil {
+		t.Errorf("CanCreate should succeed when not full, got: %v", err)
+	}
+
+	// 2. FormatDuration
+	if d := FormatDuration(48 * time.Hour + 3 * time.Hour); d != "2d 3h" {
+		t.Errorf("expected 2d 3h, got %s", d)
+	}
+	if d := FormatDuration(2 * time.Hour + 15 * time.Minute); d != "2h 15m" {
+		t.Errorf("expected 2h 15m, got %s", d)
+	}
+	if d := FormatDuration(45 * time.Minute); d != "45m" {
+		t.Errorf("expected 45m, got %s", d)
+	}
+
+	// 3. Health Incident summaries
+	incidents := []struct {
+		inc  Incident
+		want string
+	}{
+		{Incident{OOMKilled: true}, "Out of memory"},
+		{Incident{ExitCode: 137}, "Exited with code 137"},
+		{Incident{Reason: "Evicted"}, "Evicted"},
+		{Incident{}, "Stopped unexpectedly"},
+		{Incident{Step: "sync-configs", RestartCount: 0}, "Config sync failed — the server never started"},
+		{Incident{Step: "custom-step", RestartCount: 2}, "custom-step failed — the server never started (2 attempts)"},
+	}
+	for _, tc := range incidents {
+		if !strings.Contains(tc.inc.Summary(), tc.want) {
+			t.Errorf("Summary() = %q, want containing %q", tc.inc.Summary(), tc.want)
+		}
+	}
+
+	// 4. Instance memory and backup name helpers
+	mcInst := Instance{GameID: GameMinecraft, Tier: TierMedium}
+	if mcInst.MemoryLimitGiB() != TierMedium.MemoryLimitGiB() {
+		t.Errorf("MemoryLimitGiB for mcInst = %d, want %d", mcInst.MemoryLimitGiB(), TierMedium.MemoryLimitGiB())
+	}
+	if mcInst.HeapInitMemoryGiB() != TierMedium.HeapInitMemoryGiB() {
+		t.Errorf("HeapInitMemoryGiB for mcInst = %d, want %d", mcInst.HeapInitMemoryGiB(), TierMedium.HeapInitMemoryGiB())
+	}
+
+	// AssignLBIP invalid last octet
+	if ip := AssignLBIP("192.168.1.invalid", 1); ip != "192.168.1.invalid" {
+		t.Errorf("expected invalid IP to be returned as-is, got %s", ip)
+	}
+
+	// EnsureDefaults with empty LBIP
+	noLB := Instance{Name: "Solo"}
+	noLB.EnsureDefaults("")
+	if noLB.MOTD != "Solo" {
+		t.Errorf("expected MOTD Solo, got %s", noLB.MOTD)
+	}
+
+	// Level type and Curseforge pack env
+	envInst := Instance{
+		GameID:    GameMinecraft,
+		Name:      "CF-Pack",
+		Source:    SourceModpack,
+		WorldType: "flat",
+		Pack:      &Pack{Provider: ProviderCurseForge, Ref: "https://curseforge.com/modpack"},
+		Loader:    LoaderFabric,
+	}
+	env := envInst.Env()
+	if env["LEVEL_TYPE"] != "flat" || env["TYPE"] != "AUTO_CURSEFORGE" || env["CF_PAGE_URL"] != "https://curseforge.com/modpack" {
+		t.Errorf("unexpected env: %+v", env)
+	}
+
+	// Fabric env in default loader branch
+	fabricInst := Instance{
+		GameID:    GameMinecraft,
+		Name:      "FabricNormal",
+		Source:    SourceModlist,
+		Loader:    LoaderFabric,
+		MCVersion: "1.21.1",
+	}
+	fEnv := fabricInst.Env()
+	if fEnv["TYPE"] != "FABRIC" {
+		t.Errorf("expected TYPE FABRIC, got %s", fEnv["TYPE"])
+	}
+
+	// Backup file naming
+	if name := FormatBackupFileName("myserver", 1, ""); !strings.HasPrefix(name, "mc-myserver-01-") {
+		t.Errorf("unexpected FormatBackupFileName: %s", name)
+	}
+	if name := FormatBackupFileName("myserver", 1, "manual"); !strings.Contains(name, "manual") {
+		t.Errorf("unexpected tagged backup name: %s", name)
+	}
+
+	// Slugify > 40 chars
+	longSlug := Slugify("This is a ridiculously long instance name that will exceed forty characters")
+	if len(longSlug) > 40 {
+		t.Errorf("Slugify should be at most 40 chars, got %d (%s)", len(longSlug), longSlug)
+	}
+
+	// ResourceTier unknown default
+	unknownTier := ResourceTier("unknown")
+	if unknownTier.MemoryGiB() != 8 {
+		t.Errorf("unknown tier MemoryGiB = %d, want 8", unknownTier.MemoryGiB())
+	}
+
+	// ModSearchResult.FullName
+	sr := ModSearchResult{Owner: "author", Name: "coolmod"}
+	if sr.FullName() != "author/coolmod" {
+		t.Errorf("FullName = %s, want author/coolmod", sr.FullName())
+	}
+
+	// ModRef.CatalogKey
+	refBare := ModRef{Name: "jei"}
+	if refBare.CatalogKey() != "jei" {
+		t.Errorf("CatalogKey bare = %s, want jei", refBare.CatalogKey())
+	}
+	refNS := ModRef{Namespace: "author", Name: "coolmod"}
+	if refNS.CatalogKey() != "author/coolmod" {
+		t.Errorf("CatalogKey ns = %s, want author/coolmod", refNS.CatalogKey())
+	}
+
+	// VersionNewer build metadata comparison
+	if !VersionNewer("1.0.0+build.2", "1.0.0+build.1") {
+		t.Errorf("expected +build.2 newer than +build.1")
+	}
+	if VersionNewer("1.0.0+build.1", "1.0.0+build.2") {
+		t.Errorf("did not expect +build.1 newer than +build.2")
+	}
+	if !VersionNewer("1.0.0+build.2.alpha", "1.0.0+build.1.beta") {
+		t.Errorf("expected build.2 newer than build.1")
+	}
+	if !VersionNewer("1.0.0+build.1.beta", "1.0.0+build.1.alpha") {
+		t.Errorf("expected beta newer than alpha")
+	}
+	if !VersionNewer("1.0.0+beta", "1.0.0+alpha") {
+		t.Errorf("expected string comparison fallback beta > alpha")
+	}
+	if !VersionNewer("1.0.0-beta", "1.0.0-alpha") {
+		t.Errorf("expected prerelease beta newer than alpha")
+	}
+	if !VersionNewer("1.0.0b", "1.0.0a") {
+		t.Errorf("expected 1.0.0b newer than 1.0.0a")
+	}
+
+	// ModRestorePoint.Matches
+	rp := ModRestorePoint{
+		Applied: []string{"mod1", "mod2"},
+	}
+	if rp.Matches([]string{"mod1"}) {
+		t.Errorf("Matches should be false for different length")
+	}
+	if !rp.Matches([]string{"mod2", "mod1"}) {
+		t.Errorf("Matches should be true regardless of order")
+	}
+	if rp.Matches([]string{"mod1", "mod3"}) {
+		t.Errorf("Matches should be false when elements differ")
+	}
+
+	// ParseModRef bare valheim entry without hyphen
+	if entry, ok := ParseModRef("baremod", GameValheim); !ok || entry.Name != "baremod" {
+		t.Errorf("expected ParseModRef baremod, got %+v", entry)
+	}
+
+	// ParseModRef isSemver false branches
+	ParseModRef("ns-name-1.2", GameValheim)
+	ParseModRef("ns-name-1..2", GameValheim)
+	ParseModRef("ns-name-1.2.x", GameValheim)
+
+	// isVersionNewer buildA > buildB tiebreak and line 274 return false
+	if !VersionNewer("1.0.0+1.a", "1.0.0+1") {
+		t.Errorf("expected build tiebreak 1.a > 1")
+	}
+	if VersionNewer("1.0.0", "v1.0.0") {
+		t.Errorf("1.0.0 should not be newer than v1.0.0")
+	}
+}
+
+

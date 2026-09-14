@@ -1151,6 +1151,9 @@ func (m *InstanceManager) InstanceLogs(ctx context.Context, num int, tail int64)
 	if err != nil {
 		return nil, err
 	}
+	if inst == nil {
+		return nil, fmt.Errorf("instance %d not found", num)
+	}
 	if tail <= 0 {
 		tail = 100
 	}
@@ -1276,6 +1279,9 @@ func (m *InstanceManager) ExecuteCommand(ctx context.Context, num int, cmd strin
 	inst, err := m.GetInstance(ctx, num)
 	if err != nil {
 		return "", err
+	}
+	if inst == nil {
+		return "", fmt.Errorf("instance %d not found", num)
 	}
 	return m.commandExecutor(ctx, *inst, cmd)
 }

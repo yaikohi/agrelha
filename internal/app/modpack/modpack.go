@@ -3,6 +3,7 @@ package modpack
 import (
 	"archive/zip"
 	"bytes"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,6 +28,16 @@ type exportFormat struct {
 	Mods        []exportMod `yaml:"mods"`
 }
 
+type zipWriter interface {
+	Create(name string) (io.Writer, error)
+	Close() error
+}
+
+var (
+	yamlMarshal  = yaml.Marshal
+	newZipWriter = func(w io.Writer) zipWriter { return zip.NewWriter(w) }
+)
+
 func Build(profileName string, entries []string, configs map[string]string) ([]byte, error) {
 	ef := exportFormat{ProfileName: profileName}
 	for _, e := range entries {
@@ -35,13 +46,13 @@ func Build(profileName string, entries []string, configs map[string]string) ([]b
 		}
 	}
 
-	manifest, err := yaml.Marshal(ef)
+	manifest, err := yamlMarshal(ef)
 	if err != nil {
 		return nil, err
 	}
 
 	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
+	zw := newZipWriter(&buf)
 
 	w, err := zw.Create("export.r2x")
 	if err != nil {

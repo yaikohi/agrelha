@@ -209,6 +209,8 @@ func (g *Game) ResolveContent(ctx context.Context, inst domain.Instance) (domain
 	return domain.ContentSet{}, nil
 }
 
+var buildMrpack = modpack.BuildMrpack
+
 // ExportClientBundle creates an .mrpack Modrinth bundle for the instance.
 func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
 	if g.bundleBuilder != nil {
@@ -224,7 +226,7 @@ func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (do
 		mcVer = "1.21.1"
 	}
 
-	data, err := modpack.BuildMrpack(ctx, nil, inst.Name, mcVer, loader, "latest", nil, nil)
+	data, err := buildMrpack(ctx, nil, inst.Name, mcVer, loader, "latest", nil, nil)
 	if err != nil {
 		return domain.Bundle{}, fmt.Errorf("build minecraft client bundle: %w", err)
 	}

@@ -3,6 +3,7 @@ package modpack
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -128,5 +129,158 @@ func TestBuildKeepsVersionedThunderstoreIDs(t *testing.T) {
 	}
 	if !strings.Contains(m, "major: 1") || !strings.Contains(m, "patch: 7") {
 		t.Errorf("version must be parsed out, not left in the name:\n%s", m)
+	}
+}
+
+type mockZipWriter struct {
+	createErr  error
+	closeErr   error
+	writeErr   error
+	failConfig bool
+}
+
+type mockWriter struct {
+	err error
+}
+
+func (m mockWriter) Write(p []byte) (int, error) {
+	if m.err != nil {
+		return 0, m.err
+	}
+	return len(p), nil
+}
+
+func (m *mockZipWriter) Create(name string) (io.Writer, error) {
+	if m.createErr != nil {
+		if !m.failConfig || strings.Contains(name, "config/") {
+			return nil, m.createErr
+		}
+	}
+	if m.writeErr != nil {
+		if !m.failConfig || strings.Contains(name, "config/") {
+			return mockWriter{err: m.writeErr}, nil
+		}
+	}
+	return mockWriter{}, nil
+}
+
+func (m *mockZipWriter) Close() error {
+	return m.closeErr
+}
+
+func TestBuildErrors(t *testing.T) {
+	origYaml := yamlMarshal
+	origZip := newZipWriter
+	defer func() {
+		yamlMarshal = origYaml
+		newZipWriter = origZip
+	}()
+
+	// 1. yamlMarshal error
+	yamlMarshal = func(v any) ([]byte, error) {
+		return nil, fmt.Errorf("yaml fail")
+	}
+	if _, err := Build("test", nil, nil); err == nil {
+		t.Errorf("expected error when yamlMarshal fails")
+	}
+	yamlMarshal = origYaml
+
+	// 2. zip Create("export.r2x") error
+	newZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{createErr: fmt.Errorf("create fail")}
+	}
+	if _, err := Build("test", nil, nil); err == nil {
+		t.Errorf("expected error when Create export.r2x fails")
+	}
+
+	// 3. zip Write("export.r2x") error
+	newZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{writeErr: fmt.Errorf("write fail")}
+	}
+	if _, err := Build("test", nil, nil); err == nil {
+		t.Errorf("expected error when Write export.r2x fails")
+	}
+
+	configs := map[string]string{"test.cfg": "data"}
+
+	// 4. zip Create("config/...") error
+	newZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{createErr: fmt.Errorf("config create fail"), failConfig: true}
+	}
+	if _, err := Build("test", nil, configs); err == nil {
+		t.Errorf("expected error when Create config fails")
+	}
+
+	// 5. zip Write("config/...") error
+	newZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{writeErr: fmt.Errorf("config write fail"), failConfig: true}
+	}
+	if _, err := Build("test", nil, configs); err == nil {
+		t.Errorf("expected error when Write config fails")
+	}
+
+	// 6. zip Close error
+	newZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{closeErr: fmt.Errorf("close fail")}
+	}
+	if _, err := Build("test", nil, configs); err == nil {
+		t.Errorf("expected error when Close fails")
+	}
+}
+
+func TestParseEntryAndVersionEdgeCases(t *testing.T) {
+	// 1. parseEntry
+	badEntries := []string{
+		"",
+		"# comment",
+		"noslashnohyphen",
+		"/name/1.0.0",
+		"ns//1.0.0",
+	}
+	for _, e := range badEntries {
+		if _, ok := parseEntry(e); ok {
+			t.Errorf("expected parseEntry(%q) to return false", e)
+		}
+	}
+
+	// parseEntry hyphen with version vs bare
+	m1, ok1 := parseEntry("ns-name-1.2.3")
+	if !ok1 || m1.Name != "ns-name" || m1.Version.Major != 1 || m1.Version.Patch != 3 {
+		t.Errorf("unexpected m1: %+v, ok: %v", m1, ok1)
+	}
+
+	m2, ok2 := parseEntry("ns-name")
+	if !ok2 || m2.Name != "ns-name" {
+		t.Errorf("unexpected m2: %+v, ok: %v", m2, ok2)
+	}
+
+	// 2. parseVersion with short fields
+	vShort := parseVersion("1.2")
+	if vShort.Major != 1 || vShort.Minor != 2 || vShort.Patch != 0 {
+		t.Errorf("unexpected vShort: %+v", vShort)
+	}
+
+	// 3. ResolveVersions edge cases
+	if res := ResolveVersions([]string{"foo"}, nil); len(res) != 1 || res[0] != "foo" {
+		t.Errorf("expected passthrough when latest is nil")
+	}
+	res2 := ResolveVersions([]string{
+		"", "# comment", "ns/name/1.0.0", "-mod", "mod-", "unfound-mod",
+	}, func(string) (string, bool) {
+		return "", false
+	})
+	if len(res2) != 6 {
+		t.Errorf("expected 6 entries preserved, got %v", res2)
+	}
+
+	// 4. looksLikeVersion edge cases
+	if looksLikeVersion("1.0") {
+		t.Errorf("expected false for 1.0 (not 3 parts)")
+	}
+	if looksLikeVersion("1.0.beta") {
+		t.Errorf("expected false for 1.0.beta (non-integer)")
+	}
+	if !looksLikeVersion("1.0.0") {
+		t.Errorf("expected true for 1.0.0")
 	}
 }

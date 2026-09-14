@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"agrelha/internal/domain"
@@ -28,25 +29,29 @@ type Option func(*BackupScheduler)
 // BackupScheduler snapshots every running Minecraft instance once a day and
 // prunes old archives.
 type BackupScheduler struct {
-	instances  InstanceLister
-	jobRunner  JobRunner
-	cmdExec    func(ctx context.Context, inst domain.Instance, cmd string) error
-	pruner     func(slug string, num, keep int) error
-	audit      ports.AuditRecorder
-	event      ports.EventRecorder
-	namespace  string
-	backupsPVC string
-	keep       int
+	instances      InstanceLister
+	jobRunner      JobRunner
+	cmdExec        func(ctx context.Context, inst domain.Instance, cmd string) error
+	pruner         func(slug string, num, keep int) error
+	audit          ports.AuditRecorder
+	event          ports.EventRecorder
+	namespace      string
+	backupsPVC     string
+	keep           int
+	tickerInterval time.Duration
+	timeNow        func(t time.Time) time.Time
+	wg             *sync.WaitGroup
 }
 
 // New creates a new BackupScheduler with pure interfaces and optional configuration.
 func New(instances InstanceLister, runner JobRunner, opts ...Option) *BackupScheduler {
 	s := &BackupScheduler{
-		instances:  instances,
-		jobRunner:  runner,
-		namespace:  "minecraft-modded",
-		backupsPVC: "minecraft-modded-backups",
-		keep:       5,
+		instances:      instances,
+		jobRunner:      runner,
+		namespace:      "minecraft-modded",
+		backupsPVC:     "minecraft-modded-backups",
+		keep:           5,
+		tickerInterval: 15 * time.Minute,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -133,11 +138,30 @@ func (s *BackupScheduler) Keep() int {
 	return s.keep
 }
 
+func defaultTimeNow(t time.Time) time.Time {
+	return t.UTC()
+}
+
 // Start runs the daily pass at 04:00 UTC, once per calendar day.
 func (s *BackupScheduler) Start(ctx context.Context) {
-	ticker := time.NewTicker(15 * time.Minute)
+	if s == nil {
+		return
+	}
+	interval := s.tickerInterval
+	if interval <= 0 {
+		interval = 15 * time.Minute
+	}
+	timeFn := s.timeNow
+	if timeFn == nil {
+		timeFn = defaultTimeNow
+	}
+
+	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
+		if s.wg != nil {
+			defer s.wg.Done()
+		}
 		var lastDailyDate string
 
 		for {
@@ -145,7 +169,7 @@ func (s *BackupScheduler) Start(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case now := <-ticker.C:
-				utcNow := now.UTC()
+				utcNow := timeFn(now)
 				currentDate := utcNow.Format("2006-01-02")
 				if utcNow.Hour() == 4 && lastDailyDate != currentDate {
 					lastDailyDate = currentDate

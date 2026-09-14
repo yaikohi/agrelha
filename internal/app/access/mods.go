@@ -102,9 +102,6 @@ func (m *ModManager) Uninstall(ctx context.Context, slug string) (bool, error) {
 		if !found {
 			return false, nil
 		}
-		if doc.Data == nil {
-			doc.Data = make(map[string]string)
-		}
 		doc.Data["mods.txt"] = strings.Join(lines, "\n")
 		return true, nil
 	})

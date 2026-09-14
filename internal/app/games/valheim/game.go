@@ -250,6 +250,8 @@ func (g *Game) ResolveContent(ctx context.Context, inst domain.Instance) (domain
 	return domain.ContentSet{Items: items}, nil
 }
 
+var modpackBuild = modpack.Build
+
 // ExportClientBundle generates an .r2z bundle compatible with r2modman / Thunderstore.
 func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
 	name := inst.Name
@@ -277,8 +279,9 @@ func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (do
 			bepInExVer = v
 		}
 	}
+
 	modEntries := WithBepInEx(entries, bepInExVer)
-	data, err := modpack.Build(name, modEntries, configs)
+	data, err := modpackBuild(name, modEntries, configs)
 	if err != nil {
 		return domain.Bundle{}, fmt.Errorf("build valheim client bundle: %w", err)
 	}
@@ -292,7 +295,7 @@ func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (do
 // BuildClientBundle creates a fully-populated .r2z profile from entries and config files.
 func (g *Game) BuildClientBundle(profileName string, entries []string, configs map[string]string, bepInExVer string) (domain.Bundle, error) {
 	modEntries := WithBepInEx(entries, bepInExVer)
-	data, err := modpack.Build(profileName, modEntries, configs)
+	data, err := modpackBuild(profileName, modEntries, configs)
 	if err != nil {
 		return domain.Bundle{}, fmt.Errorf("build valheim client bundle: %w", err)
 	}

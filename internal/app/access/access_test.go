@@ -285,3 +285,145 @@ func TestAccessManagerWhitelistEnforced(t *testing.T) {
 		t.Errorf("expected /whitelist off, got: %v", consoleToggle.commands)
 	}
 }
+
+type failingAccessStore struct {
+	getErr   error
+	patchErr error
+}
+
+func (f *failingAccessStore) Get(context.Context, string) (ports.Document, error) {
+	return ports.Document{}, f.getErr
+}
+func (f *failingAccessStore) Put(context.Context, string, ports.Document, string) error { return nil }
+func (f *failingAccessStore) Delete(context.Context, string, string) error              { return nil }
+func (f *failingAccessStore) PutTree(context.Context, string, map[string]ports.Document, string) error {
+	return nil
+}
+func (f *failingAccessStore) Patch(ctx context.Context, path, msg string, fn func(*ports.Document) (bool, error)) (bool, error) {
+	if f.patchErr != nil {
+		return false, f.patchErr
+	}
+	var doc ports.Document
+	return fn(&doc)
+}
+
+func TestAccessManagerNilStoreAndErrors(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Nil store returns ErrNotImplemented
+	nilMgr := NewAccessManager(nil, "", nil)
+	if _, _, err := nilMgr.ListAccess(ctx); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for ListAccess, got %v", err)
+	}
+	if _, err := nilMgr.GrantOp(ctx, "steve"); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for GrantOp, got %v", err)
+	}
+	if _, err := nilMgr.RevokeOp(ctx, "steve"); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for RevokeOp, got %v", err)
+	}
+	if _, err := nilMgr.AddWhitelist(ctx, "steve"); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for AddWhitelist, got %v", err)
+	}
+	if _, err := nilMgr.RemoveWhitelist(ctx, "steve"); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented for RemoveWhitelist, got %v", err)
+	}
+	if _, err := nilMgr.WhitelistEnforced(); err == nil {
+		t.Errorf("expected error for WhitelistEnforced without rcon")
+	}
+	if err := nilMgr.SetWhitelistEnforced(true); err == nil {
+		t.Errorf("expected error for SetWhitelistEnforced without rcon")
+	}
+
+	// 2. Get error
+	getFailMgr := NewAccessManager(&failingAccessStore{getErr: context.Canceled}, "path", nil)
+	if _, _, err := getFailMgr.ListAccess(ctx); err != context.Canceled {
+		t.Errorf("expected Get error, got %v", err)
+	}
+
+	// 3. Patch error
+	patchFailMgr := NewAccessManager(&failingAccessStore{patchErr: context.Canceled}, "path", nil)
+	if _, err := patchFailMgr.GrantOp(ctx, "steve"); err != context.Canceled {
+		t.Errorf("expected GrantOp patch error, got %v", err)
+	}
+	if _, err := patchFailMgr.RevokeOp(ctx, "steve"); err != context.Canceled {
+		t.Errorf("expected RevokeOp patch error, got %v", err)
+	}
+	if _, err := patchFailMgr.AddWhitelist(ctx, "steve"); err != context.Canceled {
+		t.Errorf("expected AddWhitelist patch error, got %v", err)
+	}
+	if _, err := patchFailMgr.RemoveWhitelist(ctx, "steve"); err != context.Canceled {
+		t.Errorf("expected RemoveWhitelist patch error, got %v", err)
+	}
+
+	// 4. nil doc.Data in GrantOp and AddWhitelist
+	nilDocStore := &failingAccessStore{}
+	nilDocMgr := NewAccessManager(nilDocStore, "path", nil)
+	if _, err := nilDocMgr.GrantOp(ctx, "alex"); err != nil {
+		t.Errorf("GrantOp on nil doc failed: %v", err)
+	}
+	if _, err := nilDocMgr.AddWhitelist(ctx, "alex"); err != nil {
+		t.Errorf("AddWhitelist on nil doc failed: %v", err)
+	}
+
+	// 5. WhitelistEnforced via rcon error
+	consoleErr := &mockConsole{err: context.Canceled}
+	rconErrMgr := NewAccessManager(nil, "", consoleErr)
+	if _, err := rconErrMgr.WhitelistEnforced(); err == nil {
+		t.Errorf("expected error from WhitelistEnforced on console error")
+	}
+}
+
+func TestModManagerNilStoreAndErrors(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Nil store
+	nilMods := NewModManager(nil, "")
+	if _, err := nilMods.Install(ctx, []string{"jei"}); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented on Install, got %v", err)
+	}
+	if _, err := nilMods.Uninstall(ctx, "jei"); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented on Uninstall, got %v", err)
+	}
+	if _, err := nilMods.SetVersion(ctx, "1.21.1", "latest"); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented on SetVersion, got %v", err)
+	}
+	if _, err := nilMods.SwitchModpack(ctx, "pack", "1.21.1", []string{"mod1"}); err != ports.ErrNotImplemented {
+		t.Errorf("expected ErrNotImplemented on SwitchModpack, got %v", err)
+	}
+
+	// 2. Install on empty doc.Data
+	nilDocStore := &failingAccessStore{}
+	modMgr := NewModManager(nilDocStore, "path")
+	if _, err := modMgr.Install(ctx, []string{"jei"}); err != nil {
+		t.Errorf("Install on nil doc failed: %v", err)
+	}
+	if _, err := modMgr.SetVersion(ctx, "1.21.1", "recommended"); err != nil {
+		t.Errorf("SetVersion failed: %v", err)
+	}
+	if _, err := modMgr.SetVersion(ctx, "1.21.1", ""); err != nil {
+		t.Errorf("SetVersion with empty loaderVersion failed: %v", err)
+	}
+	// Empty loaderKey default
+	modMgrEmptyKey := &ModManager{store: nilDocStore, path: "path"}
+	if _, err := modMgrEmptyKey.SetVersion(ctx, "1.21.1", "latest"); err != nil {
+		t.Errorf("SetVersion with empty loaderKey failed: %v", err)
+	}
+	if _, err := modMgr.SwitchModpack(ctx, "pack", "1.21.1", []string{"mod1"}); err != nil {
+		t.Errorf("SwitchModpack failed: %v", err)
+	}
+
+	// 3. SetWhitelistEnforced rcon error & actorOrHyphen fallback
+	consoleErr := &mockConsole{err: context.Canceled}
+	auditRec := &mockAuditRecorder{}
+	errMgr := NewAccessManager(nilDocStore, "path", consoleErr, WithAudit(auditRec))
+	if err := errMgr.SetWhitelistEnforced(true, ""); err == nil {
+		t.Errorf("expected error in SetWhitelistEnforced when rcon fails")
+	}
+	// GrantOp with empty actor
+	_, _ = errMgr.GrantOp(ctx, "playerWithoutActor")
+	if len(auditRec.entries) == 0 || auditRec.entries[len(auditRec.entries)-1] != "-:mc-op-grant:playerWithoutActor" {
+		t.Errorf("expected '-' actor, got: %v", auditRec.entries)
+	}
+}
+
+

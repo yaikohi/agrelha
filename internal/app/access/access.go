@@ -145,9 +145,6 @@ func (a *AccessManager) RevokeOp(ctx context.Context, username string, actor ...
 		if !found {
 			return false, nil
 		}
-		if doc.Data == nil {
-			doc.Data = make(map[string]string)
-		}
 		doc.Data["ops.txt"] = strings.Join(lines, "\n")
 		return true, nil
 	})
@@ -228,9 +225,6 @@ func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string, ac
 		}
 		if !found {
 			return false, nil
-		}
-		if doc.Data == nil {
-			doc.Data = make(map[string]string)
 		}
 		doc.Data["whitelist.txt"] = strings.Join(lines, "\n")
 		return true, nil

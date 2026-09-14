@@ -31,6 +31,8 @@ type presenceStore interface {
 	RecordEvent(kind, id string) error
 }
 
+var retryDelay = 3 * time.Second
+
 func Run(ctx context.Context, k logStreamer, st presenceStore) {
 	_ = st.ClearPresence()
 	for {
@@ -43,7 +45,7 @@ func Run(ctx context.Context, k logStreamer, st presenceStore) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(3 * time.Second): // pod may be restarting
+		case <-time.After(retryDelay): // pod may be restarting
 		}
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -241,9 +243,13 @@ func TestResolveNeoForgeVersion(t *testing.T) {
 
 type mockBatchModrinth struct {
 	mockModrinth
+	batchErr error
 }
 
 func (m *mockBatchModrinth) GetProjects(ctx context.Context, idsOrSlugs []string) ([]modrinth.Project, error) {
+	if m.batchErr != nil {
+		return nil, m.batchErr
+	}
 	var out []modrinth.Project
 	for _, id := range idsOrSlugs {
 		if p, ok := m.projects[id]; ok {
@@ -389,5 +395,234 @@ func TestBuildMrpackLiveSample(t *testing.T) {
 
 	if !foundIndex || !foundReport {
 		t.Errorf("missing index or report: index=%v, report=%v", foundIndex, foundReport)
+	}
+}
+
+func TestResolveNeoForgeVersionAllCases(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Explicit requested version
+	if v := ResolveNeoForgeVersion(ctx, "1.21.1", "21.1.99"); v != "21.1.99" {
+		t.Errorf("expected requested version 21.1.99, got %s", v)
+	}
+
+	origURL := prismMetaURL
+	defer func() { prismMetaURL = origURL }()
+
+	// 2. HTTP Server returning matching version
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"versions": [
+				{
+					"version": "21.1.888",
+					"requires": [{"uid": "net.minecraft", "equals": "1.21.1"}]
+				}
+			]
+		}`))
+	}))
+	defer ts.Close()
+
+	prismMetaURL = ts.URL
+	if v := ResolveNeoForgeVersion(ctx, "1.21.1", "latest"); v != "21.1.888" {
+		t.Errorf("expected 21.1.888 from metadata, got %s", v)
+	}
+
+	// 3. HTTP Server returning non-matching version
+	if v := ResolveNeoForgeVersion(ctx, "1.20.1", "recommended"); v != "47.1.106" {
+		t.Errorf("expected fallback 47.1.106, got %s", v)
+	}
+
+	// 4. Fallback switch cases when HTTP fails
+	prismMetaURL = "http://127.0.0.1:0/fail"
+	cases := []struct {
+		mcVersion string
+		want      string
+	}{
+		{"1.21.1", "21.1.249"},
+		{"1.21.0", "21.0.167"},
+		{"1.21", "21.0.167"},
+		{"1.20.6", "20.6.141"},
+		{"1.20.4", "20.4.237"},
+		{"1.20.2", "20.2.88"},
+		{"1.20.1", "47.1.106"},
+		{"1.20", "47.1.106"},
+		{"1.20.5", "47.1.106"},
+		{"1.19.4", "21.1.249"},
+	}
+
+	for _, c := range cases {
+		if got := ResolveNeoForgeVersion(ctx, c.mcVersion, ""); got != c.want {
+			t.Errorf("ResolveNeoForgeVersion(%s) = %s, want %s", c.mcVersion, got, c.want)
+		}
+	}
+}
+
+func TestBuildMrpackAllEdgeCases(t *testing.T) {
+	ctx := context.Background()
+
+	mock := &mockBatchModrinth{
+		mockModrinth: mockModrinth{
+			projects: map[string]*modrinth.Project{
+				"opt-mod": {
+					Slug:       "opt-mod",
+					ClientSide: "optional",
+					ServerSide: "optional",
+				},
+				"non-primary": {
+					Slug:       "non-primary",
+					ClientSide: "required",
+					ServerSide: "unsupported",
+				},
+				"no-jar": {
+					Slug:       "no-jar",
+					ClientSide: "required",
+				},
+				"empty-url": {
+					Slug:       "empty-url",
+					ClientSide: "required",
+				},
+				"server-mod": {
+					Slug:       "server-mod",
+					ClientSide: "unsupported",
+				},
+			},
+			versions: map[string][]modrinth.Version{
+				"opt-mod": {
+					{
+						VersionNum: "1.0",
+						Files: []modrinth.VersionFile{
+							{FileName: "opt.jar", URL: "http://url", Primary: true},
+						},
+					},
+				},
+				"non-primary": {
+					{
+						VersionNum: "2.0",
+						Files: []modrinth.VersionFile{
+							{FileName: "fallback.jar", URL: "http://fallback", Primary: false},
+						},
+					},
+				},
+				"no-jar": {
+					{
+						VersionNum: "3.0",
+						Files: []modrinth.VersionFile{
+							{FileName: "readme.txt", URL: "http://txt", Primary: true},
+						},
+					},
+				},
+				"empty-url": {
+					{
+						VersionNum: "4.0",
+						Files: []modrinth.VersionFile{
+							{FileName: "empty.jar", URL: "", Primary: true},
+						},
+					},
+				},
+			},
+		},
+		batchErr: fmt.Errorf("batch failure"),
+	}
+
+	// 1. Default mcVersion and loaderType, duplicates in slugs, batch error fallback, non-primary jar, no jar, missing mod
+	slugs := []string{
+		"opt-mod", "opt-mod", "opt-mod?", "# comment", "",
+		"non-primary", "no-jar", "empty-url", "server-mod", "missing-mod", "no-version-mod",
+	}
+	data, err := BuildMrpack(ctx, mock, "EdgePack", "", "", "", slugs, map[string]string{"foo.txt": "bar"})
+	if err != nil {
+		t.Fatalf("BuildMrpack failed: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatalf("expected non-empty data")
+	}
+
+	// 2. Fabric loader with empty and custom loaderVersion, batch success
+	mock.batchErr = nil
+	fabricData, err := BuildMrpack(ctx, mock, "FabricPack", "1.21.1", "fabric", "", []string{"opt-mod"}, nil)
+	if err != nil {
+		t.Fatalf("BuildMrpack fabric failed: %v", err)
+	}
+	if len(fabricData) == 0 {
+		t.Fatalf("expected non-empty fabricData")
+	}
+
+	fabricData2, err := BuildMrpack(ctx, mock, "FabricPack2", "1.21.1", "fabric", "0.15.0", []string{"opt-mod"}, nil)
+	if err != nil {
+		t.Fatalf("BuildMrpack fabric2 failed: %v", err)
+	}
+	if len(fabricData2) == 0 {
+		t.Fatalf("expected non-empty fabricData2")
+	}
+}
+
+func TestBuildMrpackZipErrors(t *testing.T) {
+	ctx := context.Background()
+	mock := &mockModrinth{
+		projects: map[string]*modrinth.Project{
+			"mod": {Slug: "mod"},
+		},
+		versions: map[string][]modrinth.Version{
+			"mod": {{VersionNum: "1.0", Files: []modrinth.VersionFile{{FileName: "mod.jar", URL: "http://url", Primary: true}}}},
+		},
+	}
+
+	origMarshal := mrpackJSONMarshalIndent
+	origZip := mrpackNewZipWriter
+	defer func() {
+		mrpackJSONMarshalIndent = origMarshal
+		mrpackNewZipWriter = origZip
+	}()
+
+	// 1. JSON marshal error
+	mrpackJSONMarshalIndent = func(v any, prefix, indent string) ([]byte, error) {
+		return nil, fmt.Errorf("marshal fail")
+	}
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil); err == nil {
+		t.Errorf("expected error when mrpackJSONMarshalIndent fails")
+	}
+	mrpackJSONMarshalIndent = origMarshal
+
+	// 2. Create("modrinth.index.json") error
+	mrpackNewZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{createErr: fmt.Errorf("create index fail")}
+	}
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil); err == nil {
+		t.Errorf("expected error when Create index fails")
+	}
+
+	// 3. Write("modrinth.index.json") error
+	mrpackNewZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{writeErr: fmt.Errorf("write index fail")}
+	}
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil); err == nil {
+		t.Errorf("expected error when Write index fails")
+	}
+
+	configs := map[string]string{"test.cfg": "data"}
+
+	// 4. Create("overrides/config/...") error
+	mrpackNewZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{createErr: fmt.Errorf("create config fail"), failConfig: true}
+	}
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, configs); err == nil {
+		t.Errorf("expected error when Create config fails")
+	}
+
+	// 5. Write("overrides/config/...") error
+	mrpackNewZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{writeErr: fmt.Errorf("write config fail"), failConfig: true}
+	}
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, configs); err == nil {
+		t.Errorf("expected error when Write config fails")
+	}
+
+	// 6. Close() error
+	mrpackNewZipWriter = func(io.Writer) zipWriter {
+		return &mockZipWriter{closeErr: fmt.Errorf("close fail")}
+	}
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, configs); err == nil {
+		t.Errorf("expected error when Close fails")
 	}
 }

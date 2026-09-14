@@ -162,3 +162,135 @@ func TestInitFailureIsRecordedAsItsOwnKindOfFailure(t *testing.T) {
 		t.Errorf("logs must be read from the failing step, not the server container (got %q) — the server never started, so it has none", src.logStep)
 	}
 }
+
+type errReader struct{}
+
+func (e *errReader) Read(p []byte) (n int, err error) {
+	return 0, io.ErrUnexpectedEOF
+}
+func (e *errReader) Close() error { return nil }
+
+type failingSource struct {
+	fakeSource
+	listErr bool
+	logsErr bool
+	readErr bool
+}
+
+func (f *failingSource) ListInstances(context.Context) ([]domain.Instance, error) {
+	if f.listErr {
+		return nil, context.Canceled
+	}
+	return f.fakeSource.ListInstances(context.Background())
+}
+
+func (f *failingSource) CrashLogs(ctx context.Context, num int, tail int64, step ...string) (io.ReadCloser, error) {
+	if f.logsErr {
+		return nil, context.Canceled
+	}
+	if f.readErr {
+		return &errReader{}, nil
+	}
+	return f.fakeSource.CrashLogs(ctx, num, tail, step...)
+}
+
+type failingRecorder struct {
+	fakeRecorder
+	lastErr   bool
+	recordErr bool
+}
+
+func (r *failingRecorder) LastIncident(ctx context.Context, g domain.GameID, num int) (*domain.Incident, error) {
+	if r.lastErr {
+		return nil, context.Canceled
+	}
+	return r.fakeRecorder.LastIncident(ctx, g, num)
+}
+
+func (r *failingRecorder) RecordIncident(ctx context.Context, in domain.Incident) (int64, error) {
+	if r.recordErr {
+		return 0, context.Canceled
+	}
+	return r.fakeRecorder.RecordIncident(ctx, in)
+}
+
+func TestWatcherStartAndOptions(t *testing.T) {
+	// 1. Guard checks on nil/empty Start
+	var nilWatcher *Watcher
+	nilWatcher.Start(context.Background())
+
+	wNoRec := New(nil, nil)
+	wNoRec.Start(context.Background())
+
+	// 2. Start with ticker and context cancellation
+	src := &fakeSource{
+		game:      domain.GameValheim,
+		instances: []domain.Instance{{Number: 1, Name: "tick"}},
+		status:    map[int]ports.Status{1: {Lifecycle: ports.LifecycleRunning}},
+	}
+	rec := newRec()
+	w := New(rec, []Source{src}, WithInterval(5*time.Millisecond))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	w.Start(ctx)
+	<-ctx.Done()
+}
+
+func TestWatcherErrorBranches(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. ListInstances error
+	fSrc := &failingSource{listErr: true}
+	rec := newRec()
+	w := New(rec, []Source{fSrc})
+	if n := w.Check(ctx); n != 0 {
+		t.Errorf("expected 0 incidents on list error, got %d", n)
+	}
+
+	// 2. LastIncident error
+	fRec := &failingRecorder{lastErr: true}
+	srcCrash := &failingSource{
+		fakeSource: fakeSource{
+			game:      domain.GameMinecraft,
+			instances: []domain.Instance{{Number: 1, Name: "mc1"}},
+			status: map[int]ports.Status{
+				1: {Failure: ports.Failure{RestartCount: 1, ExitCode: 1}},
+			},
+		},
+	}
+	wLastErr := New(fRec, []Source{srcCrash})
+	if n := wLastErr.Check(ctx); n != 0 {
+		t.Errorf("expected 0 incidents on LastIncident error, got %d", n)
+	}
+
+	// 3. RecordIncident error
+	fRecRecord := &failingRecorder{recordErr: true}
+	wRecordErr := New(fRecRecord, []Source{srcCrash})
+	if n := wRecordErr.Check(ctx); n != 0 {
+		t.Errorf("expected 0 incidents on RecordIncident error, got %d", n)
+	}
+
+	// 4. CrashLogs error in captureTail
+	srcCrash.logsErr = true
+	wLogsErr := New(newRec(), []Source{srcCrash})
+	if n := wLogsErr.Check(ctx); n != 1 {
+		t.Errorf("expected 1 incident recorded even if CrashLogs fails, got %d", n)
+	}
+
+	// 5. Read error in captureTail
+	srcCrash.logsErr = false
+	srcCrash.readErr = true
+	wReadErr := New(newRec(), []Source{srcCrash})
+	if n := wReadErr.Check(ctx); n != 1 {
+		t.Errorf("expected 1 incident recorded on read error, got %d", n)
+	}
+
+	// 6. isNew when InitStep changes
+	lastInc := &domain.Incident{Number: 1, Step: "step-a"}
+	isDifferentStep := isNew(ports.Failure{InitStep: "step-b"}, lastInc)
+	if !isDifferentStep {
+		t.Errorf("expected isNew to be true when InitStep differs")
+	}
+}
+

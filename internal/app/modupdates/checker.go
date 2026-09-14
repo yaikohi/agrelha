@@ -185,25 +185,25 @@ func (c *Checker) RefreshOne(ctx context.Context, num int) (Report, error) {
 	return rep, err
 }
 
-func (c *Checker) getInstance(ctx context.Context, num int) (domain.Instance, error) {
+func (c *Checker) getInstance(ctx context.Context, num int) domain.Instance {
 	if ig, ok := c.insts.(interface {
 		GetInstance(context.Context, int) (*domain.Instance, error)
 	}); ok {
 		inst, err := ig.GetInstance(ctx, num)
 		if err == nil && inst != nil {
-			return *inst, nil
+			return *inst
 		}
 	}
 	all, err := c.insts.ListInstances(ctx)
 	if err != nil {
-		return domain.Instance{Number: num, GameID: c.gameID}, nil
+		return domain.Instance{Number: num, GameID: c.gameID}
 	}
 	for _, inst := range all {
 		if inst.Number == num {
-			return inst, nil
+			return inst
 		}
 	}
-	return domain.Instance{Number: num, GameID: c.gameID}, nil
+	return domain.Instance{Number: num, GameID: c.gameID}
 }
 
 func (c *Checker) latestVersionForRef(ctx context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error) {
@@ -227,10 +227,7 @@ func (c *Checker) resolveTreeForRef(ctx context.Context, ref domain.ModRef, inst
 }
 
 func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
-	inst, err := c.getInstance(ctx, num)
-	if err != nil {
-		return Report{}, err
-	}
+	inst := c.getInstance(ctx, num)
 	if inst.IsVanilla() || inst.PackDefined() {
 		return Report{At: time.Now()}, nil
 	}
@@ -464,10 +461,7 @@ func (c *Checker) Apply(ctx context.Context, num int, keys []string, actor strin
 		return nil, fmt.Errorf("none of the selected mods have an update")
 	}
 
-	inst, err := c.getInstance(ctx, num)
-	if err != nil {
-		return nil, err
-	}
+	inst := c.getInstance(ctx, num)
 
 	previous, err := c.insts.GetInstalledMods(ctx, num)
 	if err != nil {

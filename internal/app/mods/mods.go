@@ -176,9 +176,6 @@ func (m *Manager) Remove(ctx context.Context, nsName string) (bool, error) {
 		if !found {
 			return false, nil
 		}
-		if doc.Data == nil {
-			doc.Data = make(map[string]string)
-		}
 		doc.Data["mods.txt"] = strings.Join(kept, "\n") + "\n"
 		return true, nil
 	})

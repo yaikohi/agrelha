@@ -116,9 +116,6 @@ func (m *Manager) Revoke(ctx context.Context, steamID string, actor ...string) (
 		if !found {
 			return false, nil
 		}
-		if doc.Data == nil {
-			doc.Data = make(map[string]string)
-		}
 		doc.Data["ADMINLIST_IDS"] = strings.Join(kept, " ")
 		return true, nil
 	})
