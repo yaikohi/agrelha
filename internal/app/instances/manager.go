@@ -679,17 +679,36 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 			doc.Data = make(map[string]string)
 		}
 		cur := doc.Data["mods.txt"]
-		present := map[string]bool{}
+
+		var lines []string
+		at := map[string]int{}
 		for l := range strings.SplitSeq(cur, "\n") {
+			if strings.TrimSpace(l) == "" {
+				continue
+			}
+			lines = append(lines, l)
 			if ref, ok := domain.ParseModRef(l, m.gameID); ok {
-				present[ref.Key()] = true
+				if _, seen := at[ref.Key()]; !seen {
+					at[ref.Key()] = len(lines) - 1
+				}
 			}
 		}
-		var body strings.Builder
-		body.WriteString(strings.TrimRight(cur, "\n"))
-		for _, w := range wanted {
+
+		touched := 0
+		for i, w := range wanted {
 			ref, ok := domain.ParseModRef(w, m.gameID)
-			if !ok || present[ref.Key()] {
+			if !ok {
+				continue
+			}
+			idx, present := at[ref.Key()]
+			// A slug the operator typed with a version pins that exact version,
+			// even over an existing line: it is the way back to a build that
+			// worked. Dependencies dragged in by the resolver never repin.
+			if present {
+				if i == 0 && ref.Version != "" && lines[idx] != ref.Entry() {
+					lines[idx] = ref.Entry()
+					touched++
+				}
 				continue
 			}
 			if ref.Version == "" && m.versionResolver != nil {
@@ -706,14 +725,15 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 					ref.Version = v
 				}
 			}
-			body.WriteString("\n" + ref.Entry())
-			present[ref.Key()] = true
+			lines = append(lines, ref.Entry())
+			at[ref.Key()] = len(lines) - 1
 			addedCount++
+			touched++
 		}
-		if addedCount == 0 {
+		if touched == 0 {
 			return false, nil
 		}
-		doc.Data["mods.txt"] = strings.TrimLeft(body.String(), "\n") + "\n"
+		doc.Data["mods.txt"] = strings.Join(lines, "\n") + "\n"
 		return true, nil
 	})
 	if err != nil {
@@ -729,7 +749,7 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 // change several pins at once (a mod update and everything it drags with it)
 // use this rather than a sequence of installs, so the world never boots against
 // a half-applied set. It reports whether anything actually changed.
-func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []string, actor ...string) (bool, error) {
+func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []string, detail string, actor ...string) (bool, error) {
 	inst, err := m.GetInstance(ctx, num)
 	if err != nil {
 		return false, err
@@ -774,7 +794,10 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 	}
 
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-update", m.gamePrefix()), fmt.Sprintf("Updated mods on #%02d", num))
+		if detail == "" {
+			detail = fmt.Sprintf("Updated mods on #%02d", num)
+		}
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-update", m.gamePrefix()), fmt.Sprintf("#%02d: %s", num, detail))
 	}
 	if m.afterSyncHook != nil {
 		want := make(map[string]bool, len(entries))

@@ -2,9 +2,15 @@ package ports
 
 import (
 	"context"
+	"errors"
 
 	"agrelha/internal/domain"
 )
+
+// ErrPackageNotFound means the upstream catalogue has no such package, as
+// distinct from the catalogue being unreachable. An installed mod that returns
+// this is already broken: the next boot cannot fetch it (see ADR 0003).
+var ErrPackageNotFound = errors.New("package not found")
 
 // ContentProvider represents an upstream mod/addon source (e.g. Modrinth, Thunderstore).
 type ContentProvider interface {

@@ -13,7 +13,6 @@ import (
 	appbackups "agrelha/internal/app/backups"
 	mccontent "agrelha/internal/app/content"
 	"agrelha/internal/app/instances"
-	"agrelha/internal/app/mods"
 	"agrelha/internal/domain"
 	infrabackups "agrelha/internal/infra/backups"
 	"agrelha/internal/infra/content/modpackindex"
@@ -416,18 +415,7 @@ func buildContentHandler(cfg *config.Config, d Deps, applyAfterSync func(string,
 		Audit:          audit,
 		ReadmeCache:    readme,
 		ValheimGame:    d.ValheimGame,
-		Mods:           d.Mods,
 		TS:             cat,
-		InstalledMods: func(ctx context.Context) ([]string, error) {
-			if d.K8s != nil {
-				data, err := d.K8s.ConfigMapData(ctx, "valheim-mods")
-				if err != nil {
-					return nil, err
-				}
-				return mods.Parse(data["mods.txt"]), nil
-			}
-			return nil, nil
-		},
 		ConfigData: func(ctx context.Context) (map[string]string, error) {
 			if d.K8s != nil {
 				return d.K8s.ConfigMapData(ctx, "valheim-mod-configs")
@@ -682,7 +670,12 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 			return res
 		}
 	}
+	var modUpdateTotal func() int
+	if d.ModUpdates != nil {
+		modUpdateTotal = d.ModUpdates.Total
+	}
 	return dashboardhttp.New(dashboardhttp.Config{
+		ModUpdateTotal:       modUpdateTotal,
 		GrafanaDashboardURL:  grafanaURL,
 		ValheimAddress:       valheimAddr,
 		GameNodeName:         nodeName,

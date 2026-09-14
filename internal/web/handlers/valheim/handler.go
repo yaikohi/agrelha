@@ -70,6 +70,7 @@ func (h *Handler) Register(router fiber.Router) {
 func (h *Handler) RegisterPublic(router fiber.Router) {
 	router.Get("/api/valheim/:num<int>/mods/export", h.ValheimInstanceExport)
 	router.Get("/valheim/mods/export", h.LegacyExportRedirect)
+	router.Get("/mods/export", h.LegacyExportRedirect)
 }
 
 // RegisterProtected mounts authenticated Valheim routes.
@@ -114,6 +115,7 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Post("/api/valheim/:num<int>/mods/remove", h.ValheimInstanceModsRemove)
 	router.Post("/api/valheim/:num<int>/mods/updates/check", h.ValheimModUpdatesCheck)
 	router.Post("/api/valheim/:num<int>/mods/updates/apply", h.ValheimModUpdatesApply)
+	router.Post("/api/valheim/:num<int>/mods/updates/undo", h.ValheimModUpdatesUndo)
 	router.Get("/api/valheim/:num<int>/configs/file", h.ValheimInstanceConfigGet)
 	router.Post("/api/valheim/:num<int>/configs/save", h.ValheimInstanceConfigSave)
 	router.Post("/api/valheim/:num<int>/configs/delete", h.ValheimInstanceConfigDelete)

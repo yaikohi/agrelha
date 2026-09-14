@@ -198,3 +198,32 @@ func VersionNewer(a, b string) bool {
 	}
 	return false
 }
+
+// ModRestorePoint is the way back from one Mod update: the list as it was
+// before, and the list the update wrote. Undo compares Applied against what the
+// Instance reports now, and refuses when they differ — something else has
+// changed the Mod list since, and reverting would discard it.
+type ModRestorePoint struct {
+	At       time.Time
+	Previous []string
+	Applied  []string
+}
+
+// Matches reports whether entries are exactly what this update wrote, in any order.
+func (p ModRestorePoint) Matches(entries []string) bool {
+	if len(entries) != len(p.Applied) {
+		return false
+	}
+	have := make(map[string]int, len(entries))
+	for _, e := range entries {
+		have[strings.TrimSpace(e)]++
+	}
+	for _, e := range p.Applied {
+		e = strings.TrimSpace(e)
+		if have[e] == 0 {
+			return false
+		}
+		have[e]--
+	}
+	return true
+}

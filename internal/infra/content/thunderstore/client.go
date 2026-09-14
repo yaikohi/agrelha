@@ -3,7 +3,6 @@ package thunderstore
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -56,7 +55,7 @@ type expVersion struct {
 
 // ErrNotFound means the package does not exist, as distinct from Thunderstore
 // being unreachable. The two need different responses from an operator.
-var ErrNotFound = errors.New("package not found")
+var ErrNotFound = ports.ErrPackageNotFound
 
 func (c *Client) getJSON(ctx context.Context, url string, v any) error {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

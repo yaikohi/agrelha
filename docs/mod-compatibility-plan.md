@@ -115,12 +115,31 @@ Deliberately unresolved; settle before implementing phase 2.
    OOM-killed at exactly the moment the cluster is busy.
 3. **Draft TTL and prune policy.**
 4. **Do warnings need acknowledging**, or only blocks?
+5. **Should Mod update detection extend to Minecraft?** Not built, and the
+   reason for excluding it has changed — record which reason is load-bearing
+   now. The original argument was cost: Valheim update checks were free because
+   Thunderstore's bulk index sat warm in memory, while Modrinth would need one
+   HTTP call per mod. That argument is dead. The bulk index turned out to be
+   hours stale (it reported four mods up to date that r2modman could see had
+   newer versions, and omitted a fifth entirely), so Valheim now asks about each
+   mod by name too. Both games would cost the same.
+
+   What survives is a modelling argument, and it only covers part of the field.
+   A Minecraft Instance with Source `modpack` has its versions chosen by the
+   Pack, so a per-mod update is the wrong operation — CONTEXT.md already says a
+   Pack owns its Instance's Loader and Minecraft version. But an Instance with
+   Source `modlist` has no such owner, and per-mod updates are exactly right for
+   it. That is the case to build if this is revisited: it needs Modrinth version
+   resolution filtered by Minecraft version and Loader, which Thunderstore does
+   not require.
 
 ## Out of scope
 
 - Valheim. Thunderstore metadata is far weaker than Modrinth's — no
   `server_side`, no structured incompatibility — so the same design does not
-  transfer. Revisit separately.
+  transfer. Revisit separately. (Valheim does have Mod update detection, which
+  is a different feature: it reports that a newer version exists, never that it
+  is safe. Flagging a risky update belongs here, in this plan.)
 - CurseForge. Restricted packs and no API key; see the memory note.
 - Continuous re-validation after creation (a mod updating and breaking a running
   server). Different problem, different trigger.

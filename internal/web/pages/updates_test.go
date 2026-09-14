@@ -74,6 +74,8 @@ func TestPanelSaysUpToDateWithoutButtons(t *testing.T) {
 	got := renderPanel(t, InstanceDetailUI{
 		InstanceUI:     InstanceUI{Number: 3},
 		UpdatesChecked: "4m",
+		ModsChecked:    16,
+		ModsTotal:      16,
 	})
 	if !strings.Contains(got, "Mods are up to date") {
 		t.Error("want the up-to-date state")
@@ -81,8 +83,8 @@ func TestPanelSaysUpToDateWithoutButtons(t *testing.T) {
 	if strings.Contains(got, "updates/apply") {
 		t.Error("nothing to apply, so the apply buttons must not render")
 	}
-	if !strings.Contains(got, "Checked 4m ago") {
-		t.Error("want the last-checked time")
+	if !strings.Contains(got, "Checked all 16 mods, 4m ago") {
+		t.Errorf("want the last-checked summary, got: %s", got)
 	}
 }
 
@@ -97,5 +99,88 @@ func TestPanelShowsPendingRollout(t *testing.T) {
 	}
 	if !strings.Contains(got, "disabled") {
 		t.Error("apply buttons must be disabled while an update is already landing")
+	}
+}
+
+// "Up to date", "couldn't ask" and "no longer published" must never render the
+// same. A stale index once reported the third as the first.
+func TestPanelSeparatesUpToDateFromUnanswered(t *testing.T) {
+	got := renderPanel(t, InstanceDetailUI{
+		InstanceUI:      InstanceUI{Number: 2},
+		ModsUnreachable: []string{"Flaky-Thing"},
+		ModsChecked:     15,
+		ModsTotal:       16,
+		UpdatesChecked:  "2m",
+	})
+	if !strings.Contains(got, "Checked 15 of 16 mods, 2m ago") {
+		t.Errorf("want the partial-check summary, got: %s", got)
+	}
+	if !strings.Contains(got, "Flaky-Thing") {
+		t.Error("want the unreachable mod named")
+	}
+	if !strings.Contains(got, "Couldn't reach Thunderstore") {
+		t.Error("want the unreachable notice")
+	}
+}
+
+func TestPanelWarnsAboutModsGoneFromThunderstore(t *testing.T) {
+	got := renderPanel(t, InstanceDetailUI{
+		InstanceUI:     InstanceUI{Number: 2},
+		ModsMissing:    []string{"Deleted-Package", "Gone-Thing"},
+		ModsChecked:    14,
+		ModsTotal:      16,
+		UpdatesChecked: "2m",
+	})
+	for _, want := range []string{
+		"2 installed mod(s) are no longer published on Thunderstore",
+		"fail to boot on its next restart",
+		"Deleted-Package, Gone-Thing",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("panel missing %q", want)
+		}
+	}
+}
+
+func TestPanelSurfacesACheckThatFailedOutright(t *testing.T) {
+	got := renderPanel(t, InstanceDetailUI{
+		InstanceUI:   InstanceUI{Number: 2},
+		UpdatesError: "Last check failed: connection refused",
+	})
+	if !strings.Contains(got, "Last check failed: connection refused") {
+		t.Error("a failed check must say so rather than claiming everything is fine")
+	}
+}
+
+func TestUndoOnlyOfferedWhenThereIsAWayBack(t *testing.T) {
+	without := renderPanel(t, InstanceDetailUI{InstanceUI: InstanceUI{Number: 2}})
+	if strings.Contains(without, "Undo last update") {
+		t.Error("no restore point, so no undo button")
+	}
+
+	with := renderPanel(t, InstanceDetailUI{
+		InstanceUI: InstanceUI{Number: 2},
+		CanUndo:    true,
+		UndoWhen:   "8m ago",
+	})
+	if !strings.Contains(with, "Undo last update") {
+		t.Error("want the undo button")
+	}
+	if !strings.Contains(with, "/api/valheim/2/mods/updates/undo") {
+		t.Error("want the undo route")
+	}
+	if !strings.Contains(with, "8m ago") {
+		t.Error("want the restore point's age in the tooltip")
+	}
+}
+
+func TestUndoConfirmsWhenPlayersWouldBeDropped(t *testing.T) {
+	got := renderPanel(t, InstanceDetailUI{
+		InstanceUI: InstanceUI{Number: 2, Name: "boppo", State: "running", Players: 2, PlayersKnown: true},
+		CanUndo:    true,
+		UndoWhen:   "8m ago",
+	})
+	if !strings.Contains(got, "2 players are connected to boppo. Reverting restarts the world") {
+		t.Errorf("undo must warn like apply does, got: %s", got)
 	}
 }

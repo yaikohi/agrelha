@@ -68,6 +68,14 @@ func (s *Store) migrate() error {
 		log_tail      TEXT
 	);
 	CREATE INDEX IF NOT EXISTS idx_incidents_instance ON incidents(game_id, number, at DESC);
+	CREATE TABLE IF NOT EXISTS mod_restore_points (
+		game_id   TEXT NOT NULL,
+		number    INTEGER NOT NULL,
+		at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		previous  TEXT NOT NULL,
+		applied   TEXT NOT NULL,
+		PRIMARY KEY (game_id, number)
+	);
 	CREATE TABLE IF NOT EXISTS mod_index (
 		full_name     TEXT PRIMARY KEY,
 		namespace     TEXT,

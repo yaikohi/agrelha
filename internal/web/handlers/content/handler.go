@@ -12,7 +12,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"agrelha/internal/app/mods"
 	"agrelha/internal/ports"
 )
 
@@ -23,9 +22,7 @@ type Config struct {
 	Audit          ports.AuditRecorder
 	ReadmeCache    ports.ReadmeCache
 	ValheimGame    ports.Game
-	Mods           *mods.Manager
 	TS             ports.PackageCatalog
-	InstalledMods  func(context.Context) ([]string, error)
 	ConfigData     func(context.Context) (map[string]string, error)
 	Actor          func(*fiber.Ctx) string
 	ApplyAfterSync func(cmName, key string, check func(string) bool)
@@ -61,7 +58,6 @@ func (h *Handler) Register(router fiber.Router) {
 // RegisterPublic mounts unauthenticated content routes (e.g. image proxy and modpack download).
 func (h *Handler) RegisterPublic(router fiber.Router) {
 	router.Get("/img", h.ImageProxy)
-	router.Get("/mods/export", h.ModpackExport)
 }
 
 // RegisterProtected mounts authenticated content management routes.
@@ -144,20 +140,6 @@ func PublicHost(host string) bool {
 		}
 	}
 	return true
-}
-
-func (h *Handler) currentMods(ctx context.Context) []string {
-	if h.cfg.InstalledMods != nil {
-		if list, err := h.cfg.InstalledMods(ctx); err == nil {
-			return list
-		}
-	}
-	if h.cfg.Mods != nil {
-		if list, err := h.cfg.Mods.InstalledMods(ctx); err == nil {
-			return list
-		}
-	}
-	return nil
 }
 
 func (h *Handler) configData(ctx context.Context) (map[string]string, error) {

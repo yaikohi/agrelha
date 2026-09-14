@@ -93,6 +93,13 @@ the World; it never changes the game itself. Only pinned entries can have one:
 an entry with no version recorded has nothing to compare against.
 _Avoid_: update (unqualified), upgrade, patch
 
+**Restore point**:
+The Mod list an Instance had immediately before a Mod update, kept so the update
+can be undone. One per Instance, and only valid while the Instance's Mod list is
+still exactly what that update wrote — any other change to the list withdraws it,
+because reverting would discard that change too.
+_Avoid_: backup (that word means the World save), snapshot, rollback
+
 **Server update**:
 New game binaries, from the upstream image or the game's own store. Unrelated to
 the Mod list, and never triggered by applying a Mod update. The UI names which

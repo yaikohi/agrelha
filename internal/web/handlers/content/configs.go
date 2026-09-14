@@ -12,6 +12,8 @@ import (
 	"agrelha/internal/web/shared"
 )
 
+const configsCM = "valheim-mod-configs"
+
 var cfgNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*\.cfg$`)
 
 // ConfigsList returns the sorted list of mod config file names from the ConfigMap or StateStore.

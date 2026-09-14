@@ -29,6 +29,15 @@ type ModUpdate struct {
 	Token    string
 }
 
+// ModRefNames renders a list of mods as their Thunderstore full names.
+func ModRefNames(refs []domain.ModRef) []string {
+	out := make([]string, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, r.FullName())
+	}
+	return out
+}
+
 // ModUpdateViews renders the checker's findings for the mods tab.
 func ModUpdateViews(ups []domain.ModUpdate) []ModUpdate {
 	out := make([]ModUpdate, 0, len(ups))
@@ -111,6 +120,8 @@ func HistoryLabel(kind string) string {
 		return "Server updated"
 	case "valheim-mod-update":
 		return "Mods updated"
+	case "valheim-mod-revert":
+		return "Mods reverted"
 	case "mc-mod-update":
 		return "Minecraft: Mods updated"
 	case "crash":
@@ -169,16 +180,22 @@ type InstanceDetailUI struct {
 	InstanceUI
 	// Vanilla worlds run no Loader, so they have no Mods tab: gaining mods is a
 	// new Instance, not an edit (CONTEXT.md).
-	Vanilla        bool
-	ActiveTab      string // overview, mods, configs, console, backups, settings
-	InstalledMods  []string
-	ModUpdates     []ModUpdate
-	UpdatesPending bool
-	UpdatesChecked string
-	UpdatesError   string
-	ConfigFiles    []string
-	Backups        []BackupUI
-	LastIncident   *IncidentUI
+	Vanilla         bool
+	ActiveTab       string // overview, mods, configs, console, backups, settings
+	InstalledMods   []string
+	ModUpdates      []ModUpdate
+	ModsMissing     []string
+	ModsUnreachable []string
+	ModsChecked     int
+	ModsTotal       int
+	UpdatesPending  bool
+	UpdatesChecked  string
+	UpdatesError    string
+	CanUndo         bool
+	UndoWhen        string
+	ConfigFiles     []string
+	Backups         []BackupUI
+	LastIncident    *IncidentUI
 }
 
 // IncidentUI is the last recorded failure of an Instance, shown so the operator
@@ -634,7 +651,15 @@ func InstanceTabs(game string, num int, active string, vanilla bool) []component
 // updateClick guards an apply button behind a confirmation, but only when the
 // restart it causes would drop players who are connected right now.
 func updateClick(d InstanceDetailUI, post string) string {
-	call := fmt.Sprintf(post, d.Number)
+	return confirmIfPlayers(d, fmt.Sprintf(post, d.Number), "Updating")
+}
+
+func undoClick(d InstanceDetailUI) string {
+	call := fmt.Sprintf("@post('/api/valheim/%d/mods/updates/undo')", d.Number)
+	return confirmIfPlayers(d, call, "Reverting")
+}
+
+func confirmIfPlayers(d InstanceDetailUI, call, verb string) string {
 	if d.State != "running" || !d.PlayersKnown || d.Players <= 0 {
 		return call
 	}
@@ -642,6 +667,22 @@ func updateClick(d InstanceDetailUI, post string) string {
 	if d.Players == 1 {
 		noun = "player is"
 	}
-	return fmt.Sprintf("if (confirm('%d %s connected to %s. Updating restarts the world and disconnects them. Continue?')) %s",
-		d.Players, noun, strings.ReplaceAll(d.Name, "'", "\\'"), call)
+	return fmt.Sprintf("if (confirm('%d %s connected to %s. %s restarts the world and disconnects them. Continue?')) %s",
+		d.Players, noun, strings.ReplaceAll(d.Name, "'", "\\'"), verb, call)
+}
+
+// checkSummary says what the last check actually managed to ask, so "up to
+// date" is never confused with "could not ask".
+func checkSummary(d InstanceDetailUI) string {
+	if d.UpdatesError != "" {
+		return d.UpdatesError
+	}
+	if d.UpdatesChecked == "" {
+		return "Not checked yet."
+	}
+	s := fmt.Sprintf("Checked %d of %d mods, %s ago", d.ModsChecked, d.ModsTotal, d.UpdatesChecked)
+	if d.ModsChecked == d.ModsTotal {
+		s = fmt.Sprintf("Checked all %d mods, %s ago", d.ModsTotal, d.UpdatesChecked)
+	}
+	return s + "."
 }

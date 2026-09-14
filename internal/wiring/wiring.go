@@ -435,7 +435,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	backfillValheimSource(ctx, &d)
 
 	if d.ValheimInstances != nil && d.TS != nil {
-		d.ModUpdates = modupdates.New(d.ValheimInstances, d.TS)
+		d.ModUpdates = modupdates.New(d.ValheimInstances, d.TS, modupdates.WithRestorePoints(st))
 		d.ModUpdates.Start(ctx)
 	}
 

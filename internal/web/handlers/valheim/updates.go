@@ -24,11 +24,24 @@ func (h *Handler) ModUpdateState(ctx context.Context, d *pages.InstanceDetailUI,
 	if h.cfg.ModUpdates == nil {
 		return
 	}
-	d.ModUpdates = pages.ModUpdateViews(h.cfg.ModUpdates.Updates(inst.Number))
-	d.UpdatesPending = h.cfg.ModUpdates.Pending(ctx, inst.Number)
-	if at := h.cfg.ModUpdates.CheckedAt(inst.Number); !at.IsZero() {
-		d.UpdatesChecked = domain.FormatDuration(time.Since(at))
+	rep := h.cfg.ModUpdates.Report(inst.Number)
+	d.ModUpdates = pages.ModUpdateViews(rep.Updates)
+	d.ModsMissing = pages.ModRefNames(rep.Missing)
+	d.ModsUnreachable = pages.ModRefNames(rep.Unreachable)
+	d.ModsChecked, d.ModsTotal = rep.Checked, rep.Total
+	if !rep.At.IsZero() {
+		d.UpdatesChecked = domain.FormatDuration(time.Since(rep.At))
 	}
+	d.UpdatesPending = h.cfg.ModUpdates.Pending(ctx, inst.Number)
+	if err := h.cfg.ModUpdates.LastError(inst.Number); err != nil {
+		d.UpdatesError = "Last check failed: " + err.Error()
+	}
+
+	if rp, err := h.cfg.ModUpdates.RestoreAvailable(ctx, inst.Number); err == nil && rp != nil {
+		d.CanUndo = true
+		d.UndoWhen = domain.FormatDuration(time.Since(rp.At)) + " ago"
+	}
+
 	if inst.State == domain.StateRunning && h.cfg.ValheimInstances != nil {
 		if st, ok := h.cfg.ValheimInstances.InstanceStats(ctx, []domain.Instance{inst})[inst.Number]; ok {
 			d.Players, d.PlayersKnown = st.Players, st.PlayersKnown
@@ -47,16 +60,23 @@ func (h *Handler) ValheimModUpdatesCheck(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Mod update checking is not configured.", nil)
 	}
 
-	ups, err := h.cfg.ModUpdates.RefreshOne(c.UserContext(), inst.Number)
+	rep, err := h.cfg.ModUpdates.RefreshOne(c.UserContext(), inst.Number)
 	if err != nil {
 		return shared.SSEToast(c, "err", "Check failed: "+err.Error(), nil)
 	}
 
-	msg := "No mod updates available."
-	if len(ups) > 0 {
-		msg = fmt.Sprintf("%d mod update(s) available.", len(ups))
+	msg, kind := "No mod updates available.", "ok"
+	if len(rep.Updates) > 0 {
+		msg = fmt.Sprintf("%d mod update(s) available.", len(rep.Updates))
 	}
-	return h.pushUpdatePanel(c, *inst, msg, "ok")
+	if n := len(rep.Unreachable); n > 0 {
+		msg += fmt.Sprintf(" %d mod(s) could not be checked.", n)
+	}
+	if n := len(rep.Missing); n > 0 {
+		msg = fmt.Sprintf("%d installed mod(s) are gone from Thunderstore — this world will fail to boot.", n)
+		kind = "err"
+	}
+	return h.pushUpdatePanel(c, *inst, msg, kind)
 }
 
 // ValheimModUpdatesApply repins the selected mods to their latest versions.
@@ -102,6 +122,25 @@ func (h *Handler) ValheimModUpdatesApply(c *fiber.Ctx) error {
 
 	msg := fmt.Sprintf("Updating %d mod(s) — this world restarts once ArgoCD syncs.", len(applied))
 	return h.pushUpdatePanel(c, *inst, msg, "ok")
+}
+
+// ValheimModUpdatesUndo restores the mod list from before the last update.
+func (h *Handler) ValheimModUpdatesUndo(c *fiber.Ctx) error {
+	inst, err := h.updatableInstance(c)
+	if err != nil {
+		return shared.SSEToast(c, "err", err.Error(), nil)
+	}
+	if h.cfg.ModUpdates == nil {
+		return shared.SSEToast(c, "err", "Mod update checking is not configured.", nil)
+	}
+
+	rp, err := h.cfg.ModUpdates.Undo(c.UserContext(), inst.Number, h.cfg.Actor(c))
+	if err != nil {
+		return shared.SSEToast(c, "err", "Undo failed: "+err.Error(), nil)
+	}
+	return h.pushUpdatePanel(c, *inst,
+		fmt.Sprintf("Reverted to the %d mod(s) from before the update — this world restarts once ArgoCD syncs.", len(rp.Previous)),
+		"ok")
 }
 
 func (h *Handler) updatableInstance(c *fiber.Ctx) (*domain.Instance, error) {
