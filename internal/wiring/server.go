@@ -472,8 +472,8 @@ func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 	}
 	var searchMods minecrafthttp.SearchModsFunc
 	if d.MR != nil {
-		searchMods = func(ctx context.Context, query, mcVersion string) ([]minecrafthttp.ModHit, error) {
-			res, err := d.MR.Search(ctx, query, mcVersion, "", 20, 0)
+		searchMods = func(ctx context.Context, query, mcVersion, loader string) ([]minecrafthttp.ModHit, error) {
+			res, err := d.MR.Search(ctx, query, mcVersion, loader, 20, 0)
 			if err != nil {
 				return nil, err
 			}

@@ -25,7 +25,7 @@ type ModHit struct {
 }
 
 // SearchModsFunc searches the content provider for mods matching a query.
-type SearchModsFunc func(ctx context.Context, query, mcVersion string) ([]ModHit, error)
+type SearchModsFunc func(ctx context.Context, query, mcVersion, loader string) ([]ModHit, error)
 
 // MCInstanceModsSearch renders Modrinth results into the instance mods page,
 // so mods can be found by name rather than typed as an exact slug.
@@ -50,10 +50,12 @@ func (h *Handler) MCInstanceModsSearch(c *fiber.Ctx) error {
 	}
 
 	mcVersion := ""
+	loader := ""
 	installed := map[string]bool{}
 	if h.cfg.MCInstances != nil {
 		if inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num); err == nil && inst != nil {
 			mcVersion = inst.MCVersion
+			loader = string(inst.Loader)
 		}
 		if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), num); err == nil {
 			for _, m := range mods {
@@ -64,7 +66,7 @@ func (h *Handler) MCInstanceModsSearch(c *fiber.Ctx) error {
 		}
 	}
 
-	hits, err := h.cfg.SearchMods(c.UserContext(), q, mcVersion)
+	hits, err := h.cfg.SearchMods(c.UserContext(), q, mcVersion, loader)
 	if err != nil {
 		return patchModResults(c, fmt.Sprintf(`<p class="col-span-full py-6 text-center text-xs text-red-400">Search failed: %s</p>`, html.EscapeString(err.Error())))
 	}

@@ -799,7 +799,7 @@ func TestMCModsSearchAllBranches(t *testing.T) {
 	}
 
 	// 3. Search query empty
-	h.cfg.SearchMods = func(ctx context.Context, query, mcVersion string) ([]ModHit, error) {
+	h.cfg.SearchMods = func(ctx context.Context, query, mcVersion, loader string) ([]ModHit, error) {
 		if query == "err" {
 			return nil, errors.New("modrinth backend error")
 		}

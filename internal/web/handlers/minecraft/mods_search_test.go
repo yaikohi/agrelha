@@ -4,8 +4,13 @@ import (
 	"context"
 	"io"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"agrelha/internal/app/instances"
+	"agrelha/internal/domain"
+	"agrelha/internal/infra/store"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -31,7 +36,7 @@ func post(t *testing.T, app *fiber.App, path, body string) string {
 }
 
 func TestModsSearchRendersResultsIntoThePage(t *testing.T) {
-	app := searchApp(t, func(_ context.Context, q, _ string) ([]ModHit, error) {
+	app := searchApp(t, func(_ context.Context, q, _, _ string) ([]ModHit, error) {
 		if q != "sodium" {
 			t.Errorf("query not forwarded: %q", q)
 		}
@@ -52,7 +57,7 @@ func TestModsSearchRendersResultsIntoThePage(t *testing.T) {
 
 func TestModsSearchEmptyQueryDoesNotCallProvider(t *testing.T) {
 	called := false
-	app := searchApp(t, func(context.Context, string, string) ([]ModHit, error) {
+	app := searchApp(t, func(context.Context, string, string, string) ([]ModHit, error) {
 		called = true
 		return nil, nil
 	})
@@ -75,5 +80,51 @@ func TestModCardEscapesQuotesInSlug(t *testing.T) {
 	card := modCardHTML(2, ModHit{Slug: "it's-a-mod", Title: "X"}, false)
 	if strings.Contains(card, "{slug: 'it's") {
 		t.Error("an unescaped quote would break the Datastar expression")
+	}
+}
+
+func TestModsSearchPassesLoaderAndVersionFromInstance(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "search.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	repo := store.NewInstanceRepo(st)
+	_ = repo.Upsert(domain.Instance{
+		Number:    3,
+		Slug:      "bob",
+		Name:      "Bob",
+		GameID:    domain.GameMinecraft,
+		Loader:    domain.LoaderFabric,
+		MCVersion: "26.2",
+	})
+	mgr := instances.NewInstanceManager(
+		repo, nil, nil, 32, 8, 4,
+		"manifests/minecraft-modded", "192.168.20.240", nil, "minecraft-modded",
+		instances.WithGameID(domain.GameMinecraft),
+	)
+
+	var gotLoader, gotMCVersion string
+	h := New(Config{
+		MCInstances: mgr,
+		SearchMods: func(_ context.Context, q, mcVersion, loader string) ([]ModHit, error) {
+			gotMCVersion = mcVersion
+			gotLoader = loader
+			return []ModHit{{Slug: "cutter", Title: "Stonecutter"}}, nil
+		},
+	})
+	app := fiber.New()
+	app.Post("/api/minecraft/:num<int>/mods/search", h.MCInstanceModsSearch)
+
+	out := post(t, app, "/api/minecraft/3/mods/search", `{"modQuery":"cutter"}`)
+	if !strings.Contains(out, "Stonecutter") {
+		t.Fatalf("expected Stonecutter in results: %s", out)
+	}
+	if gotLoader != "fabric" {
+		t.Errorf("expected loader 'fabric', got %q", gotLoader)
+	}
+	if gotMCVersion != "26.2" {
+		t.Errorf("expected mcVersion '26.2', got %q", gotMCVersion)
 	}
 }
