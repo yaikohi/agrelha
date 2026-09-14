@@ -38,7 +38,9 @@ type Config struct {
 	GrafanaDashboardURL  string
 	ValheimAddress       string
 	GameNodeName         string
-	ModUpdateTotal       func() int
+	ModUpdateTotal        func() int
+	ValheimModUpdateTotal func() int
+	MCModUpdateTotal      func() int
 	ValheimInstances     *instances.InstanceManager
 	MCInstances          *instances.InstanceManager
 	ValheimGame          ports.Game
@@ -251,11 +253,17 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 	sig := map[string]any{
 		"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "online": false, "backup": "—", "backupinfo": "",
 		"mc_players": "—", "mc_cpu": "—", "mc_mem": "—", "mc_uptime": "—", "mc_state": "unknown", "mc_loader": "NeoForge",
-		"updates": 0,
+		"updates": 0, "valheim_updates": 0, "mc_updates": 0,
 	}
 
 	if h.cfg.ModUpdateTotal != nil {
 		sig["updates"] = h.cfg.ModUpdateTotal()
+	}
+	if h.cfg.ValheimModUpdateTotal != nil {
+		sig["valheim_updates"] = h.cfg.ValheimModUpdateTotal()
+	}
+	if h.cfg.MCModUpdateTotal != nil {
+		sig["mc_updates"] = h.cfg.MCModUpdateTotal()
 	}
 
 	if h.cfg.BackupInfo != nil {

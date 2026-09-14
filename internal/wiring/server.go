@@ -684,20 +684,30 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 			return tot
 		}
 	}
+	var vhModUpdateTotal func() int
+	if d.ModUpdates != nil {
+		vhModUpdateTotal = d.ModUpdates.Total
+	}
+	var mcModUpdateTotal func() int
+	if d.MCModUpdates != nil {
+		mcModUpdateTotal = d.MCModUpdates.Total
+	}
 	return dashboardhttp.New(dashboardhttp.Config{
-		ModUpdateTotal:       modUpdateTotal,
-		GrafanaDashboardURL:  grafanaURL,
-		ValheimAddress:       valheimAddr,
-		GameNodeName:         nodeName,
-		ValheimInstances:     d.ValheimInstances,
-		MCInstances:          d.MCInstances,
-		ValheimGame:          d.ValheimGame,
-		MinecraftGame:        d.MinecraftGame,
-		Auth:                 d.Auth,
-		Actor:                actor,
-		BackupInfo:           bkInfo,
-		InstanceStats:        instStats,
-		ValheimInstanceStats: vhInstStats,
+		ModUpdateTotal:        modUpdateTotal,
+		ValheimModUpdateTotal: vhModUpdateTotal,
+		MCModUpdateTotal:      mcModUpdateTotal,
+		GrafanaDashboardURL:   grafanaURL,
+		ValheimAddress:        valheimAddr,
+		GameNodeName:          nodeName,
+		ValheimInstances:      d.ValheimInstances,
+		MCInstances:           d.MCInstances,
+		ValheimGame:           d.ValheimGame,
+		MinecraftGame:         d.MinecraftGame,
+		Auth:                  d.Auth,
+		Actor:                 actor,
+		BackupInfo:            bkInfo,
+		InstanceStats:         instStats,
+		ValheimInstanceStats:  vhInstStats,
 	})
 }
 

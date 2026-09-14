@@ -46,6 +46,9 @@ func TestDashboardPage(t *testing.T) {
 
 func TestTileSignals(t *testing.T) {
 	h := New(Config{
+		ModUpdateTotal:        func() int { return 5 },
+		ValheimModUpdateTotal: func() int { return 2 },
+		MCModUpdateTotal:      func() int { return 3 },
 		BackupInfo: func() (BackupSummary, bool) {
 			return BackupSummary{
 				Count:      3,
@@ -62,6 +65,15 @@ func TestTileSignals(t *testing.T) {
 	}
 	if sig["backup"] == "—" {
 		t.Errorf("expected human ago for backup, got '—'")
+	}
+	if sig["updates"] != 5 {
+		t.Errorf("expected updates = 5, got %v", sig["updates"])
+	}
+	if sig["valheim_updates"] != 2 {
+		t.Errorf("expected valheim_updates = 2, got %v", sig["valheim_updates"])
+	}
+	if sig["mc_updates"] != 3 {
+		t.Errorf("expected mc_updates = 3, got %v", sig["mc_updates"])
 	}
 }
 

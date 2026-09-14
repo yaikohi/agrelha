@@ -34,18 +34,24 @@ templ nav(admin ...bool) {
 					>
 						Valheim
 						<span
-							data-show="$updates > 0"
+							data-show="$valheim_updates > 0"
 							class="rounded-full border border-amber-800/60 bg-amber-950/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
 							title="Mod updates available"
-							data-text="'↻ ' + $updates"
+							data-text="'↻ ' + $valheim_updates"
 						></span>
 					</a>
 
 					<a
 						href="/minecraft"
-						class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
+						class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
 					>
 						Minecraft
+						<span
+							data-show="$mc_updates > 0"
+							class="rounded-full border border-amber-800/60 bg-amber-950/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
+							title="Mod updates available"
+							data-text="'↻ ' + $mc_updates"
+						></span>
 					</a>
 
 					<!-- History -->
