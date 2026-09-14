@@ -75,3 +75,79 @@ func TestModpackIndexClient(t *testing.T) {
 		t.Fatalf("unexpected mods: %+v", mods)
 	}
 }
+
+func TestModpackIndexVersionsAndErrors(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/minecraft/versions":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"data": [
+					{"id": 91, "name": "1.21.1", "slug": "1-21-1"},
+					{"id": 84, "name": "1.20.1", "slug": "1-20-1"}
+				]
+			}`))
+		case "/minecraft/version/91/modpacks":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data": [{"id": 100, "name": "Version Pack"}], "meta": {"total": 1}}`))
+		case "/modpacks":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data": [{"id": 200, "name": "Empty Search Pack"}], "meta": {"total": 1}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	// Default baseURL
+	cDef := New("")
+	if cDef.baseURL != DefaultBaseURL {
+		t.Errorf("expected default baseURL, got %s", cDef.baseURL)
+	}
+
+	c := New(ts.URL)
+
+	// 1. Versions
+	vers := c.Versions(context.Background())
+	if len(vers) != 2 || vers[0].Name != "1.21.1" {
+		t.Fatalf("unexpected versions: %+v", vers)
+	}
+	// Cached call
+	versCached := c.Versions(context.Background())
+	if len(versCached) != 2 {
+		t.Fatalf("unexpected cached versions: %+v", versCached)
+	}
+
+	// 2. VersionIDs
+	vIDs := c.VersionIDs(context.Background())
+	if vIDs["1.21.1"] != 91 || vIDs["1.20.1"] != 84 {
+		t.Fatalf("unexpected version IDs: %+v", vIDs)
+	}
+
+	// 3. Search by mcVersion without query
+	resMC, err := c.SearchModpacks(context.Background(), "", "1.21.1", 1)
+	if err != nil || len(resMC.Data) != 1 || resMC.Data[0].ID != 100 {
+		t.Fatalf("SearchModpacks by mcVersion failed: %v, res: %+v", err, resMC)
+	}
+
+	// 4. Search by unknown mcVersion (falls back to /modpacks)
+	resUnknown, err := c.SearchModpacks(context.Background(), "", "9.99.99", 0)
+	if err != nil || len(resUnknown.Data) != 1 || resUnknown.Data[0].ID != 200 {
+		t.Fatalf("SearchModpacks by unknown mcVersion failed: %v, res: %+v", err, resUnknown)
+	}
+
+	// 5. Search without query or mcVersion
+	resEmpty, err := c.SearchModpacks(context.Background(), "", "", 0)
+	if err != nil || len(resEmpty.Data) != 1 || resEmpty.Data[0].ID != 200 {
+		t.Fatalf("SearchModpacks empty failed: %v, res: %+v", err, resEmpty)
+	}
+
+	// 6. Error handling
+	cErr := New("http://invalid.invalid")
+	if _, err := cErr.GetModpack(context.Background(), 1); err == nil {
+		t.Error("expected error for invalid host")
+	}
+	if _, err := cErr.GetModpackMods(context.Background(), 1); err == nil {
+		t.Error("expected error for invalid host")
+	}
+}

@@ -352,3 +352,167 @@ func TestAccessValheimPasswords(t *testing.T) {
 		t.Errorf("expected public access label for world 2 in HTML")
 	}
 }
+
+type mockAccessConsole struct {
+	responses map[string]string
+	executed  []string
+}
+
+func (m *mockAccessConsole) Execute(cmd string) (string, error) {
+	m.executed = append(m.executed, cmd)
+	if resp, ok := m.responses[cmd]; ok {
+		return resp, nil
+	}
+	return "ok", nil
+}
+
+func TestMCAccessHTMLFormsAndErrors(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "access_mc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	stateStore := newMemStateStore()
+	mockConsole := &mockAccessConsole{
+		responses: map[string]string{
+			"/whitelist on": "Whitelist is already turned on",
+			"/list":         "There are 1 of a max of 20 players online: notch",
+		},
+	}
+	mcAccess := mcaccess.NewAccessManager(stateStore, "manifests/minecraft-modded/access.yaml", mockConsole)
+
+	h := New(Config{
+		MCAccess:   mcAccess,
+		StateStore: stateStore,
+	})
+	app := fiber.New()
+	h.Register(app)
+
+	// Page load
+	reqPage := httptest.NewRequest(http.MethodGet, "/minecraft/access", nil)
+	respPage, err := app.Test(reqPage)
+	if err != nil || respPage.StatusCode != fiber.StatusOK {
+		t.Fatalf("access page failed: %v, status: %d", err, respPage.StatusCode)
+	}
+
+	// 1. HTML Form GrantOp
+	reqGrant := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/op", strings.NewReader("username=steve"))
+	reqGrant.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqGrant.Header.Set("Accept", "text/html")
+	respGrant, err := app.Test(reqGrant)
+	if err != nil || respGrant.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("grant op html expected 303, got %d", respGrant.StatusCode)
+	}
+
+	// Grant op again (unchanged)
+	reqGrantAgain := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/op", strings.NewReader("username=steve"))
+	reqGrantAgain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqGrantAgain.Header.Set("Accept", "text/html")
+	respGrant2, _ := app.Test(reqGrantAgain)
+	if respGrant2.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("grant op again expected 303, got %d", respGrant2.StatusCode)
+	}
+
+	// 2. HTML Form RevokeOp
+	reqRevoke := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/deop", strings.NewReader("username=steve"))
+	reqRevoke.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqRevoke.Header.Set("Accept", "text/html")
+	respRevoke, _ := app.Test(reqRevoke)
+	if respRevoke.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("revoke op expected 303, got %d", respRevoke.StatusCode)
+	}
+
+	// Revoke op again (unchanged)
+	reqRevokeAgain := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/deop", strings.NewReader("username=steve"))
+	reqRevokeAgain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqRevokeAgain.Header.Set("Accept", "text/html")
+	respRevoke2, _ := app.Test(reqRevokeAgain)
+	if respRevoke2.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("revoke op again expected 303, got %d", respRevoke2.StatusCode)
+	}
+
+	// 3. HTML Form AddWhitelist & RemoveWhitelist
+	reqWLAdd := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/add", strings.NewReader("username=alex"))
+	reqWLAdd.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqWLAdd.Header.Set("Accept", "text/html")
+	respWLAdd, _ := app.Test(reqWLAdd)
+	if respWLAdd.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("add whitelist expected 303, got %d", respWLAdd.StatusCode)
+	}
+
+	reqWLAddAgain := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/add", strings.NewReader("username=alex"))
+	reqWLAddAgain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqWLAddAgain.Header.Set("Accept", "text/html")
+	respWLAdd2, _ := app.Test(reqWLAddAgain)
+	if respWLAdd2.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("add whitelist again expected 303, got %d", respWLAdd2.StatusCode)
+	}
+
+	reqWLRem := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/remove", strings.NewReader("username=alex"))
+	reqWLRem.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqWLRem.Header.Set("Accept", "text/html")
+	respWLRem, _ := app.Test(reqWLRem)
+	if respWLRem.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("rem whitelist expected 303, got %d", respWLRem.StatusCode)
+	}
+
+	reqWLRemAgain := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/remove", strings.NewReader("username=alex"))
+	reqWLRemAgain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqWLRemAgain.Header.Set("Accept", "text/html")
+	respWLRem2, _ := app.Test(reqWLRemAgain)
+	if respWLRem2.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("rem whitelist again expected 303, got %d", respWLRem2.StatusCode)
+	}
+
+	// 4. Whitelist toggle (JSON + HTML)
+	reqToggleJSON := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
+	reqToggleJSON.Header.Set("Accept", "application/json")
+	respToggleJSON, _ := app.Test(reqToggleJSON)
+	if respToggleJSON.StatusCode != fiber.StatusOK {
+		t.Fatalf("toggle JSON expected 200, got %d", respToggleJSON.StatusCode)
+	}
+
+	reqToggleHTML := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
+	reqToggleHTML.Header.Set("Accept", "text/html")
+	respToggleHTML, _ := app.Test(reqToggleHTML)
+	if respToggleHTML.StatusCode != fiber.StatusSeeOther {
+		t.Fatalf("toggle HTML expected 303, got %d", respToggleHTML.StatusCode)
+	}
+
+	// 5. Empty username validation
+	reqEmpty := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/op", strings.NewReader("username="))
+	reqEmpty.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqEmpty.Header.Set("Accept", "text/html")
+	respEmpty, _ := app.Test(reqEmpty)
+	if respEmpty.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("empty user HTML expected 303, got %d", respEmpty.StatusCode)
+	}
+
+	reqEmptyJSON := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/op", strings.NewReader("username="))
+	reqEmptyJSON.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqEmptyJSON.Header.Set("Accept", "application/json")
+	respEmptyJSON, _ := app.Test(reqEmptyJSON)
+	if respEmptyJSON.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("empty user JSON expected 400, got %d", respEmptyJSON.StatusCode)
+	}
+
+	// 6. Unconfigured
+	hUnconf := New(Config{})
+	appUnconf := fiber.New()
+	hUnconf.Register(appUnconf)
+	reqUnconfHTML := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/op", nil)
+	reqUnconfHTML.Header.Set("Accept", "text/html")
+	respUnconfHTML, _ := appUnconf.Test(reqUnconfHTML)
+	if respUnconfHTML.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("unconf HTML expected 303, got %d", respUnconfHTML.StatusCode)
+	}
+
+	reqUnconfJSON := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/op", nil)
+	reqUnconfJSON.Header.Set("Accept", "application/json")
+	respUnconfJSON, _ := appUnconf.Test(reqUnconfJSON)
+	if respUnconfJSON.StatusCode != fiber.StatusServiceUnavailable {
+		t.Errorf("unconf JSON expected 503, got %d", respUnconfJSON.StatusCode)
+	}
+}
+

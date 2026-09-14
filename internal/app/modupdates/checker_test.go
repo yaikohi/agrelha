@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
@@ -579,4 +580,90 @@ func TestMinecraftUnpinnedModCanBeUpdatedAndPinned(t *testing.T) {
 	if strings.Join(insts.wrote[3], ",") != strings.Join(wantWrote, ",") {
 		t.Errorf("wrote = %v, want %v", insts.wrote[3], wantWrote)
 	}
+}
+
+func TestCheckerMethodsAndEdges(t *testing.T) {
+	insts := &fakeInstances{
+		insts: []domain.Instance{
+			{Number: 1, Name: "VanillaWorld", GameID: domain.GameValheim, Source: domain.SourceVanilla},
+			{Number: 2, Name: "PackWorld", GameID: domain.GameValheim, Source: domain.SourceModpack, Pack: &domain.Pack{Name: "Pack"}},
+			{Number: 3, Name: "ModdedWorld", GameID: domain.GameValheim, Source: domain.SourceModlist},
+		},
+		entries: map[int][]string{
+			3: {"denikson-BepInExPack_Valheim-5.4.2100"},
+		},
+	}
+	cat := &fakeCatalog{
+		latest: map[string]string{
+			"denikson/BepInExPack_Valheim": "5.4.2202",
+		},
+	}
+
+	// 1. WithInterval and Start
+	c := New(insts, cat, WithInterval(10*time.Millisecond))
+	ctx, cancel := context.WithCancel(context.Background())
+	c.Start(ctx)
+	time.Sleep(25 * time.Millisecond)
+	cancel()
+
+	// 2. Nil checker calls
+	var nilChecker *Checker
+	nilChecker.Start(ctx)
+	nilChecker.Refresh(ctx)
+	if nilChecker.Counts() != nil {
+		t.Errorf("expected nil Counts for nil checker")
+	}
+	if nilChecker.Total() != 0 {
+		t.Errorf("expected 0 Total for nil checker")
+	}
+	if nilChecker.LastError(1) != nil {
+		t.Errorf("expected nil LastError for nil checker")
+	}
+	if nilChecker.Pending(ctx, 1) {
+		t.Errorf("expected false Pending for nil checker")
+	}
+
+	// 3. Counts and Total
+	counts := c.Counts()
+	if counts[3] != 1 {
+		t.Errorf("counts[3] = %d, want 1", counts[3])
+	}
+	if tot := c.Total(); tot != 1 {
+		t.Errorf("Total = %d, want 1", tot)
+	}
+
+	// 4. LastError
+	if err := c.LastError(3); err != nil {
+		t.Errorf("unexpected error on #3: %v", err)
+	}
+
+	// 5. Pending with expired TTL
+	c.markPending(3, []string{"denikson/BepInExPack_Valheim"})
+	c.mu.Lock()
+	p := c.pend[3]
+	p.at = time.Now().Add(-10 * time.Minute)
+	c.pend[3] = p
+	c.mu.Unlock()
+	if c.Pending(ctx, 3) {
+		t.Errorf("expected Pending to be false for expired pending")
+	}
+
+	// 6. Pending when installed mods match want
+	c.markPending(3, []string{"denikson-BepInExPack_Valheim-5.4.2100"})
+	if c.Pending(ctx, 3) {
+		t.Errorf("expected Pending to be false when installed mod satisfies want")
+	}
+
+	// 7. Undo without restore points
+	if _, err := c.Undo(ctx, 3, "tester"); err == nil {
+		t.Errorf("expected error from Undo when restore is nil")
+	}
+	if rp, _ := c.RestoreAvailable(ctx, 3); rp != nil {
+		t.Errorf("expected nil restore point when restore is nil")
+	}
+
+	// 8. Refresh error when ListInstances fails
+	errInsts := &fakeInstances{err: fmt.Errorf("storage error")}
+	cErr := New(errInsts, cat)
+	cErr.Refresh(ctx)
 }

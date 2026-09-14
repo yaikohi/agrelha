@@ -2,17 +2,22 @@ package dashboard
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"agrelha/internal/app/instances"
 	"agrelha/internal/domain"
+	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/valyala/fasthttp"
 )
 
 func TestDashboardPage(t *testing.T) {
@@ -135,3 +140,133 @@ func TestTileSignalsWithGameEngines(t *testing.T) {
 		t.Errorf("MC metrics unexpected: %v, %v, %v", sig["mc_uptime"], sig["mc_cpu"], sig["mc_mem"])
 	}
 }
+
+func TestDashboardPageWithInstances(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "dash.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	mcRepo := store.NewInstanceRepo(st)
+	_ = mcRepo.Upsert(domain.Instance{
+		Number:    1,
+		Slug:      "ducktopia",
+		Name:      "Ducktopia",
+		State:     domain.StateRunning,
+		GameID:    domain.GameMinecraft,
+		Loader:    domain.LoaderNeoForge,
+		MCVersion: "1.21.1",
+		Tier:      domain.TierMedium,
+	})
+
+	mcMgr := instances.NewInstanceManager(
+		mcRepo, nil, nil, 32, 8, 4,
+		"manifests/minecraft-modded", "192.168.20.225", nil, "minecraft-modded",
+		instances.WithGameID(domain.GameMinecraft),
+		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+			return []string{"jei"}, nil
+		}),
+	)
+
+	vhRepo := store.NewValheimInstanceRepo(st)
+	_ = vhRepo.Upsert(domain.Instance{
+		Number:   1,
+		Slug:     "midgard",
+		Name:     "Midgard",
+		State:    domain.StateRunning,
+		GameID:   domain.GameValheim,
+		Tier:     domain.TierMedium,
+		Password: "pass",
+	})
+
+	vhMgr := instances.NewInstanceManager(
+		vhRepo, nil, nil, 16, 4, 2,
+		"manifests/valheim", "192.168.20.224", nil, "valheim",
+		instances.WithGameID(domain.GameValheim),
+		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+			return []string{"bepinex"}, nil
+		}),
+	)
+
+	h := New(Config{
+		GameNodeName:     "game-01",
+		ValheimAddress:   "192.168.20.224:2456",
+		MCInstances:      mcMgr,
+		ValheimInstances: vhMgr,
+		InstanceStats: func(ctx context.Context, insts []domain.Instance) map[int]InstanceStat {
+			return map[int]InstanceStat{
+				1: {Players: 3, PlayersKnown: true, Uptime: "5h"},
+			}
+		},
+		ValheimInstanceStats: func(ctx context.Context, insts []domain.Instance) map[int]InstanceStat {
+			return map[int]InstanceStat{
+				1: {Players: 2, PlayersKnown: true, Uptime: "2h"},
+			}
+		},
+	})
+
+	app := fiber.New()
+	h.Register(app)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	resp, err := app.Test(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET / failed: %v, code: %d", err, resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+	if !strings.Contains(bodyStr, "Ducktopia") || !strings.Contains(bodyStr, "Midgard") {
+		t.Errorf("expected Ducktopia and Midgard on dashboard: %s", bodyStr)
+	}
+}
+
+type failWriter struct{}
+
+func (f *failWriter) Write(p []byte) (n int, err error) {
+	return 0, io.ErrClosedPipe
+}
+
+func TestDashboardSSEMain(t *testing.T) {
+	h := New(Config{
+		ModUpdateTotal: func() int { return 4 },
+	})
+	app := fiber.New()
+
+	var fastCtx fasthttp.RequestCtx
+	c := app.AcquireCtx(&fastCtx)
+	defer app.ReleaseCtx(c)
+
+	err := h.SSEMain(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = fastCtx.Response.WriteTo(&failWriter{})
+}
+
+type mockModLister struct {
+	mods []string
+	err  error
+}
+
+func (m *mockModLister) GetInstalledMods(ctx context.Context, num int) ([]string, error) {
+	return m.mods, m.err
+}
+
+func TestHasModsHelper(t *testing.T) {
+	ctx := context.Background()
+	if hasMods(ctx, nil, 1) {
+		t.Errorf("expected false for nil modLister")
+	}
+	if hasMods(ctx, &mockModLister{err: fmt.Errorf("error")}, 1) {
+		t.Errorf("expected false on error")
+	}
+	if hasMods(ctx, &mockModLister{mods: nil}, 1) {
+		t.Errorf("expected false for empty mods")
+	}
+	if !hasMods(ctx, &mockModLister{mods: []string{"mod1"}}, 1) {
+		t.Errorf("expected true for non-empty mods")
+	}
+}
+

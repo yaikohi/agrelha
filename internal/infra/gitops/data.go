@@ -289,11 +289,10 @@ func (c *Committer) PatchDocument(ctx context.Context, relPath, commitMsg string
 			data[dataNode.Content[i].Value] = dataNode.Content[i+1].Value
 		}
 
-		var annotations map[string]string
+		annotations := make(map[string]string)
 		metaNode := mapValue(root, "metadata")
 		if metaNode != nil {
 			if annNode := mapValue(metaNode, "annotations"); annNode != nil && annNode.Kind == yaml.MappingNode {
-				annotations = make(map[string]string)
 				for i := 0; i+1 < len(annNode.Content); i += 2 {
 					annotations[annNode.Content[i].Value] = annNode.Content[i+1].Value
 				}
@@ -307,7 +306,7 @@ func (c *Committer) PatchDocument(ctx context.Context, relPath, commitMsg string
 
 		dataChanged := replaceData(dataNode, data)
 		annChanged := false
-		if annotations != nil && metaNode != nil {
+		if metaNode != nil && len(annotations) > 0 {
 			annNode := mapValue(metaNode, "annotations")
 			if annNode == nil {
 				kn := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "annotations"}

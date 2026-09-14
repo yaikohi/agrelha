@@ -1,9 +1,12 @@
 package valheim
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
@@ -15,6 +18,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/app/instances"
+	"agrelha/internal/app/modupdates"
 	"agrelha/internal/domain"
 	valheimmanifests "agrelha/internal/infra/manifests/valheim"
 	"agrelha/internal/infra/store"
@@ -603,3 +607,372 @@ func TestValheimWizardCreateWithCart(t *testing.T) {
 		t.Errorf("expected Smoothbrain-Mining in installed mods, got: %v", installed)
 	}
 }
+
+type mockValheimGame struct {
+	ports.Game
+	exportErr error
+	bundle    domain.Bundle
+}
+
+func (m *mockValheimGame) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
+	if m.exportErr != nil {
+		return domain.Bundle{}, m.exportErr
+	}
+	return m.bundle, nil
+}
+
+func TestValheimModUpdatesEndpoints(t *testing.T) {
+	h, st, mgr := setupTestValheimHandler(t)
+	defer st.Close()
+
+	ctx := context.Background()
+	_, err := mgr.CreateInstance(ctx, domain.Instance{
+		GameID: domain.GameValheim,
+		Number: 1,
+		Name:   "Viking Realm",
+		Source: domain.SourceModlist,
+	}, "Smoothbrain/Mining/1.0.0\n", "tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mockTS := &mockPackageCatalog{
+		results: []domain.ModSearchResult{
+			{Owner: "Smoothbrain", Name: "Mining", Version: "1.2.0"},
+		},
+	}
+	h.cfg.ModUpdates = modupdates.New(mgr, mockTS, modupdates.WithGameID(domain.GameValheim), modupdates.WithRestorePoints(st))
+
+	app := fiber.New()
+	h.Register(app)
+
+	// 1. Check updates
+	reqCheck := httptest.NewRequest("POST", "/api/valheim/1/mods/updates/check", nil)
+	respCheck, err := app.Test(reqCheck)
+	if err != nil || respCheck.StatusCode != fiber.StatusOK {
+		t.Fatalf("check failed: %v, status: %d", err, respCheck.StatusCode)
+	}
+	bodyCheck, _ := io.ReadAll(respCheck.Body)
+	if !strings.Contains(string(bodyCheck), "mod-updates-panel") {
+		t.Errorf("expected mod-updates-panel in response: %s", string(bodyCheck))
+	}
+
+	// 2. Apply updates (all: true)
+	applyBody := `{"all":true}`
+	reqApply := httptest.NewRequest("POST", "/api/valheim/1/mods/updates/apply", strings.NewReader(applyBody))
+	reqApply.Header.Set("Content-Type", "application/json")
+	respApply, err := app.Test(reqApply)
+	if err != nil || respApply.StatusCode != fiber.StatusOK {
+		t.Fatalf("apply failed: %v, status: %d", err, respApply.StatusCode)
+	}
+
+	// 3. Undo updates
+	reqUndo := httptest.NewRequest("POST", "/api/valheim/1/mods/updates/undo", nil)
+	respUndo, err := app.Test(reqUndo)
+	if err != nil || respUndo.StatusCode != fiber.StatusOK {
+		t.Fatalf("undo failed: %v, status: %d", err, respUndo.StatusCode)
+	}
+	bodyUndo, _ := io.ReadAll(respUndo.Body)
+	if !strings.Contains(string(bodyUndo), "Reverted") {
+		t.Errorf("expected Reverted in undo response: %s", string(bodyUndo))
+	}
+
+	// 4. Error cases
+	// No mods selected
+	reqEmptyApply := httptest.NewRequest("POST", "/api/valheim/1/mods/updates/apply", strings.NewReader(`{"all":false}`))
+	reqEmptyApply.Header.Set("Content-Type", "application/json")
+	respEmptyApply, _ := app.Test(reqEmptyApply)
+	bodyEmpty, _ := io.ReadAll(respEmptyApply.Body)
+	if !strings.Contains(string(bodyEmpty), "No mods selected") {
+		t.Errorf("expected 'No mods selected' toast, got: %s", string(bodyEmpty))
+	}
+
+	// Invalid instance
+	reqInvalid := httptest.NewRequest("POST", "/api/valheim/99/mods/updates/check", nil)
+	respInvalid, _ := app.Test(reqInvalid)
+	bodyInvalid, _ := io.ReadAll(respInvalid.Body)
+	if !strings.Contains(string(bodyInvalid), "not found") {
+		t.Errorf("expected not found, got: %s", string(bodyInvalid))
+	}
+
+	// Unconfigured
+	h.cfg.ModUpdates = nil
+	reqUnconf := httptest.NewRequest("POST", "/api/valheim/1/mods/updates/check", nil)
+	respUnconf, _ := app.Test(reqUnconf)
+	bodyUnconf, _ := io.ReadAll(respUnconf.Body)
+	if !strings.Contains(string(bodyUnconf), "not configured") {
+		t.Errorf("expected not configured, got: %s", string(bodyUnconf))
+	}
+}
+
+func TestValheimDetailTabsAndActions(t *testing.T) {
+	h, st, mgr := setupTestValheimHandler(t)
+	defer st.Close()
+
+	ctx := context.Background()
+	inst, err := mgr.CreateInstance(ctx, domain.Instance{
+		GameID:   domain.GameValheim,
+		Name:     "Odin Realm",
+		Password: "secret",
+		Tier:     domain.TierMedium,
+		State:    domain.StateRunning,
+	}, "", "tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Configure LastIncident and ValheimGame
+	h.cfg.LastIncident = func(ctx context.Context, number int) (*domain.Incident, error) {
+		return &domain.Incident{
+			ID:           1,
+			GameID:       domain.GameValheim,
+			Number:       1,
+			At:           time.Now(),
+			Reason:       "CrashLoopBackOff",
+			RestartCount: 3,
+		}, nil
+	}
+	h.cfg.ValheimGame = &mockValheimGame{
+		bundle: domain.Bundle{
+			Filename:    "odin-realm.r2z",
+			ContentType: "application/zip",
+			Data:        []byte("PKmockzip"),
+		},
+	}
+
+	app := fiber.New()
+	h.Register(app)
+
+	// Test backups tab
+	reqBackups := httptest.NewRequest("GET", "/valheim/1/backups", nil)
+	respBackups, err := app.Test(reqBackups)
+	if err != nil || respBackups.StatusCode != fiber.StatusOK {
+		t.Errorf("backups tab failed: %v, status: %d", err, respBackups.StatusCode)
+	}
+
+	// Test settings save
+	settingsBody := "name=Renamed+Odin&password=newsecret&tier=large"
+	reqSave := httptest.NewRequest("POST", "/api/valheim/1/settings", strings.NewReader(settingsBody))
+	reqSave.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respSave, err := app.Test(reqSave)
+	if err != nil || respSave.StatusCode != fiber.StatusOK {
+		t.Errorf("settings save failed: %v, status: %d", err, respSave.StatusCode)
+	}
+	saveBody, _ := io.ReadAll(respSave.Body)
+	if !strings.Contains(string(saveBody), "saved successfully") {
+		t.Errorf("expected saved successfully toast, got: %s", string(saveBody))
+	}
+
+	// Test settings save not found
+	reqBadSave := httptest.NewRequest("POST", "/api/valheim/99/settings", strings.NewReader(settingsBody))
+	reqBadSave.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respBadSave, _ := app.Test(reqBadSave)
+	badSaveBody, _ := io.ReadAll(respBadSave.Body)
+	if !strings.Contains(string(badSaveBody), "Failed to update settings") {
+		t.Errorf("expected Failed to update settings toast, got: %s", string(badSaveBody))
+	}
+
+	// Test export
+	reqExport := httptest.NewRequest("GET", "/api/valheim/1/mods/export", nil)
+	respExport, err := app.Test(reqExport)
+	if err != nil || respExport.StatusCode != fiber.StatusOK {
+		t.Errorf("export failed: %v, status: %d", err, respExport.StatusCode)
+	}
+	if respExport.Header.Get("Content-Type") != "application/zip" {
+		t.Errorf("expected application/zip, got: %s", respExport.Header.Get("Content-Type"))
+	}
+
+	// Test empty mod slug install & remove errors
+	reqEmptyInstall := httptest.NewRequest("POST", "/api/valheim/1/mods/install", strings.NewReader(`{"slug":""}`))
+	reqEmptyInstall.Header.Set("Content-Type", "application/json")
+	respEmptyInstall, _ := app.Test(reqEmptyInstall)
+	bodyEmptyInstall, _ := io.ReadAll(respEmptyInstall.Body)
+	if !strings.Contains(string(bodyEmptyInstall), "Mod slug required") {
+		t.Errorf("expected mod slug required error, got: %s", string(bodyEmptyInstall))
+	}
+
+	reqEmptyRemove := httptest.NewRequest("POST", "/api/valheim/1/mods/remove", strings.NewReader(`{"slug":""}`))
+	reqEmptyRemove.Header.Set("Content-Type", "application/json")
+	respEmptyRemove, _ := app.Test(reqEmptyRemove)
+	bodyEmptyRemove, _ := io.ReadAll(respEmptyRemove.Body)
+	if !strings.Contains(string(bodyEmptyRemove), "Mod slug required") {
+		t.Errorf("expected mod slug required error, got: %s", string(bodyEmptyRemove))
+	}
+
+	_ = inst
+}
+
+func TestValheimWizardPageAndImport(t *testing.T) {
+	h, st, _ := setupTestValheimHandler(t)
+	defer st.Close()
+
+	app := fiber.New()
+	h.Register(app)
+
+	// 1. GET /valheim/create
+	reqPage := httptest.NewRequest("GET", "/valheim/create", nil)
+	respPage, err := app.Test(reqPage)
+	if err != nil || respPage.StatusCode != fiber.StatusOK {
+		t.Fatalf("wizard page failed: %v, status: %d", err, respPage.StatusCode)
+	}
+
+	// 2. Wizard search with Accept: application/json
+	reqJSONSearch := httptest.NewRequest("GET", "/api/valheim/wizard/mods/search?q=mining", nil)
+	reqJSONSearch.Header.Set("Accept", "application/json")
+	respJSONSearch, err := app.Test(reqJSONSearch)
+	if err != nil || respJSONSearch.StatusCode != fiber.StatusOK {
+		t.Fatalf("json search failed: %v, status: %d", err, respJSONSearch.StatusCode)
+	}
+
+	// 3. Valid import (.r2z profile with manifest.json)
+	var zipBuf bytes.Buffer
+	zw := zip.NewWriter(&zipBuf)
+	manifestData := `{"name":"ValheimPack","dependencies":["Smoothbrain-Mining-1.2.0"]}`
+	mf, err := zw.Create("manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = mf.Write([]byte(manifestData))
+	_ = zw.Close()
+
+	var bodyBuf bytes.Buffer
+	mpw := multipart.NewWriter(&bodyBuf)
+	part, err := mpw.CreateFormFile("file", "profile.r2z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write(zipBuf.Bytes())
+	_ = mpw.Close()
+
+	reqImport := httptest.NewRequest("POST", "/api/valheim/wizard/import", &bodyBuf)
+	reqImport.Header.Set("Content-Type", mpw.FormDataContentType())
+	respImport, err := app.Test(reqImport)
+	if err != nil || respImport.StatusCode != fiber.StatusOK {
+		t.Fatalf("import failed: %v, status: %d", err, respImport.StatusCode)
+	}
+	bodyImport, _ := io.ReadAll(respImport.Body)
+	if !strings.Contains(string(bodyImport), "Imported 1 mods from profile!") {
+		t.Errorf("expected success toast, got: %s", string(bodyImport))
+	}
+
+	// 4. Invalid import (missing file)
+	reqBadImport := httptest.NewRequest("POST", "/api/valheim/wizard/import", nil)
+	respBadImport, _ := app.Test(reqBadImport)
+	bodyBadImport, _ := io.ReadAll(respBadImport.Body)
+	if !strings.Contains(string(bodyBadImport), "File upload failed") {
+		t.Errorf("expected upload failed toast, got: %s", string(bodyBadImport))
+	}
+}
+
+func TestValheimConfigs(t *testing.T) {
+	h, st, mgr := setupTestValheimHandler(t)
+	defer st.Close()
+
+	ctx := context.Background()
+	_, err := mgr.CreateInstance(ctx, domain.Instance{
+		GameID: domain.GameValheim,
+		Name:   "Valheim Server",
+		Tier:   domain.TierMedium,
+	}, "", "tester")
+	if err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+
+	app := fiber.New()
+	h.Register(app)
+
+	// 1. Get config - missing f parameter
+	reqNoFile := httptest.NewRequest("GET", "/api/valheim/1/configs/file", nil)
+	respNoFile, _ := app.Test(reqNoFile)
+	if respNoFile.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("expected 400 for missing file name, got %d", respNoFile.StatusCode)
+	}
+
+	// 2. Save config - invalid filename
+	reqBadSave := httptest.NewRequest("POST", "/api/valheim/1/configs/save", strings.NewReader("file=bad-name&content=foo"))
+	reqBadSave.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respBadSave, _ := app.Test(reqBadSave)
+	bodyBadSave, _ := io.ReadAll(respBadSave.Body)
+	if !strings.Contains(string(bodyBadSave), "Invalid config file name") {
+		t.Errorf("expected invalid config name toast, got %s", string(bodyBadSave))
+	}
+
+	// 3. Save config - success (new file)
+	reqSave := httptest.NewRequest("POST", "/api/valheim/1/configs/save", strings.NewReader("file=server.cfg&content=difficulty=hard"))
+	reqSave.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respSave, _ := app.Test(reqSave)
+	bodySave, _ := io.ReadAll(respSave.Body)
+	if !strings.Contains(string(bodySave), "Saved server.cfg") {
+		t.Errorf("expected saved toast, got %s", string(bodySave))
+	}
+
+	// 4. Save config - unchanged
+	reqSaveSame := httptest.NewRequest("POST", "/api/valheim/1/configs/save", strings.NewReader("file=server.cfg&content=difficulty=hard"))
+	reqSaveSame.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respSaveSame, _ := app.Test(reqSaveSame)
+	bodySaveSame, _ := io.ReadAll(respSaveSame.Body)
+	if !strings.Contains(string(bodySaveSame), "server.cfg is unchanged") {
+		t.Errorf("expected unchanged toast, got %s", string(bodySaveSame))
+	}
+
+	// 5. Get config - success
+	reqGet := httptest.NewRequest("GET", "/api/valheim/1/configs/file?f=server.cfg", nil)
+	respGet, _ := app.Test(reqGet)
+	if respGet.StatusCode != fiber.StatusOK {
+		t.Errorf("expected 200 for get config, got %d", respGet.StatusCode)
+	}
+	bodyGet, _ := io.ReadAll(respGet.Body)
+	if !strings.Contains(string(bodyGet), "difficulty=hard") {
+		t.Errorf("expected file content in get response, got %s", string(bodyGet))
+	}
+
+	// 6. Delete config - invalid filename
+	reqBadDelete := httptest.NewRequest("POST", "/api/valheim/1/configs/delete", strings.NewReader("file=bad-name"))
+	reqBadDelete.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respBadDelete, _ := app.Test(reqBadDelete)
+	bodyBadDelete, _ := io.ReadAll(respBadDelete.Body)
+	if !strings.Contains(string(bodyBadDelete), "Invalid config file name") {
+		t.Errorf("expected invalid filename error, got %s", string(bodyBadDelete))
+	}
+
+	// 7. Delete config - success
+	reqDelete := httptest.NewRequest("POST", "/api/valheim/1/configs/delete", strings.NewReader("file=server.cfg"))
+	reqDelete.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respDelete, _ := app.Test(reqDelete)
+	bodyDelete, _ := io.ReadAll(respDelete.Body)
+	if !strings.Contains(string(bodyDelete), "Deleted server.cfg") {
+		t.Errorf("expected deleted toast, got %s", string(bodyDelete))
+	}
+
+	// 8. Delete config - not present
+	reqDeleteAgain := httptest.NewRequest("POST", "/api/valheim/1/configs/delete", strings.NewReader("file=server.cfg"))
+	reqDeleteAgain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respDeleteAgain, _ := app.Test(reqDeleteAgain)
+	bodyDeleteAgain, _ := io.ReadAll(respDeleteAgain.Body)
+	if !strings.Contains(string(bodyDeleteAgain), "server.cfg was not present") {
+		t.Errorf("expected not present toast, got %s", string(bodyDeleteAgain))
+	}
+
+	// 9. Unconfigured ValheimInstances
+	hUnconf := New(Config{})
+	appUnconf := fiber.New()
+	hUnconf.Register(appUnconf)
+
+	respUnconfGet, _ := appUnconf.Test(httptest.NewRequest("GET", "/api/valheim/1/configs/file?f=server.cfg", nil))
+	if respUnconfGet.StatusCode != fiber.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", respUnconfGet.StatusCode)
+	}
+
+	respUnconfSave, _ := appUnconf.Test(httptest.NewRequest("POST", "/api/valheim/1/configs/save", nil))
+	bodyUnconfSave, _ := io.ReadAll(respUnconfSave.Body)
+	if !strings.Contains(string(bodyUnconfSave), "Valheim instance manager unconfigured") {
+		t.Errorf("expected unconfigured toast, got %s", string(bodyUnconfSave))
+	}
+
+	respUnconfDel, _ := appUnconf.Test(httptest.NewRequest("POST", "/api/valheim/1/configs/delete", nil))
+	bodyUnconfDel, _ := io.ReadAll(respUnconfDel.Body)
+	if !strings.Contains(string(bodyUnconfDel), "Valheim instance manager unconfigured") {
+		t.Errorf("expected unconfigured toast, got %s", string(bodyUnconfDel))
+	}
+}
+

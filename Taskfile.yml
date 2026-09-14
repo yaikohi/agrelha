@@ -94,6 +94,12 @@ tasks:
     cmds:
       - go test -cover ./...
 
+  test:coverage:
+    desc: "Run Go tests and calculate handwritten statement coverage (excludes *_templ.go)"
+    deps: [setup]
+    cmds:
+      - bash scripts/coverage.sh
+
   test:fast:
     desc: "Run quick Go tests without race detector or coverage profiling"
     deps: [setup]

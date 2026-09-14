@@ -341,3 +341,115 @@ func TestWriteDirectoryAndDeleteDirectory(t *testing.T) {
 		t.Fatalf("expected commit count to remain 4, got %d", n)
 	}
 }
+
+func TestReadFileAndDocument(t *testing.T) {
+	ctx := context.Background()
+	remote := newRemote(t, map[string]string{
+		"manifests/cm.yaml": initialConfigMapWithMetaYAML,
+		"plain.txt":         "hello world\n",
+	})
+	committer := newCommitter(remote)
+
+	// 1. ReadFile plain text
+	raw, err := committer.ReadFile(ctx, "plain.txt")
+	if err != nil || string(raw) != "hello world\n" {
+		t.Fatalf("ReadFile failed: raw=%q, err=%v", string(raw), err)
+	}
+
+	// 2. ReadFile nonexistent
+	_, err = committer.ReadFile(ctx, "nonexistent.txt")
+	if err == nil {
+		t.Fatal("expected error reading nonexistent file")
+	}
+
+	// 3. ReadDocument valid yaml with data & annotations
+	data, ann, docRaw, err := committer.ReadDocument(ctx, "manifests/cm.yaml")
+	if err != nil {
+		t.Fatalf("ReadDocument failed: %v", err)
+	}
+	if len(docRaw) == 0 {
+		t.Fatal("expected non-empty raw bytes")
+	}
+	if data["foo"] != "bar" {
+		t.Errorf("expected data[foo]=bar, got %v", data)
+	}
+	if ann["agrelha.dev/source"] != "modpack" {
+		t.Errorf("expected annotation modpack, got %v", ann)
+	}
+
+	// 4. ReadDocument on non-yaml plain text file
+	dataPlain, annPlain, _, err := committer.ReadDocument(ctx, "plain.txt")
+	if err != nil || dataPlain != nil || annPlain != nil {
+		t.Errorf("expected nil data and annotations for plain text, got data=%v ann=%v err=%v", dataPlain, annPlain, err)
+	}
+
+	// 5. ReadDocument nonexistent
+	_, _, _, err = committer.ReadDocument(ctx, "nonexistent.yaml")
+	if err == nil {
+		t.Fatal("expected error reading nonexistent document")
+	}
+}
+
+func TestPatchDocument(t *testing.T) {
+	ctx := context.Background()
+	remote := newRemote(t, map[string]string{
+		"manifests/cm.yaml":      initialConfigMapYAML,
+		"manifests/cm-meta.yaml": initialConfigMapWithMetaYAML,
+	})
+	committer := newCommitter(remote)
+
+	// 1. Unchanged patch
+	changed, err := committer.PatchDocument(ctx, "manifests/cm.yaml", "no-op", func(data, ann map[string]string) (bool, error) {
+		return false, nil
+	})
+	if err != nil || changed {
+		t.Fatalf("expected changed=false, got changed=%v err=%v", changed, err)
+	}
+
+	// 2. Mutate data and add new annotations
+	changed, err = committer.PatchDocument(ctx, "manifests/cm.yaml", "update data and add ann", func(data, ann map[string]string) (bool, error) {
+		data["whitelist.txt"] = "player1\nplayer2\n"
+		ann["agrelha.dev/new"] = "true"
+		return true, nil
+	})
+	if err != nil || !changed {
+		t.Fatalf("expected changed=true, got changed=%v err=%v", changed, err)
+	}
+	cmContent := readRemote(t, remote, "manifests/cm.yaml")
+	if !strings.Contains(cmContent, "player2") || !strings.Contains(cmContent, "agrelha.dev/new") {
+		t.Errorf("patched content missing expected fields: %s", cmContent)
+	}
+
+	// 3. Mutate existing annotations on cm-meta.yaml
+	changed, err = committer.PatchDocument(ctx, "manifests/cm-meta.yaml", "update ann", func(data, ann map[string]string) (bool, error) {
+		ann["agrelha.dev/source"] = "manual"
+		return true, nil
+	})
+	if err != nil || !changed {
+		t.Fatalf("expected changed=true for ann update, got %v err=%v", changed, err)
+	}
+	metaContent := readRemote(t, remote, "manifests/cm-meta.yaml")
+	if !strings.Contains(metaContent, "agrelha.dev/source: manual") {
+		t.Errorf("expected updated annotation, got: %s", metaContent)
+	}
+
+	// 4. Mutator returns error
+	_, err = committer.PatchDocument(ctx, "manifests/cm.yaml", "fail", func(data, ann map[string]string) (bool, error) {
+		return false, context.Canceled
+	})
+	if err == nil {
+		t.Fatal("expected error when mutate function returns error")
+	}
+
+	// 5. File has no data map
+	remoteNoData := newRemote(t, map[string]string{
+		"manifests/nodata.yaml": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: foo\n",
+	})
+	cNoData := newCommitter(remoteNoData)
+	_, err = cNoData.PatchDocument(ctx, "manifests/nodata.yaml", "edit", func(data, ann map[string]string) (bool, error) {
+		return true, nil
+	})
+	if err == nil {
+		t.Fatal("expected error when YAML has no data map")
+	}
+}

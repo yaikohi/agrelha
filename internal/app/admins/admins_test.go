@@ -97,4 +97,47 @@ func TestAdminGrantAndRevoke(t *testing.T) {
 	if changed {
 		t.Fatalf("expected changed=false when revoking nonexistent admin")
 	}
+
+	// 5. List from store
+	list, err := mgr.List(ctx)
+	if err != nil || len(list) != 1 || list[0] != "76561198000000002" {
+		t.Errorf("expected [76561198000000002], got %v, err: %v", list, err)
+	}
+}
+
+type mockAdminAuditRecorder struct {
+	audits []string
+}
+
+func (a *mockAdminAuditRecorder) RecordAudit(actor, action, detail string) error {
+	a.audits = append(a.audits, actor+":"+action+":"+detail)
+	return nil
+}
+
+func TestAdminManagerOptions(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. WithAdminReader
+	mgrReader := New(nil, "", WithAdminReader(func(ctx context.Context) ([]string, error) {
+		return []string{"123", "456"}, nil
+	}))
+	list, err := mgrReader.List(ctx)
+	if err != nil || len(list) != 2 || list[0] != "123" {
+		t.Errorf("unexpected list with reader: %v, err: %v", list, err)
+	}
+
+	// 2. WithAudit
+	store := &memoryStateStore{doc: ports.Document{Data: map[string]string{}}}
+	audit := &mockAdminAuditRecorder{}
+	mgrAudit := New(store, "manifests/valheim-admins.yaml", WithAudit(audit))
+
+	_, _ = mgrAudit.Grant(ctx, "999", "admin-user")
+	if len(audit.audits) != 1 || audit.audits[0] != "admin-user:admin-grant:999" {
+		t.Errorf("expected audit entry for grant: %v", audit.audits)
+	}
+
+	_, _ = mgrAudit.Revoke(ctx, "999", "admin-user")
+	if len(audit.audits) != 2 || audit.audits[1] != "admin-user:admin-revoke:999" {
+		t.Errorf("expected audit entry for revoke: %v", audit.audits)
+	}
 }

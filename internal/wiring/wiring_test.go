@@ -167,3 +167,53 @@ func TestServer_DockerAdapterBootstrap(t *testing.T) {
 		t.Errorf("GET / status = %d, want 200", resp.StatusCode)
 	}
 }
+
+func TestBuildVariantsAndRoutes(t *testing.T) {
+	tempDir := t.TempDir()
+
+	cfg := &config.Config{
+		DBPath:                  filepath.Join(tempDir, "git_wiring.db"),
+		GitToken:                "testtoken",
+		GitRepoURL:              "https://codeberg.org/user/repo",
+		GitBranch:               "main",
+		OIDCIssuer:              "https://auth.example.com",
+		OIDCClientSecret:        "secret",
+		MinecraftRconPassword: "rconpass",
+		MinecraftRconAddr:     "127.0.0.1:25575",
+		ValheimDeployment:     "valheim",
+		ValheimNamespace:        "valheim",
+		MinecraftDeployment:     "minecraft-modded",
+		MinecraftNamespace:      "minecraft-modded",
+		BackupsDir:              t.TempDir(),
+	}
+
+	deps, err := wiring.Build(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("wiring.Build failed: %v", err)
+	}
+	defer deps.Store.Close()
+
+	if deps.Git == nil || deps.StateStore == nil {
+		t.Errorf("expected Git and StateStore to be initialized")
+	}
+	if deps.MCRcon == nil || deps.MCRconPool == nil {
+		t.Errorf("expected MCRcon and MCRconPool to be initialized")
+	}
+	if deps.MCAccess == nil || deps.MCMods == nil {
+		t.Errorf("expected MCAccess and MCMods initialized")
+	}
+
+	app := wiring.BuildServer(context.Background(), cfg, deps)
+
+	for _, path := range []string{"/", "/valheim", "/minecraft", "/admins", "/valheim/create", "/minecraft/create", "/configs", "/mods"} {
+		req := httptest.NewRequest(fiber.MethodGet, path, nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("GET %s failed: %v", path, err)
+		}
+		if resp.StatusCode != fiber.StatusOK && resp.StatusCode != fiber.StatusTemporaryRedirect && resp.StatusCode != fiber.StatusFound {
+			t.Errorf("GET %s status = %d", path, resp.StatusCode)
+		}
+	}
+}
+
