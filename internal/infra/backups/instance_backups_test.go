@@ -68,3 +68,61 @@ func TestDeleteBackup(t *testing.T) {
 		t.Error("expected non-tar.gz to fail safe check")
 	}
 }
+
+func TestStat(t *testing.T) {
+	dir := t.TempDir()
+
+	// Empty dir
+	info, err := Stat(dir)
+	if err != nil {
+		t.Fatalf("Stat empty dir failed: %v", err)
+	}
+	if info.Count != 0 || info.TotalSize != 0 {
+		t.Errorf("expected 0 count and size, got %+v", info)
+	}
+
+	// Dir with subfolder and 2 files
+	_ = os.Mkdir(filepath.Join(dir, "subfolder"), 0755)
+	f1 := filepath.Join(dir, "file1.tar.gz")
+	f2 := filepath.Join(dir, "file2.tar.gz")
+	_ = os.WriteFile(f1, []byte("12345"), 0644)
+	_ = os.WriteFile(f2, []byte("1234567890"), 0644)
+	now := time.Now()
+	_ = os.Chtimes(f1, now.Add(-time.Hour), now.Add(-time.Hour))
+	_ = os.Chtimes(f2, now, now)
+
+	info, err = Stat(dir)
+	if err != nil {
+		t.Fatalf("Stat populated dir failed: %v", err)
+	}
+	if info.Count != 2 || info.TotalSize != 15 || info.LatestName != "file2.tar.gz" {
+		t.Errorf("Stat unexpected info: %+v", info)
+	}
+
+	// Non-existent dir returns error
+	_, err = Stat(filepath.Join(dir, "does_not_exist"))
+	if err == nil {
+		t.Error("Stat on nonexistent dir want error, got nil")
+	}
+}
+
+func TestPruneBackups_EdgeCases(t *testing.T) {
+	// Empty backupsDir
+	if err := PruneBackups("", "test", 1, 5); err != nil {
+		t.Errorf("empty backupsDir should return nil, got %v", err)
+	}
+
+	// keepCount <= 0
+	if err := PruneBackups("/tmp", "test", 1, 0); err != nil {
+		t.Errorf("keepCount 0 should return nil, got %v", err)
+	}
+
+	// matches <= keepCount
+	dir := t.TempDir()
+	fn := filepath.Join(dir, "mc-test-01-backup.tar.gz")
+	_ = os.WriteFile(fn, []byte("data"), 0644)
+	if err := PruneBackups(dir, "test", 1, 5); err != nil {
+		t.Errorf("matches <= keepCount should return nil, got %v", err)
+	}
+}
+

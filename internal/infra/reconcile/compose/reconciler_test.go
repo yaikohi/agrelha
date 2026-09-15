@@ -196,3 +196,113 @@ func TestRenderComposeOmitsHealthcheckWhenNoProbe(t *testing.T) {
 		t.Error("a game with no declared probe must not get an empty healthcheck")
 	}
 }
+
+func TestComposeReconciler_ResolveDir_And_WriteAndConverge(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+
+	var convergedDir string
+	mockExec := func(ctx context.Context, workDir string, args ...string) error {
+		convergedDir = workDir
+		return nil
+	}
+
+	r := New(WithWorkDir(tempDir), WithExecutor(mockExec))
+
+	// 1. resolveDir with empty ref.Name returns workDir
+	if dir := r.resolveDir(ports.ServerRef{Name: ""}); dir != tempDir {
+		t.Errorf("resolveDir with empty name = %q, want %q", dir, tempDir)
+	}
+
+	// 2. resolveDir with compose.yaml in instanceDir
+	inst1Dir := filepath.Join(tempDir, "inst1")
+	_ = os.MkdirAll(inst1Dir, 0755)
+	_ = os.WriteFile(filepath.Join(inst1Dir, "compose.yaml"), []byte("services: {}"), 0644)
+	if dir := r.resolveDir(ports.ServerRef{Name: "inst1"}); dir != inst1Dir {
+		t.Errorf("resolveDir with compose.yaml = %q, want %q", dir, inst1Dir)
+	}
+
+	// 3. resolveDir with docker-compose.yml in workDir
+	_ = os.WriteFile(filepath.Join(tempDir, "docker-compose.yml"), []byte("services: {}"), 0644)
+	if dir := r.resolveDir(ports.ServerRef{Name: "uncreated"}); dir != tempDir {
+		t.Errorf("resolveDir fallback to workDir = %q, want %q", dir, tempDir)
+	}
+
+	// 4. WriteAndConverge with ReadOnly volume
+	spec := domain.RuntimeSpec{
+		Image: "busybox",
+		Volumes: []domain.VolumeSpec{
+			{Name: "cfg", MountPath: "/config", ReadOnly: true},
+		},
+	}
+	ref := ports.ServerRef{Name: "server-01"}
+	if err := r.WriteAndConverge(ctx, ref, spec); err != nil {
+		t.Fatalf("WriteAndConverge failed: %v", err)
+	}
+	expectedInstDir := filepath.Join(tempDir, "server-01")
+	if convergedDir != expectedInstDir {
+		t.Errorf("convergedDir = %q, want %q", convergedDir, expectedInstDir)
+	}
+	writtenCompose, err := os.ReadFile(filepath.Join(expectedInstDir, "docker-compose.yml"))
+	if err != nil || !strings.Contains(string(writtenCompose), ":ro") {
+		t.Errorf("written compose file missing :ro: %s", string(writtenCompose))
+	}
+}
+
+func TestDefaultExecutor_Invocation(t *testing.T) {
+	ctx := context.Background()
+	// Call defaultExecutor with invalid args so docker compose fails and exercises error formatting
+	err := defaultExecutor(ctx, t.TempDir(), "nonexistent-command-12345")
+	if err == nil {
+		t.Fatal("expected error from invalid docker compose command, got nil")
+	}
+}
+
+func TestRenderCompose_DefaultsAndErrors(t *testing.T) {
+	// 1. Default serviceName
+	out, err := RenderCompose("", domain.RuntimeSpec{Image: "alpine"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "container_name: game-server") {
+		t.Errorf("expected default container_name game-server, got: %s", string(out))
+	}
+
+	// 2. Default protocol
+	out, err = RenderCompose("app", domain.RuntimeSpec{
+		Image: "alpine",
+		Ports: []domain.PortSpec{{Port: 8080}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "8080:8080/tcp") {
+		t.Errorf("expected default proto tcp, got: %s", string(out))
+	}
+}
+
+func TestComposeReconciler_WriteAndConverge_Errors(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+
+	// 1. MkdirAll fails when workDir/server-01 is a file
+	filePath := filepath.Join(tempDir, "file-not-dir")
+	if err := os.WriteFile(filePath, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	rFile := New(WithWorkDir(filePath))
+	if err := rFile.WriteAndConverge(ctx, ports.ServerRef{Name: "child"}, domain.RuntimeSpec{Image: "busybox"}); err == nil {
+		t.Error("expected WriteAndConverge to fail when MkdirAll fails")
+	}
+
+	// 2. WriteFile fails when target is an existing directory
+	rDir := New(WithWorkDir(tempDir))
+	targetDir := filepath.Join(tempDir, "inst-dir", "docker-compose.yml")
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := rDir.WriteAndConverge(ctx, ports.ServerRef{Name: "inst-dir"}, domain.RuntimeSpec{Image: "busybox"}); err == nil {
+		t.Error("expected WriteAndConverge to fail when WriteFile fails")
+	}
+}
+

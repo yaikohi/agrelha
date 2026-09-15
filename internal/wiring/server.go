@@ -98,15 +98,20 @@ func actor(c *fiber.Ctx) string {
 	return "local"
 }
 
+var (
+	syncPollInterval = 10 * time.Second
+	syncTimeout      = 5 * time.Minute
+)
+
 func makeApplyAfterSync(d Deps) func(string, string, func(string) bool) {
 	return func(cmName, key string, want func(string) bool) {
 		if d.K8s == nil {
 			return
 		}
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
 			defer cancel()
-			t := time.NewTicker(10 * time.Second)
+			t := time.NewTicker(syncPollInterval)
 			defer t.Stop()
 			for {
 				select {
@@ -150,9 +155,9 @@ func makeApplyMinecraftAfterSync(cfg *config.Config, d Deps) func(string, string
 			depName = cfg.MinecraftDeployment
 		}
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
 			defer cancel()
-			t := time.NewTicker(10 * time.Second)
+			t := time.NewTicker(syncPollInterval)
 			defer t.Stop()
 			for {
 				select {
@@ -191,7 +196,10 @@ func makeApplyMinecraftAfterSync(cfg *config.Config, d Deps) func(string, string
 	}
 }
 
-func startMinecraftScheduler(ctx context.Context, cfg *config.Config, d Deps) {
+func startMinecraftScheduler(ctx context.Context, cfg *config.Config, d Deps) *appbackups.BackupScheduler {
+	if d.MCInstances == nil {
+		return nil
+	}
 	var opts []appbackups.Option
 	if cfg != nil {
 		opts = append(opts, appbackups.WithNamespace(cfg.MinecraftNamespace))
@@ -207,20 +215,13 @@ func startMinecraftScheduler(ctx context.Context, cfg *config.Config, d Deps) {
 			appbackups.WithEvent(d.Store),
 		)
 	}
-	if d.MCInstances != nil {
-		opts = append(opts, appbackups.WithCommandExecutor(func(ctx context.Context, inst domain.Instance, cmd string) error {
-			_, err := d.MCInstances.ExecuteCommand(ctx, inst.Number, cmd)
-			return err
-		}))
-	} else if d.MCRconPool != nil && cfg != nil {
-		opts = append(opts, appbackups.WithCommandExecutor(func(ctx context.Context, inst domain.Instance, cmd string) error {
-			addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(), cfg.MinecraftNamespace)
-			_, err := d.MCRconPool.ClientFor(addr).Execute(cmd)
-			return err
-		}))
-	}
+	opts = append(opts, appbackups.WithCommandExecutor(func(ctx context.Context, inst domain.Instance, cmd string) error {
+		_, err := d.MCInstances.ExecuteCommand(ctx, inst.Number, cmd)
+		return err
+	}))
 	sched := appbackups.New(d.MCInstances, d.MCK8s, opts...)
 	sched.Start(ctx)
+	return sched
 }
 
 func makeApplyValheimAfterSync(cfg *config.Config, d Deps) func(string, string, string, func(string) bool) {
@@ -232,9 +233,9 @@ func makeApplyValheimAfterSync(cfg *config.Config, d Deps) func(string, string, 
 			depName = cfg.ValheimDeployment
 		}
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
 			defer cancel()
-			t := time.NewTicker(10 * time.Second)
+			t := time.NewTicker(syncPollInterval)
 			defer t.Stop()
 			for {
 				select {
@@ -273,9 +274,9 @@ func makeApplyValheimAfterSync(cfg *config.Config, d Deps) func(string, string, 
 	}
 }
 
-func startValheimScheduler(ctx context.Context, cfg *config.Config, d Deps) {
+func startValheimScheduler(ctx context.Context, cfg *config.Config, d Deps) *appbackups.BackupScheduler {
 	if d.ValheimInstances == nil || d.K8s == nil {
-		return
+		return nil
 	}
 	var opts []appbackups.Option
 	if cfg != nil {
@@ -297,6 +298,7 @@ func startValheimScheduler(ctx context.Context, cfg *config.Config, d Deps) {
 	}
 	sched := appbackups.New(d.ValheimInstances, d.K8s, opts...)
 	sched.Start(ctx)
+	return sched
 }
 
 func buildAccessHandler(d Deps, applyAfterSync func(string, string, func(string) bool)) *access.Handler {
@@ -437,14 +439,20 @@ func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 			opts = append(opts,
 				instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
 					inst, err := d.MCInstances.GetInstance(ctx, num)
-					if err != nil {
+					if err != nil || inst == nil {
+						if err == nil {
+							err = fmt.Errorf("instance %d not found", num)
+						}
 						return nil, err
 					}
 					return d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName())
 				}),
 				instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
 					inst, err := d.MCInstances.GetInstance(ctx, num)
-					if err != nil {
+					if err != nil || inst == nil {
+						if err == nil {
+							err = fmt.Errorf("instance %d not found", num)
+						}
 						return nil, err
 					}
 					cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName())

@@ -79,3 +79,18 @@ func TestRestorePointsAreScopedPerInstanceAndGame(t *testing.T) {
 		t.Error("want the point gone after clearing")
 	}
 }
+
+func TestRestorePoint_EmptyLists(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.SaveRestorePoint(domain.GameMinecraft, 5, nil, nil); err != nil {
+		t.Fatalf("SaveRestorePoint empty lists failed: %v", err)
+	}
+	rp, err := s.RestorePoint(domain.GameMinecraft, 5)
+	if err != nil {
+		t.Fatalf("RestorePoint failed: %v", err)
+	}
+	if rp == nil || rp.Previous != nil || rp.Applied != nil {
+		t.Errorf("expected empty slices converted to nil, got %+v", rp)
+	}
+}
+

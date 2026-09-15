@@ -791,3 +791,195 @@ func TestMultipleAllowedEmailsAuthorized(t *testing.T) {
 		t.Fatalf("expected 403 Forbidden for unlisted email Eve, got %d", cbResp.StatusCode)
 	}
 }
+
+func TestNewDev_And_IsAuthenticated(t *testing.T) {
+	cfg := Config{
+		AllowedEmail: "admin@example.com,dev@local.dev",
+		RedirectURL:  "http://localhost:3000/auth/callback",
+	}
+	devAuth := NewDev(cfg)
+
+	app := fiber.New()
+	app.Get("/auth/login", devAuth.Login)
+	app.Get("/auth/logout", devAuth.Logout)
+	app.Get("/protected", devAuth.Middleware(), func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+	app.Get("/check", func(c *fiber.Ctx) error {
+		if devAuth.IsAuthenticated(c) {
+			return c.SendString("authenticated")
+		}
+		return c.SendStatus(fiber.StatusUnauthorized)
+	})
+
+	// 1. Initial check (not authenticated)
+	req := httptest.NewRequest(fiber.MethodGet, "/check", nil)
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("expected 401 when not authenticated, got %d", resp.StatusCode)
+	}
+
+	// 2. Login in dev mode
+	loginReq := httptest.NewRequest(fiber.MethodGet, "/auth/login?returnTo=/dashboard", nil)
+	loginResp, _ := app.Test(loginReq)
+	if loginResp.StatusCode != fiber.StatusFound {
+		t.Fatalf("expected 302 on dev login, got %d", loginResp.StatusCode)
+	}
+	if loc := loginResp.Header.Get("Location"); loc != "/dashboard" {
+		t.Errorf("dev login redirected to %s, want /dashboard", loc)
+	}
+	sessionCookie := extractCookie(loginResp, "agrelha_session")
+	if sessionCookie == nil {
+		t.Fatal("expected agrelha_session cookie set on dev login")
+	}
+
+	// 3. Check with session cookie
+	checkReq := httptest.NewRequest(fiber.MethodGet, "/check", nil)
+	checkReq.AddCookie(sessionCookie)
+	checkResp, _ := app.Test(checkReq)
+	if checkResp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200 on check with session, got %d", checkResp.StatusCode)
+	}
+
+	// 4. Access protected route with session cookie
+	protReq := httptest.NewRequest(fiber.MethodGet, "/protected", nil)
+	protReq.AddCookie(sessionCookie)
+	protResp, _ := app.Test(protReq)
+	if protResp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200 on protected route, got %d", protResp.StatusCode)
+	}
+
+	// 5. Logout
+	logoutReq := httptest.NewRequest(fiber.MethodGet, "/auth/logout", nil)
+	logoutReq.AddCookie(sessionCookie)
+	logoutResp, _ := app.Test(logoutReq)
+	if logoutResp.StatusCode != fiber.StatusFound {
+		t.Fatalf("expected 302 on logout, got %d", logoutResp.StatusCode)
+	}
+}
+
+func TestUnsign_And_ReadSession_EdgeCases(t *testing.T) {
+	cfg := Config{ClientSecret: "secret123"}
+	a := NewDev(cfg)
+
+	// Unsign with no dot
+	if _, ok := a.unsign("nodot"); ok {
+		t.Error("unsign without dot should fail")
+	}
+
+	// Unsign with bad base64 payload
+	if _, ok := a.unsign("bad!base64.signature"); ok {
+		t.Error("unsign with bad payload base64 should fail")
+	}
+
+	// Unsign with bad base64 signature
+	if _, ok := a.unsign("cGF5bG9hZA.bad!sig"); ok {
+		t.Error("unsign with bad signature base64 should fail")
+	}
+
+	// Unsign with tampered signature
+	signed := a.sign([]byte("valid-payload"))
+	parts := strings.Split(signed, ".")
+	tampered := parts[0] + ".AAAA"
+	if _, ok := a.unsign(tampered); ok {
+		t.Error("unsign with tampered signature should fail")
+	}
+
+	// ReadSession with expired session
+	app := fiber.New()
+	expiredSession := sessionData{
+		Email: "test@example.com",
+		Exp:   time.Now().Add(-1 * time.Hour).Unix(),
+	}
+	expiredBytes, _ := json.Marshal(expiredSession)
+	expiredCookieVal := a.sign(expiredBytes)
+
+	app.Get("/test-expired", func(c *fiber.Ctx) error {
+		_, ok := a.readSession(c)
+		if ok {
+			return c.SendString("valid")
+		}
+		return c.SendStatus(fiber.StatusUnauthorized)
+	})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/test-expired", nil)
+	req.AddCookie(&http.Cookie{Name: "agrelha_session", Value: expiredCookieVal})
+	resp, _ := app.Test(req)
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Errorf("expired session should fail, got status %d", resp.StatusCode)
+	}
+
+	// ReadSession with invalid json
+	invalidJSONVal := a.sign([]byte("not json"))
+	req2 := httptest.NewRequest(fiber.MethodGet, "/test-expired", nil)
+	req2.AddCookie(&http.Cookie{Name: "agrelha_session", Value: invalidJSONVal})
+	resp2, _ := app.Test(req2)
+	if resp2.StatusCode != fiber.StatusUnauthorized {
+		t.Errorf("invalid json session should fail, got status %d", resp2.StatusCode)
+	}
+}
+
+func TestOIDC_RemainingBranches(t *testing.T) {
+	// 1. IsAuthenticated on nil Authenticator
+	var nilAuth *Authenticator
+	if !nilAuth.IsAuthenticated(nil) {
+		t.Error("nil Authenticator.IsAuthenticated should return true")
+	}
+
+	// 2. isEmailAllowed with empty email returns false
+	if isEmailAllowed("admin@example.com", "") {
+		t.Error("isEmailAllowed with empty email should return false")
+	}
+
+	// 3. Callback when a.isDev == true (lines 232-234)
+	devAuth := NewDev(Config{PostLogoutURL: "/after-logout"})
+	devApp := fiber.New()
+	devApp.Get("/auth/callback", devAuth.Callback)
+	reqDev := httptest.NewRequest(fiber.MethodGet, "/auth/callback", nil)
+	respDev, _ := devApp.Test(reqDev)
+	if respDev.StatusCode != fiber.StatusFound {
+		t.Errorf("expected 302 redirect for isDev callback, got %d", respDev.StatusCode)
+	}
+
+	// 4. Callback with malformed state in cookie (len(parts) < 2) (lines 253-255)
+	idp := newMockIDP(t)
+	app, auth, _ := setupTestApp(t, idp, "admin@example.com")
+	malformedCookie := auth.sign([]byte("singlepartnocolon"))
+	reqMalformed := httptest.NewRequest(fiber.MethodGet, "/auth/callback?state=xyz", nil)
+	reqMalformed.AddCookie(&http.Cookie{Name: oidcCookie, Value: malformedCookie})
+	respMalformed, _ := app.Test(reqMalformed)
+	if respMalformed.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("expected 400 for malformed cookie state, got %d", respMalformed.StatusCode)
+	}
+
+	// 5. New fails with unreachable issuer
+	ctx := context.Background()
+	if _, err := New(ctx, Config{Issuer: "http://127.0.0.1:54321/nonexistent"}); err == nil {
+		t.Error("expected error from New with unreachable issuer")
+	}
+
+	// 6. New with explicit PostLogoutURL
+	authCustom, err := New(ctx, Config{
+		Issuer:        idp.Issuer(),
+		ClientID:      idp.clientID,
+		ClientSecret:  idp.clientSecret,
+		RedirectURL:   "http://localhost:8080/auth/callback",
+		PostLogoutURL: "http://localhost:8080/bye",
+	})
+	if err != nil {
+		t.Fatalf("New with PostLogoutURL failed: %v", err)
+	}
+	if authCustom.postLogout != "http://localhost:8080/bye" {
+		t.Errorf("expected postLogout 'http://localhost:8080/bye', got %s", authCustom.postLogout)
+	}
+
+	// 7. Logout with invalid url in endSession
+	auth.endSession = "://invalid-url-parse-fail"
+	reqLogout := httptest.NewRequest(fiber.MethodGet, "/auth/logout", nil)
+	respLogout, _ := app.Test(reqLogout)
+	if respLogout.StatusCode != fiber.StatusFound {
+		t.Errorf("expected 302 redirect for invalid endSession url, got %d", respLogout.StatusCode)
+	}
+}
+
+

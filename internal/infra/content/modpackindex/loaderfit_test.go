@@ -90,6 +90,13 @@ func TestModsWithoutLoaderDataExcluded(t *testing.T) {
 	}
 }
 
+func TestFit_Percent_ZeroKnown(t *testing.T) {
+	f := Fit{Supported: 0, Known: 0}
+	if pct := f.Percent(); pct != 0 {
+		t.Errorf("expected 0 percent when Known == 0, got %d", pct)
+	}
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {

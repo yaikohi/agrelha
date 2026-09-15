@@ -220,3 +220,170 @@ func TestThunderstoreEntry(t *testing.T) {
 		t.Errorf("expected invalid to be skipped")
 	}
 }
+
+func TestThunderstore_WarmLoop(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/package/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"name": "test"}]`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New(srv.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	c.OnRefresh = func([]SearchResult) {
+		cancel()
+	}
+
+	c.WarmLoop(ctx)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.index == nil {
+		t.Error("expected index to be non-nil after WarmLoop")
+	}
+}
+
+func TestThunderstore_ResolveTree_EdgeCases(t *testing.T) {
+	mux := http.NewServeMux()
+	// Root package
+	mux.HandleFunc("/api/experimental/package/Author/Diamond/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(expPackage{
+			Namespace: "Author",
+			Name:      "Diamond",
+			Latest: expVersion{
+				VersionNumber: "1.0.0",
+				Dependencies: []string{
+					"Author-DepA-1.0.0",
+					"Author-DepB-1.0.0",
+					"ShortDep-1.0", // fewer than 3 parts
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/api/experimental/package/Author/Diamond/1.0.0/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(expVersion{
+			VersionNumber: "1.0.0",
+			Dependencies: []string{
+				"Author-DepA-1.0.0",
+				"Author-DepB-1.0.0",
+				"ShortDep-1.0",
+			},
+		})
+	})
+	// DepA depends on Shared
+	mux.HandleFunc("/api/experimental/package/Author/DepA/1.0.0/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(expVersion{
+			VersionNumber: "1.0.0",
+			Dependencies:  []string{"Author-Shared-1.0.0"},
+		})
+	})
+	// DepB also depends on Shared (diamond dependency!)
+	mux.HandleFunc("/api/experimental/package/Author/DepB/1.0.0/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(expVersion{
+			VersionNumber: "1.0.0",
+			Dependencies:  []string{"Author-Shared-1.0.0"},
+		})
+	})
+	// Shared has no deps
+	mux.HandleFunc("/api/experimental/package/Author/Shared/1.0.0/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(expVersion{
+			VersionNumber: "1.0.0",
+			Dependencies:  nil,
+		})
+	})
+	// Failing package
+	mux.HandleFunc("/api/experimental/package/Author/FailDep/1.0.0/", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.expURL = srv.URL + "/api/experimental"
+	c.http = srv.Client()
+
+	// 1. Diamond dependency resolution + short dep skipping
+	res, err := c.ResolveTree(context.Background(), "Author", "Diamond")
+	if err != nil {
+		t.Fatalf("ResolveTree diamond failed: %v", err)
+	}
+	if len(res) < 3 {
+		t.Errorf("expected at least 3 resolved dependencies, got %v", res)
+	}
+
+	// 2. ResolveTree version dep failure
+	mux.HandleFunc("/api/experimental/package/Author/Broken/", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(expPackage{
+			Namespace: "Author",
+			Name:      "Broken",
+			Latest: expVersion{
+				VersionNumber: "1.0.0",
+			},
+		})
+	})
+	mux.HandleFunc("/api/experimental/package/Author/Broken/1.0.0/", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	})
+	if _, err := c.ResolveTree(context.Background(), "Author", "Broken"); err == nil {
+		t.Error("expected ResolveTree to fail on version fetch error")
+	}
+}
+
+func TestThunderstore_Errors(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/package/", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	})
+	mux.HandleFunc("/badjson/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{not json`))
+	})
+	mux.HandleFunc("/badtoken/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{invalid-token`))
+	})
+	mux.HandleFunc("/baditem/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"versions": "not-a-slice"}]`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.expURL = srv.URL + "/api/experimental"
+	c.http = srv.Client()
+
+	ctx := context.Background()
+
+	// warm fails on 500
+	if err := c.warm(ctx); err == nil {
+		t.Fatal("expected warm error on 500, got nil")
+	}
+
+	// getJSON fails on 500
+	var v any
+	if err := c.getJSON(ctx, srv.URL+"/package/", &v); err == nil {
+		t.Fatal("expected error on 500 in getJSON, got nil")
+	}
+
+	// getJSON fails on bad json
+	if err := c.getJSON(ctx, srv.URL+"/badjson/", &v); err == nil {
+		t.Fatal("expected json decode error, got nil")
+	}
+
+	// warm fails on bad token
+	c.v1URL = srv.URL + "/badtoken"
+	if err := c.warm(ctx); err == nil {
+		t.Fatal("expected warm error on bad token, got nil")
+	}
+
+	// warm fails on bad item
+	c.v1URL = srv.URL + "/baditem"
+	if err := c.warm(ctx); err == nil {
+		t.Fatal("expected warm error on bad item, got nil")
+	}
+}
+

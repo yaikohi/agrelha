@@ -150,4 +150,42 @@ func TestModpackIndexVersionsAndErrors(t *testing.T) {
 	if _, err := cErr.GetModpackMods(context.Background(), 1); err == nil {
 		t.Error("expected error for invalid host")
 	}
+	if _, err := cErr.SearchModpacks(context.Background(), "q", "", 1); err == nil {
+		t.Error("expected error for invalid host in SearchModpacks")
+	}
+
+	// 7. VersionIDs fallback to KnownMCVersionIDs when endpoint fails
+	vIDsFallback := cErr.VersionIDs(context.Background())
+	if vIDsFallback["1.21.1"] != KnownMCVersionIDs["1.21.1"] {
+		t.Errorf("expected fallback to KnownMCVersionIDs, got %+v", vIDsFallback)
+	}
+
+	// 8. Non-200 status in getJSON
+	tsErr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	}))
+	defer tsErr.Close()
+	c500 := New(tsErr.URL)
+	if _, err := c500.GetModpack(context.Background(), 1); err == nil {
+		t.Error("expected error on 500 response")
+	}
 }
+
+func TestAnalyzeLoader_NeoForgeForgeCompat(t *testing.T) {
+	mods := []Mod{
+		{
+			ID:   1,
+			Name: "Forge Mod",
+			Slug: "forge-mod",
+			ModrinthInfo: []ModrinthProjectRef{
+				{ProjectID: "pid1", Slug: "forge-mod", Loaders: []string{"forge"}},
+			},
+		},
+	}
+
+	fit := AnalyzeLoader(mods, "neoforge")
+	if fit.Supported != 1 || fit.Percent() != 100 {
+		t.Errorf("expected neoforge to support forge mod, got %+v", fit)
+	}
+}
+

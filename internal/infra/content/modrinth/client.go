@@ -63,6 +63,11 @@ type VersionDependency = domain.VersionDependency
 type VersionFile = domain.ModVersionFile
 type Version = domain.ModVersion
 
+var (
+	sleep     = time.Sleep
+	timeAfter = time.After
+)
+
 func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 	reqURL := c.baseURL + endpoint
 	const maxRetries = 4
@@ -81,7 +86,7 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 				return ctx.Err()
 			}
 			if attempt < maxRetries-1 {
-				time.Sleep(time.Duration(attempt+1) * 250 * time.Millisecond)
+				sleep(time.Duration(attempt+1) * 250 * time.Millisecond)
 				continue
 			}
 			return err
@@ -91,7 +96,7 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 			_ = resp.Body.Close()
 			retryAfterSec := 1
 			if val := resp.Header.Get("Retry-After"); val != "" {
-				if s, err := strconv.Atoi(val); err == nil && s > 0 {
+				if s, err := strconv.Atoi(val); err == nil && s >= 0 {
 					retryAfterSec = s
 				}
 			}
@@ -99,7 +104,7 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(waitDuration):
+			case <-timeAfter(waitDuration):
 				continue
 			}
 		}
@@ -261,15 +266,24 @@ func (c *Client) ResolveRequiredDependencies(ctx context.Context, idOrSlug, mcVe
 
 	var traverse func(string) error
 	traverse = func(curr string) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if visited[curr] {
 			return nil
 		}
 		visited[curr] = true
 
 		versions, err := c.GetProjectVersions(ctx, curr, mcVersion, loader)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err != nil || len(versions) == 0 {
 			// If no specific loader version for this exact MC version, try without mcVersion filter as fallback
 			versions, err = c.GetProjectVersions(ctx, curr, "", loader)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			if err != nil || len(versions) == 0 {
 				return nil
 			}
@@ -284,9 +298,9 @@ func (c *Client) ResolveRequiredDependencies(ctx context.Context, idOrSlug, mcVe
 				}
 				if !visited[depProj.Slug] {
 					resolved = append(resolved, depProj.Slug)
-					if err := traverse(depProj.Slug); err != nil {
-						return err
-					}
+				}
+				if err := traverse(depProj.Slug); err != nil {
+					return err
 				}
 			}
 		}

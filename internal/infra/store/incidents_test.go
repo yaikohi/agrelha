@@ -51,6 +51,20 @@ func TestIncidentRoundTrip(t *testing.T) {
 	if other, err := st.ListIncidents(ctx, domain.GameValheim, 3, 10); err != nil || len(other) != 0 {
 		t.Errorf("incidents must be scoped per game: got %d for valheim", len(other))
 	}
+
+	// Test RecordIncident with zero time and ListIncidents with limit <= 0
+	id, err := st.RecordIncident(ctx, domain.Incident{
+		GameID: domain.GameMinecraft,
+		Number: 3,
+		Reason: "SyntheticZeroTime",
+	})
+	if err != nil || id == 0 {
+		t.Fatalf("RecordIncident with zero time failed: %v", err)
+	}
+	defaultLimitList, err := st.ListIncidents(ctx, domain.GameMinecraft, 3, 0)
+	if err != nil || len(defaultLimitList) != 3 {
+		t.Fatalf("ListIncidents with limit 0 should default to 20, got count %d, err=%v", len(defaultLimitList), err)
+	}
 }
 
 func TestIncidentSummary(t *testing.T) {

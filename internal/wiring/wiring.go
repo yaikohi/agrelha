@@ -43,6 +43,8 @@ import (
 	"agrelha/internal/ports"
 )
 
+var newK8sClient = k8s.New
+
 // Deps bundles all constructed infrastructure adapters and application services.
 type Deps struct {
 	Store            *store.Store
@@ -73,6 +75,8 @@ type Deps struct {
 	StateStore       ports.StateStore
 	Reconciler       ports.Reconciler
 }
+
+var buildMrpack = modpack.BuildMrpack
 
 // Build is the composition root: it is the only place that decides which
 // adapter satisfies which port. Everything it returns is already constructed,
@@ -116,7 +120,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 
 	rt := buildRuntime(cfg, &d)
 
-	if c, err := k8s.New(cfg.ValheimNamespace, cfg.ValheimDeployment); err != nil {
+	if c, err := newK8sClient(cfg.ValheimNamespace, cfg.ValheimDeployment); err != nil {
 		slog.Warn("k8s client unavailable (dev?)", "err", err)
 	} else {
 		c.SetNodeSelector(cfg.GameNodeSelector)
@@ -139,7 +143,11 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(), cfg.MinecraftNamespace)
 			res, err := d.MCRconPool.ClientFor(addr).Execute(cmd)
 			if err != nil && inst.LBIP != "" {
-				res, err = d.MCRconPool.ClientFor(inst.LBIP + ":25575").Execute(cmd)
+				target := inst.LBIP
+				if !strings.Contains(target, ":") {
+					target = target + ":25575"
+				}
+				res, err = d.MCRconPool.ClientFor(target).Execute(cmd)
 			}
 			return res, err
 		}
@@ -167,14 +175,20 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			instances.WithJobRunner(d.MCK8s),
 			instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
 				inst, err := d.MCInstances.GetInstance(ctx, num)
-				if err != nil {
+				if err != nil || inst == nil {
+					if err == nil {
+						err = fmt.Errorf("instance %d not found", num)
+					}
 					return nil, err
 				}
 				return d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName())
 			}),
 			instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
 				inst, err := d.MCInstances.GetInstance(ctx, num)
-				if err != nil {
+				if err != nil || inst == nil {
+					if err == nil {
+						err = fmt.Errorf("instance %d not found", num)
+					}
 					return nil, err
 				}
 				cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName())
@@ -260,14 +274,20 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			instances.WithJobRunner(d.K8s),
 			instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
 				inst, err := d.ValheimInstances.GetInstance(ctx, num)
-				if err != nil {
+				if err != nil || inst == nil {
+					if err == nil {
+						err = fmt.Errorf("instance %d not found", num)
+					}
 					return nil, err
 				}
 				return d.K8s.ConfigMapData(ctx, inst.ConfigsCMName())
 			}),
 			instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
 				inst, err := d.ValheimInstances.GetInstance(ctx, num)
-				if err != nil {
+				if err != nil || inst == nil {
+					if err == nil {
+						err = fmt.Errorf("instance %d not found", num)
+					}
 					return nil, err
 				}
 				cm, err := d.K8s.ConfigMapData(ctx, inst.ModsCMName())
@@ -420,7 +440,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				mcVer = "1.21.1"
 			}
 
-			mrpackBytes, err := modpack.BuildMrpack(ctx, d.MR, inst.Name, mcVer, loader, "", slugs, cfgFiles)
+			mrpackBytes, err := buildMrpack(ctx, d.MR, inst.Name, mcVer, loader, "", slugs, cfgFiles)
 			if err != nil {
 				return domain.Bundle{}, fmt.Errorf("build mrpack: %w", err)
 			}
@@ -517,7 +537,7 @@ func buildRuntime(cfg *config.Config, d *Deps) ports.Runtime {
 		return dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket)))
 	}
 
-	if mcK8s, err := k8s.New(cfg.MinecraftNamespace, cfg.MinecraftDeployment); err != nil {
+	if mcK8s, err := newK8sClient(cfg.MinecraftNamespace, cfg.MinecraftDeployment); err != nil {
 		slog.Warn("minecraft k8s client unavailable (dev?)", "err", err)
 	} else {
 		mcK8s.SetNodeSelector(cfg.GameNodeSelector)

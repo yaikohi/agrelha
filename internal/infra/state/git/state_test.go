@@ -201,4 +201,28 @@ data:
 	if err == nil {
 		t.Fatalf("expected error getting deleted file, got nil")
 	}
+
+	// 7. Put with doc.Data != nil and doc.Annotations == nil (ReplaceData path)
+	dataOnlyDoc := ports.Document{
+		Data: map[string]string{"mods.txt": "mod4\n"},
+	}
+	if err := adapter.Put(ctx, "manifests/cm.yaml", dataOnlyDoc, "replace data only"); err != nil {
+		t.Fatalf("Put data only failed: %v", err)
+	}
+
+	// 8. Put with doc.Data == nil (WriteDirectory raw file path)
+	rawOnlyDoc := ports.Document{
+		Raw: []byte("raw file content"),
+	}
+	if err := adapter.Put(ctx, "manifests/custom.txt", rawOnlyDoc, "put raw file"); err != nil {
+		t.Fatalf("Put raw file failed: %v", err)
+	}
+
+	// 9. Patch mutator returns error
+	_, err = adapter.Patch(ctx, "manifests/cm.yaml", "failing patch", func(d *ports.Document) (bool, error) {
+		return false, context.Canceled
+	})
+	if err == nil {
+		t.Fatalf("expected error when mutate returns error, got nil")
+	}
 }

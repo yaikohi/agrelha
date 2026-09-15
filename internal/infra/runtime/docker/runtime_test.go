@@ -341,3 +341,176 @@ func TestSocketClient_OverHTTP(t *testing.T) {
 		t.Errorf("ContainerStats: %+v, err: %v", stats, err)
 	}
 }
+
+func TestDockerRuntime_NilReceiverAndClient(t *testing.T) {
+	ctx := context.Background()
+	ref := ports.ServerRef{Name: "c1"}
+
+	check := func(name string, r *Runtime) {
+		t.Run(name, func(t *testing.T) {
+			if err := r.Start(ctx, ref); err != ports.ErrNotImplemented {
+				t.Fatalf("Start want ErrNotImplemented, got %v", err)
+			}
+			if err := r.Stop(ctx, ref); err != ports.ErrNotImplemented {
+				t.Fatalf("Stop want ErrNotImplemented, got %v", err)
+			}
+			if err := r.Restart(ctx, ref); err != ports.ErrNotImplemented {
+				t.Fatalf("Restart want ErrNotImplemented, got %v", err)
+			}
+			st, err := r.Status(ctx, ref)
+			if err != ports.ErrNotImplemented || st.Lifecycle != ports.LifecycleUnknown {
+				t.Fatalf("Status want ErrNotImplemented, got %v, %+v", err, st)
+			}
+			if _, err := r.Metrics(ctx, ref); err != ports.ErrNotImplemented {
+				t.Fatalf("Metrics want ErrNotImplemented, got %v", err)
+			}
+			if _, err := r.Logs(ctx, ref, ports.LogOptions{}); err != ports.ErrNotImplemented {
+				t.Fatalf("Logs want ErrNotImplemented, got %v", err)
+			}
+			if err := r.WatchAvailability(ctx, ref, time.Millisecond); err != ports.ErrNotImplemented {
+				t.Fatalf("WatchAvailability want ErrNotImplemented, got %v", err)
+			}
+		})
+	}
+
+	check("nil receiver", nil)
+	check("nil client", &Runtime{client: nil})
+}
+
+func TestDockerRuntime_New_DefaultClient(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "")
+	r := New()
+	if r == nil || r.client == nil {
+		t.Fatal("expected non-nil runtime and client")
+	}
+}
+
+func TestDockerRuntime_Status_EdgeCases(t *testing.T) {
+	ctx := context.Background()
+	ref := ports.ServerRef{Name: "c1"}
+
+	// Error from inspect other than ErrNotExist
+	mockErr := &mockClient{err: errors.New("docker daemon down")}
+	rErr := New(WithClient(mockErr))
+	st, err := rErr.Status(ctx, ref)
+	if err == nil || st.Lifecycle != ports.LifecycleUnknown {
+		t.Fatalf("expected error on daemon failure, got %v, st=%+v", err, st)
+	}
+
+	// Health status is "none"
+	mockNone := &mockClient{
+		inspect: ContainerInspect{
+			State: ContainerState{
+				Running: true,
+				Health: &struct {
+					Status string `json:"Status"`
+				}{Status: "none"},
+				StartedAt: "invalid-time",
+			},
+		},
+	}
+	rNone := New(WithClient(mockNone))
+	stNone, err := rNone.Status(ctx, ref)
+	if err != nil {
+		t.Fatalf("Status unexpected error: %v", err)
+	}
+	if !stNone.Available {
+		t.Errorf("when health status is none, Available should fallback to Running (true)")
+	}
+	if !stNone.StartedAt.IsZero() {
+		t.Errorf("StartedAt with invalid time should be zero")
+	}
+}
+
+func TestDockerRuntime_Metrics_EdgeCases(t *testing.T) {
+	ctx := context.Background()
+	ref := ports.ServerRef{Name: "c1"}
+
+	// Error from ContainerStats
+	mockErr := &mockClient{err: errors.New("stats error")}
+	rErr := New(WithClient(mockErr))
+	if _, err := rErr.Metrics(ctx, ref); err == nil {
+		t.Fatalf("expected error from Metrics, got nil")
+	}
+
+	// Zero memory and zero cpu delta
+	mockZero := &mockClient{
+		stats: ContainerStats{},
+	}
+	rZero := New(WithClient(mockZero))
+	m, err := rZero.Metrics(ctx, ref)
+	if err != nil {
+		t.Fatalf("Metrics unexpected error: %v", err)
+	}
+	if m.MemoryMiB != 0 || m.CPUMillicores != 0 {
+		t.Errorf("expected 0 memory and 0 cpu, got %+v", m)
+	}
+
+	// CPUs == 0 fallback to 1
+	mockCpus0 := &mockClient{
+		stats: ContainerStats{
+			MemoryStats: struct {
+				Usage int64 `json:"usage"`
+				Limit int64 `json:"limit"`
+			}{Usage: 50 * 1024 * 1024},
+			CPUStats: struct {
+				CPUUsage struct {
+					TotalUsage uint64 `json:"total_usage"`
+				} `json:"cpu_usage"`
+				SystemCPUUsage uint64 `json:"system_cpu_usage"`
+				OnlineCPUs     uint32 `json:"online_cpus"`
+			}{
+				CPUUsage: struct {
+					TotalUsage uint64 `json:"total_usage"`
+				}{TotalUsage: 500},
+				SystemCPUUsage: 1000,
+				OnlineCPUs:     0, // Will fallback to 1
+			},
+			PreCPUStats: struct {
+				CPUUsage struct {
+					TotalUsage uint64 `json:"total_usage"`
+				} `json:"cpu_usage"`
+				SystemCPUUsage uint64 `json:"system_cpu_usage"`
+			}{
+				CPUUsage: struct {
+					TotalUsage uint64 `json:"total_usage"`
+				}{TotalUsage: 400},
+				SystemCPUUsage: 800,
+			},
+		},
+	}
+	rCpus0 := New(WithClient(mockCpus0))
+	m2, err := rCpus0.Metrics(ctx, ref)
+	if err != nil {
+		t.Fatalf("Metrics unexpected error: %v", err)
+	}
+	if m2.CPUMillicores != 500 { // (100 / 200) * 1 * 1000 = 500
+		t.Errorf("CPUMillicores = %d, want 500", m2.CPUMillicores)
+	}
+}
+
+func TestDockerRuntime_WatchAvailability(t *testing.T) {
+	ctx := context.Background()
+	ref := ports.ServerRef{Name: "c1"}
+
+	// Timeout case
+	mockNotReady := &mockClient{
+		inspect: ContainerInspect{State: ContainerState{Running: false}},
+	}
+	r := New(WithClient(mockNotReady))
+	err := r.WatchAvailability(ctx, ref, 10*time.Millisecond)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
+	}
+
+	// Ready case
+	mockReady := &mockClient{
+		inspect: ContainerInspect{State: ContainerState{Running: true}},
+	}
+	rReady := New(WithClient(mockReady))
+	err = rReady.WatchAvailability(ctx, ref, 2500*time.Millisecond)
+	if err != nil {
+		t.Fatalf("expected nil error on ready container, got %v", err)
+	}
+}
+

@@ -1,5 +1,9 @@
 # Architecture cleanup
 
+> **Historical.** This plan has been executed; it is kept as a record of how
+> the work was done, not as a description of the system. For the architecture
+> as it stands, see [architecture.md](architecture.md).
+
 Companion to `docs/modularization-plan.md`, which ran phases 0–9. Those phases
 built the domain, the ports and the adapters. This one finishes the job they
 left half-done: the seams exist, but most of the code still reaches around them.

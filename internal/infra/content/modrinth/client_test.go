@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	"agrelha/internal/domain"
 )
@@ -303,3 +304,356 @@ func TestModrinthLatestAndInstance(t *testing.T) {
 		t.Fatalf("expected empty for empty-mod, got ver=%s, deps=%v, err=%v", ver, deps, err)
 	}
 }
+
+func TestModrinth_RetriesAndErrors(t *testing.T) {
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/too-many-requests":
+			attempts++
+			if attempts == 1 {
+				w.Header().Set("Retry-After", "0")
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"slug": "recovered"}`))
+		case "/always-429":
+			w.Header().Set("Retry-After", "10")
+			w.WriteHeader(http.StatusTooManyRequests)
+		case "/server-error":
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`internal server error`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+
+	// 1. Retry after 429 succeeds
+	var res struct{ Slug string }
+	if err := c.getJSON(context.Background(), "/too-many-requests", &res); err != nil || res.Slug != "recovered" {
+		t.Fatalf("expected 429 recovery, got err=%v, res=%+v", err, res)
+	}
+
+	// 2. 429 retry canceled via context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // canceled before wait
+	if err := c.getJSON(ctx, "/always-429", &res); err == nil {
+		t.Fatal("expected context canceled error during 429 retry wait, got nil")
+	}
+
+	// 3. 500 server error
+	if err := c.getJSON(context.Background(), "/server-error", &res); err == nil {
+		t.Fatal("expected server error, got nil")
+	}
+
+	// 4. GetProjects with empty slice
+	projects, err := c.GetProjects(context.Background(), []string{})
+	if err != nil || projects != nil {
+		t.Errorf("GetProjects empty slice want nil, nil, got %v, %v", projects, err)
+	}
+
+	// 5. LatestVersion on empty mod returns error
+	_, _, err = c.LatestVersion(context.Background(), "", "empty-mod")
+	if err == nil {
+		t.Fatal("expected error from LatestVersion on empty mod, got nil")
+	}
+}
+
+type errTransport struct {
+	err error
+}
+
+func (t *errTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, t.err
+}
+
+func TestModrinthClient_NetworkRetriesAndExhaustion(t *testing.T) {
+	origSleep := sleep
+	origTimeAfter := timeAfter
+	sleep = func(time.Duration) {}
+	timeAfter = func(time.Duration) <-chan time.Time {
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
+	defer func() {
+		sleep = origSleep
+		timeAfter = origTimeAfter
+	}()
+
+	// 1. Invalid URL for NewRequestWithContext
+	c := New("http://invalid url with spaces\x7f")
+	var dummy any
+	if err := c.getJSON(context.Background(), "/test", &dummy); err == nil {
+		t.Error("expected error for invalid URL, got nil")
+	}
+
+	// 2. Transport error retry exhaustion
+	c2 := New("http://localhost:1")
+	c2.http.Transport = &errTransport{err: context.DeadlineExceeded}
+	// ctx canceled to return ctx.Err()
+	ctxCancel, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := c2.getJSON(ctxCancel, "/test", &dummy); err == nil {
+		t.Error("expected ctx cancel error, got nil")
+	}
+
+	// 3. Transport error retry exhaustion without ctx cancellation
+	if err := c2.getJSON(context.Background(), "/test", &dummy); err == nil {
+		t.Error("expected transport error retry exhaustion, got nil")
+	}
+
+	// 4. 429 exhaustion
+	srv429 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv429.Close()
+	c429 := New(srv429.URL)
+	if err := c429.getJSON(context.Background(), "/test", &dummy); err == nil {
+		t.Error("expected rate limit exhaustion error, got nil")
+	}
+
+	// 5. 429 ctx done in select
+	var cancelSelect context.CancelFunc
+	var ctxSelect context.Context
+	ctxSelect, cancelSelect = context.WithCancel(context.Background())
+	defer cancelSelect()
+
+	timeAfter = func(time.Duration) <-chan time.Time {
+		cancelSelect()
+		return make(chan time.Time)
+	}
+
+	srvSelect429 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "1")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srvSelect429.Close()
+	cSelect := New(srvSelect429.URL)
+	if err := cSelect.getJSON(ctxSelect, "/test", &dummy); err == nil {
+		t.Error("expected ctx cancel in 429 select, got nil")
+	}
+}
+
+func TestModrinthClient_MoreEdgeCases(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/search":
+			if r.URL.Query().Get("query") == "fail" {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			// verify defaults
+			if r.URL.Query().Get("limit") != "20" {
+				t.Errorf("expected default limit 20, got %s", r.URL.Query().Get("limit"))
+			}
+			_, _ = w.Write([]byte(`{"hits": [], "total_hits": 0}`))
+		case "/project/dep-broken":
+			http.NotFound(w, r)
+		case "/project/dep-ok":
+			_, _ = w.Write([]byte(`{"id": "dep-ok-id", "slug": "dep-ok", "title": "Dep OK"}`))
+		case "/project/dep-recurse-err":
+			_, _ = w.Write([]byte(`{"id": "dep-recurse-err-id", "slug": "dep-recurse-err", "title": "Dep Recurse Err"}`))
+		case "/project/dep-recurse-err/version":
+			http.NotFound(w, r)
+		case "/project/tree-mod/version":
+			if r.URL.Query().Get("game_versions") == `["1.20.1"]` {
+				// empty for exact
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			// fallback without mcVersion
+			_, _ = w.Write([]byte(`[
+				{
+					"id": "v-tree",
+					"version_number": "1.0.0",
+					"dependencies": [
+						{"project_id": "dep-broken", "dependency_type": "required"},
+						{"project_id": "dep-ok", "dependency_type": "required"}
+					]
+				}
+			]`))
+		case "/project/dep-ok/version":
+			// empty version so ResolveTreeForInstance gets depSlug without version
+			_, _ = w.Write([]byte(`[]`))
+		case "/project/match-all-vers/version":
+			if r.URL.Query().Get("game_versions") == "" {
+				// return version advertising 1.20.1
+				_, _ = w.Write([]byte(`[
+					{"id": "v-matched", "version_number": "3.0.0", "game_versions": ["1.20.1"]}
+				]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[]`))
+		case "/project/zero-vers/version":
+			_, _ = w.Write([]byte(`[]`))
+		case "/project/error-proj/version":
+			http.Error(w, "err", http.StatusInternalServerError)
+		case "/project/error-proj":
+			http.Error(w, "err", http.StatusInternalServerError)
+		case "/projects":
+			http.Error(w, "err", http.StatusInternalServerError)
+		case "/version/bad-ver":
+			http.Error(w, "not found", http.StatusNotFound)
+		case "/project/diamond-mod/version":
+			_, _ = w.Write([]byte(`[{"id": "v-d", "version_number": "1.0", "dependencies": [{"project_id": "b-id", "dependency_type": "required"}, {"project_id": "c-id", "dependency_type": "required"}]}]`))
+		case "/project/b-id":
+			_, _ = w.Write([]byte(`{"id": "b-id", "slug": "diamond-b"}`))
+		case "/project/diamond-b/version":
+			_, _ = w.Write([]byte(`[{"id": "v-b", "version_number": "1.0", "dependencies": [{"project_id": "d-id", "dependency_type": "required"}]}]`))
+		case "/project/c-id":
+			_, _ = w.Write([]byte(`{"id": "c-id", "slug": "diamond-c"}`))
+		case "/project/diamond-c/version":
+			_, _ = w.Write([]byte(`[{"id": "v-c", "version_number": "1.0", "dependencies": [{"project_id": "d-id", "dependency_type": "required"}]}]`))
+		case "/project/d-id":
+			_, _ = w.Write([]byte(`{"id": "d-id", "slug": "diamond-d"}`))
+		case "/project/diamond-d/version":
+			_, _ = w.Write([]byte(`[{"id": "v-d2", "version_number": "1.0", "dependencies": []}]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+
+	// 1. Search with limit <= 0 and loader == ""
+	_, err := c.Search(context.Background(), "test", "", "", 0, 0)
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+
+	// 1b. Search error
+	if _, err := c.Search(context.Background(), "fail", "", "", 10, 0); err == nil {
+		t.Error("expected search error, got nil")
+	}
+
+	// 2. GetProjects error
+	_, err = c.GetProjects(context.Background(), []string{"proj-a"})
+	if err == nil {
+		t.Error("expected GetProjects error, got nil")
+	}
+
+	// 3. GetVersion error
+	_, err = c.GetVersion(context.Background(), "bad-ver")
+	if err == nil {
+		t.Error("expected GetVersion error, got nil")
+	}
+
+	// 4. GetProjectVersions with loader == "" and fallback 3 (query without game_versions)
+	vers, err := c.GetProjectVersions(context.Background(), "match-all-vers", "1.20.1", "")
+	if err != nil {
+		t.Fatalf("GetProjectVersions failed: %v", err)
+	}
+	if len(vers) != 1 || vers[0].ID != "v-matched" {
+		t.Fatalf("expected v-matched, got %+v", vers)
+	}
+
+	// 5. ResolveRequiredDependencies fallback to empty mcVersion and skip broken dep
+	deps, err := c.ResolveRequiredDependencies(context.Background(), "tree-mod", "1.20.1", "neoforge")
+	if err != nil {
+		t.Fatalf("ResolveRequiredDependencies failed: %v", err)
+	}
+	if len(deps) != 1 || deps[0] != "dep-ok" {
+		t.Fatalf("expected [dep-ok], got %v", deps)
+	}
+
+	// 5b. Diamond dependency traversal
+	diamondDeps, err := c.ResolveRequiredDependencies(context.Background(), "diamond-mod", "", "neoforge")
+	if err != nil {
+		t.Fatalf("diamond resolve failed: %v", err)
+	}
+	if len(diamondDeps) != 3 {
+		t.Errorf("expected 3 diamond deps, got %v", diamondDeps)
+	}
+
+	// 5c. Dependency traversal with canceled context in child
+	var cancelRec context.CancelFunc
+	var ctxRec context.Context
+	ctxRec, cancelRec = context.WithCancel(context.Background())
+	defer cancelRec()
+
+	srvRec := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/project/rec-parent/version":
+			_, _ = w.Write([]byte(`[{"id": "v-p", "version_number": "1.0", "dependencies": [{"project_id": "rec-child", "dependency_type": "required"}]}]`))
+		case "/project/rec-child":
+			_, _ = w.Write([]byte(`{"id": "rec-child", "slug": "rec-child"}`))
+		case "/project/rec-child/version":
+			cancelRec()
+			http.Error(w, "server error", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srvRec.Close()
+	cRec := New(srvRec.URL)
+	_, err = cRec.ResolveRequiredDependencies(ctxRec, "rec-parent", "", "neoforge")
+	if err == nil {
+		t.Error("expected error from canceled recursive resolve, got nil")
+	}
+
+	// 5d. Dependency traversal with canceled context in fallback GetProjectVersions
+	var cancelFallback context.CancelFunc
+	var ctxFallback context.Context
+	ctxFallback, cancelFallback = context.WithCancel(context.Background())
+	defer cancelFallback()
+
+	var noVerCount int
+	srvFallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("game_versions") == "" {
+			noVerCount++
+			if noVerCount >= 2 {
+				cancelFallback()
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+		}
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srvFallback.Close()
+	cFallback := New(srvFallback.URL)
+	_, err = cFallback.ResolveRequiredDependencies(ctxFallback, "any-mod", "1.20.1", "neoforge")
+	if err == nil {
+		t.Error("expected error from canceled fallback resolve, got nil")
+	}
+
+	// 6. LatestVersion: slug = ns when name == "", and len(vers) == 0 returns "", nil, nil
+	v, _, err := c.LatestVersion(context.Background(), "zero-vers", "")
+	if err != nil || v != "" {
+		t.Fatalf("expected empty version, got %s, err: %v", v, err)
+	}
+
+	// 7. LatestVersionForInstance: ref.Name == "" (falls back to ref.Namespace), and error
+	_, _, err = c.LatestVersionForInstance(context.Background(), domain.ModRef{Namespace: "error-proj"}, domain.Instance{})
+	if err == nil {
+		t.Error("expected error from LatestVersionForInstance, got nil")
+	}
+
+	// 8. ResolveTreeForInstance: ref.Name == "", error from dependencies
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = c.ResolveTreeForInstance(cancelCtx, domain.ModRef{Namespace: "error-proj"}, domain.Instance{})
+	if err == nil {
+		t.Error("expected error from ResolveTreeForInstance with canceled ctx, got nil")
+	}
+
+	// 9. ResolveTreeForInstance: dep without versions appends just slug
+	tree, err := c.ResolveTreeForInstance(context.Background(), domain.ModRef{Namespace: "tree-mod"}, domain.Instance{MCVersion: "1.20.1"})
+	if err != nil {
+		t.Fatalf("ResolveTreeForInstance failed: %v", err)
+	}
+	if len(tree) != 1 || tree[0] != "dep-ok" {
+		t.Fatalf("expected [dep-ok], got %v", tree)
+	}
+}
+
+

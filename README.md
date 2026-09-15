@@ -68,6 +68,9 @@ rewrite:
 
 Layers run `domain → ports → app → infra / web`, with dependencies pointing
 inward and an architecture test that fails the build on a forbidden import.
+[docs/architecture.md](docs/architecture.md) is the full picture: the layers and
+why they are split that way, the import matrix, how each layer is tested, and a
+one-line purpose for every package under `internal/`.
 
 **Auth** is OIDC (any provider) with an allow-list, or local Argon2id accounts
 when there is no IdP. **Persistence** is embedded SQLite (modernc, no cgo):

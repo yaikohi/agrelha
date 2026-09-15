@@ -458,3 +458,183 @@ func TestModIndexConversion(t *testing.T) {
 		t.Fatalf("unexpected back conversion: %+v", back)
 	}
 }
+
+func TestReadmeCache(t *testing.T) {
+	s := newTestStore(t)
+
+	// Cache miss
+	content, hit, err := s.GetReadme("author/mod", "1.0.0")
+	if err != nil {
+		t.Fatalf("GetReadme error: %v", err)
+	}
+	if hit || content != "" {
+		t.Fatalf("expected cache miss, got hit=%v, content=%q", hit, content)
+	}
+
+	// Cache put
+	if err := s.PutReadme("author/mod", "1.0.0", "# Mod Title"); err != nil {
+		t.Fatalf("PutReadme error: %v", err)
+	}
+
+	// Cache hit
+	content, hit, err = s.GetReadme("author/mod", "1.0.0")
+	if err != nil {
+		t.Fatalf("GetReadme error: %v", err)
+	}
+	if !hit || content != "# Mod Title" {
+		t.Fatalf("expected cache hit with markdown, got hit=%v, content=%q", hit, content)
+	}
+}
+
+func TestHistoryAndAsTime(t *testing.T) {
+	s := newTestStore(t)
+
+	// Add audit and event records
+	if _, err := s.db.Exec(`INSERT INTO audit (at, actor, action, detail) VALUES (CURRENT_TIMESTAMP, 'admin@example.com', 'restart', 'restarted server')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO events (at, kind, detail) VALUES (CURRENT_TIMESTAMP, 'custom-event', 'event detail')`); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := s.ListHistory(10)
+	if err != nil {
+		t.Fatalf("ListHistory error: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("expected 2 history entries, got %d: %+v", len(history), history)
+	}
+
+	// Test asTime parsing variants
+	now := time.Now().UTC().Truncate(time.Second)
+	if parsed := asTime(now); !parsed.Equal(now) {
+		t.Errorf("asTime(time.Time) failed: %v", parsed)
+	}
+	if parsed := asTime([]byte(now.Format(time.RFC3339))); !parsed.Equal(now) {
+		t.Errorf("asTime([]byte) failed: %v", parsed)
+	}
+	if parsed := asTime(now.Format("2006-01-02 15:04:05.999999999-07:00")); parsed.IsZero() {
+		t.Errorf("asTime nano failed")
+	}
+	if parsed := asTime(now.Format("2006-01-02 15:04:05")); parsed.IsZero() {
+		t.Errorf("asTime standard failed")
+	}
+	if parsed := asTime("invalid-date-string"); !parsed.IsZero() {
+		t.Errorf("asTime invalid string should be zero")
+	}
+	if parsed := asTime(12345); !parsed.IsZero() {
+		t.Errorf("asTime unsupported type should be zero")
+	}
+}
+
+func TestStore_OpenFailure(t *testing.T) {
+	// Attempt opening SQLite in a nonexistent directory
+	_, err := Open("/dev/null/invalid_dir/db.sqlite")
+	if err == nil {
+		t.Fatalf("expected Open failure on invalid path, got nil")
+	}
+}
+
+func TestStore_ClosedStoreErrors(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "closed.db")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	repo := NewInstanceRepo(s)
+	vhRepo := NewValheimInstanceRepo(s)
+
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	// 1. History
+	if _, err := s.ListHistory(10); err == nil {
+		t.Error("expected error from ListHistory on closed store")
+	}
+
+	// 2. Incidents
+	if _, err := s.RecordIncident(ctx, domain.Incident{GameID: domain.GameMinecraft, Number: 1, Reason: "oom"}); err == nil {
+		t.Error("expected error from RecordIncident on closed store")
+	}
+	if _, err := s.LastIncident(ctx, domain.GameMinecraft, 1); err == nil {
+		t.Error("expected error from LastIncident on closed store")
+	}
+	if _, err := s.ListIncidents(ctx, domain.GameMinecraft, 1, 10); err == nil {
+		t.Error("expected error from ListIncidents on closed store")
+	}
+
+	// 3. Instances (MC)
+	if _, err := s.GetInstance(1); err == nil {
+		t.Error("expected error from GetInstance on closed store")
+	}
+	if _, err := s.ListInstances(); err == nil {
+		t.Error("expected error from ListInstances on closed store")
+	}
+
+	// 4. Instances (Valheim)
+	if _, err := s.GetValheimInstance(1); err == nil {
+		t.Error("expected error from GetValheimInstance on closed store")
+	}
+	if _, err := s.ListValheimInstances(); err == nil {
+		t.Error("expected error from ListValheimInstances on closed store")
+	}
+	if _, err := s.ValheimInstancesMissingSource(); err == nil {
+		t.Error("expected error from ValheimInstancesMissingSource on closed store")
+	}
+
+	// 5. Mods
+	if err := s.SaveModIndex([]ModIndexRow{{FullName: "author-mod"}}, time.Now()); err == nil {
+		t.Error("expected error from SaveModIndex on closed store")
+	}
+	if _, _, err := s.LoadModIndex(); err == nil {
+		t.Error("expected error from LoadModIndex on closed store")
+	}
+	if _, _, err := s.GetReadme("author-mod", "1.0.0"); err == nil {
+		t.Error("expected error from GetReadme on closed store")
+	}
+
+	// 6. Players
+	if _, err := s.ListPlayers(); err == nil {
+		t.Error("expected error from ListPlayers on closed store")
+	}
+
+	// 9. ModIndex errors on missing table
+	sTable := newTestStore(t)
+	if _, err := sTable.db.Exec("DROP TABLE mod_index"); err != nil {
+		t.Fatal(err)
+	}
+	if err := sTable.SaveModIndex([]ModIndexRow{{FullName: "mod"}}, time.Now()); err == nil {
+		t.Error("expected SaveModIndex error when mod_index table is dropped")
+	}
+	if _, _, err := sTable.LoadModIndex(); err == nil {
+		t.Error("expected LoadModIndex error when mod_index table is dropped")
+	}
+
+	// 7. Users
+	if err := s.CreateUser(ctx, ports.User{Username: "user"}, "hash"); err == nil {
+		t.Error("expected error from CreateUser on closed store")
+	}
+	if _, err := s.ListUsers(ctx); err == nil {
+		t.Error("expected error from ListUsers on closed store")
+	}
+	if err := s.DeleteUser(ctx, "user"); err == nil {
+		t.Error("expected error from DeleteUser on closed store")
+	}
+
+	// 8. Instance Repositories
+	if _, err := repo.List(); err == nil {
+		t.Error("expected error from repo.List on closed store")
+	}
+	if _, err := repo.Get(1); err == nil {
+		t.Error("expected error from repo.Get on closed store")
+	}
+	if _, err := vhRepo.List(); err == nil {
+		t.Error("expected error from vhRepo.List on closed store")
+	}
+	if _, err := vhRepo.Get(1); err == nil {
+		t.Error("expected error from vhRepo.Get on closed store")
+	}
+}
+

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -18,36 +19,53 @@ import (
 	"agrelha/internal/wiring"
 )
 
+var (
+	osExit          = os.Exit
+	shutdownTimeout = 5 * time.Second
+)
+
 func main() {
+	osExit(run(context.Background(), os.Stdout, os.Stderr, os.Args[1:]))
+}
+
+func run(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	cfg := config.Load()
 	logging.Setup(cfg.LogLevel, cfg.LogFormat)
 	build.SourceURL = cfg.SourceURL
 
-	deps, err := wiring.Build(context.Background(), cfg)
+	deps, err := wiring.Build(ctx, cfg)
 	if err != nil {
 		slog.Error("startup failed", "err", err)
-		os.Exit(1)
+		return 1
 	}
 
-	app := wiring.BuildServer(context.Background(), cfg, deps)
+	app := wiring.BuildServer(ctx, cfg, deps)
 
+	errCh := make(chan error, 1)
 	go func() {
 		if err := app.Listen(cfg.ListenAddr); err != nil {
-			slog.Error("http server error", "err", err)
-			os.Exit(1)
+			errCh <- err
 		}
 	}()
 	slog.Info("agrelha listening", "version", build.Version, "commit", build.Commit, "built", build.Date,
 		"addr", cfg.ListenAddr, "log_level", cfg.LogLevel, "log_format", cfg.LogFormat)
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	sigCtx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	<-ctx.Done()
-	slog.Info("shutting down")
-	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+	select {
+	case err := <-errCh:
+		slog.Error("http server error", "err", err)
+		return 1
+	case <-sigCtx.Done():
+		slog.Info("shutting down")
+	}
+
+	shutCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := app.ShutdownWithContext(shutCtx); err != nil {
 		slog.Error("forced shutdown", "err", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

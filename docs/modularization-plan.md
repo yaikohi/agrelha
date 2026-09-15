@@ -1,5 +1,9 @@
 # Modularization plan — making agrelha open-source and adaptable
 
+> **Historical.** This plan has been executed; it is kept as a record of how
+> the work was done, not as a description of the system. For the architecture
+> as it stands, see [architecture.md](architecture.md).
+
 Status: **phases 0–8 done, phase 9 next.** Design agreed 2026-09-08;
 last worked 2026-09-09. See docs/SESSION-HANDOFF-2026-09-09.md for pick-up state.
 

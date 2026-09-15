@@ -188,3 +188,31 @@ func TestValheimReadinessChecksTheGamePort(t *testing.T) {
 		t.Error("readiness must check that the game port is actually bound")
 	}
 }
+
+func TestValheimRender_Stopped_And_Vanilla(t *testing.T) {
+	inst := domain.Instance{
+		GameID: domain.GameValheim,
+		Number: 3,
+		Name:   "Vanilla World",
+		Slug:   "vanilla-world",
+		Source: domain.SourceVanilla,
+		Tier:   domain.TierSmall,
+		State:  domain.StateStopped,
+	}
+
+	files, err := New("key=val", "valheim").Render(inst, "some-mod\n")
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	dep := string(files["deployment.yaml"])
+	if !strings.Contains(dep, "replicas: 0") {
+		t.Errorf("stopped instance should have replicas: 0, got %s", dep)
+	}
+
+	// IndentModsTxt
+	d := Data{ModsTxt: "vmod1\nvmod2"}
+	if indented := d.IndentModsTxt(); indented != "    vmod1\n    vmod2\n" {
+		t.Errorf("unexpected IndentModsTxt: %q", indented)
+	}
+}
+

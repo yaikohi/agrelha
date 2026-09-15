@@ -7,6 +7,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+var podMetricsFetcher = func(ctx context.Context, c *Client, podName string) ([]byte, error) {
+	return c.cs.CoreV1().RESTClient().Get().
+		AbsPath("/apis/metrics.k8s.io/v1beta1/namespaces", c.namespace, "pods", podName).
+		DoRaw(ctx)
+}
+
 // PodMetrics reads live CPU/memory usage for the valheim pod from the
 // metrics.k8s.io API (metrics-server). Returns summed-container CPU millicores
 // and memory MiB. Done via a raw REST call to avoid the k8s.io/metrics dep.
@@ -15,9 +21,7 @@ func (c *Client) PodMetrics(ctx context.Context) (cpuMilli, memMiB int64, err er
 	if err != nil {
 		return 0, 0, err
 	}
-	raw, err := c.cs.CoreV1().RESTClient().Get().
-		AbsPath("/apis/metrics.k8s.io/v1beta1/namespaces", c.namespace, "pods", name).
-		DoRaw(ctx)
+	raw, err := podMetricsFetcher(ctx, c, name)
 	if err != nil {
 		return 0, 0, err
 	}

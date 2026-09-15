@@ -5,6 +5,9 @@ cluster. Declarative state (mods, configs, access) is committed to git and
 reconciled by ArgoCD; imperative actions (start/stop/restart, logs) go straight
 to the Kubernetes API.
 
+This file is the *domain* language only. Structural vocabulary — Layer, Port,
+Adapter, Plane — is defined in [docs/architecture.md](docs/architecture.md).
+
 ## Language
 
 ### Servers
