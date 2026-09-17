@@ -158,17 +158,24 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 		Files:         []MrpackFile{},
 	}
 
-	// 1. Clean and deduplicate slugs
+	// 1. Clean and deduplicate slugs, extracting pinned versions if present
 	var cleanSlugs []string
+	pinnedVersions := make(map[string]string)
 	seen := make(map[string]bool)
 	for _, s := range slugs {
-		s = strings.TrimSpace(s)
-		s = strings.TrimSuffix(s, "?")
-		if s == "" || strings.HasPrefix(s, "#") || seen[s] {
+		ref, ok := domain.ParseModRef(s, domain.GameMinecraft)
+		if !ok || ref.Name == "" {
 			continue
 		}
-		seen[s] = true
-		cleanSlugs = append(cleanSlugs, s)
+		slug := strings.TrimSpace(ref.Name)
+		if seen[slug] {
+			continue
+		}
+		seen[slug] = true
+		cleanSlugs = append(cleanSlugs, slug)
+		if ref.Version != "" {
+			pinnedVersions[slug] = ref.Version
+		}
 	}
 
 	// 2. Fetch project metadata (using batch provider if available)
@@ -205,6 +212,11 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 			projectMap[slug] = p
 		}
 
+		if pv, exists := pinnedVersions[slug]; exists && proj.ID != "" {
+			pinnedVersions[proj.ID] = pv
+			pinnedVersions[proj.Slug] = pv
+		}
+
 		// Filter out server-side only mods
 		if strings.EqualFold(proj.ClientSide, "unsupported") {
 			slog.Info("mrpack: excluding server-only mod from client pack", "slug", slug)
@@ -238,6 +250,13 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 			defer func() { <-sem }()
 
 			versions, err := mr.GetProjectVersions(ctx, p.Slug, mcVersion, loaderType)
+			if (err != nil || len(versions) == 0) && mcVersion != "" {
+				// Fallback: query without strict mcVersion to catch universal/unversioned mods
+				if fallbackVers, fbErr := mr.GetProjectVersions(ctx, p.Slug, "", loaderType); fbErr == nil && len(fallbackVers) > 0 {
+					versions = fallbackVers
+					err = nil
+				}
+			}
 			if err != nil || len(versions) == 0 {
 				slog.Warn("mrpack: skipping mod, no compatible versions found", "slug", p.Slug, "mcVersion", mcVersion, "loader", loaderType)
 				filesMu.Lock()
@@ -246,8 +265,20 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 				return
 			}
 
-			// Choose best version: prefer primary version file with .jar extension
+			// Choose best version: prefer pinned version if requested, else prefer first compatible version
 			ver := versions[0]
+			wantedVer := pinnedVersions[p.Slug]
+			if wantedVer == "" {
+				wantedVer = pinnedVersions[p.ID]
+			}
+			if wantedVer != "" {
+				for _, v := range versions {
+					if v.VersionNum == wantedVer || v.ID == wantedVer || strings.EqualFold(v.VersionNum, wantedVer) {
+						ver = v
+						break
+					}
+				}
+			}
 			var chosenFile *domain.ModVersionFile
 			for _, f := range ver.Files {
 				if f.Primary && strings.HasSuffix(f.FileName, ".jar") {
@@ -355,7 +386,11 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 	report.WriteString("Modpack Export Report\n")
 	report.WriteString(fmt.Sprintf("Name:              %s\n", packName))
 	report.WriteString(fmt.Sprintf("Minecraft Version: %s\n", mcVersion))
-	report.WriteString(fmt.Sprintf("Loader:            %s (%s)\n", loaderType, depMap[loaderType]))
+	loaderVer := depMap[loaderType]
+	if loaderVer == "" {
+		loaderVer = depMap[loaderType+"-loader"]
+	}
+	report.WriteString(fmt.Sprintf("Loader:            %s (%s)\n", loaderType, loaderVer))
 	report.WriteString(fmt.Sprintf("Export Date:       %s\n", time.Now().UTC().Format(time.RFC3339)))
 	report.WriteString("============================================================\n")
 	report.WriteString(fmt.Sprintf("Total Server Mods: %d\n", len(cleanSlugs)))

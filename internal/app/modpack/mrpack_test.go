@@ -626,3 +626,130 @@ func TestBuildMrpackZipErrors(t *testing.T) {
 		t.Errorf("expected error when Close fails")
 	}
 }
+
+type mockFallbackModrinth struct {
+	projects map[string]*modrinth.Project
+}
+
+func (m *mockFallbackModrinth) GetProject(_ context.Context, idOrSlug string) (*modrinth.Project, error) {
+	if p, ok := m.projects[idOrSlug]; ok {
+		return p, nil
+	}
+	return nil, fmt.Errorf("not found: %s", idOrSlug)
+}
+
+func (m *mockFallbackModrinth) GetProjectVersions(_ context.Context, idOrSlug, mcVersion, _ string) ([]modrinth.Version, error) {
+	switch idOrSlug {
+	case "fabric-api":
+		return []modrinth.Version{
+			{
+				ID:         "v-older",
+				VersionNum: "0.150.0",
+				Files: []modrinth.VersionFile{
+					{FileName: "fabric-api-0.150.0.jar", URL: "https://example.com/fa1.jar"},
+				},
+			},
+			{
+				ID:         "v-pinned",
+				VersionNum: "0.160.0+26.2",
+				Files: []modrinth.VersionFile{
+					{FileName: "fabric-api-0.160.0+26.2.jar", URL: "https://example.com/fa2.jar", Primary: true},
+				},
+			},
+		}, nil
+	case "sodium":
+		return []modrinth.Version{
+			{
+				ID:         "mc26.2-0.9.2-fabric",
+				VersionNum: "0.9.2",
+				Files: []modrinth.VersionFile{
+					{FileName: "sodium-0.9.2.jar", URL: "https://example.com/sod.jar"},
+				},
+			},
+		}, nil
+	case "fallback-mod":
+		// Fails when mcVersion is provided, succeeds on fallback without mcVersion
+		if mcVersion != "" {
+			return nil, nil
+		}
+		return []modrinth.Version{
+			{
+				VersionNum: "1.0.0",
+				Files: []modrinth.VersionFile{
+					{FileName: "fallback-1.0.0.jar", URL: "https://example.com/fb.jar"},
+				},
+			},
+		}, nil
+	}
+	return nil, fmt.Errorf("not found: %s", idOrSlug)
+}
+
+func TestBuildMrpackPinnedVersionsAndFallback(t *testing.T) {
+	mock := &mockFallbackModrinth{
+		projects: map[string]*modrinth.Project{
+			"fabric-api":   {ID: "proj-fa", Slug: "fabric-api", ClientSide: "required"},
+			"sodium":       {ID: "proj-sod", Slug: "sodium", ClientSide: "required"},
+			"fallback-mod": {ID: "proj-fb", Slug: "fallback-mod", ClientSide: "required"},
+		},
+	}
+
+	slugs := []string{
+		"# comment",
+		"",
+		"fabric-api:0.160.0+26.2",
+		"sodium:mc26.2-0.9.2-fabric",
+		"fallback-mod",
+		"fabric-api:0.160.0+26.2", // duplicate
+	}
+
+	zipBytes, err := BuildMrpack(context.Background(), mock, "FabricPack", "26.2", "fabric", "latest", slugs, nil)
+	if err != nil {
+		t.Fatalf("BuildMrpack failed: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		t.Fatalf("invalid zip: %v", err)
+	}
+
+	var foundIndex, foundReport bool
+	for _, f := range zr.File {
+		if f.Name == "modrinth.index.json" {
+			foundIndex = true
+			rc, _ := f.Open()
+			var idx MrpackIndex
+			_ = json.NewDecoder(rc).Decode(&idx)
+			rc.Close()
+
+			if len(idx.Files) != 3 {
+				t.Fatalf("expected 3 files, got %d", len(idx.Files))
+			}
+			foundPinnedFA := false
+			for _, file := range idx.Files {
+				if file.Path == "mods/fabric-api-0.160.0+26.2.jar" {
+					foundPinnedFA = true
+				}
+			}
+			if !foundPinnedFA {
+				t.Error("expected pinned fabric-api 0.160.0+26.2 to be chosen")
+			}
+		}
+		if f.Name == "overrides/MOD_EXPORT_REPORT.txt" {
+			foundReport = true
+			rc, _ := f.Open()
+			b, _ := io.ReadAll(rc)
+			rc.Close()
+			content := string(b)
+			if !strings.Contains(content, "Loader:            fabric (0.16.10)") {
+				t.Errorf("report should display fabric (0.16.10), got:\n%s", content)
+			}
+			if !strings.Contains(content, "+ fabric-api (0.160.0+26.2)") {
+				t.Errorf("report should list pinned fabric-api, got:\n%s", content)
+			}
+		}
+	}
+
+	if !foundIndex || !foundReport {
+		t.Errorf("foundIndex=%v, foundReport=%v", foundIndex, foundReport)
+	}
+}

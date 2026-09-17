@@ -428,6 +428,16 @@ func TestWiring_WiringRemainingBranches(t *testing.T) {
 		t.Error("expected error for non-existent instance in MC GetInstalledMods")
 	}
 
+	// MC ExportClientBundle fallback to MCInstances and non-existent instance
+	mcInstFallback := domain.Instance{Number: 1, Slug: "mc-fallback", Name: "MC Fallback"}
+	_ = deps.MCInstances.SaveInstance(mcInstFallback)
+	bundleFallback, err := deps.MinecraftGame.ExportClientBundle(ctx, mcInstFallback)
+	t.Logf("MC ExportClientBundle fallback: %+v, err: %v", bundleFallback, err)
+
+	mcInstMissing := domain.Instance{Number: 999, Slug: "mc-missing", Name: "MC Missing"}
+	bundleMissing, err := deps.MinecraftGame.ExportClientBundle(ctx, mcInstMissing)
+	t.Logf("MC ExportClientBundle missing: %+v, err: %v", bundleMissing, err)
+
 	// Valheim InstallMod error and success branches
 	_, _ = deps.ValheimInstances.InstallMod(ctx, 1, "author-err")
 	_, _ = deps.ValheimInstances.InstallMod(ctx, 1, "author-fresh")

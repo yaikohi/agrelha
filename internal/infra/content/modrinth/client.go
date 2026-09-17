@@ -109,6 +109,20 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, v any) error {
 			}
 		}
 
+		if resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusGatewayTimeout {
+			_ = resp.Body.Close()
+			if attempt < maxRetries-1 {
+				waitDuration := time.Duration(attempt+1) * 250 * time.Millisecond
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-timeAfter(waitDuration):
+					continue
+				}
+			}
+			return fmt.Errorf("%s returned status %s", reqURL, resp.Status)
+		}
+
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {

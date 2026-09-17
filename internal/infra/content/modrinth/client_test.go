@@ -131,6 +131,65 @@ func TestModrinthRetry429(t *testing.T) {
 	}
 }
 
+func TestModrinthRetry503(t *testing.T) {
+	origTimeAfter := timeAfter
+	timeAfter = func(time.Duration) <-chan time.Time {
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	}
+	defer func() { timeAfter = origTimeAfter }()
+
+	attempts := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("503 service unavailable"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id": "p1", "slug": "test-mod", "title": "Test Mod"}`))
+	}))
+	defer ts.Close()
+
+	c := New(ts.URL)
+	p, err := c.GetProject(context.Background(), "test-mod")
+	if err != nil {
+		t.Fatalf("GetProject failed: %v", err)
+	}
+	if attempts < 2 {
+		t.Errorf("expected at least 2 attempts, got %d", attempts)
+	}
+	if p.Slug != "test-mod" {
+		t.Errorf("unexpected project: %+v", p)
+	}
+
+	// Always 503 exceeds maxRetries
+	tsFail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer tsFail.Close()
+
+	cFail := New(tsFail.URL)
+	_, err = cFail.GetProject(context.Background(), "always-503")
+	if err == nil {
+		t.Fatal("expected error on persistent 503, got nil")
+	}
+
+	// Context canceled during 503 wait
+	ctx, cancel := context.WithCancel(context.Background())
+	timeAfter = func(time.Duration) <-chan time.Time {
+		cancel()
+		ch := make(chan time.Time)
+		return ch
+	}
+	_, err = cFail.GetProject(ctx, "canceled-503")
+	if err == nil {
+		t.Fatal("expected ctx cancel error, got nil")
+	}
+}
+
 func TestModrinthErrors(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

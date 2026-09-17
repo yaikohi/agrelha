@@ -425,9 +425,30 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 							}
 						}
 					}
+				} else {
+					slog.Warn("minecraft export: cannot read mods configmap from k8s", "configmap", inst.ModsCMName(), "err", err)
 				}
 				if cfgData, err := d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName()); err == nil {
 					cfgFiles = cfgData
+				} else {
+					slog.Warn("minecraft export: cannot read configs configmap from k8s", "configmap", inst.ConfigsCMName(), "err", err)
+				}
+			}
+
+			if len(slugs) == 0 && d.MCInstances != nil {
+				if mods, err := d.MCInstances.GetInstalledMods(ctx, inst.Number); err == nil && len(mods) > 0 {
+					slugs = mods
+				} else if err != nil {
+					slog.Warn("minecraft export: cannot read installed mods from instance manager", "number", inst.Number, "err", err)
+				}
+			}
+			if len(cfgFiles) == 0 && d.MCInstances != nil {
+				if names, err := d.MCInstances.ListConfigs(ctx, inst.Number); err == nil {
+					for _, name := range names {
+						if content, err := d.MCInstances.GetConfig(ctx, inst.Number, name); err == nil {
+							cfgFiles[name] = content
+						}
+					}
 				}
 			}
 
