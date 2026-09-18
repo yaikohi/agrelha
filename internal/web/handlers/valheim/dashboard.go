@@ -32,6 +32,26 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 		updateCounts = h.cfg.ModUpdates.Counts()
 	}
 
+	// Resolved per instance rather than up front: the report is a small file on
+	// the backups mount and a missing one is normal, not an error.
+	serverUpdate := func(inst domain.Instance) bool {
+		if h.cfg.ServerBuild == nil {
+			return false
+		}
+		b, err := h.cfg.ServerBuild(inst.Slug, inst.Number)
+		return err == nil && b != nil && b.UpdateAvailable()
+	}
+	serverBuild := func(inst domain.Instance) string {
+		if h.cfg.ServerBuild == nil {
+			return ""
+		}
+		b, err := h.cfg.ServerBuild(inst.Slug, inst.Number)
+		if err != nil || b == nil || !b.Known() {
+			return ""
+		}
+		return b.Installed
+	}
+
 	uiInstances := make([]pages.InstanceUI, 0, len(instances))
 	for _, inst := range instances {
 		canStart := true
@@ -62,6 +82,8 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 			MOTD:               inst.MOTD,
 			LBIP:               inst.LBIP,
 			ModUpdates:         updateCounts[inst.Number],
+			ServerUpdate:       serverUpdate(inst),
+			ServerBuild:        serverBuild(inst),
 			CanStart:           canStart,
 			StartBlockedReason: blockedReason,
 		})

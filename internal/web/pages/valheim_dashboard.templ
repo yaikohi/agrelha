@@ -72,6 +72,18 @@ templ ValheimDashboard(instances []InstanceUI, budget BudgetUI) {
 										</span>
 									}
 
+									// A Server update is new game binaries, not mods
+									// (CONTEXT.md keeps the two apart) - hence a
+									// different word and a different colour.
+									if inst.ServerUpdate {
+										<span
+											class="rounded bg-sky-950/60 px-2 py-0.5 text-[11px] font-medium text-sky-300 ring-1 ring-sky-800/60"
+											title="A newer Valheim build is published; the server installs it automatically once no one is playing"
+										>
+											&#8681; Server update
+										</span>
+									}
+
 									if inst.ModUpdates > 0 {
 										<a
 											href={ templ.SafeURL(fmt.Sprintf("/valheim/%d/mods", inst.Number)) }

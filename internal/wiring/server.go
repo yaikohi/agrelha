@@ -75,7 +75,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 	contentH := buildContentHandler(cfg, d, applyAfterSync)
 	minecraftH := buildMinecraftHandler(cfg, d, applyMCAfterSync)
 	wizardH := buildWizardHandler(d)
-	valheimH := buildValheimHandler(d, applyValheimAfterSync, consoleH.ValheimConsole)
+	valheimH := buildValheimHandler(cfg, d, applyValheimAfterSync, consoleH.ValheimConsole)
 	dashboardH := buildDashboardHandler(cfg, d, contentH, minecraftH, backupsH, valheimH)
 
 	return web.New(web.ServerConfig{
@@ -374,7 +374,7 @@ func buildConsoleHandler(d Deps) *consolehttp.Handler {
 	})
 }
 
-func buildValheimHandler(d Deps, applyValheimAfterSync func(string, string, string, func(string) bool), legacyConsole func(*fiber.Ctx) error) *valheimhttp.Handler {
+func buildValheimHandler(cfg *config.Config, d Deps, applyValheimAfterSync func(string, string, string, func(string) bool), legacyConsole func(*fiber.Ctx) error) *valheimhttp.Handler {
 	var cat ports.PackageCatalog
 	if d.TS != nil {
 		cat = d.TS
@@ -383,8 +383,19 @@ func buildValheimHandler(d Deps, applyValheimAfterSync func(string, string, stri
 	if d.Store != nil {
 		readme = d.Store
 	}
+	// The build-watch sidecar in each Valheim pod writes its report into that
+	// instance's backup directory; agrelha mounts the same export read-only.
+	var serverBuild func(string, int) (*domain.ServerBuild, error)
+	if cfg != nil && cfg.BackupsDir != "" {
+		dir := cfg.BackupsDir
+		serverBuild = func(slug string, num int) (*domain.ServerBuild, error) {
+			return infrabackups.ReadServerBuild(dir, slug, num)
+		}
+	}
+
 	return valheimhttp.New(valheimhttp.Config{
 		LastIncident:          incidentReader(d, domain.GameValheim),
+		ServerBuild:           serverBuild,
 		ValheimInstances:      d.ValheimInstances,
 		ValheimGame:           d.ValheimGame,
 		TS:                    cat,

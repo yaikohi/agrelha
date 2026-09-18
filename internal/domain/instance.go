@@ -363,3 +363,32 @@ var safeBackupName = regexp.MustCompile(`^(mc|valheim)-[a-z0-9-]+-\d{2}-[a-zA-Z0
 func IsSafeBackupFileName(name string) bool {
 	return safeBackupName.MatchString(name)
 }
+
+// ServerBuild is what the game's own store says about the binaries an Instance
+// is running, as opposed to its Mod list. A Server update is available when the
+// Instance is behind Latest.
+//
+// It is reported by the server itself rather than derived by agrelha: the
+// Valheim image's updater contacts Steam only when it is already idle enough to
+// install, so while players are connected an available update leaves no trace
+// anywhere agrelha can read.
+type ServerBuild struct {
+	Installed string
+	Latest    string
+	CheckedAt time.Time
+}
+
+// UpdateAvailable reports whether the store carries newer binaries than the
+// Instance is running. Unknown on either side means no claim: a failed upstream
+// check must never be rendered as "up to date".
+func (b ServerBuild) UpdateAvailable() bool {
+	if b.Installed == "" || b.Latest == "" {
+		return false
+	}
+	return b.Installed != b.Latest
+}
+
+// Known reports whether the build report carries a usable answer at all.
+func (b ServerBuild) Known() bool {
+	return b.Installed != "" && b.Latest != ""
+}

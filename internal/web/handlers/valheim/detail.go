@@ -55,6 +55,15 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 	}
 	d.Vanilla = inst.IsVanilla()
 
+	if h.cfg.ServerBuild != nil {
+		if b, err := h.cfg.ServerBuild(inst.Slug, inst.Number); err == nil && b != nil {
+			d.ServerUpdate = b.UpdateAvailable()
+			if b.Known() {
+				d.ServerBuild = b.Installed
+			}
+		}
+	}
+
 	if h.cfg.LastIncident != nil {
 		if in, err := h.cfg.LastIncident(c.UserContext(), inst.Number); err == nil {
 			d.LastIncident = pages.IncidentView(in)

@@ -59,6 +59,22 @@ templ ValheimInstanceDetail(d InstanceDetailUI) {
 			<!-- TAB 1: OVERVIEW -->
 			if d.ActiveTab == "overview" {
 				<div class="space-y-6">
+					if d.ServerUpdate {
+						<div class="flex items-start gap-2.5 rounded-xl border border-sky-800/60 bg-sky-950/40 p-4">
+							<span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-900/60 text-sm font-bold text-sky-300">&#8681;</span>
+							<div class="min-w-0">
+								<h2 class="text-sm font-semibold text-sky-200">Server update available</h2>
+								<p class="mt-0.5 text-xs text-sky-300/80">
+									A newer Valheim build is published. The server installs it on its own
+									within 15 minutes of the world being empty, then restarts &mdash; world
+									saves are not touched. Nothing to do unless you want it sooner.
+								</p>
+								if d.ServerBuild != "" {
+									<p class="mt-1.5 font-mono text-xs text-sky-300/70">{ "running build " + d.ServerBuild }</p>
+								}
+							</div>
+						</div>
+					}
 					@IncidentPanel(d.LastIncident)
 					<!-- Connection address hero banner -->
 					<div class="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 sm:flex-row sm:items-center sm:justify-between">

@@ -42,10 +42,14 @@ const instanceStatsTTL = 15 * time.Second
 
 // Config specifies dependencies for the Valheim instances handlers.
 type Config struct {
-	LastIncident          func(ctx context.Context, number int) (*domain.Incident, error)
-	ValheimInstances      *instances.InstanceManager
-	ValheimGame           ports.Game
-	ModUpdates            *modupdates.Checker
+	LastIncident     func(ctx context.Context, number int) (*domain.Incident, error)
+	ValheimInstances *instances.InstanceManager
+	ValheimGame      ports.Game
+	ModUpdates       *modupdates.Checker
+	// ServerBuild reports the game binaries an Instance runs versus the newest
+	// the store offers. Injected as a function because the source is a file on
+	// the backups mount, not a port.
+	ServerBuild           func(slug string, num int) (*domain.ServerBuild, error)
 	TS                    ports.PackageCatalog
 	ReadmeCache           ports.ReadmeCache
 	Actor                 func(*fiber.Ctx) string

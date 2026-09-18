@@ -150,28 +150,32 @@ func HistoryBadge(source, kind string) string {
 }
 
 type InstanceUI struct {
-	GameID             string
-	HasMods            bool
-	Number             int
-	Name               string
-	Slug               string
-	Password           string
-	Seed               string
-	Loader             string
-	Source             string
-	Pack               string
-	PackRef            string
-	PackProvider       string
-	MCVersion          string
-	Tier               string
-	MemoryGiB          int
-	State              string
-	MOTD               string
-	Players            int
-	PlayersKnown       bool
-	Uptime             string
-	LBIP               string
-	ModUpdates         int
+	GameID       string
+	HasMods      bool
+	Number       int
+	Name         string
+	Slug         string
+	Password     string
+	Seed         string
+	Loader       string
+	Source       string
+	Pack         string
+	PackRef      string
+	PackProvider string
+	MCVersion    string
+	Tier         string
+	MemoryGiB    int
+	State        string
+	MOTD         string
+	Players      int
+	PlayersKnown bool
+	Uptime       string
+	LBIP         string
+	ModUpdates   int
+	// ServerUpdate is a new game build from the store, which CONTEXT.md keeps
+	// strictly apart from a Mod update. The UI must never merge the two.
+	ServerUpdate       bool
+	ServerBuild        string
 	CanStart           bool
 	StartBlockedReason string
 }
