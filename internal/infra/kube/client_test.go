@@ -436,6 +436,24 @@ func TestPodName_And_Logs(t *testing.T) {
 	_, _ = c.StreamDeploymentLogs(ctx, "valheim", 100)
 	_, _ = c.StreamLogs(ctx, 100)
 
+	// Multi-container pod (e.g. valheim + build-watch)
+	podMulti := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "valheim-multi",
+			Namespace: "valheim",
+			Labels:    map[string]string{"app": "valheim-multi"},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "build-watch"},
+				{Name: "valheim"},
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	cMulti := NewWithClientset(fake.NewSimpleClientset(podMulti), "valheim", "valheim-multi")
+	_, _ = cMulti.StreamLogs(ctx, 100)
+
 	// 2. Pod with role=mc-instance running fallback
 	podRole := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

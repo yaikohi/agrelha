@@ -46,10 +46,22 @@ func (c *Client) StreamLogs(ctx context.Context, tail int64) (io.ReadCloser, err
 	if err != nil {
 		return nil, err
 	}
-	req := c.cs.CoreV1().Pods(c.namespace).GetLogs(name, &corev1.PodLogOptions{
+	opts := &corev1.PodLogOptions{
 		Follow:    true,
 		TailLines: &tail,
-	})
+	}
+	if p, pErr := c.cs.CoreV1().Pods(c.namespace).Get(ctx, name, metav1.GetOptions{}); pErr == nil {
+		for _, cnt := range p.Spec.Containers {
+			if cnt.Name == "valheim" || cnt.Name == "minecraft" {
+				opts.Container = cnt.Name
+				break
+			}
+		}
+		if opts.Container == "" && len(p.Spec.Containers) > 0 {
+			opts.Container = p.Spec.Containers[0].Name
+		}
+	}
+	req := c.cs.CoreV1().Pods(c.namespace).GetLogs(name, opts)
 	return req.Stream(ctx)
 }
 
