@@ -108,10 +108,11 @@ func makeApplyAfterSync(d Deps) func(string, string, func(string) bool) {
 		if d.K8s == nil {
 			return
 		}
+		timeout, poll := syncTimeout, syncPollInterval
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
-			t := time.NewTicker(syncPollInterval)
+			t := time.NewTicker(poll)
 			defer t.Stop()
 			for {
 				select {
@@ -154,10 +155,11 @@ func makeApplyMinecraftAfterSync(cfg *config.Config, d Deps) func(string, string
 		if depName == "" && cfg != nil {
 			depName = cfg.MinecraftDeployment
 		}
+		timeout, poll := syncTimeout, syncPollInterval
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
-			t := time.NewTicker(syncPollInterval)
+			t := time.NewTicker(poll)
 			defer t.Stop()
 			for {
 				select {
@@ -232,10 +234,11 @@ func makeApplyValheimAfterSync(cfg *config.Config, d Deps) func(string, string, 
 		if depName == "" && cfg != nil {
 			depName = cfg.ValheimDeployment
 		}
+		timeout, poll := syncTimeout, syncPollInterval
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), syncTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
-			t := time.NewTicker(syncPollInterval)
+			t := time.NewTicker(poll)
 			defer t.Stop()
 			for {
 				select {

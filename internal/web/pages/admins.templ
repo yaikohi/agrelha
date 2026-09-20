@@ -55,7 +55,7 @@ templ Admins(players []domain.Player, adminIDs []string, passwords []ValheimWorl
 								<div>
 									<div class="flex items-center gap-2">
 										<a
-											href={ templ.SafeURL(fmt.Sprintf("/valheim/instances/%d", w.Number)) }
+											href={ templ.SafeURL(fmt.Sprintf("/valheim/%d/overview", w.Number)) }
 											class="text-sm font-medium text-zinc-200 hover:text-zinc-100 transition"
 										>
 											{ w.Name }
