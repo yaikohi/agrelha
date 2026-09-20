@@ -9,3 +9,7 @@ metadata:
 data:
   mods.txt: |
 {{ .IndentModsTxt }}
+{{- if .HasCurseForge }}
+  curseforge.txt: |
+{{ .IndentCurseForgeTxt }}
+{{- end }}

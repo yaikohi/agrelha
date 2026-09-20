@@ -160,7 +160,7 @@ func TestMCDashboardEndpoint(t *testing.T) {
 		Loader:    domain.LoaderNeoForge,
 		Tier:      domain.TierMedium,
 		State:     domain.StateStopped,
-	}, "")
+	}, domain.ModList{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestMCInstanceLifecycleEndpoints(t *testing.T) {
 		Loader:    domain.LoaderNeoForge,
 		Tier:      domain.TierMedium,
 		State:     domain.StateStopped,
-	}, "")
+	}, domain.ModList{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestMCInstancePageTabsAndRedirects(t *testing.T) {
 		Loader:    domain.LoaderNeoForge,
 		Tier:      domain.TierMedium,
 		State:     domain.StateStopped,
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +464,7 @@ func TestMCInstanceSettingsAndModInstallRemove(t *testing.T) {
 		Loader:    domain.LoaderNeoForge,
 		Tier:      domain.TierMedium,
 		State:     domain.StateStopped,
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,7 +507,7 @@ func TestMCConfigAndInstanceConfigEndpoints(t *testing.T) {
 		Loader:    domain.LoaderNeoForge,
 		Tier:      domain.TierMedium,
 		State:     domain.StateStopped,
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -716,7 +716,7 @@ func TestMCDashboardInstanceActions(t *testing.T) {
 		Loader:    domain.LoaderNeoForge,
 		Tier:      domain.TierMedium,
 		State:     domain.StateStopped,
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
 	}

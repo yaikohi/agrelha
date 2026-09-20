@@ -33,7 +33,7 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 		Source:    domain.SourceModlist,
 		MCVersion: "1.21.1",
 		Tier:      domain.TierLarge, // 12 GiB
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatalf("create instance 1 failed: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 		Source:    domain.SourceVanilla,
 		MCVersion: "1.21.4",
 		Tier:      domain.TierLarge, // 12 GiB
-	}, "")
+	}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create instance 2 failed: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 		Source:    domain.SourceModlist,
 		MCVersion: "1.20.1",
 		Tier:      domain.TierSmall, // 4 GiB
-	}, "fabric-api\n")
+	}, domain.ModList{Primary: "fabric-api\n"})
 	if err != nil {
 		t.Fatalf("create instance 3 failed: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestInstanceManagerDeepWorkflows(t *testing.T) {
 		Source:    domain.SourceModlist,
 		MCVersion: "1.21.1",
 		Tier:      domain.TierMedium,
-	}, "jei\n", "alice")
+	}, domain.ModList{Primary: "jei\n"}, "alice")
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestValheimInstanceManager(t *testing.T) {
 		Password: "outpostpassword",
 		Seed:     "seed999",
 		Tier:     domain.TierMedium, // 6 GiB
-	}, "denikson/BepInExPack_Valheim\n", "admin@agrelha.local")
+	}, domain.ModList{Primary: "denikson/BepInExPack_Valheim\n"}, "admin@agrelha.local")
 	if err != nil {
 		t.Fatalf("create valheim instance failed: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestValheimInstanceManager(t *testing.T) {
 		Name:     "Farms of Valheim",
 		Password: "farmspassword",
 		Tier:     domain.TierLarge, // 8 GiB
-	}, "", "admin@agrelha.local")
+	}, domain.ModList{}, "admin@agrelha.local")
 	if err != nil {
 		t.Fatalf("create second instance failed: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestValheimInstanceManager(t *testing.T) {
 	inst3, err := mgr.CreateInstance(ctx, domain.Instance{
 		Name: "Third Instance",
 		Tier: domain.TierSmall, // 4 GiB
-	}, "")
+	}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create inst3 failed: %v", err)
 	}
@@ -638,7 +638,7 @@ func TestCreateInstanceRefusesTheDevOverwriteScenario(t *testing.T) {
 
 	_, err := m.CreateInstance(context.Background(), domain.Instance{
 		GameID: domain.GameValheim, Name: "test1", Tier: domain.TierSmall,
-	}, "")
+	}, domain.ModList{})
 	if err == nil {
 		t.Fatal("CreateInstance overwrote a world the database did not know about")
 	}

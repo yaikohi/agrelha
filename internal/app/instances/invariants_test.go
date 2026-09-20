@@ -181,7 +181,7 @@ func TestBudgetRejectsRAMOvercommit(t *testing.T) {
 		Source:    domain.SourceVanilla,
 		MCVersion: "1.21.4",
 		Tier:      domain.TierLarge, // 12 GiB
-	}, "")
+	}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create inst1: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestBudgetRejectsRAMOvercommit(t *testing.T) {
 		Source:    domain.SourceVanilla,
 		MCVersion: "1.21.4",
 		Tier:      domain.TierMedium, // 8 GiB
-	}, "")
+	}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create inst2: %v", err)
 	}
@@ -225,17 +225,17 @@ func TestMaxInstancesLimit(t *testing.T) {
 		store.NewInstanceRepo(st), nil, nil, 24, 2, 2, "manifests/mc", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
 	ctx := context.Background()
 
-	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "One", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, "")
+	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "One", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create One: %v", err)
 	}
-	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Two", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, "")
+	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Two", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create Two: %v", err)
 	}
 
 	// Third creation must be rejected
-	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Three", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, "")
+	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Three", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, domain.ModList{})
 	if err == nil {
 		t.Fatalf("expected error when exceeding max instances limit of 2, got nil")
 	}

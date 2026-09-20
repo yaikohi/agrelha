@@ -278,7 +278,7 @@ func TestValheimLifecycleEndpoints(t *testing.T) {
 		GameID: domain.GameValheim,
 		Name:   "Valhalla",
 		Tier:   domain.TierSmall,
-	}, "test-admin")
+	}, domain.ModList{Primary: "test-admin"})
 	if err != nil {
 		t.Fatalf("CreateInstance failed: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestValheimHubCardSymmetry(t *testing.T) {
 		GameID: domain.GameValheim,
 		Name:   "Valhalla",
 		Tier:   domain.TierMedium,
-	}, "test-admin")
+	}, domain.ModList{Primary: "test-admin"})
 	if err != nil {
 		t.Fatalf("CreateInstance failed: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestValheimBackupsAndRestores(t *testing.T) {
 		GameID: domain.GameValheim,
 		Name:   "Valheim",
 		Tier:   domain.TierMedium,
-	}, "test-admin")
+	}, domain.ModList{Primary: "test-admin"})
 	if err != nil {
 		t.Fatalf("CreateInstance failed: %v", err)
 	}

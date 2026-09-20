@@ -109,6 +109,17 @@ func ResolveNeoForgeVersion(ctx context.Context, mcVersion, requestedVersion str
 }
 
 // ModrinthProvider defines the subset of Modrinth client needed for building modpacks.
+// CurseForgeFile is one pinned CurseForge entry with everything needed to embed
+// it in a .mrpack. URL is empty for a Restricted mod, which nobody can put in a
+// modpack - those still fall through to the report.
+type CurseForgeFile struct {
+	Slug     string
+	FileName string
+	URL      string
+	Size     int64
+	SHA1     string
+}
+
 type ModrinthProvider interface {
 	GetProject(ctx context.Context, idOrSlug string) (*domain.ModProject, error)
 	GetProjectVersions(ctx context.Context, idOrSlug, mcVersion, loader string) ([]domain.ModVersion, error)
@@ -122,7 +133,7 @@ type ModrinthBatchProvider interface {
 // BuildMrpack generates a Modrinth modpack (.mrpack) ZIP archive suitable for 1-click import into Prism Launcher.
 // It filters out server-only mods (client_side == "unsupported"), resolves client files and hashes,
 // packages declarative mod configs into overrides/config/, and writes an export report.
-func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, loaderType, loaderVersion string, slugs []string, configs map[string]string) ([]byte, error) {
+func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, loaderType, loaderVersion string, slugs []string, cfFiles []CurseForgeFile, configs map[string]string) ([]byte, error) {
 	if mcVersion == "" {
 		mcVersion = "1.21.1"
 	}
@@ -381,6 +392,30 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 	}
 
 	// 3. Write diagnostic export report into overrides/MOD_EXPORT_REPORT.txt
+	// CurseForge mods are embedded by URL rather than merely named: a modpack
+	// that silently omits mods the server runs looks fine and is not.
+	var cfRestricted []string
+	for _, f := range cfFiles {
+		if f.URL == "" {
+			cfRestricted = append(cfRestricted, f.Slug)
+			continue
+		}
+		name := f.FileName
+		if name == "" {
+			name = f.Slug + ".jar"
+		}
+		hashes := map[string]string{}
+		if f.SHA1 != "" {
+			hashes["sha1"] = f.SHA1
+		}
+		index.Files = append(index.Files, MrpackFile{
+			Path:      "mods/" + name,
+			Hashes:    hashes,
+			Downloads: []string{f.URL},
+			FileSize:  f.Size,
+		})
+	}
+
 	var report strings.Builder
 	report.WriteString("============================================================\n")
 	report.WriteString("Modpack Export Report\n")
@@ -410,6 +445,16 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 		sort.Strings(serverOnlyMods)
 		report.WriteString("[SERVER-ONLY MODS (OMITTED SAFELY)]\n")
 		for _, s := range serverOnlyMods {
+			report.WriteString(fmt.Sprintf("- %s\n", s))
+		}
+		report.WriteString("\n")
+	}
+
+	if len(cfRestricted) > 0 {
+		sort.Strings(cfRestricted)
+		report.WriteString("[CURSEFORGE MODS THE AUTHOR FORBIDS REDISTRIBUTING]\n")
+		report.WriteString("Install these by hand from CurseForge; no modpack may carry them.\n")
+		for _, s := range cfRestricted {
 			report.WriteString(fmt.Sprintf("- %s\n", s))
 		}
 		report.WriteString("\n")

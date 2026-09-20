@@ -126,7 +126,7 @@ func (h *Handler) MCInstanceCreate(c *fiber.Ctx) error {
 		inst.Loader = domain.NormalizeLoader(loaderStr)
 	}
 
-	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, mods, h.cfg.Actor(c))
+	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, domain.ModList{Primary: mods}, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Failed to create world: "+err.Error(), nil)
 	}

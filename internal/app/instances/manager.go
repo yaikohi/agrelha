@@ -45,6 +45,8 @@ type InstanceManager struct {
 	depResolver         func(ctx context.Context, slug, mcVersion, loader string) ([]string, error)
 	versionResolver     func(ctx context.Context, fullName string) (string, error)
 	modsReader          func(ctx context.Context, num int) ([]string, error)
+	cfModsReader        func(ctx context.Context, num int) ([]string, error)
+	cfResolver          func(ctx context.Context, slug, mcVersion, loader string) ([]string, error)
 	configsReader       func(ctx context.Context, num int) (map[string]string, error)
 	globalConfigsReader func(ctx context.Context) (map[string]string, error)
 	globalConfigsPath   string
@@ -100,6 +102,21 @@ func WithVersionResolver(fn func(ctx context.Context, fullName string) (string, 
 
 func WithModsReader(fn func(ctx context.Context, num int) ([]string, error)) Option {
 	return func(m *InstanceManager) { m.modsReader = fn }
+}
+
+// WithCurseForgeResolver supplies the resolver that turns a CurseForge slug into
+// its own pinned entry plus a pinned entry per required dependency. Without it
+// CurseForge installs are refused rather than written unresolved: see ADR 0004 -
+// the server cannot resolve them either, so an unresolved entry is a boot-time
+// crash loop.
+func WithCurseForgeResolver(fn func(ctx context.Context, slug, mcVersion, loader string) ([]string, error)) Option {
+	return func(m *InstanceManager) { m.cfResolver = fn }
+}
+
+// WithCurseForgeReader supplies the CurseForge half of a Minecraft Mod list.
+// Valheim never sets it: Thunderstore is its only catalogue.
+func WithCurseForgeReader(fn func(ctx context.Context, num int) ([]string, error)) Option {
+	return func(m *InstanceManager) { m.cfModsReader = fn }
 }
 
 func WithConfigsReader(fn func(ctx context.Context, num int) (map[string]string, error)) Option {
@@ -311,7 +328,9 @@ func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*domain.Ins
 	return &inst, nil
 }
 
-func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instance, modsTxt string, actor ...string) (*domain.Instance, error) {
+// CreateInstance provisions a new Instance. mods arrives split by Provider
+// because each Provider's entries reach the server in its own file.
+func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instance, mods domain.ModList, actor ...string) (*domain.Instance, error) {
 	existing, err := m.repo.List()
 	if err != nil {
 		return nil, err
@@ -371,7 +390,7 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 		return nil, err
 	}
 
-	files, err := m.renderer.Render(inst, modsTxt)
+	files, err := m.renderer.Render(inst, mods)
 	if err != nil {
 		return nil, fmt.Errorf("render manifests: %w", err)
 	}
@@ -642,6 +661,55 @@ func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]stri
 	return out, nil
 }
 
+// GetCurseForgeMods reads the CurseForge half of a Mod list. An Instance with no
+// CurseForge entries has no such file, which is not an error.
+func (m *InstanceManager) GetCurseForgeMods(ctx context.Context, num int) ([]string, error) {
+	if m.cfModsReader != nil {
+		return m.cfModsReader(ctx, num)
+	}
+	if m.stateStore == nil {
+		return nil, nil
+	}
+	path := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	doc, err := m.stateStore.Get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	if doc.Data != nil {
+		for _, ref := range domain.SplitModLines(doc.Data["curseforge.txt"], domain.ProviderCurseForge) {
+			out = append(out, ref.Entry())
+		}
+	}
+	return out, nil
+}
+
+// GetModList reads everything an Instance runs, split by Provider - the shape
+// the renderer needs.
+func (m *InstanceManager) GetModList(ctx context.Context, num int) (domain.ModList, error) {
+	primary, err := m.GetInstalledMods(ctx, num)
+	if err != nil {
+		return domain.ModList{}, err
+	}
+	out := domain.ModList{Primary: joinLines(primary)}
+	if m.gameID != domain.GameMinecraft {
+		return out, nil
+	}
+	cf, err := m.GetCurseForgeMods(ctx, num)
+	if err != nil {
+		return out, err
+	}
+	out.CurseForge = joinLines(cf)
+	return out, nil
+}
+
+func joinLines(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
 func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, actor ...string) (int, error) {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
@@ -818,6 +886,142 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 		})
 	}
 	return true, nil
+}
+
+// InstallCurseForgeMod adds a CurseForge mod, and every dependency it requires,
+// to an Instance's CurseForge list. It is separate from InstallMod because the
+// two Providers store their entries in different files in different syntaxes,
+// and because CurseForge dependencies must be resolved here rather than by the
+// server (ADR 0004).
+func (m *InstanceManager) InstallCurseForgeMod(ctx context.Context, num int, slug string, actor ...string) (int, error) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return 0, fmt.Errorf("mod slug required")
+	}
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil {
+		return 0, err
+	}
+	if inst == nil {
+		return 0, fmt.Errorf("instance %d not found", num)
+	}
+	if inst.GameID != domain.GameMinecraft {
+		return 0, fmt.Errorf("CurseForge mods are a Minecraft concept")
+	}
+	if !inst.CanInstallMods() {
+		return 0, inst.VanillaImmutableErr()
+	}
+	if m.cfResolver == nil {
+		return 0, fmt.Errorf("CurseForge is not configured")
+	}
+	if m.stateStore == nil {
+		return 0, ports.ErrNotImplemented
+	}
+
+	// Resolved before any write. A half-resolved list is worse than no change:
+	// the server would download what it could and fail on the rest at boot.
+	wanted, err := m.cfResolver(ctx, slug, inst.MCVersion, string(inst.Loader))
+	if err != nil {
+		return 0, fmt.Errorf("cannot install %s: %w", slug, err)
+	}
+	if len(wanted) == 0 {
+		return 0, fmt.Errorf("no CurseForge mod named %s exists for %s/%s", slug, inst.MCVersion, inst.Loader)
+	}
+
+	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	msg := fmt.Sprintf("%s: install curseforge %s into instance #%02d", m.gamePrefix(), slug, num)
+	added := 0
+	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
+		if doc.Data == nil {
+			doc.Data = make(map[string]string)
+		}
+		refs := domain.SplitModLines(doc.Data["curseforge.txt"], domain.ProviderCurseForge)
+		at := map[string]int{}
+		for i, r := range refs {
+			if _, seen := at[r.Key()]; !seen {
+				at[r.Key()] = i
+			}
+		}
+		for _, line := range wanted {
+			ref, ok := domain.ParseMCModRef(line, domain.ProviderCurseForge)
+			if !ok {
+				continue
+			}
+			if i, present := at[ref.Key()]; present {
+				// Re-pin rather than duplicate: the operator asked for this file.
+				if refs[i].Entry() != ref.Entry() {
+					refs[i] = ref
+					added++
+				}
+				continue
+			}
+			refs = append(refs, ref)
+			at[ref.Key()] = len(refs) - 1
+			added++
+		}
+		if added == 0 {
+			return false, nil
+		}
+		doc.Data["curseforge.txt"] = domain.JoinModLines(refs)
+		return true, nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	if changed && m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-install", m.gamePrefix()),
+			fmt.Sprintf("Installed curseforge %s into #%02d (%d entries)", slug, num, added))
+	}
+	return added, nil
+}
+
+// RemoveCurseForgeMod drops one entry from an Instance's CurseForge list.
+// Dependencies it pulled in are left alone: agrelha cannot tell whether another
+// mod also needs them, and removing one that is still required would turn a tidy
+// list into a broken world.
+func (m *InstanceManager) RemoveCurseForgeMod(ctx context.Context, num int, slug string, actor ...string) error {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return fmt.Errorf("mod slug required")
+	}
+	if m.stateStore == nil {
+		return ports.ErrNotImplemented
+	}
+	target, ok := domain.ParseMCModRef(slug, domain.ProviderCurseForge)
+	if !ok {
+		return fmt.Errorf("mod slug required")
+	}
+
+	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	msg := fmt.Sprintf("%s: remove curseforge %s from instance #%02d", m.gamePrefix(), target.Slug, num)
+	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
+		if doc.Data == nil {
+			return false, nil
+		}
+		refs := domain.SplitModLines(doc.Data["curseforge.txt"], domain.ProviderCurseForge)
+		kept := refs[:0:0]
+		found := false
+		for _, r := range refs {
+			if r.Key() == target.Key() {
+				found = true
+				continue
+			}
+			kept = append(kept, r)
+		}
+		if !found {
+			return false, nil
+		}
+		doc.Data["curseforge.txt"] = domain.JoinModLines(kept)
+		return true, nil
+	})
+	if err != nil {
+		return err
+	}
+	if changed && m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-remove", m.gamePrefix()),
+			fmt.Sprintf("Removed curseforge %s from #%02d", target.Slug, num))
+	}
+	return nil
 }
 
 func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, actor ...string) error {
@@ -1440,10 +1644,11 @@ func (m *InstanceManager) RestoreNew(ctx context.Context, num int, newName, tier
 		State:      domain.StateStopped,
 	}
 
-	mods, _ := m.GetInstalledMods(ctx, srcInst.Number)
-	modsTxt := strings.Join(mods, "\n")
+	// Duplicate carries both halves: a copy that silently dropped the CurseForge
+	// mods would look right in the UI and boot without them.
+	mods, _ := m.GetModList(ctx, srcInst.Number)
 
-	created, err := m.CreateInstance(ctx, newInst, modsTxt, actor...)
+	created, err := m.CreateInstance(ctx, newInst, mods, actor...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new instance: %w", err)
 	}

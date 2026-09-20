@@ -45,8 +45,10 @@ func New(nodeSelector, namespace string) *Renderer {
 
 var _ ports.SpecRenderer = (*Renderer)(nil)
 
-func (r *Renderer) Render(inst domain.Instance, modsTxt string) (map[string][]byte, error) {
-	return Render(inst, modsTxt, r.nodeSelector, r.namespace)
+// Valheim has one catalogue (Thunderstore), so only the Primary list is ever
+// populated; CurseForge is Minecraft's concern.
+func (r *Renderer) Render(inst domain.Instance, mods domain.ModList) (map[string][]byte, error) {
+	return Render(inst, mods.Primary, r.nodeSelector, r.namespace)
 }
 
 func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[string][]byte, error) {

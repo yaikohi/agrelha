@@ -226,7 +226,7 @@ func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (do
 		mcVer = "1.21.1"
 	}
 
-	data, err := buildMrpack(ctx, nil, inst.Name, mcVer, loader, "latest", nil, nil)
+	data, err := buildMrpack(ctx, nil, inst.Name, mcVer, loader, "latest", nil, nil, nil)
 	if err != nil {
 		return domain.Bundle{}, fmt.Errorf("build minecraft client bundle: %w", err)
 	}

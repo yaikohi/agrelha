@@ -26,7 +26,7 @@ func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
 		Source:    domain.SourceModpack,
 		MCVersion: "1.21.1",
 		Tier:      domain.TierLarge,
-	}, "")
+	}, domain.ModList{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 		Source:    domain.SourceModlist,
 		MCVersion: "1.21.1",
 		Tier:      domain.TierMedium,
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
 	}

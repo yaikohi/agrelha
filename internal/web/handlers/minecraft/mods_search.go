@@ -22,6 +22,13 @@ type ModHit struct {
 	Title       string
 	Description string
 	IconURL     string
+	// Provider says which catalogue the hit came from, and therefore which file
+	// the Install writes to. Empty means Modrinth, so existing callers are
+	// unaffected.
+	Provider domain.Provider
+	// Restricted marks a mod whose author forbids third-party distribution. It
+	// can be read about but never added, so Install is offered but refused.
+	Restricted bool
 }
 
 // SearchModsFunc searches the content provider for mods matching a query.
@@ -57,9 +64,19 @@ func (h *Handler) MCInstanceModsSearch(c *fiber.Ctx) error {
 			mcVersion = inst.MCVersion
 			loader = string(inst.Loader)
 		}
+		// Keyed by Provider as well as slug: the same slug on Modrinth and on
+		// CurseForge is two different mods, and marking one Installed because the
+		// other is would offer the wrong button.
 		if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), num); err == nil {
 			for _, m := range mods {
-				if ref, ok := domain.ParseModRef(m, domain.GameMinecraft); ok {
+				if ref, ok := domain.ParseMCModRef(m, domain.ProviderModrinth); ok {
+					installed[ref.Key()] = true
+				}
+			}
+		}
+		if mods, err := h.cfg.MCInstances.GetCurseForgeMods(c.UserContext(), num); err == nil {
+			for _, m := range mods {
+				if ref, ok := domain.ParseMCModRef(m, domain.ProviderCurseForge); ok {
 					installed[ref.Key()] = true
 				}
 			}
@@ -80,7 +97,11 @@ func (h *Handler) MCInstanceModsSearch(c *fiber.Ctx) error {
 		html.EscapeString(q), len(hits), html.EscapeString(mcVersion)))
 
 	for _, hit := range hits {
-		ref, _ := domain.ParseModRef(hit.Slug, domain.GameMinecraft)
+		provider := hit.Provider
+		if provider == "" {
+			provider = domain.ProviderModrinth
+		}
+		ref, _ := domain.ParseMCModRef(hit.Slug, provider)
 		sb.WriteString(modCardHTML(num, hit, installed[ref.Key()]))
 	}
 	return patchModResults(c, sb.String())
@@ -88,16 +109,27 @@ func (h *Handler) MCInstanceModsSearch(c *fiber.Ctx) error {
 
 func modCardHTML(num int, hit ModHit, installed bool) string {
 	slug := strings.ReplaceAll(hit.Slug, "'", "\\'")
+	provider := hit.Provider
+	if provider == "" {
+		provider = domain.ProviderModrinth
+	}
 
 	action := fmt.Sprintf(
-		`<button type="button" data-on:click="@post('/api/minecraft/%d/mods/install', {payload: {slug: '%s'}})" class="shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white transition">+ Install</button>`,
-		num, slug)
-	badge := ""
+		`<button type="button" data-on:click="@post('/api/minecraft/%d/mods/install', {payload: {slug: '%s', provider: '%s'}})" class="shrink-0 rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white transition">+ Install</button>`,
+		num, slug, provider)
+
+	// A Restricted mod exists and can be read about, but no download exists for
+	// anyone but CurseForge's own client. Offering Install would be a lie.
+	if hit.Restricted {
+		action = `<span class="shrink-0 rounded-lg border border-amber-800/60 bg-amber-950/40 px-3 py-1.5 text-xs font-medium text-amber-300" title="This mod's author does not allow third-party downloads. No API key changes this.">Not downloadable</span>`
+	}
+
+	badge := providerBadge(provider)
 	if installed {
-		badge = `<span class="rounded bg-emerald-950/70 border border-emerald-800/60 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">Installed</span>`
+		badge += ` <span class="rounded bg-emerald-950/70 border border-emerald-800/60 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">Installed</span>`
 		action = fmt.Sprintf(
-			`<button type="button" data-on:click="@post('/api/minecraft/%d/mods/remove', {payload: {slug: '%s'}})" class="shrink-0 rounded-lg bg-red-950/50 border border-red-800/60 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-900/60 transition">Remove</button>`,
-			num, slug)
+			`<button type="button" data-on:click="@post('/api/minecraft/%d/mods/remove', {payload: {slug: '%s', provider: '%s'}})" class="shrink-0 rounded-lg bg-red-950/50 border border-red-800/60 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-900/60 transition">Remove</button>`,
+			num, slug, provider)
 	}
 
 	return fmt.Sprintf(`
@@ -137,4 +169,14 @@ func patchModResults(c *fiber.Ctx, content string) error {
 		return err
 	}
 	return c.Send(buf.Bytes())
+}
+
+// providerBadge names which catalogue a hit came from. With one search box over
+// two catalogues, the operator otherwise cannot tell why the same-looking mod
+// appears twice.
+func providerBadge(p domain.Provider) string {
+	if p == domain.ProviderCurseForge {
+		return `<span class="rounded bg-orange-950/60 border border-orange-800/60 px-1.5 py-0.5 text-[10px] font-medium text-orange-300">CurseForge</span>`
+	}
+	return `<span class="rounded bg-green-950/60 border border-green-800/60 px-1.5 py-0.5 text-[10px] font-medium text-green-300">Modrinth</span>`
 }

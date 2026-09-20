@@ -75,7 +75,7 @@ func TestManagerDrivesAnyRuntime(t *testing.T) {
 	inst, err := mgr.CreateInstance(ctx, domain.Instance{
 		Name: "portcheck", Loader: domain.LoaderNeoForge, Source: domain.SourceModlist,
 		MCVersion: "1.21.1", Tier: domain.TierSmall,
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

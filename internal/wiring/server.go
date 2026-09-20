@@ -489,21 +489,57 @@ func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 			d.MCInstances.ApplyOptions(opts...)
 		}
 	}
+	// One search box over both catalogues. Each hit carries its Provider so the
+	// Install writes to the right file; one catalogue failing must not take the
+	// other down, because the operator's question is "is there a mod that does
+	// X", not "is there a Modrinth mod that does X".
 	var searchMods minecrafthttp.SearchModsFunc
-	if d.MR != nil {
+	if d.MR != nil || d.CF.Ready() {
 		searchMods = func(ctx context.Context, query, mcVersion, loader string) ([]minecrafthttp.ModHit, error) {
-			res, err := d.MR.Search(ctx, query, mcVersion, loader, 20, 0)
-			if err != nil {
-				return nil, err
+			var hits []minecrafthttp.ModHit
+			var firstErr error
+
+			if d.MR != nil {
+				res, err := d.MR.Search(ctx, query, mcVersion, loader, 20, 0)
+				if err != nil {
+					firstErr = err
+				} else {
+					for _, h := range res.Hits {
+						hits = append(hits, minecrafthttp.ModHit{
+							Slug:        h.Slug,
+							Title:       h.Title,
+							Description: h.Description,
+							IconURL:     h.IconURL,
+							Provider:    domain.ProviderModrinth,
+						})
+					}
+				}
 			}
-			hits := make([]minecrafthttp.ModHit, 0, len(res.Hits))
-			for _, h := range res.Hits {
-				hits = append(hits, minecrafthttp.ModHit{
-					Slug:        h.Slug,
-					Title:       h.Title,
-					Description: h.Description,
-					IconURL:     h.IconURL,
-				})
+
+			if d.CF.Ready() {
+				res, err := d.CF.Search(ctx, query, mcVersion, domain.Loader(loader), 20)
+				if err != nil {
+					if firstErr == nil {
+						firstErr = err
+					}
+					slog.Warn("curseforge search failed", "query", query, "err", err)
+				}
+				for _, m := range res {
+					hits = append(hits, minecrafthttp.ModHit{
+						Slug:        m.Slug,
+						Title:       m.Name,
+						Description: m.Summary,
+						IconURL:     m.IconURL,
+						Provider:    domain.ProviderCurseForge,
+						Restricted:  m.Restricted,
+					})
+				}
+			}
+
+			// Only surface an error when nothing at all came back; a partial
+			// answer is more useful than a failure the operator cannot act on.
+			if len(hits) == 0 && firstErr != nil {
+				return nil, firstErr
 			}
 			return hits, nil
 		}

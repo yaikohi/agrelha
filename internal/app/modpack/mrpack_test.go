@@ -98,7 +98,7 @@ func TestBuildMrpack(t *testing.T) {
 
 	slugs := []string{"jei", "luckperms", "ferrite-core"}
 
-	zipBytes, err := BuildMrpack(context.Background(), mock, "TestPack", "1.21.1", "neoforge", "21.1.249", slugs, configs)
+	zipBytes, err := BuildMrpack(context.Background(), mock, "TestPack", "1.21.1", "neoforge", "21.1.249", slugs, nil, configs)
 	if err != nil {
 		t.Fatalf("BuildMrpack failed: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestBuildMrpackFabric(t *testing.T) {
 		},
 	}
 
-	zipBytes, err := BuildMrpack(context.Background(), mock, "FabricPack", "1.21.1", "fabric", "latest", []string{"fabric-api"}, nil)
+	zipBytes, err := BuildMrpack(context.Background(), mock, "FabricPack", "1.21.1", "fabric", "latest", []string{"fabric-api"}, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildMrpack failed: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestBuildMrpackWithReportAndBatch(t *testing.T) {
 
 	slugs := []string{"jei", "luckperms", "nonexistent-curseforge-mod"}
 
-	zipBytes, err := BuildMrpack(context.Background(), mock, "Test120Pack", "1.20.1", "neoforge", "latest", slugs, nil)
+	zipBytes, err := BuildMrpack(context.Background(), mock, "Test120Pack", "1.20.1", "neoforge", "latest", slugs, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildMrpack failed: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestBuildMrpackLiveSample(t *testing.T) {
 		"spark", // server-only mod
 	}
 
-	zipBytes, err := BuildMrpack(context.Background(), mr, "LiveTestPack", "1.20.1", "neoforge", "latest", slugs, nil)
+	zipBytes, err := BuildMrpack(context.Background(), mr, "LiveTestPack", "1.20.1", "neoforge", "latest", slugs, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildMrpack failed: %v", err)
 	}
@@ -530,7 +530,7 @@ func TestBuildMrpackAllEdgeCases(t *testing.T) {
 		"opt-mod", "opt-mod", "opt-mod?", "# comment", "",
 		"non-primary", "no-jar", "empty-url", "server-mod", "missing-mod", "no-version-mod",
 	}
-	data, err := BuildMrpack(ctx, mock, "EdgePack", "", "", "", slugs, map[string]string{"foo.txt": "bar"})
+	data, err := BuildMrpack(ctx, mock, "EdgePack", "", "", "", slugs, nil, map[string]string{"foo.txt": "bar"})
 	if err != nil {
 		t.Fatalf("BuildMrpack failed: %v", err)
 	}
@@ -540,7 +540,7 @@ func TestBuildMrpackAllEdgeCases(t *testing.T) {
 
 	// 2. Fabric loader with empty and custom loaderVersion, batch success
 	mock.batchErr = nil
-	fabricData, err := BuildMrpack(ctx, mock, "FabricPack", "1.21.1", "fabric", "", []string{"opt-mod"}, nil)
+	fabricData, err := BuildMrpack(ctx, mock, "FabricPack", "1.21.1", "fabric", "", []string{"opt-mod"}, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildMrpack fabric failed: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestBuildMrpackAllEdgeCases(t *testing.T) {
 		t.Fatalf("expected non-empty fabricData")
 	}
 
-	fabricData2, err := BuildMrpack(ctx, mock, "FabricPack2", "1.21.1", "fabric", "0.15.0", []string{"opt-mod"}, nil)
+	fabricData2, err := BuildMrpack(ctx, mock, "FabricPack2", "1.21.1", "fabric", "0.15.0", []string{"opt-mod"}, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildMrpack fabric2 failed: %v", err)
 	}
@@ -579,7 +579,7 @@ func TestBuildMrpackZipErrors(t *testing.T) {
 	mrpackJSONMarshalIndent = func(v any, prefix, indent string) ([]byte, error) {
 		return nil, fmt.Errorf("marshal fail")
 	}
-	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil); err == nil {
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil, nil); err == nil {
 		t.Errorf("expected error when mrpackJSONMarshalIndent fails")
 	}
 	mrpackJSONMarshalIndent = origMarshal
@@ -588,7 +588,7 @@ func TestBuildMrpackZipErrors(t *testing.T) {
 	mrpackNewZipWriter = func(io.Writer) zipWriter {
 		return &mockZipWriter{createErr: fmt.Errorf("create index fail")}
 	}
-	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil); err == nil {
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil, nil); err == nil {
 		t.Errorf("expected error when Create index fails")
 	}
 
@@ -596,7 +596,7 @@ func TestBuildMrpackZipErrors(t *testing.T) {
 	mrpackNewZipWriter = func(io.Writer) zipWriter {
 		return &mockZipWriter{writeErr: fmt.Errorf("write index fail")}
 	}
-	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil); err == nil {
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil, nil); err == nil {
 		t.Errorf("expected error when Write index fails")
 	}
 
@@ -606,7 +606,7 @@ func TestBuildMrpackZipErrors(t *testing.T) {
 	mrpackNewZipWriter = func(io.Writer) zipWriter {
 		return &mockZipWriter{createErr: fmt.Errorf("create config fail"), failConfig: true}
 	}
-	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, configs); err == nil {
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil, configs); err == nil {
 		t.Errorf("expected error when Create config fails")
 	}
 
@@ -614,7 +614,7 @@ func TestBuildMrpackZipErrors(t *testing.T) {
 	mrpackNewZipWriter = func(io.Writer) zipWriter {
 		return &mockZipWriter{writeErr: fmt.Errorf("write config fail"), failConfig: true}
 	}
-	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, configs); err == nil {
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil, configs); err == nil {
 		t.Errorf("expected error when Write config fails")
 	}
 
@@ -622,7 +622,7 @@ func TestBuildMrpackZipErrors(t *testing.T) {
 	mrpackNewZipWriter = func(io.Writer) zipWriter {
 		return &mockZipWriter{closeErr: fmt.Errorf("close fail")}
 	}
-	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, configs); err == nil {
+	if _, err := BuildMrpack(ctx, mock, "Pack", "1.21.1", "neoforge", "", []string{"mod"}, nil, configs); err == nil {
 		t.Errorf("expected error when Close fails")
 	}
 }
@@ -702,7 +702,7 @@ func TestBuildMrpackPinnedVersionsAndFallback(t *testing.T) {
 		"fabric-api:0.160.0+26.2", // duplicate
 	}
 
-	zipBytes, err := BuildMrpack(context.Background(), mock, "FabricPack", "26.2", "fabric", "latest", slugs, nil)
+	zipBytes, err := BuildMrpack(context.Background(), mock, "FabricPack", "26.2", "fabric", "latest", slugs, nil, nil)
 	if err != nil {
 		t.Fatalf("BuildMrpack failed: %v", err)
 	}

@@ -65,7 +65,7 @@ func TestLegacyRedirectsToActiveInstance(t *testing.T) {
 		MCVersion: "1.21.1",
 		Loader:    "neoforge",
 		Source:    "modlist",
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
 	}

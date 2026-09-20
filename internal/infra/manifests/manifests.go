@@ -15,17 +15,26 @@ var templateFS embed.FS
 
 type Data struct {
 	domain.Instance
-	Annotations map[string]string
-	Env         map[string]string
-	ModsTxt     string
+	Annotations   map[string]string
+	Env           map[string]string
+	ModsTxt       string
+	CurseForgeTxt string
 	// NodeSelector is "key=value"; empty means schedule anywhere.
 	NodeSelectorKey   string
 	NodeSelectorValue string
 	Namespace         string
 }
 
-func (rd Data) IndentModsTxt() string {
-	lines := strings.Split(strings.TrimRight(rd.ModsTxt, "\n"), "\n")
+func (rd Data) IndentModsTxt() string { return indentBlock(rd.ModsTxt) }
+
+// IndentCurseForgeTxt is empty when the Instance has no CurseForge mods, which
+// is what keeps the second ConfigMap key out of the rendered object entirely.
+func (rd Data) IndentCurseForgeTxt() string { return indentBlock(rd.CurseForgeTxt) }
+
+func (rd Data) HasCurseForge() bool { return strings.TrimSpace(rd.CurseForgeTxt) != "" }
+
+func indentBlock(body string) string {
+	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
 	var sb strings.Builder
 	for _, l := range lines {
 		sb.WriteString("    " + l + "\n")
@@ -44,19 +53,20 @@ func New(nodeSelector, namespace string) *Renderer {
 	return &Renderer{nodeSelector: nodeSelector, namespace: namespace}
 }
 
-func (r *Renderer) Render(inst domain.Instance, modsTxt string) (map[string][]byte, error) {
-	return Render(inst, modsTxt, r.nodeSelector, r.namespace)
+func (r *Renderer) Render(inst domain.Instance, mods domain.ModList) (map[string][]byte, error) {
+	return Render(inst, mods, r.nodeSelector, r.namespace)
 }
 
-func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[string][]byte, error) {
+func Render(inst domain.Instance, mods domain.ModList, nodeSelector, namespace string) (map[string][]byte, error) {
 	inst.EnsureDefaults("")
 
 	data := Data{
-		Instance:    inst,
-		Annotations: inst.Annotations(),
-		Env:         inst.Env(),
-		ModsTxt:     modsTxt,
-		Namespace:   namespace,
+		Instance:      inst,
+		Annotations:   inst.Annotations(),
+		Env:           inst.EnvWith(mods),
+		ModsTxt:       mods.Primary,
+		CurseForgeTxt: mods.CurseForge,
+		Namespace:     namespace,
 	}
 	if data.Namespace == "" {
 		data.Namespace = "minecraft-modded"
@@ -109,7 +119,7 @@ func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[
 	}
 	files["configs.yaml"] = cfgBuf.Bytes()
 
-	if inst.Source != domain.SourceVanilla || strings.TrimSpace(modsTxt) != "" {
+	if inst.Source != domain.SourceVanilla || !mods.Empty() {
 		if strings.TrimSpace(data.ModsTxt) == "" {
 			data.ModsTxt = fmt.Sprintf("# Mod list for %s\n", inst.Name)
 		}

@@ -251,7 +251,7 @@ func TestValheimDashboard(t *testing.T) {
 		GameID: domain.GameValheim,
 		Name:   "Odin's World",
 		Tier:   domain.TierMedium,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestValheimLifecycleEndpoints(t *testing.T) {
 		GameID: domain.GameValheim,
 		Name:   "Viking Realm",
 		Tier:   domain.TierSmall,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
 	}
@@ -320,7 +320,7 @@ func TestValheimInstancePage(t *testing.T) {
 		Name:     "Midgard",
 		Password: "secretpassword",
 		Tier:     domain.TierLarge,
-	}, "denikson-BepInExPack_Valheim\n", "tester")
+	}, domain.ModList{Primary: "denikson-BepInExPack_Valheim\n"}, "tester")
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestValheimLegacyRedirects(t *testing.T) {
 	_, _ = mgr.CreateInstance(ctx, domain.Instance{
 		GameID: domain.GameValheim,
 		Name:   "Valheim Default",
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 
 	app := fiber.New()
 	h.Register(app)
@@ -395,7 +395,7 @@ func TestValheimInstanceModsSearchAndInstall(t *testing.T) {
 		GameID: domain.GameValheim,
 		Number: 1,
 		Name:   "Valheim Default",
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 
 	app := fiber.New()
 	h.Register(app)
@@ -484,7 +484,7 @@ func TestValheimModDetail(t *testing.T) {
 		GameID: domain.GameValheim,
 		Number: 1,
 		Name:   "Valheim Detail",
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 
 	app := fiber.New()
 	h.Register(app)
@@ -679,7 +679,7 @@ func TestValheimModUpdatesEndpoints(t *testing.T) {
 		Number: 1,
 		Name:   "Viking Realm",
 		Source: domain.SourceModlist,
-	}, "Smoothbrain/Mining/1.0.0\n", "tester")
+	}, domain.ModList{Primary: "Smoothbrain/Mining/1.0.0\n"}, "tester")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -764,7 +764,7 @@ func TestValheimDetailTabsAndActions(t *testing.T) {
 		Password: "secret",
 		Tier:     domain.TierMedium,
 		State:    domain.StateRunning,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -921,7 +921,7 @@ func TestValheimConfigs(t *testing.T) {
 		GameID: domain.GameValheim,
 		Name:   "Valheim Server",
 		Tier:   domain.TierMedium,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
 	}

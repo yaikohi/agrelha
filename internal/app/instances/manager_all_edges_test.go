@@ -181,7 +181,7 @@ type fullMockRenderer struct {
 	err   error
 }
 
-func (r *fullMockRenderer) Render(inst domain.Instance, modsTxt string) (map[string][]byte, error) {
+func (r *fullMockRenderer) Render(inst domain.Instance, mods domain.ModList) (map[string][]byte, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -397,7 +397,7 @@ func TestManagerCreateInstanceEdges(t *testing.T) {
 
 	// 1. repo.List error
 	repo.listErr = fmt.Errorf("list fail")
-	if _, err := mgr.CreateInstance(ctx, domain.Instance{Name: "W1"}, ""); err == nil {
+	if _, err := mgr.CreateInstance(ctx, domain.Instance{Name: "W1"}, domain.ModList{}); err == nil {
 		t.Errorf("expected error when repo.List fails")
 	}
 	repo.listErr = nil
@@ -405,22 +405,22 @@ func TestManagerCreateInstanceEdges(t *testing.T) {
 	// 2. Budget exceeded
 	mgr.maxInstances = 1
 	repo.Upsert(domain.Instance{Number: 1, State: domain.StateStopped})
-	if _, err := mgr.CreateInstance(ctx, domain.Instance{Name: "W2"}, ""); err == nil {
+	if _, err := mgr.CreateInstance(ctx, domain.Instance{Name: "W2"}, domain.ModList{}); err == nil {
 		t.Errorf("expected error when budget max instances exceeded")
 	}
 	mgr.maxInstances = 4
 
 	// 3. Number already in use & invalid number
-	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 1, Name: "W2"}, ""); err == nil {
+	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 1, Name: "W2"}, domain.ModList{}); err == nil {
 		t.Errorf("expected error for duplicate instance number")
 	}
-	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 99, Name: "W99"}, ""); err == nil {
+	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 99, Name: "W99"}, domain.ModList{}); err == nil {
 		t.Errorf("expected error for instance number out of range")
 	}
 
 	// 4. GameID fallback and Valheim default name
 	delete(repo.instances, 1)
-	instV, err := mgr.CreateInstance(ctx, domain.Instance{GameID: domain.GameValheim}, "")
+	instV, err := mgr.CreateInstance(ctx, domain.Instance{GameID: domain.GameValheim}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create valheim instance failed: %v", err)
 	}
@@ -460,21 +460,21 @@ func TestManagerCreateInstanceEdges(t *testing.T) {
 
 	// 7. renderer error
 	renderer.err = fmt.Errorf("render fail")
-	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 2, Name: "W2"}, ""); err == nil {
+	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 2, Name: "W2"}, domain.ModList{}); err == nil {
 		t.Errorf("expected error when renderer fails")
 	}
 	renderer.err = nil
 
 	// 8. stateStore.PutTree error
 	store.treeErr = fmt.Errorf("put tree fail")
-	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 2, Name: "W2"}, ""); err == nil {
+	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 2, Name: "W2"}, domain.ModList{}); err == nil {
 		t.Errorf("expected error when stateStore.PutTree fails")
 	}
 	store.treeErr = nil
 
 	// 9. repo.Upsert error
 	repo.upsertErr = fmt.Errorf("upsert fail")
-	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 2, Name: "W2"}, ""); err == nil {
+	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 2, Name: "W2"}, domain.ModList{}); err == nil {
 		t.Errorf("expected error when repo.Upsert fails")
 	}
 	repo.upsertErr = nil
@@ -483,7 +483,7 @@ func TestManagerCreateInstanceEdges(t *testing.T) {
 	events := &fullMockAuditAndEvent{}
 	mgr.audit = events
 	mgr.event = events
-	inst2, err := mgr.CreateInstance(ctx, domain.Instance{Number: 2, Name: "W2"}, "", "operator")
+	inst2, err := mgr.CreateInstance(ctx, domain.Instance{Number: 2, Name: "W2"}, domain.ModList{}, "operator")
 	if err != nil || inst2 == nil {
 		t.Fatalf("unexpected error creating instance 2: %v", err)
 	}
@@ -1369,7 +1369,7 @@ func TestManagerExactEdgeCases(t *testing.T) {
 	}
 
 	// 3. CreateInstance default Minecraft name
-	createdMC, err := mgr.CreateInstance(ctx, domain.Instance{Number: 5, GameID: domain.GameMinecraft, Name: ""}, "")
+	createdMC, err := mgr.CreateInstance(ctx, domain.Instance{Number: 5, GameID: domain.GameMinecraft, Name: ""}, domain.ModList{})
 	if err != nil || createdMC.Name != "World 05" {
 		t.Errorf("expected World 05, got %+v, %v", createdMC, err)
 	}
@@ -1377,7 +1377,7 @@ func TestManagerExactEdgeCases(t *testing.T) {
 	// 4. CreateInstance checkLBIPFree collision
 	mgr.maxInstances = 100
 	repo.Upsert(domain.Instance{Number: 50, GameID: domain.GameValheim, LBIP: "192.168.20.99"})
-	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 51, GameID: domain.GameMinecraft, LBIP: "192.168.20.99"}, ""); err == nil {
+	if _, err := mgr.CreateInstance(ctx, domain.Instance{Number: 51, GameID: domain.GameMinecraft, LBIP: "192.168.20.99"}, domain.ModList{}); err == nil {
 		t.Errorf("expected error on LBIP collision in CreateInstance")
 	}
 

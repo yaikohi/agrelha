@@ -345,7 +345,7 @@ func TestMCSettingsSave(t *testing.T) {
 		Name:      "OldName",
 		MCVersion: "1.21.1",
 		Tier:      domain.TierSmall,
-	}, "")
+	}, domain.ModList{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -80,14 +80,24 @@ decides its Loader and Minecraft version.
 _Avoid_: modpack (as a distinct concept), bundle
 
 **Provider**:
-Who distributes a Pack: CurseForge or Modrinth. A distributor, never a Loader and
-never a kind of server.
+Who distributes content: CurseForge or Modrinth. It applies to a Pack and to an
+individual mod alike — the same two names answer both questions, and a single
+Mod list may draw from both. A distributor, never a Loader and never a kind of
+server.
 _Avoid_: platform, host, source (that word means something else here)
 
 **Mod list**:
-An operator-chosen set of individual mods resolved from Modrinth, used when Source
-is `modlist`. The operator picks the Loader and Minecraft version.
+An operator-chosen set of individual mods, used when Source is `modlist`. Each
+entry names its Provider, so one list may mix Modrinth and CurseForge mods. The
+operator picks the Loader and Minecraft version.
 _Avoid_: modpack, custom pack
+
+**Restricted mod**:
+A mod whose author forbids third-party distribution. Its Provider still answers
+questions about it, so it appears in search and can be read about, but no
+download exists for anyone but the Provider's own client. An API key does not
+change this. A Restricted mod can never join a Mod list.
+_Avoid_: unavailable, broken, missing (it exists; it just cannot be fetched)
 
 **Mod update**:
 A newer version of an already-installed mod exists upstream. Applying one repins

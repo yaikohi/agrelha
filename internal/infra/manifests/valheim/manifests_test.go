@@ -21,7 +21,7 @@ func TestValheimRenderBasic(t *testing.T) {
 	}
 
 	renderer := New("dedicated=gameserver", "valheim")
-	files, err := renderer.Render(inst, "denikson/BepInExPack_Valheim\nvalheim/jotunn\n")
+	files, err := renderer.Render(inst, domain.ModList{Primary: "denikson/BepInExPack_Valheim\nvalheim/jotunn\n"})
 	if err != nil {
 		t.Fatalf("Render failed: %v", err)
 	}
@@ -55,6 +55,18 @@ func TestValheimRenderBasic(t *testing.T) {
 	}
 	if !strings.Contains(dep, "dedicated: \"gameserver\"") {
 		t.Errorf("nodeSelector missing in deployment: %s", dep)
+	}
+	if !strings.Contains(dep, "name: valheim-admins") {
+		t.Errorf("valheim-admins configMapRef missing in deployment: %s", dep)
+	}
+	if !strings.Contains(dep, "name: POST_BOOTSTRAP_HOOK") {
+		t.Errorf("POST_BOOTSTRAP_HOOK missing in deployment: %s", dep)
+	}
+	if !strings.Contains(dep, "name: PRE_BEPINEX_CONFIG_HOOK") {
+		t.Errorf("PRE_BEPINEX_CONFIG_HOOK missing in modded deployment: %s", dep)
+	}
+	if !strings.Contains(dep, "name: PRE_SERVER_RUN_HOOK") || !strings.Contains(dep, "rsync -a --delete /config/bepinex/plugins/") {
+		t.Errorf("PRE_SERVER_RUN_HOOK missing or not syncing plugins: %s", dep)
 	}
 
 	// 2. Verify service.yaml
@@ -111,7 +123,7 @@ func TestValheimRenderStoppedSeedsEmptyModList(t *testing.T) {
 	}
 
 	renderer := New("", "")
-	files, err := renderer.Render(inst, "")
+	files, err := renderer.Render(inst, domain.ModList{})
 	if err != nil {
 		t.Fatalf("Render failed: %v", err)
 	}
@@ -149,7 +161,7 @@ func TestValheimDeploymentReconcilesMods(t *testing.T) {
 		State:  domain.StateRunning,
 	}
 
-	files, err := New("", "").Render(inst, "")
+	files, err := New("", "").Render(inst, domain.ModList{})
 	if err != nil {
 		t.Fatalf("Render failed: %v", err)
 	}
@@ -175,7 +187,7 @@ func TestValheimReadinessChecksTheGamePort(t *testing.T) {
 		Tier: domain.TierLarge, State: domain.StateRunning,
 	}
 
-	files, err := New("", "").Render(inst, "")
+	files, err := New("", "").Render(inst, domain.ModList{})
 	if err != nil {
 		t.Fatalf("Render failed: %v", err)
 	}
@@ -200,13 +212,25 @@ func TestValheimRender_Stopped_And_Vanilla(t *testing.T) {
 		State:  domain.StateStopped,
 	}
 
-	files, err := New("key=val", "valheim").Render(inst, "some-mod\n")
+	files, err := New("key=val", "valheim").Render(inst, domain.ModList{Primary: "some-mod\n"})
 	if err != nil {
 		t.Fatalf("Render failed: %v", err)
 	}
 	dep := string(files["deployment.yaml"])
 	if !strings.Contains(dep, "replicas: 0") {
 		t.Errorf("stopped instance should have replicas: 0, got %s", dep)
+	}
+	if !strings.Contains(dep, "name: valheim-admins") {
+		t.Errorf("valheim-admins configMapRef missing in vanilla deployment: %s", dep)
+	}
+	if !strings.Contains(dep, "name: POST_BOOTSTRAP_HOOK") {
+		t.Errorf("POST_BOOTSTRAP_HOOK missing in vanilla deployment: %s", dep)
+	}
+	if strings.Contains(dep, "PRE_BEPINEX_CONFIG_HOOK") {
+		t.Errorf("PRE_BEPINEX_CONFIG_HOOK should not exist in vanilla deployment: %s", dep)
+	}
+	if !strings.Contains(dep, "name: PRE_SERVER_RUN_HOOK") || strings.Contains(dep, "rsync -a --delete /config/bepinex/plugins/") {
+		t.Errorf("PRE_SERVER_RUN_HOOK unexpected in vanilla deployment: %s", dep)
 	}
 
 	// IndentModsTxt
@@ -215,4 +239,3 @@ func TestValheimRender_Stopped_And_Vanilla(t *testing.T) {
 		t.Errorf("unexpected IndentModsTxt: %q", indented)
 	}
 }
-

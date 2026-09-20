@@ -155,23 +155,16 @@ func (h *Handler) MCInstanceModsRemove(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	var req struct {
-		Slug string `json:"slug" form:"slug"`
-	}
-	_ = c.BodyParser(&req)
-
-	slug := strings.TrimSpace(req.Slug)
-	if slug == "" {
-		slug = strings.TrimSpace(c.FormValue("slug"))
-	}
-	if slug == "" {
-		slug = strings.TrimSpace(c.Query("slug"))
-	}
+	slug, provider := modRequest(c)
 	if slug == "" {
 		return shared.SSEToast(c, "err", "Mod slug required.", nil)
 	}
 
-	if err := h.cfg.MCInstances.RemoveMod(c.UserContext(), num, slug, h.cfg.Actor(c)); err != nil {
+	remove := h.cfg.MCInstances.RemoveMod
+	if provider == domain.ProviderCurseForge {
+		remove = h.cfg.MCInstances.RemoveCurseForgeMod
+	}
+	if err := remove(c.UserContext(), num, slug, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Remove failed: "+err.Error(), nil)
 	}
 
@@ -188,20 +181,24 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	var req struct {
-		Slug string `json:"slug" form:"slug"`
-	}
-	_ = c.BodyParser(&req)
-
-	slug := strings.TrimSpace(req.Slug)
-	if slug == "" {
-		slug = strings.TrimSpace(c.FormValue("slug"))
-	}
-	if slug == "" {
-		slug = strings.TrimSpace(c.Query("slug"))
-	}
+	slug, provider := modRequest(c)
 	if slug == "" {
 		return shared.SSEToast(c, "err", "Mod slug required.", nil)
+	}
+
+	// Routed by Provider, never guessed: the two catalogues store entries in
+	// different files in different syntaxes, and a CurseForge file id handed to
+	// Modrinth would only fail at boot.
+	if provider == domain.ProviderCurseForge {
+		added, err := h.cfg.MCInstances.InstallCurseForgeMod(c.UserContext(), num, slug, h.cfg.Actor(c))
+		if err != nil {
+			return shared.SSEToast(c, "err", "Install failed: "+err.Error(), nil)
+		}
+		msg := fmt.Sprintf("Installed %s from CurseForge. Updating...", slug)
+		if added > 1 {
+			msg = fmt.Sprintf("Installed %s from CurseForge (+%d required). Updating...", slug, added-1)
+		}
+		return shared.SSEToast(c, "ok", msg, nil)
 	}
 
 	added, err := h.cfg.MCInstances.InstallMod(c.UserContext(), num, slug, h.cfg.Actor(c))
@@ -235,4 +232,33 @@ func (h *Handler) MCInstanceExport(c *fiber.Ctx) error {
 	c.Set("Content-Type", bundle.ContentType)
 	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, bundle.Filename))
 	return c.Send(bundle.Data)
+}
+
+// modRequest reads the slug and Provider a mod action applies to. An absent
+// Provider means Modrinth, so links written before CurseForge existed keep
+// working.
+func modRequest(c *fiber.Ctx) (string, domain.Provider) {
+	var req struct {
+		Slug     string `json:"slug" form:"slug"`
+		Provider string `json:"provider" form:"provider"`
+	}
+	_ = c.BodyParser(&req)
+
+	slug := strings.TrimSpace(req.Slug)
+	for _, fallback := range []string{c.FormValue("slug"), c.Query("slug")} {
+		if slug == "" {
+			slug = strings.TrimSpace(fallback)
+		}
+	}
+
+	raw := strings.TrimSpace(req.Provider)
+	for _, fallback := range []string{c.FormValue("provider"), c.Query("provider")} {
+		if raw == "" {
+			raw = strings.TrimSpace(fallback)
+		}
+	}
+	if strings.EqualFold(raw, string(domain.ProviderCurseForge)) {
+		return slug, domain.ProviderCurseForge
+	}
+	return slug, domain.ProviderModrinth
 }

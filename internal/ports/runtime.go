@@ -134,7 +134,10 @@ type Console interface {
 }
 
 type SpecRenderer interface {
-	Render(inst domain.Instance, modsTxt string) (map[string][]byte, error)
+	// Render turns an Instance plus what it runs into deployable objects. The
+	// Mod list arrives split by Provider because each Provider's entries reach
+	// the server in its own file.
+	Render(inst domain.Instance, mods domain.ModList) (map[string][]byte, error)
 }
 
 // JobRunner creates one-shot batch tasks such as backups and restores.

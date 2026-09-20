@@ -315,3 +315,90 @@ func (p ModRestorePoint) Matches(entries []string) bool {
 	}
 	return true
 }
+
+// MCModRef is one entry of a Minecraft Mod list. Both Providers write
+// "<id>:<pin>", but the halves mean different things: Modrinth pins a version
+// string, CurseForge pins a numeric file id. They are never interchangeable, so
+// the Provider travels with the reference rather than being inferred later.
+type MCModRef struct {
+	Provider Provider
+	Slug     string
+	// Pin is a Modrinth version ("2.6.4") or a CurseForge file id ("4593548").
+	// Empty means unpinned, which agrelha never writes but a hand-edited list may
+	// contain.
+	Pin string
+}
+
+// ParseMCModRef reads one line of a Mod list file. The Provider comes from which
+// file the line was in, never from the line itself: the two syntaxes are
+// indistinguishable, and guessing would silently send a CurseForge file id to
+// Modrinth.
+func ParseMCModRef(line string, provider Provider) (MCModRef, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return MCModRef{}, false
+	}
+	ref := MCModRef{Provider: provider}
+	if slug, pin, ok := strings.Cut(line, ":"); ok {
+		ref.Slug, ref.Pin = strings.TrimSpace(slug), strings.TrimSpace(pin)
+	} else {
+		ref.Slug = line
+	}
+	if ref.Slug == "" {
+		return MCModRef{}, false
+	}
+	return ref, true
+}
+
+// Entry renders the reference back to its line in the Mod list file.
+func (r MCModRef) Entry() string {
+	if r.Pin == "" {
+		return r.Slug
+	}
+	return r.Slug + ":" + r.Pin
+}
+
+// Key identifies the mod independently of which release is pinned, so installing
+// the same mod twice replaces rather than duplicates.
+func (r MCModRef) Key() string {
+	return string(r.Provider) + "/" + strings.ToLower(r.Slug)
+}
+
+// SplitModLines turns a Mod list file body into references, skipping blanks and
+// comments.
+func SplitModLines(body string, provider Provider) []MCModRef {
+	var out []MCModRef
+	for line := range strings.SplitSeq(body, "\n") {
+		if ref, ok := ParseMCModRef(line, provider); ok {
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
+// JoinModLines renders references back into a file body.
+func JoinModLines(refs []MCModRef) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range refs {
+		b.WriteString(r.Entry())
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// CFMod is a CurseForge mod as agrelha shows it. Restricted carries the one fact
+// that changes what the operator can do: a Restricted mod can be searched and
+// read about, but never added to a Mod list.
+type CFMod struct {
+	ID         int
+	Slug       string
+	Name       string
+	Summary    string
+	IconURL    string
+	PageURL    string
+	Downloads  int64
+	Restricted bool
+}

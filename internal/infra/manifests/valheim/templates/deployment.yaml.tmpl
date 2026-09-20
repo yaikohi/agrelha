@@ -197,6 +197,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .ConfigCMName }}
+            - configMapRef:
+                name: valheim-admins
+                optional: true
           env:
             - name: SERVER_NAME
               value: {{ quote .Name }}
@@ -214,6 +217,17 @@ spec:
               value: "-savedir /config/worlds_local"
             - name: TZ
               value: "Europe/Amsterdam"
+            - name: POST_BOOTSTRAP_HOOK
+              value: "mkdir -p /config/worlds_local && cp -f /config/adminlist.txt /config/bannedlist.txt /config/permittedlist.txt /config/worlds_local/ 2>/dev/null || true"
+{{- if not .IsVanilla }}
+            - name: PRE_BEPINEX_CONFIG_HOOK
+              value: "mkdir -p \"$plugins_path\""
+            - name: PRE_SERVER_RUN_HOOK
+              value: "mkdir -p /config/worlds_local /opt/valheim/bepinex/BepInEx/plugins && cp -f /config/adminlist.txt /config/bannedlist.txt /config/permittedlist.txt /config/worlds_local/ 2>/dev/null || true; [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/ || true"
+{{- else }}
+            - name: PRE_SERVER_RUN_HOOK
+              value: "mkdir -p /config/worlds_local && cp -f /config/adminlist.txt /config/bannedlist.txt /config/permittedlist.txt /config/worlds_local/ 2>/dev/null || true"
+{{- end }}
           ports:
             - containerPort: 2456
               name: game

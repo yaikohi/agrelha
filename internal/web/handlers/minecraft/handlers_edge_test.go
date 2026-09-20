@@ -135,7 +135,7 @@ func TestHandlerActorAndStatsEdges(t *testing.T) {
 		Name:      "World1",
 		State:     domain.StateRunning,
 		MCVersion: "1.21.1",
-	}, "")
+	}, domain.ModList{})
 
 	respCfgInst, _ := appFull.Test(httptest.NewRequest("GET", "/minecraft/configs", nil))
 	if loc := respCfgInst.Header.Get("Location"); loc != "/minecraft/1/configs" {
@@ -163,7 +163,7 @@ func TestMCDashboardAllBranches(t *testing.T) {
 		State:     domain.StateRunning,
 		Tier:      domain.TierMedium,
 		MCVersion: "1.21.1",
-	}, "")
+	}, domain.ModList{})
 
 	// 2. Modpack instance
 	_, _ = mgr.CreateInstance(context.Background(), domain.Instance{
@@ -178,7 +178,7 @@ func TestMCDashboardAllBranches(t *testing.T) {
 			Ref:      "atm-9",
 			Provider: domain.ProviderModrinth,
 		},
-	}, "")
+	}, domain.ModList{})
 
 	// 3. Stopped instance that would exceed RAM if started
 	_, _ = mgr.CreateInstance(context.Background(), domain.Instance{
@@ -187,7 +187,7 @@ func TestMCDashboardAllBranches(t *testing.T) {
 		State:     domain.StateStopped,
 		Tier:      domain.TierLarge,
 		MCVersion: "1.21.1",
-	}, "")
+	}, domain.ModList{})
 
 	cat := &mockModUpdatesCatalog{
 		versions: map[string]string{"jei|fabric": "15.0.0"},
@@ -316,7 +316,7 @@ func TestMCInstanceDetailAllBranches(t *testing.T) {
 			Ref:      "cobblemon",
 			Provider: domain.ProviderCurseForge,
 		},
-	}, "")
+	}, domain.ModList{})
 
 	// Set LastIncident hook
 	var incidentErr error
@@ -576,7 +576,7 @@ func TestMCConfigsAllBranches(t *testing.T) {
 		State:     domain.StateStopped,
 		Tier:      domain.TierSmall,
 		MCVersion: "1.21.1",
-	}, "")
+	}, domain.ModList{})
 
 	app := fiber.New()
 	h.RegisterProtected(app)
@@ -774,7 +774,7 @@ func TestMCModsSearchAllBranches(t *testing.T) {
 		State:     domain.StateStopped,
 		Tier:      domain.TierSmall,
 		MCVersion: "1.21.1",
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 
 	app := fiber.New()
 	h.RegisterProtected(app)
@@ -1079,7 +1079,7 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 		Loader:    domain.LoaderNeoForge,
 		Tier:      domain.TierMedium,
 		State:     domain.StateRunning,
-	}, "jei\n")
+	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1154,10 +1154,10 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 	)
 	_, _ = mgrA.CreateInstance(context.Background(), domain.Instance{
 		Number: 1, Name: "Running1", State: domain.StateRunning, Tier: domain.TierSmall, MCVersion: "1.21.1",
-	}, "")
+	}, domain.ModList{})
 	_, _ = mgrA.CreateInstance(context.Background(), domain.Instance{
 		Number: 2, Name: "Stopped2", State: domain.StateStopped, Tier: domain.TierSmall, MCVersion: "1.21.1",
-	}, "")
+	}, domain.ModList{})
 	hA := New(Config{MCInstances: mgrA})
 	appA := fiber.New()
 	hA.RegisterProtected(appA)
@@ -1180,10 +1180,10 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 	)
 	_, _ = mgrB.CreateInstance(context.Background(), domain.Instance{
 		Number: 1, Name: "RunningB1", State: domain.StateRunning, Tier: domain.TierMedium, MCVersion: "1.21.1",
-	}, "")
+	}, domain.ModList{})
 	_, _ = mgrB.CreateInstance(context.Background(), domain.Instance{
 		Number: 2, Name: "StoppedB2", State: domain.StateStopped, Tier: domain.TierLarge, MCVersion: "1.21.1",
-	}, "")
+	}, domain.ModList{})
 	hB := New(Config{MCInstances: mgrB})
 	appB := fiber.New()
 	hB.RegisterProtected(appB)
@@ -1232,7 +1232,7 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 		State:     domain.StateRunning,
 		MCVersion: "1.21.1",
 		Loader:    domain.LoaderNeoForge,
-	}, "mod-unreachable\nmod-update:1.0.0\n")
+	}, domain.ModList{Primary: "mod-unreachable\nmod-update:1.0.0\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1278,7 +1278,7 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 		State:     domain.StateRunning,
 		MCVersion: "1.21.1",
 		Loader:    domain.LoaderNeoForge,
-	}, "some-mod\n")
+	}, domain.ModList{Primary: "some-mod\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1305,7 +1305,7 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 		State:     domain.StateRunning,
 		MCVersion: "1.21.1",
 		Loader:    domain.LoaderNeoForge,
-	}, "restored-mod:2.0.0\n")
+	}, domain.ModList{Primary: "restored-mod:2.0.0\n"})
 	if err != nil {
 		t.Fatal(err)
 	}

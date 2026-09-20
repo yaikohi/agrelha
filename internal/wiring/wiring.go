@@ -22,6 +22,7 @@ import (
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/auth/local"
 	"agrelha/internal/infra/auth/oidc"
+	"agrelha/internal/infra/content/curseforge"
 	"agrelha/internal/infra/content/mcversions"
 	"agrelha/internal/infra/content/modpackindex"
 	"agrelha/internal/infra/content/modrinth"
@@ -62,6 +63,7 @@ type Deps struct {
 	Git              *gitops.Committer
 	TS               *thunderstore.Client
 	MR               *modrinth.Client
+	CF               *curseforge.Client
 	MPI              *modpackindex.Client
 	MCV              *mcversions.Client
 	MCMods           *mcaccess.ModManager
@@ -138,6 +140,14 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	if d.MR != nil {
 		instOpts = append(instOpts, instances.WithDependencyResolver(d.MR.ResolveRequiredDependencies))
 	}
+	// New(..., "") returns nil, so an unset key leaves CurseForge absent rather
+	// than broken: search shows nothing and installs are refused with a reason.
+	d.CF = curseforge.New(cfg.CurseForgeAPI, cfg.CurseForgeAPIKey)
+	if d.CF.Ready() {
+		instOpts = append(instOpts, instances.WithCurseForgeResolver(d.CF.Resolve))
+	} else {
+		slog.Info("curseforge: no API key configured, CurseForge mods unavailable")
+	}
 	if d.MCRconPool != nil {
 		rconExec := func(inst domain.Instance, cmd string) (string, error) {
 			addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(), cfg.MinecraftNamespace)
@@ -202,6 +212,26 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 					if line != "" && !strings.HasPrefix(line, "#") {
 						lines = append(lines, line)
 					}
+				}
+				return lines, nil
+			}),
+			// The CurseForge half of the same ConfigMap. Absent for any world with
+			// no CurseForge mods, which is not an error.
+			instances.WithCurseForgeReader(func(ctx context.Context, num int) ([]string, error) {
+				inst, err := d.MCInstances.GetInstance(ctx, num)
+				if err != nil || inst == nil {
+					if err == nil {
+						err = fmt.Errorf("instance %d not found", num)
+					}
+					return nil, err
+				}
+				cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName())
+				if err != nil {
+					return nil, err
+				}
+				var lines []string
+				for _, ref := range domain.SplitModLines(cm["curseforge.txt"], domain.ProviderCurseForge) {
+					lines = append(lines, ref.Entry())
 				}
 				return lines, nil
 			}),
@@ -461,7 +491,24 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				mcVer = "1.21.1"
 			}
 
-			mrpackBytes, err := buildMrpack(ctx, d.MR, inst.Name, mcVer, loader, "", slugs, cfgFiles)
+			// CurseForge mods are embedded rather than merely listed, so the
+			// exported pack contains what the server actually runs.
+			var cfExport []modpack.CurseForgeFile
+			if d.CF.Ready() && d.MCInstances != nil {
+				if entries, err := d.MCInstances.GetCurseForgeMods(ctx, inst.Number); err == nil && len(entries) > 0 {
+					files, err := d.CF.ExportFiles(ctx, entries)
+					if err != nil {
+						slog.Warn("minecraft export: cannot resolve curseforge files", "number", inst.Number, "err", err)
+					}
+					for _, f := range files {
+						cfExport = append(cfExport, modpack.CurseForgeFile{
+							Slug: f.Slug, FileName: f.FileName, URL: f.URL, SHA1: f.SHA1, Size: f.Size,
+						})
+					}
+				}
+			}
+
+			mrpackBytes, err := buildMrpack(ctx, d.MR, inst.Name, mcVer, loader, "", slugs, cfExport, cfgFiles)
 			if err != nil {
 				return domain.Bundle{}, fmt.Errorf("build mrpack: %w", err)
 			}

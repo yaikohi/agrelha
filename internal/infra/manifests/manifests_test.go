@@ -24,7 +24,7 @@ func TestRenderInstanceManifests(t *testing.T) {
 		LBIP: "192.168.20.225",
 	}
 
-	files, err := Render(inst, "jei\nappleskin\n", "ykhi.xyz/gameserver=true", "minecraft-modded")
+	files, err := Render(inst, domain.ModList{Primary: "jei\nappleskin\n"}, "ykhi.xyz/gameserver=true", "minecraft-modded")
 	if err != nil {
 		t.Fatalf("unexpected error rendering manifests: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestMinecraftReadinessUsesMCHealth(t *testing.T) {
 		Loader: domain.LoaderNeoForge, MCVersion: "1.21.1",
 	}
 
-	files, err := Render(inst, "", "", "minecraft-modded")
+	files, err := Render(inst, domain.ModList{}, "", "minecraft-modded")
 	if err != nil {
 		t.Fatalf("Render failed: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestRenderer_FabricAndStopped(t *testing.T) {
 		State:     domain.StateStopped,
 	}
 
-	files, err := r.Render(inst, "fabric-api\nsodium\n")
+	files, err := r.Render(inst, domain.ModList{Primary: "fabric-api\nsodium\n"})
 	if err != nil {
 		t.Fatalf("Render failed: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestRenderer_FabricAndStopped(t *testing.T) {
 		MCVersion: "1.21.1",
 		Tier:      domain.TierSmall,
 	}
-	filesV, err := Render(instVanilla, "", "", "")
+	filesV, err := Render(instVanilla, domain.ModList{}, "", "")
 	if err != nil {
 		t.Fatalf("Render vanilla failed: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestRenderer_FabricAndStopped(t *testing.T) {
 	}
 
 	// Test SourceFabric with empty modsTxt generates default mod list
-	filesF, err := Render(inst, "", "", "minecraft-modded")
+	filesF, err := Render(inst, domain.ModList{}, "", "minecraft-modded")
 	if err != nil {
 		t.Fatalf("Render fabric empty mods failed: %v", err)
 	}
@@ -142,4 +142,3 @@ func TestRenderer_FabricAndStopped(t *testing.T) {
 		t.Errorf("expected default mods placeholder in mods.yaml, got %s", string(modsF))
 	}
 }
-

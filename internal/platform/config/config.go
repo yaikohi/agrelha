@@ -51,6 +51,8 @@ type Config struct {
 	MinecraftRconAddr     string
 	MinecraftRconPassword string
 	ModrinthAPI           string
+	CurseForgeAPI         string
+	CurseForgeAPIKey      string
 
 	// Multi-instance and global budget settings
 	TotalBudgetGiB   int
@@ -157,6 +159,10 @@ func Load() *Config {
 		MinecraftRconAddr:     env("MINECRAFT_RCON_ADDR", "minecraft-modded.minecraft-modded.svc.cluster.local:25575"),
 		MinecraftRconPassword: env("MINECRAFT_RCON_PASSWORD", ""),
 		ModrinthAPI:           env("MODRINTH_API", "https://api.modrinth.com/v2"),
+		CurseForgeAPI:         env("CURSEFORGE_API", "https://api.curseforge.com/v1"),
+		// Empty is a supported state: CurseForge has no anonymous API, so without
+		// a key it is simply absent and Modrinth carries on alone.
+		CurseForgeAPIKey: env("CURSEFORGE_API_KEY", ""),
 
 		TotalBudgetGiB:   totalBudget,
 		MaxInstances:     maxInstances,

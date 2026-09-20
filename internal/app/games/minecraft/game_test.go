@@ -286,7 +286,7 @@ func TestMinecraftEdgeCasesAndOptions(t *testing.T) {
 
 	// 7. ExportClientBundle error when buildMrpack fails
 	oldMrpack := buildMrpack
-	buildMrpack = func(ctx context.Context, client modpack.ModrinthProvider, name, mcVersion, loader, loaderVersion string, mods []string, overrides map[string]string) ([]byte, error) {
+	buildMrpack = func(ctx context.Context, client modpack.ModrinthProvider, name, mcVersion, loader, loaderVersion string, mods []string, cfFiles []modpack.CurseForgeFile, overrides map[string]string) ([]byte, error) {
 		return nil, context.Canceled
 	}
 	defer func() { buildMrpack = oldMrpack }()

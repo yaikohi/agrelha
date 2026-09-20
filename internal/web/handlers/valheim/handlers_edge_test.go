@@ -215,7 +215,7 @@ func TestValheimHandlerEdges(t *testing.T) {
 		Name:   "Valhalla",
 		Tier:   domain.TierMedium,
 		State:  domain.StateRunning,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 		Name:   "Running World",
 		Tier:   domain.TierMedium,
 		State:  domain.StateRunning,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	// Instance 2: Stopped (hits maxRunning=1)
 	_, _ = mgrBudget.CreateInstance(context.Background(), domain.Instance{
 		GameID: domain.GameValheim,
@@ -319,7 +319,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 		Name:   "Stopped World",
 		Tier:   domain.TierMedium,
 		State:  domain.StateStopped,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 
 	mockCatalog := &mockPackageCatalog{
 		results: []domain.ModSearchResult{{Owner: "Author", Name: "Mod", Version: "1.0.0"}},
@@ -356,14 +356,14 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 		Name:   "Running World",
 		Tier:   domain.TierMedium,
 		State:  domain.StateRunning,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	_, _ = mgrRAM.CreateInstance(context.Background(), domain.Instance{
 		GameID: domain.GameValheim,
 		Number: 2,
 		Name:   "Stopped World",
 		Tier:   domain.TierMedium,
 		State:  domain.StateStopped,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	hRAM := New(Config{ValheimInstances: mgrRAM})
 	appRAM := fiber.New()
 	appRAM.Get("/valheim", hRAM.ValheimDashboard)
@@ -397,7 +397,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 		Name:   "Stopped World",
 		Tier:   domain.TierMedium,
 		State:  domain.StateStopped,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	// Instance 2: Running
 	_, _ = mgrLife.CreateInstance(context.Background(), domain.Instance{
 		GameID: domain.GameValheim,
@@ -405,7 +405,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 		Name:   "Running World",
 		Tier:   domain.TierMedium,
 		State:  domain.StateRunning,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 
 	hLifecycle := New(Config{ValheimInstances: mgrLife})
 	appTest := fiber.New()
@@ -496,7 +496,7 @@ func TestValheimConfigsAllEdges(t *testing.T) {
 		Number: 1,
 		Name:   "Config World",
 		Tier:   domain.TierMedium,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 
 	app := fiber.New()
 	app.Get("/test/config/:num", h.ValheimInstanceConfigGet)
@@ -629,7 +629,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 		Tier:     domain.TierMedium,
 		State:    domain.StateRunning,
 		Source:   domain.SourceModlist,
-	}, "Smoothbrain-Mining-1.2.0\n", "tester")
+	}, domain.ModList{Primary: "Smoothbrain-Mining-1.2.0\n"}, "tester")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -643,7 +643,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 		Tier:     domain.TierSmall,
 		State:    domain.StateStopped,
 		Source:   domain.SourceVanilla,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1500,7 +1500,7 @@ func TestValheimWizardAllEdges(t *testing.T) {
 		Number: 1,
 		Name:   "Single Instance",
 		Tier:   domain.TierMedium,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 
 	hLimit := New(Config{ValheimInstances: mgrLimit})
 	appLimit := fiber.New()
@@ -1550,7 +1550,7 @@ func TestValheimUpdatesAllEdges(t *testing.T) {
 		Tier:   domain.TierMedium,
 		State:  domain.StateRunning,
 		Source: domain.SourceModlist,
-	}, "Author-Mod-1.0.0\n", "tester")
+	}, domain.ModList{Primary: "Author-Mod-1.0.0\n"}, "tester")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1564,7 +1564,7 @@ func TestValheimUpdatesAllEdges(t *testing.T) {
 		Tier:   domain.TierSmall,
 		State:  domain.StateStopped,
 		Source: domain.SourceVanilla,
-	}, "", "tester")
+	}, domain.ModList{}, "tester")
 	if err != nil {
 		t.Fatal(err)
 	}

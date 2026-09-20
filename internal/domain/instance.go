@@ -221,7 +221,39 @@ func (inst Instance) ConfigsCMName() string {
 	return fmt.Sprintf("mc-%s-%02d-configs", inst.Slug, inst.Number)
 }
 
+// ModList is an Instance's mods as the server will receive them: one body per
+// Provider, because each Provider reads its own file in its own syntax. Merging
+// them would need a translation that could only ever be wrong.
+//
+// Primary is the game's own catalogue - Modrinth for Minecraft, Thunderstore for
+// Valheim. CurseForge is Minecraft-only and empty everywhere else.
+type ModList struct {
+	Primary    string
+	CurseForge string
+}
+
+// Empty reports whether the Instance runs no mods at all.
+func (m ModList) Empty() bool {
+	return strings.TrimSpace(m.Primary) == "" && strings.TrimSpace(m.CurseForge) == ""
+}
+
+// HasCurseForge reports whether any entry comes from CurseForge, which is what
+// decides whether the server is told to read a CurseForge list at all.
+func (m ModList) HasCurseForge() bool {
+	return strings.TrimSpace(m.CurseForge) != ""
+}
+
+// Env is the environment for an Instance whose mods are not yet known - the
+// common case for callers that only need identity and sizing.
 func (inst Instance) Env() map[string]string {
+	return inst.EnvWith(ModList{})
+}
+
+// EnvWith is Env for a caller that knows what the Instance runs. Only the
+// CurseForge list changes the answer: a Mod list with no CurseForge entries must
+// not point the server at a CurseForge file, or it would read one that is not
+// there.
+func (inst Instance) EnvWith(mods ModList) map[string]string {
 	if inst.GameID == GameValheim {
 		env := map[string]string{
 			"SERVER_NAME":   inst.Name,
@@ -277,6 +309,9 @@ func (inst Instance) Env() map[string]string {
 	default:
 		env["VERSION"] = inst.MCVersion
 		env["MODRINTH_PROJECTS"] = "@/config-mods/mods.txt"
+		if mods.HasCurseForge() {
+			env["CURSEFORGE_FILES"] = "@/config-mods/curseforge.txt"
+		}
 		env["MODRINTH_DOWNLOAD_DEPENDENCIES"] = "required"
 		env["REMOVE_OLD_MODS"] = "TRUE"
 		env["MODRINTH_PROJECTS_DEFAULT_VERSION_TYPE"] = "beta"

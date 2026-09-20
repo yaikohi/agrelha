@@ -35,7 +35,7 @@ import (
 
 type dummyRenderer struct{}
 
-func (dummyRenderer) Render(domain.Instance, string) (map[string][]byte, error) {
+func (dummyRenderer) Render(domain.Instance, domain.ModList) (map[string][]byte, error) {
 	return map[string][]byte{}, nil
 }
 
@@ -866,7 +866,7 @@ func TestWiring_MinecraftGame_Options_Branches(t *testing.T) {
 	t.Logf("MC telem with no MCAccess: %+v", telem)
 
 	oldMrpack := buildMrpack
-	buildMrpack = func(ctx context.Context, mr modpack.ModrinthProvider, packName, mcVersion, loaderType, loaderVersion string, slugs []string, configs map[string]string) ([]byte, error) {
+	buildMrpack = func(ctx context.Context, mr modpack.ModrinthProvider, packName, mcVersion, loaderType, loaderVersion string, slugs []string, cfFiles []modpack.CurseForgeFile, configs map[string]string) ([]byte, error) {
 		return nil, errors.New("mrpack build failed")
 	}
 	defer func() { buildMrpack = oldMrpack }()

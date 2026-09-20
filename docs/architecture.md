@@ -327,6 +327,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/backups` | Backup archive naming, stat and pruning on the local or NFS filesystem. |
 | `infra/content/mcversions` | Minecraft version list and version comparison. |
 | `infra/content/modpackindex` | Modpack Index REST client. |
+| `infra/content/curseforge` | CurseForge v1 client: mod search, file pinning, dependency resolution and export URLs. Needs an API key; absent without one. |
 | `infra/content/modrinth` | Modrinth v2 REST client: projects, versions, dependencies. |
 | `infra/content/thunderstore` | Thunderstore client: warm package index for search, per-package version and README lookups. |
 | `infra/gitops` | Clones the ops repository, edits a document in place preserving YAML structure, commits and pushes. |

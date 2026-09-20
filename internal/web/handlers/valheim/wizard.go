@@ -578,7 +578,7 @@ func (h *Handler) ValheimWizardCreate(c *fiber.Ctx) error {
 		State:    domain.StateRunning,
 	}
 
-	created, err := h.cfg.ValheimInstances.CreateInstance(c.UserContext(), inst, modsTxt, h.cfg.Actor(c))
+	created, err := h.cfg.ValheimInstances.CreateInstance(c.UserContext(), inst, domain.ModList{Primary: modsTxt}, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Failed to create Valheim server: "+err.Error(), nil)
 	}
