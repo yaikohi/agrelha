@@ -300,7 +300,7 @@ func TestWiring_BuildContentAndMinecraftHandlers(t *testing.T) {
 		MCK8s: k8sClient,
 	}
 
-	contentH := buildContentHandler(&config.Config{ModConfigsPath: "valheim/configs"}, d, nil)
+	contentH := buildContentHandler(&config.Config{}, d, nil)
 	app := fiber.New()
 	contentH.RegisterProtected(app)
 
@@ -441,10 +441,10 @@ func TestWiring_InstanceManagerClosures(t *testing.T) {
 	if err != nil || len(vhMods) != 2 {
 		t.Errorf("ValheimInstances.InstalledMods failed: %v, %v", err, vhMods)
 	}
-	vhGlobalCfgs, err := deps.ValheimInstances.ListGlobalConfigs(ctx)
-	if err != nil || len(vhGlobalCfgs) == 0 {
-		t.Errorf("ValheimInstances.ListGlobalConfigs failed: %v, %v", err, vhGlobalCfgs)
-	}
+	// Valheim has no global configs any more: the single shared
+	// valheim-mod-configs ConfigMap it read was mounted by nothing and its UI was
+	// unreachable. Configs are per-instance now. Minecraft still has the global
+	// path, and is asserted above.
 	_ = deps.ValheimInstances.InstanceStats(ctx, []domain.Instance{{Number: 1, Slug: "valheim-01", GameID: domain.GameValheim, State: domain.StateRunning}})
 }
 

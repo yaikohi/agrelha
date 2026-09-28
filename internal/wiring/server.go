@@ -411,10 +411,6 @@ func buildValheimHandler(cfg *config.Config, d Deps, applyValheimAfterSync func(
 }
 
 func buildContentHandler(cfg *config.Config, d Deps, applyAfterSync func(string, string, func(string) bool)) *contenthttp.Handler {
-	var modConfigsPath string
-	if cfg != nil {
-		modConfigsPath = cfg.ModConfigsPath
-	}
 	var cat ports.PackageCatalog
 	if d.TS != nil {
 		cat = d.TS
@@ -426,18 +422,11 @@ func buildContentHandler(cfg *config.Config, d Deps, applyAfterSync func(string,
 		readme = d.Store
 	}
 	return contenthttp.New(contenthttp.Config{
-		ModConfigsPath: modConfigsPath,
 		StateStore:     d.StateStore,
 		Audit:          audit,
 		ReadmeCache:    readme,
 		ValheimGame:    d.ValheimGame,
 		TS:             cat,
-		ConfigData: func(ctx context.Context) (map[string]string, error) {
-			if d.K8s != nil {
-				return d.K8s.ConfigMapData(ctx, "valheim-mod-configs")
-			}
-			return nil, nil
-		},
 		Actor:          actor,
 		ApplyAfterSync: applyAfterSync,
 	})

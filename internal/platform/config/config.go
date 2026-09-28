@@ -31,7 +31,6 @@ type Config struct {
 	GitAuthorEmail  string
 	ModsPath        string
 	AdminsPath      string
-	ModConfigsPath  string
 	ThunderstoreAPI string
 
 	// Imperative plane (k8s)
@@ -141,7 +140,6 @@ func Load() *Config {
 		GitAuthorEmail:  env("GIT_AUTHOR_EMAIL", "agrelha@localhost"),
 		ModsPath:        env("MODS_PATH", "manifests/valheim/mods.yaml"),
 		AdminsPath:      env("ADMINS_PATH", "manifests/valheim/admins.yaml"),
-		ModConfigsPath:  env("MOD_CONFIGS_PATH", "manifests/valheim/configs.yaml"),
 		ThunderstoreAPI: env("THUNDERSTORE_API", "https://thunderstore.io/c/valheim/api/v1"),
 
 		ValheimNamespace:  env("VALHEIM_NAMESPACE", "valheim"),

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"agrelha/internal/domain"
 )
 
@@ -41,8 +43,8 @@ func TestValheimRenderBasic(t *testing.T) {
 	if !strings.Contains(dep, "replicas: 1") {
 		t.Errorf("expected replicas: 1 for running state")
 	}
-	if !strings.Contains(dep, "image: lloesche/valheim-server:latest") {
-		t.Errorf("deployment image missing: %s", dep)
+	if !strings.Contains(dep, "image: lloesche/valheim-server@sha256:") {
+		t.Errorf("deployment image must be digest-pinned, not tagged: %s", dep)
 	}
 	if !strings.Contains(dep, "claimName: valheim-instance-01-data") {
 		t.Errorf("PVC claimName missing or wrong: %s", dep)
@@ -198,6 +200,98 @@ func TestValheimReadinessChecksTheGamePort(t *testing.T) {
 	}
 	if !strings.Contains(dep, ":2456[[:space:]]") {
 		t.Error("readiness must check that the game port is actually bound")
+	}
+}
+
+func TestValheimModConfigsGoWhereBepInExActuallyReads(t *testing.T) {
+	inst := domain.Instance{
+		GameID: domain.GameValheim, Number: 2, Name: "boppo", Slug: "boppo",
+		Source: domain.SourceModlist, Tier: domain.TierLarge, State: domain.StateRunning,
+	}
+
+	files, err := New("", "").Render(inst, domain.ModList{Primary: "a-b-1.0.0\n"})
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	dep := string(files["deployment.yaml"])
+
+	// /opt/valheim/bepinex/BepInEx/config is a symlink to /config/bepinex, so
+	// /config/bepinex/config is one level below anything BepInEx reads. Syncing
+	// there left every committed value unapplied for a month without any error.
+	if strings.Contains(dep, "cp -Lf /custom-configs/* /config/bepinex/config/") {
+		t.Error("mod configs must be copied to /config/bepinex, not the /config/bepinex/config subdirectory BepInEx never reads")
+	}
+	if !strings.Contains(dep, "cp -Lf /custom-configs/* /config/bepinex/ ") {
+		t.Error("expected the custom configs to be copied into /config/bepinex itself")
+	}
+	if !strings.Contains(dep, "rm -rf /config/bepinex/config") {
+		t.Error("the stray subdirectory left by the old sync must be cleaned up")
+	}
+}
+
+func TestValheimDeploymentPublishesWhatAgrelhaCannotSeeItself(t *testing.T) {
+	inst := domain.Instance{
+		GameID: domain.GameValheim, Number: 2, Name: "boppo", Slug: "boppo",
+		Source: domain.SourceModlist, Tier: domain.TierLarge, State: domain.StateRunning,
+	}
+
+	files, err := New("", "").Render(inst, domain.ModList{})
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	dep := string(files["deployment.yaml"])
+
+	// agrelha has no pods/exec in the valheim namespace, so anything it needs to
+	// know about the inside of the pod has to be published to the shared backups
+	// export. A rendered deployment without these silently produces a world that
+	// reports no server updates and no occupancy.
+	if !strings.Contains(dep, "name: build-watch") {
+		t.Error("build-watch sidecar missing: agrelha would never learn a server update is pending")
+	}
+	if !strings.Contains(dep, "/backups/boppo-02/server-build.json") {
+		t.Error("build id must be published under the instance's own backups subdirectory")
+	}
+	if !strings.Contains(dep, `value: "/backups/boppo-02"`) {
+		t.Error("BACKUPS_DIRECTORY must point off-node, or a lost disk takes the world and every backup with it")
+	}
+	if !strings.Contains(dep, "STATUS_HTTP_PORT") {
+		t.Error("the served status port must match the declared containerPort, or occupancy is unreadable")
+	}
+}
+
+// The templates carry multi-line shell, and a mis-indented heredoc renders
+// output that only fails at ArgoCD sync time - long after the commit, on a
+// world that is already down. Parse everything we emit, for both shapes.
+func TestValheimRenderedManifestsAreValidYAML(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		inst domain.Instance
+		mods domain.ModList
+	}{
+		{"modded", domain.Instance{
+			GameID: domain.GameValheim, Number: 2, Name: "boppo", Slug: "boppo",
+			Source: domain.SourceModlist, Tier: domain.TierLarge, State: domain.StateRunning,
+		}, domain.ModList{Primary: "Author-Mod-1.2.3\nOther-Thing-0.1.0\n"}},
+		{"vanilla", domain.Instance{
+			GameID: domain.GameValheim, Number: 1, Name: "lareira", Slug: "lareira-v2",
+			Source: domain.SourceVanilla, Tier: domain.TierLarge, State: domain.StateRunning,
+		}, domain.ModList{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files, err := New("", "valheim").Render(tc.inst, tc.mods)
+			if err != nil {
+				t.Fatalf("Render failed: %v", err)
+			}
+			if len(files) == 0 {
+				t.Fatal("Render produced no files")
+			}
+			for name, body := range files {
+				var doc any
+				if err := yaml.Unmarshal(body, &doc); err != nil {
+					t.Errorf("%s is not valid YAML: %v\n%s", name, err, body)
+				}
+			}
+		})
 	}
 }
 

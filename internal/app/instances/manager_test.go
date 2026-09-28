@@ -362,8 +362,8 @@ func TestValheimInstanceManager(t *testing.T) {
 
 	// Verify manifests written to stateStore
 	depDoc, ok := state.docs["manifests/valheim/instance-01/deployment.yaml"]
-	if !ok || !strings.Contains(string(depDoc.Raw), "lloesche/valheim-server:latest") {
-		t.Fatalf("deployment.yaml not written to stateStore or missing image: %s", string(depDoc.Raw))
+	if !ok || !strings.Contains(string(depDoc.Raw), "lloesche/valheim-server@sha256:") {
+		t.Fatalf("deployment.yaml not written to stateStore or image not digest-pinned: %s", string(depDoc.Raw))
 	}
 	svcDoc, ok := state.docs["manifests/valheim/instance-01/service.yaml"]
 	if !ok || !strings.Contains(string(svcDoc.Raw), "192.168.20.211") {

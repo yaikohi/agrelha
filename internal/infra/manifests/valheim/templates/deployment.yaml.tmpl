@@ -174,15 +174,21 @@ spec:
             - name: mods-config
               mountPath: /config-mods
               readOnly: true
+        # /opt/valheim/bepinex/BepInEx/config is a SYMLINK to /config/bepinex, so
+        # /config/bepinex IS the directory BepInEx reads. Copying into
+        # /config/bepinex/config/ - one level down - put every git-managed value
+        # somewhere BepInEx never looks, which is why nothing committed here took
+        # effect for a month. Do not reintroduce that subdirectory.
         - name: sync-configs
           image: busybox:1.36
           command: ["sh", "-c"]
           args:
             - |
-              mkdir -p /config/bepinex/config
+              mkdir -p /config/bepinex
+              rm -rf /config/bepinex/config
               if [ -d /custom-configs ] && [ "$(ls -A /custom-configs 2>/dev/null)" ]; then
-                echo ">> Syncing custom mod configs to /config/bepinex/config..."
-                cp -Lf /custom-configs/* /config/bepinex/config/ 2>/dev/null || true
+                echo ">> Syncing custom mod configs to /config/bepinex..."
+                cp -Lf /custom-configs/* /config/bepinex/ 2>/dev/null || true
               fi
           volumeMounts:
             - name: config-volume
@@ -192,7 +198,10 @@ spec:
 {{- end }}
       containers:
         - name: valheim
-          image: lloesche/valheim-server:latest
+          # Pinned: the game self-updates from Steam regardless, so the tag only
+          # controls the wrapper. Unpinned, a bad wrapper release lands on every
+          # world at once on the next restart.
+          image: lloesche/valheim-server@sha256:bbda47cbbc9fd7b0385803ba0a70ba2084df4cb87ec6170a145aec5df06be07e
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
@@ -213,8 +222,23 @@ spec:
               value: "{{ if .IsVanilla }}false{{ else }}true{{ end }}"
             - name: STATUS_HTTP
               value: "true"
+            # The image serves status.json on :80 by default, but containerPort
+            # and the Service both declare 9001 - so status.json would be
+            # reachable only from inside the pod, and agrelha could not tell
+            # whether anyone was playing. Make served and declared agree.
+            - name: STATUS_HTTP_PORT
+              value: "9001"
             - name: SERVER_ARGS
               value: "-savedir /config/worlds_local"
+            # Without this the image backs up to /config/backups - the SAME
+            # node-local PVC as the world, so one lost disk takes the world and
+            # every backup of it together. /backups is the NAS NFS export.
+            # Per-instance subdir: every archive is named worlds-<ts>.zip, so a
+            # shared directory would collide across instances.
+            - name: BACKUPS_DIRECTORY
+              value: "/backups/{{ .BackupsSubdir }}"
+            - name: BACKUPS_MAX_AGE
+              value: "14"
             - name: TZ
               value: "Europe/Amsterdam"
             - name: POST_BOOTSTRAP_HOOK
@@ -276,6 +300,71 @@ spec:
             - name: custom-configs
               mountPath: /custom-configs
 {{- end }}
+
+        # Publishes "is a Valheim server update available?" for agrelha, which
+        # cannot work it out itself: it has no pods/exec here (deliberate, see
+        # agrelha-rbac.yaml) and the log is no help either - valheim-updater's
+        # update() returns silently when players are online, without ever asking
+        # Steam. So nothing is logged while an update sits waiting.
+        # Same image as the server (already on the node, already has steamcmd),
+        # so this adds no new image, no RBAC and no third-party service.
+        - name: build-watch
+          image: lloesche/valheim-server@sha256:bbda47cbbc9fd7b0385803ba0a70ba2084df4cb87ec6170a145aec5df06be07e
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -uo pipefail
+              OUT=/backups/{{ .BackupsSubdir }}/server-build.json
+              MANIFEST=/opt/valheim/dl/server/steamapps/appmanifest_896660.acf
+              mkdir -p "$(dirname "$OUT")"
+              while true; do
+                installed=$(grep -oE '"buildid"[[:space:]]+"[0-9]+"' "$MANIFEST" 2>/dev/null \
+                  | grep -oE '[0-9]+' | head -1)
+
+                # /opt/valheim is an emptyDir, so on a fresh pod the server has not
+                # finished downloading yet and there is no installed build to read.
+                # Retry soon instead of sleeping the full interval - otherwise every
+                # restart leaves the build report stale for half an hour. Skipping
+                # the Steam call here too: it cannot answer a question we have no
+                # local half of.
+                if [ -z "${installed:-}" ]; then
+                  echo "build-watch: no installed build yet, retrying in 30s" >&2
+                  sleep 30
+                  continue
+                fi
+
+                # cd first: steamcmd needs its own directory as cwd, which is how
+                # valheim-updater invokes it too.
+                latest=$(cd /opt/steamcmd && timeout 300 ./steamcmd.sh +login anonymous \
+                  +app_info_update 1 +app_info_print 896660 +quit 2>/dev/null \
+                  | awk '/"branches"/,0' | awk '/"public"/,0' \
+                  | grep -m1 -oE '"buildid"[[:space:]]+"[0-9]+"' | grep -oE '[0-9]+')
+
+                # A failed Steam query must not erase a good answer, or the UI would
+                # flap to "unknown" on any transient network blip.
+                if [ -z "${latest:-}" ]; then
+                  echo "build-watch: steam query failed, retrying in 60s" >&2
+                  sleep 60
+                  continue
+                fi
+
+                printf '{"instance":"{{ .BackupsSubdir }}","installed":"%s","latest":"%s","checked_at":"%s"}\n' \
+                  "$installed" "$latest" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT"
+                sleep 1800
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: server-volume
+              mountPath: /opt/valheim
+              readOnly: true
+            - name: backups-volume
+              mountPath: /backups
       volumes:
         - name: config-volume
           persistentVolumeClaim:

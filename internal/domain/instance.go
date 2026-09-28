@@ -214,6 +214,15 @@ func (inst Instance) ModsCMName() string {
 	return fmt.Sprintf("mc-%s-%02d-mods", inst.Slug, inst.Number)
 }
 
+// BackupsSubdir is the Instance's own directory on the shared backups export.
+// Every Instance mounts the same PVC and the image names every archive
+// worlds-<timestamp>.zip, so a shared directory would have them overwrite each
+// other. It is also where the sidecars leave what they publish for agrelha to
+// read back - the server build id, and the generated BepInEx configs.
+func (inst Instance) BackupsSubdir() string {
+	return fmt.Sprintf("%s-%02d", inst.Slug, inst.Number)
+}
+
 func (inst Instance) ConfigsCMName() string {
 	if inst.GameID == GameValheim {
 		return fmt.Sprintf("valheim-%s-%02d-configs", inst.Slug, inst.Number)

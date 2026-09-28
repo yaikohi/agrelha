@@ -24,13 +24,6 @@ func (h *Handler) MCConfigsList(c *fiber.Ctx) ([]string, error) {
 	return h.cfg.MCInstances.ListGlobalConfigs(c.UserContext())
 }
 
-// MCConfigsPage renders the list of Minecraft config files.
-func (h *Handler) MCConfigsPage(c *fiber.Ctx) error {
-	files, _ := h.MCConfigsList(c)
-	fk, fm := shared.TakeFlash(c)
-	return shared.Render(c, pages.MinecraftConfigs(files, h.cfg.MCInstances != nil, fk, fm))
-}
-
 // MCConfigNew renders the new Minecraft config file form.
 func (h *Handler) MCConfigNew(c *fiber.Ctx) error {
 	return shared.Render(c, pages.MinecraftConfigEdit("", "", true, h.cfg.MCInstances != nil))

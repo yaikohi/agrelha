@@ -522,12 +522,6 @@ func TestMCConfigAndInstanceConfigEndpoints(t *testing.T) {
 		t.Errorf("expected 307 for configs redirect, got: %d", respList.StatusCode)
 	}
 
-	app.Get("/test/configs/page", h.MCConfigsPage)
-	respPage, _ := app.Test(httptest.NewRequest("GET", "/test/configs/page", nil))
-	if respPage.StatusCode != fiber.StatusOK {
-		t.Errorf("expected 200 for MCConfigsPage, got: %d", respPage.StatusCode)
-	}
-
 	reqNew := httptest.NewRequest("GET", "/minecraft/configs/new", nil)
 	respNew, _ := app.Test(reqNew)
 	if respNew.StatusCode != fiber.StatusOK {

@@ -17,13 +17,11 @@ import (
 
 // Config configures dependencies for the content management handler.
 type Config struct {
-	ModConfigsPath string
 	StateStore     ports.StateStore
 	Audit          ports.AuditRecorder
 	ReadmeCache    ports.ReadmeCache
 	ValheimGame    ports.Game
 	TS             ports.PackageCatalog
-	ConfigData     func(context.Context) (map[string]string, error)
 	Actor          func(*fiber.Ctx) string
 	ApplyAfterSync func(cmName, key string, check func(string) bool)
 }
@@ -63,11 +61,6 @@ func (h *Handler) RegisterPublic(router fiber.Router) {
 // RegisterProtected mounts authenticated content management routes.
 func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Get("/mods/:namespace/:name", h.ModDetail)
-	router.Get("/configs", h.ConfigsPage)
-	router.Get("/configs/new", h.ConfigNew)
-	router.Get("/configs/edit", h.ConfigEdit)
-	router.Post("/configs/save", h.ConfigSave)
-	router.Post("/configs/delete", h.ConfigDelete)
 }
 
 const maxImageBytes = 12 << 20
@@ -153,16 +146,3 @@ func PublicHost(host string) bool {
 	return true
 }
 
-func (h *Handler) configData(ctx context.Context) (map[string]string, error) {
-	if h.cfg.ConfigData != nil {
-		return h.cfg.ConfigData(ctx)
-	}
-	if h.cfg.StateStore != nil && h.cfg.ModConfigsPath != "" {
-		doc, err := h.cfg.StateStore.Get(ctx, h.cfg.ModConfigsPath)
-		if err != nil {
-			return nil, err
-		}
-		return doc.Data, nil
-	}
-	return nil, nil
-}

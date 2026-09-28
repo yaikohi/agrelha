@@ -268,7 +268,6 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		instances.WithAudit(st),
 		instances.WithEvent(st),
 		instances.WithBackupsDir(cfg.BackupsDir),
-		instances.WithGlobalConfigsPath(cfg.ModConfigsPath),
 	)
 	if d.TS != nil {
 		valheimInstOpts = append(valheimInstOpts,
@@ -333,9 +332,6 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 					}
 				}
 				return lines, nil
-			}),
-			instances.WithGlobalConfigsReader(func(ctx context.Context) (map[string]string, error) {
-				return d.K8s.ConfigMapData(ctx, "valheim-mod-configs")
 			}),
 			instances.WithSourceReconciler(func(ctx context.Context, inst *domain.Instance) (bool, error) {
 				if inst == nil || d.K8s == nil {
