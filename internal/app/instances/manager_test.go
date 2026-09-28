@@ -647,3 +647,91 @@ func TestCreateInstanceRefusesTheDevOverwriteScenario(t *testing.T) {
 	}
 	t.Logf("refused with: %v", err)
 }
+
+func TestInstanceManager_SourceReconciler(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "reconcile.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	repo := store.NewValheimInstanceRepo(st)
+	_ = repo.Upsert(domain.Instance{
+		Number: 1,
+		Name:   "ReconcileTest",
+		Slug:   "reconcile-test",
+		GameID: domain.GameValheim,
+		Source: domain.SourceVanilla,
+	})
+
+	reconcileCount := 0
+	reconciler := func(ctx context.Context, inst *domain.Instance) (bool, error) {
+		reconcileCount++
+		if inst.Number == 1 && inst.Source == domain.SourceVanilla {
+			inst.Source = domain.SourceModlist
+			return true, nil
+		}
+		return false, nil
+	}
+
+	mgr := NewInstanceManager(repo, nil, nil, 10, 2, 1, "", "", nil, "valheim",
+		WithSourceReconciler(reconciler),
+	)
+
+	// 1. GetInstance triggers reconciler and persists
+	inst, err := mgr.GetInstance(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetInstance failed: %v", err)
+	}
+	if inst.Source != domain.SourceModlist {
+		t.Errorf("expected source to be reconciled to modlist, got %s", inst.Source)
+	}
+
+	// Verify persistence in repo
+	fromRepo, _ := repo.Get(1)
+	if fromRepo.Source != domain.SourceModlist {
+		t.Errorf("expected repo to be updated to modlist, got %s", fromRepo.Source)
+	}
+
+	// 2. Calling GetInstance again returns changed=false
+	_, _ = mgr.GetInstance(ctx, 1)
+
+	// 3. Error from reconciler is swallowed gracefully
+	errMgr := NewInstanceManager(repo, nil, nil, 10, 2, 1, "", "", nil, "valheim",
+		WithSourceReconciler(func(ctx context.Context, inst *domain.Instance) (bool, error) {
+			return false, errors.New("reconcile err")
+		}),
+	)
+	got, err := errMgr.GetInstance(ctx, 1)
+	if err != nil || got == nil {
+		t.Errorf("expected GetInstance to succeed despite reconciler error: %v", err)
+	}
+
+	// 4. ListInstances triggers reconciler
+	_ = repo.Upsert(domain.Instance{
+		Number: 2,
+		Name:   "ReconcileTest2",
+		Slug:   "reconcile-test2",
+		GameID: domain.GameValheim,
+		Source: domain.SourceVanilla,
+	})
+	listMgr := NewInstanceManager(repo, nil, nil, 10, 2, 1, "", "", nil, "valheim",
+		WithSourceReconciler(func(ctx context.Context, inst *domain.Instance) (bool, error) {
+			if inst.Number == 2 {
+				inst.Source = domain.SourceModlist
+				return true, nil
+			}
+			return false, nil
+		}),
+	)
+	list, err := listMgr.ListInstances(ctx)
+	if err != nil {
+		t.Fatalf("ListInstances failed: %v", err)
+	}
+	for _, it := range list {
+		if it.Number == 2 && it.Source != domain.SourceModlist {
+			t.Errorf("expected instance 2 source to be modlist, got %s", it.Source)
+		}
+	}
+}

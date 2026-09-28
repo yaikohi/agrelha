@@ -624,7 +624,7 @@ func TestWiring_BackfillValheimSource_MoreErrors(t *testing.T) {
 
 	cs := fakek8s.NewSimpleClientset(
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "valheim-vh-load-02", Namespace: "valheim"},
+			ObjectMeta: metav1.ObjectMeta{Name: "valheim-vh-2-02", Namespace: "valheim"},
 			Spec: appsv1.DeploymentSpec{
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
@@ -875,5 +875,110 @@ func TestWiring_MinecraftGame_Options_Branches(t *testing.T) {
 	_, err = deps.MinecraftGame.ExportClientBundle(ctx, mcInst)
 	if err == nil {
 		t.Error("expected error from ExportClientBundle with failing buildMrpack")
+	}
+}
+
+func TestWiring_ValheimSourceReconciliation_Branches(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+
+	// 1. Nil checks on backfillValheimSource
+	backfillValheimSource(ctx, &Deps{})
+	backfillValheimSource(ctx, &Deps{ValheimInstances: &instances.InstanceManager{}})
+	backfillValheimSource(ctx, &Deps{ValheimInstances: &instances.InstanceManager{}, K8s: &k8s.Client{}})
+
+	// 2. Empty records in store
+	st, err := store.Open(filepath.Join(tempDir, "empty.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	cs := fakek8s.NewSimpleClientset()
+	k8sClient := k8s.NewWithClientset(cs, "valheim", "valheim")
+	mgr := instances.NewInstanceManager(store.NewValheimInstanceRepo(st), nil, nil, 10, 2, 1, "", "", nil, "valheim")
+	d := &Deps{
+		Store:            st,
+		ValheimInstances: mgr,
+		K8s:              k8sClient,
+	}
+	backfillValheimSource(ctx, d)
+
+	// 3. Fallback to cfg.ValheimDeployment when inst.DeploymentName() is not found
+	_, _ = st.DB().Exec(`INSERT INTO valheim_instances (number, name, slug, source) VALUES (1, 'CustomName', 'custom-slug', 'vanilla')`)
+	_, _ = cs.AppsV1().Deployments("valheim").Create(ctx, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "valheim-legacy", Namespace: "valheim"},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "valheim", Env: []corev1.EnvVar{{Name: "BEPINEX", Value: "true"}}},
+					},
+				},
+			},
+		},
+	}, metav1.CreateOptions{})
+
+	cfg := &config.Config{ValheimDeployment: "valheim-legacy"}
+	backfillValheimSource(ctx, d, cfg)
+
+	got, err := mgr.GetInstance(ctx, 1)
+	if err != nil || got == nil {
+		t.Fatalf("failed to get instance 1: %v", err)
+	}
+	if got.Source != domain.SourceModlist {
+		t.Errorf("expected source to reconcile to modlist via fallback, got %s", got.Source)
+	}
+
+	// 4. Test Build's wired WithSourceReconciler callback
+	dbPath := filepath.Join(tempDir, "reconcile_wired.db")
+	stWired, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = stWired.Close()
+
+	origK8sClient := newK8sClient
+	defer func() { newK8sClient = origK8sClient }()
+	newK8sClient = func(ns, dep string) (*k8s.Client, error) {
+		return k8s.NewWithClientset(cs, ns, dep), nil
+	}
+
+	cfgWired := &config.Config{
+		DBPath:            dbPath,
+		ValheimDeployment: "valheim-legacy",
+		ValheimNamespace:  "valheim",
+	}
+	deps, err := Build(ctx, cfgWired)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	// Seed instance 1 into deps.ValheimInstances as SourceModlist
+	_ = deps.ValheimInstances.SaveInstance(domain.Instance{
+		Number: 1,
+		Name:   "CustomName",
+		Slug:   "custom-slug",
+		GameID: domain.GameValheim,
+		Source: domain.SourceModlist,
+	})
+
+	// Now update deployment BEPINEX to "false"
+	dep, _ := cs.AppsV1().Deployments("valheim").Get(ctx, "valheim-legacy", metav1.GetOptions{})
+	dep.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{Name: "BEPINEX", Value: "false"}}
+	_, _ = cs.AppsV1().Deployments("valheim").Update(ctx, dep, metav1.UpdateOptions{})
+
+	// GetInstance triggers sourceReconciler and reconciles from Modlist to Vanilla
+	reconciled, err := deps.ValheimInstances.GetInstance(ctx, 1)
+	if err != nil || reconciled == nil {
+		t.Fatalf("GetInstance failed: %v", err)
+	}
+	if reconciled.Source != domain.SourceVanilla {
+		t.Errorf("expected source to be reconciled to vanilla, got %s", reconciled.Source)
+	}
+
+	// Idempotent call
+	reconciledSame, _ := deps.ValheimInstances.GetInstance(ctx, 1)
+	if reconciledSame.Source != domain.SourceVanilla {
+		t.Errorf("expected source to stay vanilla, got %s", reconciledSame.Source)
 	}
 }

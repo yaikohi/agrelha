@@ -57,6 +57,7 @@ type InstanceManager struct {
 	afterSyncHook       func(cm, dep, key string, want func(string) bool)
 	commandExecutor     func(ctx context.Context, inst domain.Instance, cmd string) (string, error)
 	jobRunner           ports.JobRunner
+	sourceReconciler    func(ctx context.Context, inst *domain.Instance) (bool, error)
 }
 
 type Option func(*InstanceManager)
@@ -149,6 +150,10 @@ func WithTelemetryProvider(fn func(ctx context.Context, inst domain.Instance) (p
 
 func WithAfterSyncHook(fn func(cm, dep, key string, want func(string) bool)) Option {
 	return func(m *InstanceManager) { m.afterSyncHook = fn }
+}
+
+func WithSourceReconciler(fn func(ctx context.Context, inst *domain.Instance) (bool, error)) Option {
+	return func(m *InstanceManager) { m.sourceReconciler = fn }
 }
 
 func actorOrHyphen(actor []string) string {
@@ -269,6 +274,11 @@ func (m *InstanceManager) ListInstances(ctx context.Context) ([]domain.Instance,
 	instances := make([]domain.Instance, 0, len(records))
 	for _, r := range records {
 		inst := r
+		if m.sourceReconciler != nil {
+			if changed, err := m.sourceReconciler(ctx, &inst); err == nil && changed {
+				_ = m.repo.Upsert(inst)
+			}
+		}
 		if m.runtime != nil {
 			if st, err := m.runtime.Status(ctx, m.serverRef(inst)); err == nil {
 				if newState := stateFromStatus(st); inst.State != newState {
@@ -313,6 +323,11 @@ func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*domain.Ins
 		return nil, nil
 	}
 	inst := *rec
+	if m.sourceReconciler != nil {
+		if changed, err := m.sourceReconciler(ctx, &inst); err == nil && changed {
+			_ = m.repo.Upsert(inst)
+		}
+	}
 	if m.runtime != nil {
 		if st, err := m.runtime.Status(ctx, m.serverRef(inst)); err == nil {
 			if newState := stateFromStatus(st); inst.State != newState {

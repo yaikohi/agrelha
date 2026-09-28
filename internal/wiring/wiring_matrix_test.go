@@ -319,6 +319,35 @@ func TestWiring_Build_FullK8sMatrix(t *testing.T) {
 		t.Errorf("expected backfilled source Vanilla, got %v", backfilledInst.Source)
 	}
 
+	// Update deployment BEPINEX to "true" to test runtime reconciliation via GetInstance
+	valheimDep, err := cs.AppsV1().Deployments("valheim").Get(ctx, "valheim-valheim-01-01", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	valheimDep.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+		{Name: "BEPINEX", Value: "true"},
+	}
+	if _, err := cs.AppsV1().Deployments("valheim").Update(ctx, valheimDep, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	reconciledInst, err := deps.ValheimInstances.GetInstance(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reconciledInst.Source != domain.SourceModlist {
+		t.Errorf("expected reconciled source Modlist, got %v", reconciledInst.Source)
+	}
+
+	// Verify idempotency
+	reconciledInst2, err := deps.ValheimInstances.GetInstance(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reconciledInst2.Source != domain.SourceModlist {
+		t.Errorf("expected source to remain Modlist, got %v", reconciledInst2.Source)
+	}
+
 	// Trigger Thunderstore onRefresh callback
 	if deps.TS != nil && deps.TS.OnRefresh != nil {
 		deps.TS.OnRefresh([]thunderstore.SearchResult{

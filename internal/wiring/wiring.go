@@ -337,6 +337,28 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			instances.WithGlobalConfigsReader(func(ctx context.Context) (map[string]string, error) {
 				return d.K8s.ConfigMapData(ctx, "valheim-mod-configs")
 			}),
+			instances.WithSourceReconciler(func(ctx context.Context, inst *domain.Instance) (bool, error) {
+				if inst == nil || d.K8s == nil {
+					return false, nil
+				}
+				depName := inst.DeploymentName()
+				v, found, err := d.K8s.DeploymentEnv(ctx, depName, "BEPINEX")
+				if err != nil && inst.Number == 1 && cfg.ValheimDeployment != "" {
+					v, found, err = d.K8s.DeploymentEnv(ctx, cfg.ValheimDeployment, "BEPINEX")
+				}
+				if err != nil || !found {
+					return false, err
+				}
+				expected := domain.SourceModlist
+				if strings.EqualFold(v, "false") {
+					expected = domain.SourceVanilla
+				}
+				if inst.Source != expected {
+					inst.Source = expected
+					return true, nil
+				}
+				return false, nil
+			}),
 		)
 	}
 	valheimInstOpts = append(valheimInstOpts,
@@ -521,7 +543,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		}),
 	)
 
-	backfillValheimSource(ctx, &d)
+	backfillValheimSource(ctx, &d, cfg)
 
 	if d.ValheimInstances != nil && d.TS != nil {
 		d.ModUpdates = modupdates.New(d.ValheimInstances, d.TS, modupdates.WithRestorePoints(st))
@@ -642,45 +664,59 @@ func buildAuth(ctx context.Context, cfg *config.Config, st *store.Store) ports.A
 	return oidc.NewDev(oidcCfg)
 }
 
-// backfillValheimSource gives pre-existing Valheim Worlds a Source, derived from
-// what their deployment actually runs. Source was not stored before Vanilla
-// became a real choice, and guessing "modded" would flip BepInEx on for a World
-// whose players are earning achievements. Runs once per instance: a Source, once
-// set, is never recomputed.
-func backfillValheimSource(ctx context.Context, d *Deps) {
-	if d.ValheimInstances == nil || d.K8s == nil {
+// backfillValheimSource reconciles Valheim Worlds' Source, derived from
+// what their deployment actually runs (e.g. BEPINEX="true" vs "false").
+// Source was not stored before Vanilla became a real choice, and manual GitOps
+// changes to BEPINEX are reflected into Agrelha's store on startup and whenever
+// instances are read.
+func backfillValheimSource(ctx context.Context, d *Deps, cfgs ...*config.Config) {
+	if d.ValheimInstances == nil || d.K8s == nil || d.Store == nil {
 		return
 	}
-	// Ask the store which rows were never written, not the repository: it
-	// normalises an empty Source to modlist on read, so inst.Source is never "".
-	missing, err := d.Store.ValheimInstancesMissingSource()
+	var cfg *config.Config
+	if len(cfgs) > 0 {
+		cfg = cfgs[0]
+	}
+	records, err := d.Store.ListValheimInstances()
 	if err != nil {
 		slog.Warn("valheim source backfill: cannot query instances", "err", err)
 		return
 	}
-	if len(missing) == 0 {
+	if len(records) == 0 {
 		return
 	}
-	slog.Info("valheim source backfill: instances without a stored source", "numbers", missing)
 
-	for _, num := range missing {
-		inst, err := d.ValheimInstances.GetInstance(ctx, num)
+	for _, rec := range records {
+		inst, err := d.ValheimInstances.GetInstance(ctx, rec.Number)
 		if err != nil || inst == nil {
-			slog.Warn("valheim source backfill: cannot load instance", "instance", num, "err", err)
+			slog.Warn("valheim source backfill: cannot load instance", "instance", rec.Number, "err", err)
 			continue
 		}
-		source := domain.SourceModlist
-		if v, found, err := d.K8s.DeploymentEnv(ctx, inst.DeploymentName(), "BEPINEX"); err != nil {
+		expectedSource := inst.Source
+		depName := inst.DeploymentName()
+		v, found, err := d.K8s.DeploymentEnv(ctx, depName, "BEPINEX")
+		if err != nil && rec.Number == 1 && cfg != nil && cfg.ValheimDeployment != "" {
+			v, found, err = d.K8s.DeploymentEnv(ctx, cfg.ValheimDeployment, "BEPINEX")
+		}
+		if err != nil {
 			slog.Warn("valheim source backfill: cannot read deployment", "instance", inst.Number, "err", err)
 			continue
-		} else if found && strings.EqualFold(v, "false") {
-			source = domain.SourceVanilla
+		} else if found {
+			if strings.EqualFold(v, "false") {
+				expectedSource = domain.SourceVanilla
+			} else if strings.EqualFold(v, "true") {
+				expectedSource = domain.SourceModlist
+			}
+		} else if rec.Source == "" {
+			expectedSource = domain.SourceModlist
 		}
-		inst.Source = source
-		if err := d.ValheimInstances.SaveInstance(*inst); err != nil {
-			slog.Warn("valheim source backfill: cannot save", "instance", inst.Number, "err", err)
-			continue
+		if inst.Source != expectedSource || rec.Source == "" {
+			inst.Source = expectedSource
+			if err := d.ValheimInstances.SaveInstance(*inst); err != nil {
+				slog.Warn("valheim source backfill: cannot save", "instance", inst.Number, "err", err)
+				continue
+			}
+			slog.Info("valheim source backfilled from the running deployment", "instance", inst.Number, "name", inst.Name, "source", expectedSource)
 		}
-		slog.Info("valheim source backfilled from the running deployment", "instance", inst.Number, "name", inst.Name, "source", source)
 	}
 }
