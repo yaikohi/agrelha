@@ -15,6 +15,13 @@ import (
 // read-only, so this is the whole contract between them.
 const serverBuildFile = "server-build.json"
 
+// instanceDir is the Instance's own directory on the shared export. The naming
+// convention belongs to the domain, because the deployment template has to
+// render the same string into the sidecars that write here.
+func instanceDir(backupsDir, slug string, num int) string {
+	return filepath.Join(backupsDir, domain.Instance{Slug: slug, Number: num}.BackupsSubdir())
+}
+
 type serverBuildDoc struct {
 	Instance  string `json:"instance"`
 	Installed string `json:"installed"`
@@ -30,7 +37,7 @@ func ReadServerBuild(backupsDir, slug string, num int) (*domain.ServerBuild, err
 	if backupsDir == "" || slug == "" {
 		return nil, nil
 	}
-	path := filepath.Join(backupsDir, fmt.Sprintf("%s-%02d", slug, num), serverBuildFile)
+	path := filepath.Join(instanceDir(backupsDir, slug, num), serverBuildFile)
 	raw, err := os.ReadFile(path)
 	switch {
 	case os.IsNotExist(err):

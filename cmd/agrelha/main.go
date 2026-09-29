@@ -29,6 +29,13 @@ func main() {
 }
 
 func run(ctx context.Context, stdout, stderr io.Writer, args []string) int {
+	// Subcommands are dispatched before any config loading or wiring: the
+	// bepinex merge runs as an init container on the game pod, where there is
+	// no database, no git credentials and no cluster access to build.
+	if len(args) > 0 && args[0] == "bepinex" {
+		return runBepInEx(stdout, stderr, args[1:])
+	}
+
 	cfg := config.Load()
 	logging.Setup(cfg.LogLevel, cfg.LogFormat)
 	build.SourceURL = cfg.SourceURL

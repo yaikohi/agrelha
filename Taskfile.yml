@@ -5,7 +5,7 @@ vars:
   CSS_OUT: internal/web/assets/css/output.css
   DATASTAR_JS: internal/web/assets/js/datastar.js
   DATASTAR_VERSION: 1.0.2 # must match datastar-go protocol (PatchElements/PatchSignals)
-  GO_MAIN: cmd/agrelha/main.go
+  GO_MAIN: ./cmd/agrelha
   GO_BINARY: main
   VERSION: dev
   IMAGE: registry.ykhi.xyz/agrelha

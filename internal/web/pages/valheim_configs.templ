@@ -1,0 +1,156 @@
+package pages
+
+import "fmt"
+
+// ValheimConfigsTab renders the BepInEx config editor for one world.
+//
+// It deliberately renders NO settings up front. Therzie.Warfare.cfg alone
+// declares 1398 of them across 182 sections; putting that in the page is a
+// multi-megabyte document and a hung browser. The operator picks a file, then a
+// section or a search, and only the matches are fetched.
+templ ValheimConfigsTab(d InstanceDetailUI) {
+	<div
+		class="space-y-6"
+		data-signals={ fmt.Sprintf("{cfgFile: '', cfgSha: '', cfgSearch: '', cfgSection: '', cfgOnlyChanged: false, cfgRaw: false, cfgDirty: {}, cfgBusy: false, cfgNum: %d}", d.Number) }
+	>
+		<div class="flex items-start justify-between gap-4">
+			<div>
+				<h2 class="text-base font-semibold text-zinc-100">Mod configuration</h2>
+				<p class="mt-0.5 text-xs text-zinc-400">
+					Settings come from the files the mods generate on the server. agrelha stores only the values you change, and applies them on the next restart.
+				</p>
+			</div>
+			if d.ConfigsPublished != "" {
+				<span class="shrink-0 rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[11px] text-zinc-400">
+					read { d.ConfigsPublished }
+				</span>
+			}
+		</div>
+		if d.RestartPending {
+			@pendingRestartBanner(d)
+		}
+		if d.ConfigsError != "" {
+			<div class="rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-xs text-red-300">
+				{ d.ConfigsError }
+			</div>
+		} else if d.ConfigsUnpublished {
+			@configsNotPublished()
+		} else if len(d.Configs) == 0 {
+			<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 p-8 text-center text-xs text-zinc-500">
+				This world's mods have not written any configuration files.
+			</div>
+		} else {
+			@configFileList(d)
+			<div id="cfg-panel" class="space-y-4"></div>
+		}
+	</div>
+}
+
+// A world that has never started has published nothing. Saying "no configs"
+// here would be a different, and wrong, claim.
+templ configsNotPublished() {
+	<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 p-8 text-center">
+		<p class="text-xs text-zinc-400">No configuration has been published for this world yet.</p>
+		<p class="mt-1.5 text-[11px] text-zinc-500">
+			Mods write their config files the first time the world runs. Start it once and they will appear here.
+		</p>
+	</div>
+}
+
+templ configFileList(d InstanceDetailUI) {
+	<div class="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/80">
+		<table class="w-full text-left text-xs">
+			<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400">
+				<tr>
+					<th class="px-4 py-2.5 font-medium">Mod</th>
+					<th class="px-4 py-2.5 font-medium text-right">Settings</th>
+					<th class="px-4 py-2.5 font-medium text-right">Changed</th>
+					<th class="px-4 py-2.5 font-medium text-right">Managed</th>
+					<th class="px-4 py-2.5"></th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-zinc-800/60">
+				for _, f := range d.Configs {
+					<tr class="hover:bg-zinc-800/30">
+						<td class="px-4 py-2.5">
+							<div class="font-medium text-zinc-200">
+								if f.Plugin != "" {
+									{ f.Plugin }
+									if f.Version != "" {
+										<span class="ml-1.5 text-[11px] font-normal text-zinc-500">v{ f.Version }</span>
+									}
+								} else {
+									<span class="font-mono text-zinc-300">{ f.Name }</span>
+								}
+							</div>
+							if f.Plugin != "" {
+								<div class="mt-0.5 font-mono text-[11px] text-zinc-500">{ f.Name }</div>
+							}
+						</td>
+						<td class="px-4 py-2.5 text-right tabular-nums text-zinc-400">
+							if f.Parsable {
+								{ fmt.Sprint(f.Settings) }
+							} else {
+								<span class="text-amber-500/80" title="agrelha could not read this file's structure; it opens in the raw editor">raw</span>
+							}
+						</td>
+						<td class="px-4 py-2.5 text-right tabular-nums">
+							if f.Changed > 0 {
+								<span class="text-amber-400" title="differ from the value the mod ships with">{ fmt.Sprint(f.Changed) }</span>
+							} else {
+								<span class="text-zinc-600">0</span>
+							}
+						</td>
+						<td class="px-4 py-2.5 text-right tabular-nums">
+							if f.Overridden > 0 {
+								<span class="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-200" title="values agrelha pins in git">{ fmt.Sprint(f.Overridden) }</span>
+							} else {
+								<span class="text-zinc-600">—</span>
+							}
+						</td>
+						<td class="px-4 py-2.5 text-right">
+							<button
+								type="button"
+								data-on:click={ fmt.Sprintf("@get('/api/valheim/%d/configs/file?f=%s')", d.Number, f.Name) }
+								class="rounded bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-white"
+							>
+								Open
+							</button>
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+// A change is committed but the running server has not read it: mods load
+// their config once, at startup. The banner says what is waiting and why, and
+// offers to overrule the wait.
+templ pendingRestartBanner(d InstanceDetailUI) {
+	<div class="rounded-xl border border-amber-900/60 bg-amber-950/25 p-4">
+		<div class="flex items-start justify-between gap-4">
+			<div class="min-w-0">
+				<p class="text-xs font-semibold text-amber-300">Waiting to restart</p>
+				<p class="mt-1 text-[11px] leading-relaxed text-amber-200/80">
+					{ d.RestartReason }
+					if d.RestartSince != "" {
+						<span class="text-amber-200/50">· waiting { d.RestartSince }</span>
+					}
+				</p>
+				if d.RestartWaiting != "" {
+					<p class="mt-1 text-[11px] text-amber-200/60">Held because: { d.RestartWaiting }</p>
+				} else {
+					<p class="mt-1 text-[11px] text-amber-200/60">The world is empty; this applies on the next check.</p>
+				}
+			</div>
+			<button
+				type="button"
+				data-on:click={ fmt.Sprintf("if (confirm('Restart now?\\n\\nAnyone connected will be disconnected.')) { @post('/api/valheim/%d/restart/force') }", d.Number) }
+				class="shrink-0 rounded-lg border border-amber-700/60 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-900/40"
+			>
+				Restart now
+			</button>
+		</div>
+	</div>
+}

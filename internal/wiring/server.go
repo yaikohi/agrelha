@@ -400,6 +400,8 @@ func buildValheimHandler(cfg *config.Config, d Deps, applyValheimAfterSync func(
 		LastIncident:          incidentReader(d, domain.GameValheim),
 		ServerBuild:           serverBuild,
 		ValheimInstances:      d.ValheimInstances,
+		ValheimConfigs:        d.ValheimConfigs,
+		ValheimRestarts:       d.ValheimRestarts,
 		ValheimGame:           d.ValheimGame,
 		TS:                    cat,
 		ReadmeCache:           readme,

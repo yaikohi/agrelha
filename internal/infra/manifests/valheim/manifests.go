@@ -107,18 +107,24 @@ func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[
 	}
 	files["slot.yaml"] = slotBuf.Bytes()
 
-	// A Vanilla world has no Loader, so its mod list and BepInEx config map
-	// would be objects that exist only to stay empty. Valheim "configs" are
-	// BepInEx plugin configs, which is why they go too.
-	if inst.IsVanilla() {
-		return files, nil
-	}
-
+	// The configs ConfigMap is rendered even for a Vanilla world, empty. Saving
+	// an Override is a StateStore.Patch, and Patch cannot create a file that is
+	// not there - while the only write that can, WriteDirectory, deletes every
+	// sibling it was not given, which here is the rest of the instance's
+	// manifests. So the file has to exist before anyone needs it, and a world
+	// converted from Vanilla to Modded has no later chance to render one.
+	// It costs an empty object; the deployment only mounts it when Modded.
 	var cfgBuf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&cfgBuf, "configs.yaml.tmpl", data); err != nil {
 		return nil, fmt.Errorf("render configs: %w", err)
 	}
 	files["configs.yaml"] = cfgBuf.Bytes()
+
+	// A Vanilla world has no Loader, so a mod list would be an object that
+	// exists only to stay empty.
+	if inst.IsVanilla() {
+		return files, nil
+	}
 
 	if strings.TrimSpace(data.ModsTxt) == "" {
 		data.ModsTxt = fmt.Sprintf("# Mod list for %s\n", inst.Name)

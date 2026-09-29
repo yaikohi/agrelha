@@ -124,6 +124,49 @@ An Instance's memory allocation: small (4 GiB), medium (8 GiB), large (12 GiB).
 Tiers exist so concurrent Instances fit a fixed RAM budget.
 _Avoid_: size, plan
 
+**Setting**:
+One named value a mod exposes in its Generated config, together with the type it
+binds to, the value it ships with, and what it will accept. The mod decides what
+Settings exist; agrelha discovers them by reading the file the mod wrote.
+_Avoid_: option, property, config key
+
+**Generated config**:
+The `.cfg` file a mod writes on the World's disk, carrying every Setting it
+exposes with the mod's own description, type and default. It is the authority on
+*what exists*. It is never stored in git: it is derived, it is large, and it
+changes whenever the mod does.
+_Avoid_: config file (unqualified), default config
+
+**Override**:
+One Setting the operator deliberately pinned. Overrides, and only Overrides,
+live in git. An Override that currently equals the Default is still an Override:
+it records a decision, and a mod update can move the Default underneath it.
+_Avoid_: custom config, change, setting (that is the thing being overridden)
+
+**Override set**:
+Every Override for one Generated config, stored as one key in the Instance's
+configs ConfigMap, in BepInEx's own syntax. Deleting the last Override deletes
+the key; an empty Override set does not exist.
+_Avoid_: config file, patch, diff
+
+**Effective config**:
+The Generated config with the Override set substituted into it - what the mod
+actually loads. Produced at pod start, stored nowhere.
+_Avoid_: merged config, final config
+
+**Config snapshot**:
+The copy of an Instance's Generated configs that the publish sidecar leaves on
+the backups export, and agrelha's only way to see them. A missing snapshot means
+"not published yet", which is a different answer from "this World has no
+configs".
+_Avoid_: config cache, config dump
+
+**Pending restart**:
+A committed change that only a restart will apply, waiting for the World to
+empty. Distinct from a Server update and from a Mod update: those *cause*
+restarts, this *is* one waiting to happen.
+_Avoid_: pending change, queued restart, dirty
+
 ### State
 
 **Lifecycle**:
@@ -208,6 +251,28 @@ the promise Vanilla made — so it is offered as Duplicate, never as an edit.
 The rule is enforced in the domain, not only in the UI: an install refused on the
 page must also be refused when the API is called directly. Duplicate is the
 supported path to a Modded copy.
+
+**The Generated config says what exists; git says what was changed.**
+Discovery and intent are different questions with different authorities. Storing
+a whole Generated config in git would make git claim to know which Settings a
+mod has, which it cannot - the mod changes and git does not notice. It also does
+not fit: three of one world's files exceed 100 KB against a 1 MiB ConfigMap
+ceiling.
+
+**Removing an Override does not restore the Default.**
+The Generated config keeps whatever value was last written to it. "Reset to
+default" therefore *writes* the Default as an Override; it never merely deletes
+one. A button that silently changes nothing is worse than no button.
+
+**An Override for a Setting that no longer exists is kept.**
+A mod that drops a Setting, or is uninstalled for an afternoon, must not silently
+destroy a recorded decision. BepInEx preserves such entries itself; agrelha
+reports them as unmatched and leaves them alone.
+
+**An unknown player count is never read as an empty World.**
+A server that is stopped, starting, or unreachable answers nothing, and nothing
+is not zero. A Pending restart waits for the operator rather than disconnecting
+people on a guess.
 
 **Lifecycle is never compared with Availability**, and neither is compared with
 Kubernetes' `Phase`.

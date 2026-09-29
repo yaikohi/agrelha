@@ -200,6 +200,35 @@ type InstanceDetailUI struct {
 	ConfigFiles     []string
 	Backups         []BackupUI
 	LastIncident    *IncidentUI
+
+	// Configs is the BepInEx config set the publish sidecar last copied off the
+	// world's disk. ConfigsUnpublished distinguishes "the sidecar has not run
+	// yet" from "this world has no configs" - rendering the first as the second
+	// would tell the operator their mods expose no settings.
+	Configs            []ConfigFileUI
+	ConfigsUnpublished bool
+	ConfigsPublished   string
+	ConfigsError       string
+
+	// A committed change that only a restart will apply, waiting for the world
+	// to empty. Distinct from a Server update and a Mod update: those cause
+	// restarts, this is one waiting to happen.
+	RestartPending bool
+	RestartReason  string
+	RestartWaiting string
+	RestartSince   string
+}
+
+// ConfigFileUI is one mod's Generated config as the file list shows it.
+type ConfigFileUI struct {
+	Name       string
+	Plugin     string
+	Version    string
+	Settings   int
+	Changed    int
+	Overridden int
+	Size       int64
+	Parsable   bool
 }
 
 // IncidentUI is the last recorded failure of an Instance, shown so the operator

@@ -917,110 +917,91 @@ func TestValheimConfigs(t *testing.T) {
 	defer st.Close()
 
 	ctx := context.Background()
-	_, err := mgr.CreateInstance(ctx, domain.Instance{
+	if _, err := mgr.CreateInstance(ctx, domain.Instance{
 		GameID: domain.GameValheim,
 		Name:   "Valheim Server",
 		Tier:   domain.TierMedium,
-	}, domain.ModList{}, "tester")
-	if err != nil {
+	}, domain.ModList{}, "tester"); err != nil {
 		t.Fatalf("create instance: %v", err)
 	}
 
 	app := fiber.New()
 	h.Register(app)
 
-	// 1. Get config - missing f parameter
-	reqNoFile := httptest.NewRequest("GET", "/api/valheim/1/configs/file", nil)
-	respNoFile, _ := app.Test(reqNoFile)
-	if respNoFile.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("expected 400 for missing file name, got %d", respNoFile.StatusCode)
+	post := func(path, body string) string {
+		t.Helper()
+		req := httptest.NewRequest("POST", path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		out, _ := io.ReadAll(resp.Body)
+		return string(out)
 	}
 
-	// 2. Save config - invalid filename
-	reqBadSave := httptest.NewRequest("POST", "/api/valheim/1/configs/save", strings.NewReader("file=bad-name&content=foo"))
-	reqBadSave.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	respBadSave, _ := app.Test(reqBadSave)
-	bodyBadSave, _ := io.ReadAll(respBadSave.Body)
-	if !strings.Contains(string(bodyBadSave), "Invalid config file name") {
-		t.Errorf("expected invalid config name toast, got %s", string(bodyBadSave))
+	// The raw endpoint edits the override set as text. It is the path a file
+	// agrelha cannot parse takes, and the only save that works without a
+	// published snapshot.
+	if got := post("/api/valheim/1/configs/raw", `{"file":"server.cfg","content":"[General]\nDifficulty = hard\n"}`); !strings.Contains(got, "Saved server.cfg") {
+		t.Errorf("expected saved toast, got %s", got)
+	}
+	if got := post("/api/valheim/1/configs/raw", `{"file":"server.cfg","content":"[General]\nDifficulty = hard\n"}`); !strings.Contains(got, "already set that way") {
+		t.Errorf("expected unchanged toast, got %s", got)
+	}
+	if got := post("/api/valheim/1/configs/raw", `{"file":"bad-name","content":"x"}`); !strings.Contains(got, "Invalid config file name") {
+		t.Errorf("expected invalid name toast, got %s", got)
 	}
 
-	// 3. Save config - success (new file)
-	reqSave := httptest.NewRequest("POST", "/api/valheim/1/configs/save", strings.NewReader("file=server.cfg&content=difficulty=hard"))
-	reqSave.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	respSave, _ := app.Test(reqSave)
-	bodySave, _ := io.ReadAll(respSave.Body)
-	if !strings.Contains(string(bodySave), "Saved server.cfg") {
-		t.Errorf("expected saved toast, got %s", string(bodySave))
+	// An empty override set deletes the key rather than storing an empty value:
+	// an empty value would make the merge tool write an empty file over a good
+	// config on the server.
+	if got := post("/api/valheim/1/configs/raw", `{"file":"server.cfg","content":"   "}`); !strings.Contains(got, "Stopped managing server.cfg") {
+		t.Errorf("expected the key to be dropped, got %s", got)
 	}
 
-	// 4. Save config - unchanged
-	reqSaveSame := httptest.NewRequest("POST", "/api/valheim/1/configs/save", strings.NewReader("file=server.cfg&content=difficulty=hard"))
-	reqSaveSame.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	respSaveSame, _ := app.Test(reqSaveSame)
-	bodySaveSame, _ := io.ReadAll(respSaveSame.Body)
-	if !strings.Contains(string(bodySaveSame), "server.cfg is unchanged") {
-		t.Errorf("expected unchanged toast, got %s", string(bodySaveSame))
+	if got := post("/api/valheim/1/configs/delete", `{"file":"bad-name"}`); !strings.Contains(got, "Invalid config file name") {
+		t.Errorf("expected invalid filename error, got %s", got)
+	}
+	if got := post("/api/valheim/1/configs/delete", `{"file":"server.cfg"}`); !strings.Contains(got, "was not managing") {
+		t.Errorf("expected a not-managed toast, got %s", got)
 	}
 
-	// 5. Get config - success
-	reqGet := httptest.NewRequest("GET", "/api/valheim/1/configs/file?f=server.cfg", nil)
-	respGet, _ := app.Test(reqGet)
-	if respGet.StatusCode != fiber.StatusOK {
-		t.Errorf("expected 200 for get config, got %d", respGet.StatusCode)
+	// With no published snapshot there is nothing to build a form from. The
+	// endpoints must say so rather than crash or claim the world has no
+	// settings.
+	if got := post("/api/valheim/1/configs/save", `{"file":"server.cfg"}`); !strings.Contains(got, "unavailable") {
+		t.Errorf("expected an unavailable toast, got %s", got)
 	}
+	respGet, _ := app.Test(httptest.NewRequest("GET", "/api/valheim/1/configs/file?f=server.cfg", nil))
 	bodyGet, _ := io.ReadAll(respGet.Body)
-	if !strings.Contains(string(bodyGet), "difficulty=hard") {
-		t.Errorf("expected file content in get response, got %s", string(bodyGet))
+	if respGet.StatusCode != fiber.StatusOK || !strings.Contains(string(bodyGet), "unavailable") {
+		t.Errorf("expected an inline unavailable message, got %d %s", respGet.StatusCode, string(bodyGet))
 	}
 
-	// 6. Delete config - invalid filename
-	reqBadDelete := httptest.NewRequest("POST", "/api/valheim/1/configs/delete", strings.NewReader("file=bad-name"))
-	reqBadDelete.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	respBadDelete, _ := app.Test(reqBadDelete)
-	bodyBadDelete, _ := io.ReadAll(respBadDelete.Body)
-	if !strings.Contains(string(bodyBadDelete), "Invalid config file name") {
-		t.Errorf("expected invalid filename error, got %s", string(bodyBadDelete))
-	}
-
-	// 7. Delete config - success
-	reqDelete := httptest.NewRequest("POST", "/api/valheim/1/configs/delete", strings.NewReader("file=server.cfg"))
-	reqDelete.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	respDelete, _ := app.Test(reqDelete)
-	bodyDelete, _ := io.ReadAll(respDelete.Body)
-	if !strings.Contains(string(bodyDelete), "Deleted server.cfg") {
-		t.Errorf("expected deleted toast, got %s", string(bodyDelete))
-	}
-
-	// 8. Delete config - not present
-	reqDeleteAgain := httptest.NewRequest("POST", "/api/valheim/1/configs/delete", strings.NewReader("file=server.cfg"))
-	reqDeleteAgain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	respDeleteAgain, _ := app.Test(reqDeleteAgain)
-	bodyDeleteAgain, _ := io.ReadAll(respDeleteAgain.Body)
-	if !strings.Contains(string(bodyDeleteAgain), "server.cfg was not present") {
-		t.Errorf("expected not present toast, got %s", string(bodyDeleteAgain))
-	}
-
-	// 9. Unconfigured ValheimInstances
+	// Unconfigured manager: a toast, never a panic or a 500.
 	hUnconf := New(Config{})
 	appUnconf := fiber.New()
 	hUnconf.Register(appUnconf)
-
-	respUnconfGet, _ := appUnconf.Test(httptest.NewRequest("GET", "/api/valheim/1/configs/file?f=server.cfg", nil))
-	if respUnconfGet.StatusCode != fiber.StatusServiceUnavailable {
-		t.Errorf("expected 503, got %d", respUnconfGet.StatusCode)
+	for _, path := range []string{
+		"/api/valheim/1/configs/save",
+		"/api/valheim/1/configs/delete",
+		"/api/valheim/1/configs/raw",
+		"/api/valheim/1/configs/reset",
+	} {
+		resp, err := appUnconf.Test(httptest.NewRequest("POST", path, nil))
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		if resp.StatusCode >= 500 {
+			t.Errorf("%s returned %d; an unconfigured dependency is a message, not a server error", path, resp.StatusCode)
+		}
 	}
-
-	respUnconfSave, _ := appUnconf.Test(httptest.NewRequest("POST", "/api/valheim/1/configs/save", nil))
-	bodyUnconfSave, _ := io.ReadAll(respUnconfSave.Body)
-	if !strings.Contains(string(bodyUnconfSave), "Valheim instance manager unconfigured") {
-		t.Errorf("expected unconfigured toast, got %s", string(bodyUnconfSave))
+	respUnconfGet, err := appUnconf.Test(httptest.NewRequest("GET", "/api/valheim/1/configs/file?f=server.cfg", nil))
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	respUnconfDel, _ := appUnconf.Test(httptest.NewRequest("POST", "/api/valheim/1/configs/delete", nil))
-	bodyUnconfDel, _ := io.ReadAll(respUnconfDel.Body)
-	if !strings.Contains(string(bodyUnconfDel), "Valheim instance manager unconfigured") {
-		t.Errorf("expected unconfigured toast, got %s", string(bodyUnconfDel))
+	if respUnconfGet.StatusCode >= 500 {
+		t.Errorf("config get returned %d on an unconfigured handler", respUnconfGet.StatusCode)
 	}
 }
-

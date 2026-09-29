@@ -11,6 +11,7 @@ import (
 
 	mcaccess "agrelha/internal/app/access"
 	"agrelha/internal/app/admins"
+	appbepinex "agrelha/internal/app/bepinex"
 	"agrelha/internal/app/games/minecraft"
 	"agrelha/internal/app/games/valheim"
 	"agrelha/internal/app/health"
@@ -19,9 +20,11 @@ import (
 	"agrelha/internal/app/modpack"
 	"agrelha/internal/app/mods"
 	"agrelha/internal/app/modupdates"
+	"agrelha/internal/app/restarts"
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/auth/local"
 	"agrelha/internal/infra/auth/oidc"
+	infrabackups "agrelha/internal/infra/backups"
 	"agrelha/internal/infra/content/curseforge"
 	"agrelha/internal/infra/content/mcversions"
 	"agrelha/internal/infra/content/modpackindex"
@@ -40,6 +43,7 @@ import (
 	localstate "agrelha/internal/infra/state/local"
 	"agrelha/internal/infra/state/unconfigured"
 	"agrelha/internal/infra/store"
+	"agrelha/internal/infra/valheimstatus"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/ports"
 )
@@ -72,6 +76,9 @@ type Deps struct {
 	MCRconPool       *rcon.Pool
 	MCInstances      *instances.InstanceManager
 	ValheimInstances *instances.InstanceManager
+	ValheimConfigs   *appbepinex.Service
+	ValheimRestarts  *restarts.Queue
+	ValheimStatus    *valheimstatus.Client
 	ModUpdates       *modupdates.Checker
 	MCModUpdates     *modupdates.Checker
 	StateStore       ports.StateStore
@@ -540,6 +547,58 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	)
 
 	backfillValheimSource(ctx, &d, cfg)
+
+	// BepInEx config editing needs three things that live in different places:
+	// the Generated configs the publish sidecar leaves on the backups export,
+	// the Override sets held in the live ConfigMap, and the git write path the
+	// instance manager already owns. Without a backups directory there is
+	// nothing published to read, and the Configs tab says so rather than
+	// pretending the world has no settings.
+	if d.ValheimInstances != nil && cfg.BackupsDir != "" {
+		d.ValheimConfigs = appbepinex.New(
+			appbepinex.WithSnapshot(func(slug string, num int) (*domain.ConfigSnapshot, error) {
+				return infrabackups.ReadConfigSnapshot(cfg.BackupsDir, slug, num)
+			}),
+			appbepinex.WithFile(func(slug string, num int, name string) (string, string, error) {
+				return infrabackups.ReadConfigFile(cfg.BackupsDir, slug, num, name)
+			}),
+			appbepinex.WithOverrides(func(ctx context.Context, num int) (map[string]string, error) {
+				return d.ValheimInstances.ListConfigData(ctx, num)
+			}),
+			appbepinex.WithWriter(d.ValheimInstances),
+		)
+	}
+
+	// Mods read their configuration once, at load, so a committed Override does
+	// nothing until the pod restarts. Rolling immediately would disconnect
+	// whoever is playing over a setting they never asked about, so the restart
+	// waits for the world to empty - and occupancy comes from the server's own
+	// status endpoint, per world, because the log-tailing route was wired to a
+	// deployment name that does not exist and reported nothing at all.
+	if d.ValheimInstances != nil {
+		d.ValheimStatus = valheimstatus.New(cfg.ValheimNamespace)
+		opts := []restarts.Option{
+			restarts.WithLookup(d.ValheimInstances.GetInstance),
+			restarts.WithOccupancy(func(ctx context.Context, inst domain.Instance) (int, bool) {
+				return d.ValheimStatus.Players(ctx, inst.ServiceName())
+			}),
+		}
+		if d.ValheimRuntime != nil {
+			opts = append(opts, restarts.WithRestarter(func(ctx context.Context, inst domain.Instance) error {
+				return d.ValheimRuntime.Restart(ctx, ports.ServerRef{
+					Name:  inst.DeploymentName(),
+					Scope: cfg.ValheimNamespace,
+				})
+			}))
+		}
+		if st != nil {
+			opts = append(opts, restarts.WithEvent(func(kind, detail string) {
+				_ = st.RecordEvent(kind, detail)
+			}))
+		}
+		d.ValheimRestarts = restarts.New(opts...)
+		d.ValheimRestarts.Run(ctx)
+	}
 
 	if d.ValheimInstances != nil && d.TS != nil {
 		d.ModUpdates = modupdates.New(d.ValheimInstances, d.TS, modupdates.WithRestorePoints(st))

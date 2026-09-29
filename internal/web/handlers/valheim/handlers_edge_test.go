@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -488,7 +489,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 }
 
 func TestValheimConfigsAllEdges(t *testing.T) {
-	h, st, mgr, _, memStore, _, _ := setupTestValheimHandlerFull(t)
+	h, st, mgr := setupTestValheimHandler(t)
 	defer st.Close()
 
 	_, _ = mgr.CreateInstance(context.Background(), domain.Instance{
@@ -500,117 +501,78 @@ func TestValheimConfigsAllEdges(t *testing.T) {
 
 	app := fiber.New()
 	app.Get("/test/config/:num", h.ValheimInstanceConfigGet)
+	app.Get("/test/settings/:num", h.ValheimInstanceConfigSettings)
 	app.Post("/test/save/:num", h.ValheimInstanceConfigSave)
+	app.Post("/test/reset/:num", h.ValheimInstanceConfigReset)
+	app.Post("/test/raw/:num", h.ValheimInstanceConfigRaw)
 	app.Post("/test/delete/:num", h.ValheimInstanceConfigDelete)
 
-	// Unparseable num
-	respGetBadNum, _ := app.Test(httptest.NewRequest("GET", "/test/config/bad", nil))
-	if respGetBadNum.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("expected 400, got %d", respGetBadNum.StatusCode)
+	body := func(method, path, payload string) string {
+		t.Helper()
+		var req *http.Request
+		if payload == "" {
+			req = httptest.NewRequest(method, path, nil)
+		} else {
+			req = httptest.NewRequest(method, path, strings.NewReader(payload))
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		if resp.StatusCode >= 500 {
+			t.Errorf("%s %s returned %d", method, path, resp.StatusCode)
+		}
+		out, _ := io.ReadAll(resp.Body)
+		return string(out)
 	}
 
-	respSaveBadNum, _ := app.Test(httptest.NewRequest("POST", "/test/save/bad", nil))
-	bSaveBadNum, _ := io.ReadAll(respSaveBadNum.Body)
-	if !strings.Contains(string(bSaveBadNum), "Invalid instance number") {
-		t.Errorf("expected Invalid instance number, got: %s", string(bSaveBadNum))
+	// An unparseable instance number must be reported, never guessed at.
+	for _, path := range []string{"/test/save/bad", "/test/reset/bad", "/test/delete/bad"} {
+		if got := body("POST", path, ""); !strings.Contains(got, "Invalid instance number") {
+			t.Errorf("%s: expected an invalid-number message, got %s", path, got)
+		}
+	}
+	if got := body("GET", "/test/config/bad", ""); !strings.Contains(got, "Invalid instance number") {
+		t.Errorf("expected an invalid-number message, got %s", got)
 	}
 
-	respDelBadNum, _ := app.Test(httptest.NewRequest("POST", "/test/delete/bad", nil))
-	bDelBadNum, _ := io.ReadAll(respDelBadNum.Body)
-	if !strings.Contains(string(bDelBadNum), "Invalid instance number") {
-		t.Errorf("expected Invalid instance number, got: %s", string(bDelBadNum))
+	// A file name outside the allowed shape is refused everywhere it can arrive.
+	if got := body("GET", "/test/config/1?f=../../etc/passwd", ""); !strings.Contains(got, "Invalid config file name") {
+		t.Errorf("expected a path-traversal refusal, got %s", got)
+	}
+	if got := body("POST", "/test/raw/1", `{"file":"../escape.cfg","content":"x"}`); !strings.Contains(got, "Invalid config file name") {
+		t.Errorf("expected a path-traversal refusal, got %s", got)
+	}
+	if got := body("POST", "/test/delete/1", `{"file":"no-extension"}`); !strings.Contains(got, "Invalid config file name") {
+		t.Errorf("expected an invalid-name refusal, got %s", got)
 	}
 
-	// ConfigSave JSON body fileName
-	saveJSON := `{"file":"custom.cfg","content":"setting=true\r\nother=false"}`
-	reqSaveJSON := httptest.NewRequest("POST", "/test/save/1", strings.NewReader(saveJSON))
-	reqSaveJSON.Header.Set("Content-Type", "application/json")
-	respSaveJSON, _ := app.Test(reqSaveJSON)
-	bSaveJSON, _ := io.ReadAll(respSaveJSON.Body)
-	if !strings.Contains(string(bSaveJSON), "Saved custom.cfg") {
-		t.Errorf("expected saved custom.cfg, got: %s", string(bSaveJSON))
+	// Reset needs to know which setting; an empty request is a message, not a
+	// guess at one.
+	if got := body("POST", "/test/reset/1", `{"file":"x.cfg"}`); !strings.Contains(got, "Which setting") && !strings.Contains(got, "unavailable") {
+		t.Errorf("expected reset to ask which setting, got %s", got)
 	}
 
-	// ConfigSave FormValue fileName (req.File == "")
-	reqSaveForm := httptest.NewRequest("POST", "/test/save/1", strings.NewReader("file=form.cfg&content=a=b"))
-	reqSaveForm.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	respSaveForm, _ := app.Test(reqSaveForm)
-	bSaveForm, _ := io.ReadAll(respSaveForm.Body)
-	if !strings.Contains(string(bSaveForm), "Saved form.cfg") {
-		t.Errorf("expected saved form.cfg, got: %s", string(bSaveForm))
+	// The raw path writes the override set straight to git and works without a
+	// published snapshot.
+	if got := body("POST", "/test/raw/1", `{"file":"edge.cfg","content":"[S]\nK = 1\n"}`); !strings.Contains(got, "Saved edge.cfg") {
+		t.Errorf("expected a save toast, got %s", got)
+	}
+	if got := body("POST", "/test/delete/1", `{"file":"edge.cfg"}`); !strings.Contains(got, "Stopped managing edge.cfg") {
+		t.Errorf("expected a stop-managing toast, got %s", got)
 	}
 
-	// ConfigSave FormValue fallback when req.File is empty in JSON
-	reqSaveEmptyJSON := httptest.NewRequest("POST", "/test/save/1?file=fallback.cfg", strings.NewReader(`{"content":"setting=true"}`))
-	reqSaveEmptyJSON.Header.Set("Content-Type", "application/json")
-	respSaveEmptyJSON, _ := app.Test(reqSaveEmptyJSON)
-	bSaveEmptyJSON, _ := io.ReadAll(respSaveEmptyJSON.Body)
-	if !strings.Contains(string(bSaveEmptyJSON), "Saved fallback.cfg") {
-		t.Errorf("expected saved fallback.cfg, got: %s", string(bSaveEmptyJSON))
+	// Without a snapshot the typed endpoints degrade to a message. They must not
+	// claim the world has no settings, and must not 500.
+	for _, path := range []string{"/test/config/1?f=edge.cfg", "/test/settings/1?f=edge.cfg"} {
+		if got := body("GET", path, ""); !strings.Contains(got, "unavailable") {
+			t.Errorf("%s: expected an unavailable message, got %s", path, got)
+		}
 	}
-
-	// ConfigDelete empty file name (covers FormValue and Query fallbacks)
-	reqDelEmpty := httptest.NewRequest("POST", "/test/delete/1", nil)
-	respDelEmpty, _ := app.Test(reqDelEmpty)
-	bDelEmpty, _ := io.ReadAll(respDelEmpty.Body)
-	if !strings.Contains(string(bDelEmpty), "Invalid config file name") {
-		t.Errorf("expected Invalid config file name, got: %s", string(bDelEmpty))
+	if got := body("POST", "/test/save/1", `{"file":"edge.cfg","values":{"0":"x"}}`); !strings.Contains(got, "unavailable") {
+		t.Errorf("expected an unavailable message, got %s", got)
 	}
-
-	// ConfigSave patchErr failure
-	memStore.patchErr = errors.New("git patch exploded")
-	saveFail := `{"file":"custom.cfg","content":"setting=updated"}`
-	reqSaveFail := httptest.NewRequest("POST", "/test/save/1", strings.NewReader(saveFail))
-	reqSaveFail.Header.Set("Content-Type", "application/json")
-	respSaveFail, _ := app.Test(reqSaveFail)
-	bSaveFail, _ := io.ReadAll(respSaveFail.Body)
-	if !strings.Contains(string(bSaveFail), "Save failed: git patch exploded") {
-		t.Errorf("expected save failed toast, got: %s", string(bSaveFail))
-	}
-	memStore.patchErr = nil
-
-	// ConfigDelete from FormValue (req.File == "")
-	reqDelForm := httptest.NewRequest("POST", "/test/delete/1", strings.NewReader("file=form.cfg"))
-	reqDelForm.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	respDelForm, _ := app.Test(reqDelForm)
-	bDelForm, _ := io.ReadAll(respDelForm.Body)
-	if !strings.Contains(string(bDelForm), "Deleted form.cfg") {
-		t.Errorf("expected deleted form.cfg, got: %s", string(bDelForm))
-	}
-
-	// ConfigDelete from query param ?file=custom.cfg
-	reqDelQuery := httptest.NewRequest("POST", "/test/delete/1?file=custom.cfg", nil)
-	respDelQuery, _ := app.Test(reqDelQuery)
-	bDelQuery, _ := io.ReadAll(respDelQuery.Body)
-	if !strings.Contains(string(bDelQuery), "Deleted custom.cfg") {
-		t.Errorf("expected deleted custom.cfg, got: %s", string(bDelQuery))
-	}
-
-	// ConfigDelete patchErr failure (DeleteConfig uses Patch)
-	memStore.patchErr = errors.New("git patch delete exploded")
-	reqDelFail := httptest.NewRequest("POST", "/test/delete/1?file=custom.cfg", nil)
-	respDelFail, _ := app.Test(reqDelFail)
-	bDelFail, _ := io.ReadAll(respDelFail.Body)
-	if !strings.Contains(string(bDelFail), "Delete failed: git patch delete exploded") {
-		t.Errorf("expected delete failed toast, got: %s", string(bDelFail))
-	}
-	memStore.patchErr = nil
-
-	// ConfigGet patchSignals error branch
-	origPatch := patchSignals
-	patchSignals = func(w *bufio.Writer, s any) error {
-		return errors.New("patchSignals failed")
-	}
-	t.Cleanup(func() {
-		patchSignals = origPatch
-	})
-
-	reqGetSignalErr := httptest.NewRequest("GET", "/test/config/1?f=custom.cfg", nil)
-	respGetSignalErr, _ := app.Test(reqGetSignalErr)
-	if respGetSignalErr.StatusCode != fiber.StatusInternalServerError {
-		t.Errorf("expected 500 on patchSignals error, got: %d", respGetSignalErr.StatusCode)
-	}
-	patchSignals = origPatch
 }
 
 func TestValheimDetailAllEdges(t *testing.T) {

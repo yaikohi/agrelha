@@ -9,8 +9,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	appbepinex "agrelha/internal/app/bepinex"
 	"agrelha/internal/app/instances"
 	"agrelha/internal/app/modupdates"
+	"agrelha/internal/app/restarts"
 	"agrelha/internal/domain"
 	"mime/multipart"
 
@@ -44,6 +46,8 @@ const instanceStatsTTL = 15 * time.Second
 type Config struct {
 	LastIncident     func(ctx context.Context, number int) (*domain.Incident, error)
 	ValheimInstances *instances.InstanceManager
+	ValheimConfigs   *appbepinex.Service
+	ValheimRestarts  *restarts.Queue
 	ValheimGame      ports.Game
 	ModUpdates       *modupdates.Checker
 	// ServerBuild reports the game binaries an Instance runs versus the newest
@@ -136,8 +140,12 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Post("/api/valheim/:num<int>/mods/updates/apply", h.ValheimModUpdatesApply)
 	router.Post("/api/valheim/:num<int>/mods/updates/undo", h.ValheimModUpdatesUndo)
 	router.Get("/api/valheim/:num<int>/configs/file", h.ValheimInstanceConfigGet)
+	router.Get("/api/valheim/:num<int>/configs/settings", h.ValheimInstanceConfigSettings)
 	router.Post("/api/valheim/:num<int>/configs/save", h.ValheimInstanceConfigSave)
+	router.Post("/api/valheim/:num<int>/configs/reset", h.ValheimInstanceConfigReset)
+	router.Post("/api/valheim/:num<int>/configs/raw", h.ValheimInstanceConfigRaw)
 	router.Post("/api/valheim/:num<int>/configs/delete", h.ValheimInstanceConfigDelete)
+	router.Post("/api/valheim/:num<int>/restart/force", h.ValheimForceRestart)
 }
 
 func (h *Handler) LegacyModsRedirect(c *fiber.Ctx) error {

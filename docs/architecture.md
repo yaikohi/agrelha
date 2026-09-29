@@ -308,6 +308,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `app/access` | Minecraft mods, whitelist and operator persistence (`ModManager`, `AccessManager`), synchronised to the live console. |
 | `app/admins` | Valheim admin Steam64 IDs, held in declarative state. |
 | `app/backups` | Scheduled world snapshots and retention pruning. |
+| `app/bepinex` | Reconciles the Generated configs a mod writes on the PVC with the Override set agrelha keeps in git, and commits the operator's edits. |
 | `app/content` | Mod cart compatibility analysis before an instance is created. |
 | `app/games/minecraft` | The Minecraft `ports.Game`: runtime spec, content resolution, client bundle export, telemetry. |
 | `app/games/valheim` | The Valheim `ports.Game`, including BepInEx handling and `.r2z` profile export. |
@@ -317,6 +318,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `app/modpack` | Builds and parses modpack archives: `.mrpack`, Prism zips, raw mod lists. |
 | `app/mods` | **Unused.** Edited the global `valheim-mods` ConfigMap, which no longer exists; its last consumer was removed with the global mods page. Constructed in `wiring` but never read. |
 | `app/modupdates` | Asks the catalogue whether installed mods have newer versions, applies the ones chosen, and holds the single step back. |
+| `app/restarts` | Holds a restart that a committed change needs until the world is empty, and lets the operator force one. |
 
 ### Driven adapters
 
@@ -342,6 +344,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/state/git` | `ports.StateStore` over `gitops.Committer`. |
 | `infra/state/local` | `ports.StateStore` over local files and SQLite. |
 | `infra/state/unconfigured` | `ports.StateStore` that reads nothing and refuses writes, for installations with no declarative plane. |
+| `infra/valheimstatus` | Reads the lloesche image's STATUS_HTTP endpoint for a world's live player count. |
 | `infra/store` | Embedded SQLite (modernc, pure Go): player roster and sessions, audit trail, event timeline, incidents, mod index cache, mod restore points, instance rows. |
 
 ### Driving adapters

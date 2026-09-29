@@ -1110,6 +1110,25 @@ func (m *InstanceManager) ListConfigs(ctx context.Context, num int) ([]string, e
 	return files, nil
 }
 
+// ListConfigData returns every stored config body for an Instance, keyed by
+// file name. ListConfigs answers "which files", which costs the same read; the
+// BepInEx editor needs the bodies too and should not pay for that read once per
+// file.
+func (m *InstanceManager) ListConfigData(ctx context.Context, num int) (map[string]string, error) {
+	if m.configsReader != nil {
+		return m.configsReader(ctx, num)
+	}
+	if m.stateStore == nil {
+		return nil, nil
+	}
+	path := fmt.Sprintf("%s/instance-%02d/configs.yaml", m.instancesRelPath, num)
+	doc, err := m.stateStore.Get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	return doc.Data, nil
+}
+
 func (m *InstanceManager) GetConfig(ctx context.Context, num int, filename string) (string, error) {
 	if m.configsReader != nil {
 		data, err := m.configsReader(ctx, num)

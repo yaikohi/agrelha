@@ -88,6 +88,10 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 		}
 	}
 
+	if tab == "configs" && !d.Vanilla {
+		h.configTabState(c, &d, *inst)
+	}
+
 	// Fetch backups if on backups tab
 	if tab == "backups" {
 		for _, b := range h.cfg.ValheimInstances.ListBackups(*inst) {
