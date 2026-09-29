@@ -194,8 +194,16 @@ func renderSetting(num int, file string, view appbepinex.FileView, s domain.Sett
 
 func renderControl(s domain.Setting, idx int) string {
 	esc := html.EscapeString
-	bind := fmt.Sprintf(`data-bind="cfgDirty.%d"`, idx)
 	base := `class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-100 focus:border-zinc-400 focus:outline-none"`
+
+	// Every control WRITES its signal on change rather than binding to it.
+	// data-bind would create a signal for every rendered setting the moment the
+	// fragment loads, so an untouched field would be submitted as "" and read as
+	// an edit to empty. cfgDirty must hold only what the operator actually
+	// touched, because that is the whole payload.
+	record := func(event string) string {
+		return fmt.Sprintf(`data-on:%s="$cfgDirty['%d'] = evt.target.value"`, event, idx)
+	}
 
 	switch s.Control() {
 	case domain.ControlToggle:
@@ -214,7 +222,7 @@ func renderControl(s domain.Setting, idx int) string {
 
 	case domain.ControlChoice:
 		var b strings.Builder
-		fmt.Fprintf(&b, `<select %s %s>`, bind, base)
+		fmt.Fprintf(&b, `<select %s %s>`, record("change"), base)
 		for _, v := range s.Acceptable {
 			sel := ""
 			if v == s.Value {
@@ -227,7 +235,7 @@ func renderControl(s domain.Setting, idx int) string {
 
 	case domain.ControlMulti:
 		return fmt.Sprintf(`<input type="text" value="%s" %s %s placeholder="%s"/>`,
-			esc(s.Value), bind, base, esc(strings.Join(s.Acceptable, ", ")))
+			esc(s.Value), record("input"), base, esc(strings.Join(s.Acceptable, ", ")))
 
 	case domain.ControlNumber:
 		attrs := ""
@@ -239,10 +247,10 @@ func renderControl(s domain.Setting, idx int) string {
 		} else {
 			attrs += ` step="any"`
 		}
-		return fmt.Sprintf(`<input type="number"%s value="%s" %s %s/>`, attrs, esc(s.Value), bind, base)
+		return fmt.Sprintf(`<input type="number"%s value="%s" %s %s/>`, attrs, esc(s.Value), record("input"), base)
 
 	default:
-		return fmt.Sprintf(`<input type="text" value="%s" %s %s/>`, esc(s.Value), bind, base)
+		return fmt.Sprintf(`<input type="text" value="%s" %s %s/>`, esc(s.Value), record("input"), base)
 	}
 }
 

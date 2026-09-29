@@ -270,3 +270,39 @@ func TestLongDescriptionsAreTruncatedForTheRow(t *testing.T) {
 		t.Error("newlines must not survive into a single-line row")
 	}
 }
+
+// Saving submits $cfgDirty wholesale, so cfgDirty must contain only what the
+// operator touched. data-bind would create a signal for every rendered setting
+// the moment the fragment loads, and an untouched numeric field would arrive as
+// "" and be rejected as "is not a whole number" - on a setting nobody edited.
+func TestControlsDoNotBindUntouchedSettingsIntoThePayload(t *testing.T) {
+	for _, s := range []domain.Setting{
+		{Type: "Int32", Value: "5"},
+		{Type: "Single", Value: "1.5", Range: &domain.SettingRange{From: "1", To: "5"}},
+		{Type: "String", Value: "text"},
+		{Type: "Mode", Acceptable: []string{"A", "B"}, Value: "A"},
+		{Type: "LogChannel", Acceptable: []string{"Info", "Warn"}, MultipleValues: true, Value: "Warn"},
+		{Type: "Boolean", Value: "true"},
+	} {
+		got := renderControl(s, 7)
+		if strings.Contains(got, "data-bind") {
+			t.Errorf("%s uses data-bind, which submits it untouched: %s", s.Type, got)
+		}
+		if !strings.Contains(got, "$cfgDirty['7']") {
+			t.Errorf("%s must write its own signal on change: %s", s.Type, got)
+		}
+	}
+}
+
+func TestEditedControlsStillCarryTheirCurrentValue(t *testing.T) {
+	// Not binding must not cost the operator sight of what the value is now.
+	if got := renderControl(domain.Setting{Type: "Int32", Value: "42"}, 0); !strings.Contains(got, `value="42"`) {
+		t.Errorf("number input lost its current value: %s", got)
+	}
+	if got := renderControl(domain.Setting{Type: "String", Value: "hello"}, 0); !strings.Contains(got, `value="hello"`) {
+		t.Errorf("text input lost its current value: %s", got)
+	}
+	if got := renderControl(domain.Setting{Type: "M", Acceptable: []string{"A", "B"}, Value: "B"}, 0); !strings.Contains(got, `<option value="B" selected>`) {
+		t.Errorf("select lost its current value: %s", got)
+	}
+}

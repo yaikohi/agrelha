@@ -23,6 +23,8 @@ spec:
         instance: "{{ .Number }}"
         world: "{{ .Slug }}"
     spec:
+      imagePullSecrets:
+        - name: agrelha-regcred
 {{- if .NodeSelectorKey }}
       nodeSelector:
         {{ .NodeSelectorKey }}: "{{ .NodeSelectorValue }}"
@@ -174,22 +176,19 @@ spec:
             - name: mods-config
               mountPath: /config-mods
               readOnly: true
-        # /opt/valheim/bepinex/BepInEx/config is a SYMLINK to /config/bepinex, so
-        # /config/bepinex IS the directory BepInEx reads. Copying into
-        # /config/bepinex/config/ - one level down - put every git-managed value
-        # somewhere BepInEx never looks, which is why nothing committed here took
-        # effect for a month. Do not reintroduce that subdirectory.
-        - name: sync-configs
-          image: busybox:1.36
-          command: ["sh", "-c"]
+        - name: config-merge
+          image: registry.ykhi.xyz/agrelha:0.28.0
+          command: ["/app/main", "bepinex", "merge"]
           args:
-            - |
-              mkdir -p /config/bepinex
-              rm -rf /config/bepinex/config
-              if [ -d /custom-configs ] && [ "$(ls -A /custom-configs 2>/dev/null)" ]; then
-                echo ">> Syncing custom mod configs to /config/bepinex..."
-                cp -Lf /custom-configs/* /config/bepinex/ 2>/dev/null || true
-              fi
+            - "--generated=/config/bepinex"
+            - "--overrides=/custom-configs"
+            - "--out=/config/bepinex"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
           volumeMounts:
             - name: config-volume
               mountPath: /config
@@ -365,6 +364,74 @@ spec:
               readOnly: true
             - name: backups-volume
               mountPath: /backups
+{{- if not .IsVanilla }}
+        - name: config-publish
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              SRC=/config/bepinex
+              DST=/backups/{{ .BackupsSubdir }}/bepinex-configs
+              last=""
+              while true; do
+                # Cheap change detection: names, sizes and mtimes of the .cfg
+                # files. The 651 KB copy only happens when a mod actually
+                # rewrote something, which is rare; the listing is free.
+                stamp=$(ls -l "$SRC"/*.cfg 2>/dev/null | sha256sum)
+                if [ "$stamp" != "$last" ]; then
+                  tmp="${DST}.tmp"
+                  rm -rf "$tmp"
+                  mkdir -p "$tmp"
+
+                  # Depth 1 only: plugins/, .cache/ and AdminPanelCompanion/ are
+                  # siblings of the config files, not part of them. *.default is
+                  # BepInEx's shipped copy, not live configuration.
+                  copied=0
+                  for f in "$SRC"/*.cfg; do
+                    [ -f "$f" ] || continue
+                    case "$f" in *.default) continue ;; esac
+                    cp -f "$f" "$tmp/" 2>/dev/null && copied=$((copied+1))
+                  done
+
+                  # index.json is written LAST and is what agrelha looks for, so
+                  # a half-finished publish is never read as a complete one.
+                  {
+                    printf '{"instance":"{{ .BackupsSubdir }}","published_at":"%s","files":[' \
+                      "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                    first=1
+                    for f in "$tmp"/*.cfg; do
+                      [ -f "$f" ] || continue
+                      [ "$first" -eq 1 ] || printf ','
+                      first=0
+                      printf '{"name":"%s","size":%s,"sha256":"%s","modified":"%s"}' \
+                        "$(basename "$f")" \
+                        "$(wc -c < "$f" | tr -d ' ')" \
+                        "$(sha256sum "$f" | cut -d' ' -f1)" \
+                        "$(date -u -r "$f" +%Y-%m-%dT%H:%M:%SZ)"
+                    done
+                    printf ']}\n'
+                  } > "$tmp/index.json"
+
+                  rm -rf "$DST"
+                  mv "$tmp" "$DST"
+                  echo "config-publish: published $copied config(s)" >&2
+                  last="$stamp"
+                fi
+                sleep 60
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+              readOnly: true
+            - name: backups-volume
+              mountPath: /backups
+{{- end }}
       volumes:
         - name: config-volume
           persistentVolumeClaim:

@@ -218,14 +218,17 @@ func TestValheimModConfigsGoWhereBepInExActuallyReads(t *testing.T) {
 	// /opt/valheim/bepinex/BepInEx/config is a symlink to /config/bepinex, so
 	// /config/bepinex/config is one level below anything BepInEx reads. Syncing
 	// there left every committed value unapplied for a month without any error.
-	if strings.Contains(dep, "cp -Lf /custom-configs/* /config/bepinex/config/") {
-		t.Error("mod configs must be copied to /config/bepinex, not the /config/bepinex/config subdirectory BepInEx never reads")
+	if strings.Contains(dep, "/config/bepinex/config") {
+		t.Error("overrides must be written to /config/bepinex, not the /config/bepinex/config subdirectory BepInEx never reads")
 	}
-	if !strings.Contains(dep, "cp -Lf /custom-configs/* /config/bepinex/ ") {
-		t.Error("expected the custom configs to be copied into /config/bepinex itself")
+	if !strings.Contains(dep, "--out=/config/bepinex") {
+		t.Error("the merge must write where BepInEx actually reads")
 	}
-	if !strings.Contains(dep, "rm -rf /config/bepinex/config") {
-		t.Error("the stray subdirectory left by the old sync must be cleaned up")
+	if !strings.Contains(dep, "--overrides=/custom-configs") {
+		t.Error("the merge must read the operator's override sets from the mounted ConfigMap")
+	}
+	if !strings.Contains(dep, `"bepinex", "merge"`) {
+		t.Error("the merge runs the agrelha binary, not a shell script: 207 KB files through sh quoting corrupt configs")
 	}
 }
 
