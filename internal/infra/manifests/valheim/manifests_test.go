@@ -336,3 +336,19 @@ func TestValheimRender_Stopped_And_Vanilla(t *testing.T) {
 		t.Errorf("unexpected IndentModsTxt: %q", indented)
 	}
 }
+
+func TestBuildWatchRejectsAnInProgressDownload(t *testing.T) {
+	inst := domain.Instance{
+		GameID: domain.GameValheim, Number: 2, Name: "boppo", Slug: "boppo",
+		Source: domain.SourceModlist, Tier: domain.TierLarge, State: domain.StateRunning,
+	}
+	files, err := New("", "").Render(inst, domain.ModList{})
+	if err != nil {
+		t.Fatalf("Render failed: %v", err)
+	}
+	dep := string(files["deployment.yaml"])
+
+	if !strings.Contains(dep, `[ "$installed" = "0" ]`) {
+		t.Error("Steam writes buildid 0 while downloading; publishing that reads as 'update available, running build 0' for the whole 30 minute sleep")
+	}
+}

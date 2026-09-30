@@ -573,3 +573,23 @@ func TestMergePreservesTheSeparatorAsWritten(t *testing.T) {
 		t.Errorf("a file written without spaces must stay that way: %q", merged)
 	}
 }
+
+func TestABuildOfZeroIsNotAnAnswer(t *testing.T) {
+	downloading := ServerBuild{Installed: "0", Latest: "25527701"}
+	if downloading.Known() {
+		t.Error("Steam writes buildid 0 while downloading; that is not an installed build")
+	}
+	if downloading.UpdateAvailable() {
+		t.Error("a mid-download world must not be reported as needing an update")
+	}
+
+	real := ServerBuild{Installed: "25527701", Latest: "25527701"}
+	if !real.Known() || real.UpdateAvailable() {
+		t.Error("matching real builds are known and up to date")
+	}
+
+	behind := ServerBuild{Installed: "25364309", Latest: "25527701"}
+	if !behind.Known() || !behind.UpdateAvailable() {
+		t.Error("a genuinely older build is an update")
+	}
+}

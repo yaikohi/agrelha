@@ -426,7 +426,7 @@ type ServerBuild struct {
 // Instance is running. Unknown on either side means no claim: a failed upstream
 // check must never be rendered as "up to date".
 func (b ServerBuild) UpdateAvailable() bool {
-	if b.Installed == "" || b.Latest == "" {
+	if !b.Known() {
 		return false
 	}
 	return b.Installed != b.Latest
@@ -434,5 +434,10 @@ func (b ServerBuild) UpdateAvailable() bool {
 
 // Known reports whether the build report carries a usable answer at all.
 func (b ServerBuild) Known() bool {
-	return b.Installed != "" && b.Latest != ""
+	return isBuildID(b.Installed) && isBuildID(b.Latest)
+}
+
+func isBuildID(v string) bool {
+	v = strings.TrimSpace(v)
+	return v != "" && v != "0"
 }

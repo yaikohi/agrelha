@@ -327,7 +327,7 @@ spec:
                 # restart leaves the build report stale for half an hour. Skipping
                 # the Steam call here too: it cannot answer a question we have no
                 # local half of.
-                if [ -z "${installed:-}" ]; then
+                if [ -z "${installed:-}" ] || [ "$installed" = "0" ]; then
                   echo "build-watch: no installed build yet, retrying in 30s" >&2
                   sleep 30
                   continue
