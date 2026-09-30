@@ -2,49 +2,23 @@ package domain
 
 import "strings"
 
-// MergeReport says what happened to each Override, so the UI can tell the
-// operator when one of their decisions no longer lands anywhere.
 type MergeReport struct {
-	// Applied: the key existed and its value was rewritten.
 	Applied []Override
-	// NoOp: the key existed and already held this value.
+
 	NoOp []Override
-	// Appended: the key was absent, and was written under an existing section.
+
 	Appended []Override
-	// Stale: the key was absent and so was its section. Usually the mod dropped
-	// the Setting, or was uninstalled. Reported and still written, never
-	// silently discarded - a recorded decision outlives a mod being absent for
-	// an afternoon.
+
 	Stale []Override
 }
 
-// Changed reports whether the merge would alter the file at all.
 func (r MergeReport) Changed() bool {
 	return len(r.Applied) > 0 || len(r.Appended) > 0 || len(r.Stale) > 0
 }
 
-// Merge produces the Effective config: the Generated config with the operator's
-// Overrides substituted into it.
-//
-// This is a TEXTUAL substitution, not a re-render. Only the right-hand side of
-// an overridden `Key = value` line changes; the file header, every description
-// and metadata comment, blank lines, section order and any line the parser did
-// not understand all pass through untouched. r2modman re-emits the file from
-// its own model instead, and silently loses the `## Settings file was created
-// by plugin ...` header every time it saves - substituting in place makes that
-// class of bug unrepresentable.
-//
-// An Override whose key is absent is appended as a bare `Key = value` with no
-// description block. That is exactly what BepInEx writes for an orphaned entry,
-// and BepInEx preserves such entries across its own Save() - so an Override for
-// a Setting the mod does not currently declare survives rather than evaporating.
 func Merge(generated ConfigFile, o OverrideSet) (string, MergeReport) {
 	var report MergeReport
 
-	// With no Generated config there is nothing to substitute into - a fresh
-	// PVC, where no mod has run yet. Writing the bare Override set is enough:
-	// BepInEx reads it, and rewrites it with the full metadata on its first
-	// Save(), keeping these values.
 	if len(generated.lines) == 0 && len(generated.Sections) == 0 {
 		for _, ov := range o.All() {
 			report.Stale = append(report.Stale, ov)
@@ -92,9 +66,6 @@ func Merge(generated ConfigFile, o OverrideSet) (string, MergeReport) {
 	return strings.Join(lines, "\n"), report
 }
 
-// appendOverrides writes entries the Generated config does not declare. An
-// entry whose section exists goes under that header, so BepInEx binds it to the
-// right section; one whose section does not exist gets a new header at the end.
 func appendOverrides(lines []string, pending []Override, knownSections map[string]bool) []string {
 	bySection := map[string][]Override{}
 	var order []string
@@ -123,9 +94,6 @@ func appendOverrides(lines []string, pending []Override, knownSections map[strin
 	return lines
 }
 
-// insertIntoSection places entries at the end of an existing section, just
-// before the next section header, so they are bound to the section the
-// operator meant rather than whatever happens to come last in the file.
 func insertIntoSection(lines []string, section string, entries []Override) []string {
 	start := -1
 	for i, l := range lines {
@@ -147,8 +115,7 @@ func insertIntoSection(lines []string, section string, entries []Override) []str
 			break
 		}
 	}
-	// Step back over the blank lines separating this section from the next, so
-	// the insert does not land after them and read as part of the next section.
+
 	for end > start+1 && strings.TrimSpace(lines[end-1]) == "" {
 		end--
 	}

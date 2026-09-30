@@ -1,12 +1,3 @@
-// Package restarts holds changes that only a restart will apply until the
-// world is empty.
-//
-// Committing a config Override does not change anything a player can see: mods
-// read their configuration once, at load. So the change sits in git, applied by
-// the next pod start. Rolling immediately would disconnect whoever is playing
-// over a setting they did not ask about; never rolling leaves the change
-// silently unapplied for days. This waits for the world to empty, and says so
-// while it waits.
 package restarts
 
 import (
@@ -19,31 +10,23 @@ import (
 	"agrelha/internal/domain"
 )
 
-// Pending is a restart that a committed change requires.
 type Pending struct {
 	Number int
 	Slug   string
 	Reason string
 	Since  time.Time
-	// Blocked says why it has not happened yet: players online, or an
-	// occupancy answer we do not have. Empty means it is ready to go.
+
 	Blocked string
 }
 
-// Waiting reports whether this restart is being held back.
 func (p Pending) Waiting() bool { return p.Blocked != "" }
 
-// Occupancy reports the number of players on a world, and whether that number
-// is known at all. Unknown is never treated as empty.
 type Occupancy func(ctx context.Context, inst domain.Instance) (int, bool)
 
-// Restarter rolls one world.
 type Restarter func(ctx context.Context, inst domain.Instance) error
 
-// InstanceLookup resolves an instance number to the Instance itself.
 type InstanceLookup func(ctx context.Context, num int) (*domain.Instance, error)
 
-// EventRecorder notes that a restart happened, for the activity log.
 type EventRecorder func(kind, detail string)
 
 type Option func(*Queue)
@@ -55,7 +38,6 @@ func WithEvent(fn EventRecorder) Option    { return func(q *Queue) { q.event = f
 func WithInterval(d time.Duration) Option  { return func(q *Queue) { q.interval = d } }
 func WithClock(fn func() time.Time) Option { return func(q *Queue) { q.now = fn } }
 
-// Queue holds pending restarts and applies them when their world empties.
 type Queue struct {
 	mu      sync.Mutex
 	pending map[int]Pending
@@ -80,9 +62,6 @@ func New(opts ...Option) *Queue {
 	return q
 }
 
-// Request records that an Instance needs a restart. Asking twice does not
-// reset the clock: the operator wants to know how long the change has been
-// waiting, not how recently they last edited something.
 func (q *Queue) Request(num int, slug, reason string) {
 	if q == nil {
 		return
@@ -97,7 +76,6 @@ func (q *Queue) Request(num int, slug, reason string) {
 	q.pending[num] = Pending{Number: num, Slug: slug, Reason: reason, Since: q.now()}
 }
 
-// Pending reports the restart waiting on one Instance, if any.
 func (q *Queue) Pending(num int) (Pending, bool) {
 	if q == nil {
 		return Pending{}, false
@@ -108,7 +86,6 @@ func (q *Queue) Pending(num int) (Pending, bool) {
 	return p, ok
 }
 
-// All lists every pending restart, oldest first.
 func (q *Queue) All() []Pending {
 	if q == nil {
 		return nil
@@ -123,7 +100,6 @@ func (q *Queue) All() []Pending {
 	return out
 }
 
-// Cancel drops a pending restart without performing it.
 func (q *Queue) Cancel(num int) {
 	if q == nil {
 		return
@@ -133,8 +109,6 @@ func (q *Queue) Cancel(num int) {
 	delete(q.pending, num)
 }
 
-// Force restarts now, whoever is connected. This is the operator overruling the
-// wait, so it does not consult occupancy at all.
 func (q *Queue) Force(ctx context.Context, num int) error {
 	if q == nil {
 		return fmt.Errorf("restart queue unavailable")
@@ -152,7 +126,6 @@ func (q *Queue) Force(ctx context.Context, num int) error {
 	return nil
 }
 
-// Run applies pending restarts as their worlds empty, until ctx is done.
 func (q *Queue) Run(ctx context.Context) {
 	if q == nil || q.restart == nil {
 		return
@@ -185,9 +158,6 @@ func (q *Queue) tick(ctx context.Context) {
 		}
 		switch {
 		case !known:
-			// A server that is down, starting, or unreachable is not an empty
-			// one. Restarting on an unknown answer is how you disconnect people
-			// during a netsplit, so it waits for the operator instead.
 			q.block(p.Number, "cannot tell if anyone is playing")
 			continue
 		case players > 0:

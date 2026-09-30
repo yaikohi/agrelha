@@ -144,6 +144,9 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Post("/api/valheim/:num<int>/configs/save", h.ValheimInstanceConfigSave)
 	router.Post("/api/valheim/:num<int>/configs/reset", h.ValheimInstanceConfigReset)
 	router.Post("/api/valheim/:num<int>/configs/raw", h.ValheimInstanceConfigRaw)
+	router.Post("/api/valheim/:num<int>/configs/import/preview", h.ValheimInstanceConfigImportPreview)
+	router.Post("/api/valheim/:num<int>/configs/import/apply", h.ValheimInstanceConfigImportApply)
+	router.Get("/api/valheim/:num<int>/configs/import", h.ValheimInstanceConfigImportOpen)
 	router.Post("/api/valheim/:num<int>/configs/delete", h.ValheimInstanceConfigDelete)
 	router.Post("/api/valheim/:num<int>/restart/force", h.ValheimForceRestart)
 }

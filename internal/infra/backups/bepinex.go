@@ -12,10 +12,6 @@ import (
 	"agrelha/internal/domain"
 )
 
-// configsDir is where the config-publish sidecar stages an Instance's
-// Generated configs on the shared NFS export, beside server-build.json. It
-// writes index.json last, so a directory without one is a publish in progress
-// and is treated as not published rather than as an empty config set.
 const (
 	configsDir     = "bepinex-configs"
 	configIndexDoc = "index.json"
@@ -34,9 +30,6 @@ type configIndexDocument struct {
 	Files       []configIndexFile `json:"files"`
 }
 
-// ReadConfigSnapshot reports the Generated configs the sidecar last published
-// for an Instance. A missing directory or index is not an error - the world may
-// never have started, or the sidecar may be mid-publish - and returns nil.
 func ReadConfigSnapshot(backupsDir, slug string, num int) (*domain.ConfigSnapshot, error) {
 	if backupsDir == "" || slug == "" {
 		return nil, nil
@@ -60,9 +53,6 @@ func ReadConfigSnapshot(backupsDir, slug string, num int) (*domain.ConfigSnapsho
 		out.PublishedAt = t
 	}
 	for _, f := range doc.Files {
-		// A name that is not a plain file name would let the index steer reads
-		// out of the snapshot directory. The sidecar never writes one; refusing
-		// here means a tampered index cannot.
 		if !safeConfigName(f.Name) {
 			continue
 		}
@@ -75,14 +65,6 @@ func ReadConfigSnapshot(backupsDir, slug string, num int) (*domain.ConfigSnapsho
 	return out, nil
 }
 
-// ReadConfigFile returns one published Generated config and the digest of the
-// bytes actually read.
-//
-// The digest is verified against the index rather than trusted from it: the
-// export is NFS and the sidecar republishes whenever a mod rewrites a file, so
-// reading a file that has moved since the index was written is a real race, not
-// a theoretical one. Callers use the returned digest for the optimistic
-// concurrency check when saving.
 func ReadConfigFile(backupsDir, slug string, num int, name string) (string, string, error) {
 	if backupsDir == "" || slug == "" {
 		return "", "", os.ErrNotExist
@@ -99,8 +81,6 @@ func ReadConfigFile(backupsDir, slug string, num int, name string) (string, stri
 	return string(raw), hex.EncodeToString(sum[:]), nil
 }
 
-// safeConfigName accepts only a plain file name - no directory separators, no
-// parent references, no leading dot.
 func safeConfigName(name string) bool {
 	if name == "" || name == "." || name == ".." {
 		return false

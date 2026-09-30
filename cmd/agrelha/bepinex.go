@@ -13,13 +13,6 @@ import (
 	"agrelha/internal/domain"
 )
 
-// The merge has to happen on the game pod, before BepInEx loads, so it cannot
-// live in the web app. It runs as an init container from this same image.
-//
-// It is Go and not a shell script on purpose: the files it rewrites reach
-// 207 KB with arbitrary text in the values, and pushing that through `sh`
-// quoting is how configs get corrupted. Here it is the same parser the UI uses,
-// under the same tests.
 func runBepInEx(stdout, stderr io.Writer, args []string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: agrelha bepinex merge [flags]")
@@ -53,8 +46,6 @@ func runBepInExMerge(stdout, stderr io.Writer, args []string) int {
 
 	names, err := overrideFileNames(*overrides)
 	if err != nil {
-		// No override directory at all is the ordinary case for a world nobody
-		// has tuned yet, and must not stop the server booting.
 		if os.IsNotExist(err) {
 			fmt.Fprintf(stdout, ">> bepinex merge: no overrides at %s, nothing to do\n", *overrides)
 			return 0
@@ -102,9 +93,6 @@ func runBepInExMerge(stdout, stderr io.Writer, args []string) int {
 		fmt.Fprintf(stdout, ">> bepinex merge: %s: %d applied, %d appended, %d unmatched, %d already set\n",
 			name, len(report.Applied), len(report.Appended), len(report.Stale), len(report.NoOp))
 		for _, ov := range report.Stale {
-			// The mod no longer declares this Setting, or is not installed. The
-			// value is still written - a recorded decision outlives a mod being
-			// absent - but say so, or it looks like it silently vanished.
 			fmt.Fprintf(stdout, ">> bepinex merge: %s: %s is not declared by the mod; written anyway\n", name, ov.Key())
 		}
 	}
@@ -114,9 +102,6 @@ func runBepInExMerge(stdout, stderr io.Writer, args []string) int {
 	return 0
 }
 
-// overrideFileNames lists the override sets to apply. The directory is a
-// ConfigMap projection, so it also contains kubelet's own "..data" symlink and
-// timestamped directories; those are not config files.
 func overrideFileNames(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -137,8 +122,6 @@ func overrideFileNames(dir string) ([]string, error) {
 	return names, nil
 }
 
-// writeFileAtomic replaces the target in one step. A partial write here is a
-// corrupt config on a server that is about to start reading it.
 func writeFileAtomic(path string, body []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

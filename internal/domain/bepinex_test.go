@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// The golden files are real configs pulled off instance-02, not invented ones.
-// A parser for this format is only worth anything if it survives what the mods
-// actually write.
 func realConfigs(t *testing.T) map[string]string {
 	t.Helper()
 	dir := filepath.Join("testdata", "bepinex")
@@ -85,15 +82,9 @@ func TestParseReadsTheMetadataMoosDoWrite(t *testing.T) {
 	}
 }
 
-// r2modman never reads "# Default value:" at all, so it cannot say what an
-// operator changed. That line is the whole basis of the "differs from default"
-// marker, so assert it against a real file.
 func TestDiffersFromDefaultUsesTheModsOwnDefault(t *testing.T) {
 	cfgs := realConfigs(t)
 
-	// Every mod config was captured at its defaults, because the sync bug meant
-	// nothing committed to git ever reached the disk. So a pristine file must
-	// report nothing changed...
 	for name, body := range cfgs {
 		if name == "BepInEx.cfg" {
 			continue
@@ -104,15 +95,10 @@ func TestDiffersFromDefaultUsesTheModsOwnDefault(t *testing.T) {
 		}
 	}
 
-	// ...while BepInEx's own config is genuinely tuned by the lloesche image
-	// (console Enabled, PreventClose, ForceBepInExTTYDriver, WriteUnityLog are
-	// all flipped from false). Real drift on a real file, detected from nothing
-	// but the "# Default value:" lines.
 	if n := ParseConfigFile("BepInEx.cfg", cfgs["BepInEx.cfg"]).ChangedCount(); n != 4 {
 		t.Errorf("BepInEx.cfg changed settings = %d, want the 4 the image sets", n)
 	}
 
-	// ...and the same file with one value moved must report exactly that one.
 	body := strings.Replace(
 		cfgs["org.bepinex.plugins.mining.cfg"],
 		"Mining Yield Factor = 2",
@@ -179,9 +165,6 @@ func TestControlKindForTheTypesModsActuallyUse(t *testing.T) {
 	}
 }
 
-// A Toggle writes On/Off and a Boolean writes true/false. Writing the wrong
-// pair produces a value the mod quietly ignores, which looks like the setting
-// having no effect.
 func TestToggleUsesTheFilesOwnVocabulary(t *testing.T) {
 	serverSync := Setting{Type: "Toggle", Acceptable: []string{"Off", "On"}, Value: "On"}
 	if serverSync.TrueValue() != "On" || serverSync.FalseValue() != "Off" {
@@ -273,9 +256,6 @@ func TestUnparsableFileRefusesTheTypedEditor(t *testing.T) {
 }
 
 func TestEntryBeforeAnySectionIsRefusedNotGuessed(t *testing.T) {
-	// BepInEx always writes a [Section] first. A bare entry means this is not
-	// the format we think it is, and inventing a section would write the
-	// Override somewhere the mod never reads.
 	f := ParseConfigFile("x", "Key = 1\n\n[S]\n\nOther = 2\n")
 	if f.Parsable() {
 		t.Error("expected the file to be treated as unparsable")
@@ -297,7 +277,6 @@ func TestValueMayContainEqualsSigns(t *testing.T) {
 }
 
 func TestEmptyFileParsesAndRendersEmpty(t *testing.T) {
-	// MaddCatter.WayfarerRecall.state.cfg on the live server is 0 bytes.
 	f := ParseConfigFile("empty", "")
 	if f.Parsable() {
 		t.Error("an empty file has nothing to edit as a form")
@@ -339,8 +318,6 @@ func TestOverrideSetEncodesCanonically(t *testing.T) {
 }
 
 func TestEmptyOverrideSetEncodesToNothing(t *testing.T) {
-	// The caller deletes the ConfigMap key on empty. An empty value would make
-	// the merge tool write an empty file over a good one.
 	o := NewOverrideSet()
 	if o.Encode() != "" {
 		t.Errorf("want empty, got %q", o.Encode())
@@ -361,8 +338,6 @@ func TestOverrideSetRoundTrips(t *testing.T) {
 	}
 }
 
-// The one config already in git is a whole file, not a fragment. It has to keep
-// working without a migration step.
 func TestAWholeConfigFileIsAValidOverrideSet(t *testing.T) {
 	cfgs := realConfigs(t)
 	set := ParseOverrideSet(cfgs["org.bepinex.plugins.mining.cfg"])
@@ -377,9 +352,6 @@ func TestAWholeConfigFileIsAValidOverrideSet(t *testing.T) {
 	}
 }
 
-// Forgetting an Override stops agrelha managing the Setting. It does NOT put
-// the default back - the Generated config keeps whatever value was last written
-// to it. Getting this wrong produces a button that visibly does nothing.
 func TestUnsetStopsManagingButRestoresNothing(t *testing.T) {
 	o := NewOverrideSet()
 	o.Set("2 - Mining", "Mining Yield Factor", "4")
@@ -394,7 +366,6 @@ func TestUnsetStopsManagingButRestoresNothing(t *testing.T) {
 		t.Error("the override should be gone")
 	}
 
-	// The file still reads 4 afterwards: nothing rewrote it.
 	generated := ParseConfigFile("mining", "[2 - Mining]\n\n## d\n# Setting type: Single\n# Default value: 2\nMining Yield Factor = 4\n")
 	merged, report := Merge(generated, o)
 	if report.Changed() {
@@ -465,7 +436,6 @@ func TestFileLevelAccessors(t *testing.T) {
 }
 
 func TestOverrideSetSetOnAZeroValueIsSafe(t *testing.T) {
-	// The zero OverrideSet has a nil map; writing to it must not panic.
 	var o OverrideSet
 	o.Set("S", "K", "1")
 	if v, ok := o.Get("S", "K"); !ok || v != "1" {
@@ -487,8 +457,6 @@ func TestMergeKeepsEverythingItDidNotChange(t *testing.T) {
 		t.Fatalf("unexpected report: %+v", report)
 	}
 
-	// This is the r2modman bug, asserted absent: it filters out everything
-	// before the first [Section] and so drops this header on every save.
 	if !strings.Contains(merged, "## Settings file was created by plugin Mining v1.1.6") {
 		t.Error("the file header must survive a merge")
 	}
@@ -547,8 +515,6 @@ func TestMergeAppendsAnUnknownKeyUnderItsOwnSection(t *testing.T) {
 		t.Fatalf("want one appended override, got %+v", report)
 	}
 
-	// Bound to [Alpha], not dumped at the end of the file where BepInEx would
-	// read it as part of [Beta].
 	alpha := strings.Index(merged, "[Alpha]")
 	beta := strings.Index(merged, "[Beta]")
 	three := strings.Index(merged, "Three = 3")
@@ -558,8 +524,6 @@ func TestMergeAppendsAnUnknownKeyUnderItsOwnSection(t *testing.T) {
 }
 
 func TestMergeKeepsAnOverrideForASettingTheModDropped(t *testing.T) {
-	// A mod that removes a Setting, or is uninstalled for an afternoon, must not
-	// silently destroy a recorded decision.
 	f := ParseConfigFile("x", "[Alpha]\n\nOne = 1\n")
 	o := NewOverrideSet()
 	o.Set("Gone", "Old", "7")
@@ -574,9 +538,6 @@ func TestMergeKeepsAnOverrideForASettingTheModDropped(t *testing.T) {
 }
 
 func TestMergeOnAFreshPVCWritesABareConfig(t *testing.T) {
-	// First boot: no mod has run, so there is no generated file to merge into.
-	// BepInEx reads a bare file fine and rewrites it with full metadata on its
-	// first Save(), keeping these values.
 	o := NewOverrideSet()
 	o.Set("2 - Mining", "Mining Yield Factor", "3")
 

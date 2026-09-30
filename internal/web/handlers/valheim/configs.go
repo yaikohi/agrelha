@@ -390,3 +390,95 @@ func (h *Handler) configTabState(c *fiber.Ctx, d *pages.InstanceDetailUI, inst d
 		})
 	}
 }
+
+func (h *Handler) ValheimInstanceConfigImportPreview(c *fiber.Ctx) error {
+	svc, num, _, err := h.configRequest(c)
+	if err != nil {
+		return ssePatchElements(c, "#cfg-import-preview", configError(err))
+	}
+	inst, err := h.instanceFor(c, num)
+	if err != nil {
+		return ssePatchElements(c, "#cfg-import-preview", configError(err))
+	}
+
+	var req struct {
+		File    string `json:"file"`
+		Content string `json:"content"`
+	}
+	_ = c.BodyParser(&req)
+	body := strings.Clone(strings.ReplaceAll(req.Content, "\r\n", "\n"))
+	if strings.TrimSpace(body) == "" {
+		return ssePatchElements(c, "#cfg-import-preview", "")
+	}
+
+	name := strings.Clone(strings.TrimSpace(req.File))
+	if name == "" {
+		name, err = svc.MatchFile(c.UserContext(), *inst, body)
+		if err != nil {
+			return ssePatchElements(c, "#cfg-import-preview", configError(err))
+		}
+	}
+	if !valheimCfgNameRe.MatchString(name) {
+		return ssePatchElements(c, "#cfg-import-preview", configError(errors.New("Invalid config file name.")))
+	}
+
+	plan, view, err := svc.PlanImport(c.UserContext(), *inst, name, body)
+	if err != nil {
+		return ssePatchElements(c, "#cfg-import-preview", configError(err))
+	}
+	return ssePatchElements(c, "#cfg-import-preview", renderImportPreview(num, name, view, plan))
+}
+
+func (h *Handler) ValheimInstanceConfigImportApply(c *fiber.Ctx) error {
+	svc, num, _, err := h.configRequest(c)
+	if err != nil {
+		return shared.SSEToast(c, "err", err.Error(), nil)
+	}
+	inst, err := h.instanceFor(c, num)
+	if err != nil {
+		return shared.SSEToast(c, "err", err.Error(), nil)
+	}
+
+	var req struct {
+		File    string `json:"file"`
+		SHA256  string `json:"sha256"`
+		Content string `json:"content"`
+	}
+	_ = c.BodyParser(&req)
+	body := strings.Clone(strings.ReplaceAll(req.Content, "\r\n", "\n"))
+	name := strings.Clone(strings.TrimSpace(req.File))
+	if name == "" {
+		name, err = svc.MatchFile(c.UserContext(), *inst, body)
+		if err != nil {
+			return shared.SSEToast(c, "err", err.Error(), nil)
+		}
+	}
+	if !valheimCfgNameRe.MatchString(name) {
+		return shared.SSEToast(c, "err", "Invalid config file name.", nil)
+	}
+
+	n, changed, err := svc.ApplyImport(c.UserContext(), *inst, name, req.SHA256, body, h.cfg.Actor(c))
+	switch {
+	case errors.Is(err, appbepinex.ErrStaleSnapshot):
+		return shared.SSEToast(c, "err", "The server rewrote this config while you were importing. Reopen it and try again.", nil)
+	case err != nil:
+		return shared.SSEToast(c, "err", err.Error(), nil)
+	case n == 0:
+		return shared.SSEToast(c, "ok", fmt.Sprintf("Nothing to import into %s: every value matches what the mod already uses.", name), nil)
+	case !changed:
+		return shared.SSEToast(c, "ok", fmt.Sprintf("%s is already set that way.", name), nil)
+	}
+
+	h.requestRestart(c, "imported "+name)
+	return shared.SSEToast(c, "ok",
+		fmt.Sprintf("Imported %d value(s) into %s. Applies on the next restart.", n, name),
+		map[string]any{"cfgImport": "", "cfgImportOpen": false})
+}
+
+func (h *Handler) ValheimInstanceConfigImportOpen(c *fiber.Ctx) error {
+	_, num, _, err := h.configRequest(c)
+	if err != nil {
+		return ssePatchElements(c, "#cfg-panel", configError(err))
+	}
+	return ssePatchElements(c, "#cfg-panel", renderImportPanel(num))
+}

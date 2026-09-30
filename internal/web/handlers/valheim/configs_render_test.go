@@ -1,6 +1,7 @@
 package valheim
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -42,9 +43,6 @@ Lock Configuration = On
 Mining Yield Factor = 3
 `
 
-// A ServerSync Toggle writes On/Off where a plain Boolean writes true/false.
-// A checkbox that emits the wrong pair produces a value the mod ignores, which
-// looks exactly like the setting having no effect.
 func TestToggleControlEmitsTheFilesOwnVocabulary(t *testing.T) {
 	view := viewOf(t, renderCfg)
 	s, ok := view.Config.Lookup("1 - General", "Lock Configuration")
@@ -97,8 +95,6 @@ func TestChoiceControlListsOnlyWhatTheModAccepts(t *testing.T) {
 }
 
 func TestUndescribedSettingFallsBackToText(t *testing.T) {
-	// 298 of Therzie.Warfare's 1398 entries are bare `key = value` with no
-	// metadata. We cannot invent a type for them.
 	s := domain.Setting{Value: "0", Orphaned: true}
 	if got := renderControl(s, 0); !strings.Contains(got, `type="text"`) {
 		t.Errorf("a setting the mod never described must be free text: %s", got)
@@ -125,8 +121,7 @@ func TestSettingRowShowsWhatChangedAndWhatIsManaged(t *testing.T) {
 	if !strings.Contains(got, "Forget") {
 		t.Error("a managed setting should offer to be forgotten")
 	}
-	// Forgetting is not resetting, and the confirmation has to say so or the
-	// operator will expect the default back.
+
 	if !strings.Contains(got, "keeps its current value") {
 		t.Error("the forget confirmation must say the server keeps its value")
 	}
@@ -140,7 +135,6 @@ func TestUnmanagedSettingOffersNoForget(t *testing.T) {
 	}
 }
 
-// The default view is what agrelha manages, not every setting the mod exposes.
 func TestEmptyManagedListExplainsItselfRatherThanLookingBroken(t *testing.T) {
 	view := viewOf(t, renderCfg)
 	got := renderSettings(2, "test.cfg", view, nil, false, true)
@@ -161,8 +155,6 @@ func TestTruncationIsStatedNotHidden(t *testing.T) {
 	}
 }
 
-// Storing a whole generated config would put up to 207 KB into a ConfigMap that
-// caps at 1 MiB, and is the single easiest mistake to make here.
 func TestRawEditorHoldsTheOverrideSetNotTheGeneratedFile(t *testing.T) {
 	big := strings.Builder{}
 	big.WriteString("[Huge]\n\n")
@@ -204,8 +196,6 @@ func TestPanelForAnUnparsableFileOffersTheRawEditor(t *testing.T) {
 }
 
 func TestPanelDoesNotRenderEverySettingUpFront(t *testing.T) {
-	// The whole design rests on this: Therzie.Warfare.cfg has 1398 settings and
-	// putting them in the page is megabytes of HTML.
 	var b strings.Builder
 	b.WriteString("[S]\n\n")
 	for i := 0; i < 800; i++ {
@@ -224,8 +214,6 @@ func TestPanelDoesNotRenderEverySettingUpFront(t *testing.T) {
 	}
 }
 
-// Section and setting names are arbitrary mod-authored text and end up inside
-// single-quoted JavaScript in a Datastar attribute.
 func TestNamesWithQuotesCannotBreakOutOfTheHandler(t *testing.T) {
 	body := "[It's A Section]\n\n## d\n# Setting type: String\n# Default value: x\nIt's A Setting = y\n"
 	view := viewOf(t, body, domain.Override{Section: "It's A Section", Name: "It's A Setting", Value: "y"})
@@ -235,10 +223,6 @@ func TestNamesWithQuotesCannotBreakOutOfTheHandler(t *testing.T) {
 	}
 	got := renderSetting(1, "q.cfg", view, s, 0)
 
-	// Two layers: jsQuote puts a backslash before the apostrophe, then the
-	// attribute is HTML-escaped. The browser decodes &#39; back to ' when it
-	// parses the attribute, so the backslash has to already be there - without
-	// it the JS string would terminate early on the mod's own punctuation.
 	if !strings.Contains(got, `It\&#39;s A Section`) {
 		t.Errorf("apostrophe not escaped for the JS literal: %s", got)
 	}
@@ -271,10 +255,6 @@ func TestLongDescriptionsAreTruncatedForTheRow(t *testing.T) {
 	}
 }
 
-// Saving submits $cfgDirty wholesale, so cfgDirty must contain only what the
-// operator touched. data-bind would create a signal for every rendered setting
-// the moment the fragment loads, and an untouched numeric field would arrive as
-// "" and be rejected as "is not a whole number" - on a setting nobody edited.
 func TestControlsDoNotBindUntouchedSettingsIntoThePayload(t *testing.T) {
 	for _, s := range []domain.Setting{
 		{Type: "Int32", Value: "5"},
@@ -295,7 +275,6 @@ func TestControlsDoNotBindUntouchedSettingsIntoThePayload(t *testing.T) {
 }
 
 func TestEditedControlsStillCarryTheirCurrentValue(t *testing.T) {
-	// Not binding must not cost the operator sight of what the value is now.
 	if got := renderControl(domain.Setting{Type: "Int32", Value: "42"}, 0); !strings.Contains(got, `value="42"`) {
 		t.Errorf("number input lost its current value: %s", got)
 	}
@@ -304,5 +283,90 @@ func TestEditedControlsStillCarryTheirCurrentValue(t *testing.T) {
 	}
 	if got := renderControl(domain.Setting{Type: "M", Acceptable: []string{"A", "B"}, Value: "B"}, 0); !strings.Contains(got, `<option value="B" selected>`) {
 		t.Errorf("select lost its current value: %s", got)
+	}
+}
+
+func TestImportPreviewSeparatesWhatWillAndWillNotBeWritten(t *testing.T) {
+	view := viewOf(t, renderCfg)
+	plan := domain.PlanImport(view.Config, `[2 - Mining]
+Mining Yield Factor = 4
+
+[1 - General]
+Lock Configuration = On
+
+[Gone]
+Old = 1
+`)
+	got := renderImportPreview(2, "test.cfg", view, plan)
+
+	if !strings.Contains(got, "1</span> to import") {
+		t.Errorf("the count of real changes must be stated: %s", got)
+	}
+	if !strings.Contains(got, "1 already default") {
+		t.Error("values matching the default should be reported as skipped")
+	}
+	if !strings.Contains(got, "1 not declared by this mod") {
+		t.Error("unmatched entries must be visible before importing")
+	}
+	if !strings.Contains(got, "3 → <span class=\"text-zinc-200\">4</span>") {
+		t.Errorf("the preview must show current → new: %s", got)
+	}
+}
+
+func TestImportPreviewOfNonsenseSaysSo(t *testing.T) {
+	view := viewOf(t, renderCfg)
+	plan := domain.PlanImport(view.Config, "just some text")
+	got := renderImportPreview(2, "test.cfg", view, plan)
+	if !strings.Contains(got, "does not look like a BepInEx config") && !strings.Contains(got, "looks like a BepInEx config") {
+		t.Errorf("expected an explanation, got %s", got)
+	}
+}
+
+func TestImportPreviewSaysWhenThereIsNothingToDo(t *testing.T) {
+	pristine := strings.Replace(renderCfg, "Mining Yield Factor = 3", "Mining Yield Factor = 2", 1)
+	view := viewOf(t, pristine)
+	plan := domain.PlanImport(view.Config, pristine)
+	got := renderImportPreview(2, "test.cfg", view, plan)
+	if !strings.Contains(got, "Nothing to import") {
+		t.Errorf("importing a mod's own untouched config changes nothing and must say so: %s", got)
+	}
+}
+
+func TestImportPreviewCapsTheRowsItRenders(t *testing.T) {
+	var gen strings.Builder
+	gen.WriteString("[S]\n\n")
+	var paste strings.Builder
+	paste.WriteString("[S]\n")
+	for i := 0; i < 300; i++ {
+		fmt.Fprintf(&gen, "## d\n# Setting type: Int32\n# Default value: 0\nKey%03d = 0\n", i)
+		fmt.Fprintf(&paste, "Key%03d = 1\n", i)
+	}
+	view := viewOf(t, gen.String())
+	plan := domain.PlanImport(view.Config, paste.String())
+	if plan.Count(domain.ImportApply) != 300 {
+		t.Fatalf("fixture wrong: %d", plan.Count(domain.ImportApply))
+	}
+	got := renderImportPreview(2, "test.cfg", view, plan)
+	if strings.Count(got, "Key") > 60 {
+		t.Errorf("the preview rendered too many rows: %d", strings.Count(got, "Key"))
+	}
+	if !strings.Contains(got, "and 260 more") {
+		t.Errorf("the elision must be stated: %s", got)
+	}
+}
+
+func TestImportPanelOffersBothPasteAndFile(t *testing.T) {
+	got := renderImportPanel(3)
+	if !strings.Contains(got, `type="file"`) {
+		t.Error("expected a file picker")
+	}
+	if !strings.Contains(got, "<textarea") {
+		t.Error("expected a paste box")
+	}
+	if !strings.Contains(got, "configs/import/preview") || !strings.Contains(got, "configs/import/apply") {
+		t.Error("expected both the check and the import action")
+	}
+	if !strings.Contains(got, "only the values that differ") {
+		t.Error("the panel must say what it will actually store")
 	}
 }

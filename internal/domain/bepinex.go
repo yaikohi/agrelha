@@ -7,24 +7,11 @@ import (
 	"strings"
 )
 
-// A BepInEx Generated config is not free-form text. BepInEx's ConfigFile.Save()
-// emits every entry the same way - a `##` description, then `# Setting type:`,
-// `# Default value:` and optionally the values it will accept, then `Key = value`
-// - so a mod's own file tells us enough to build a typed form for it. Nothing
-// here talks to a mod or a file: this is the grammar and nothing else.
-
-// SettingRange is the inclusive bound BepInEx writes for a numeric entry
-// declared with AcceptableValueRange. From and To are kept as written rather
-// than parsed, because the file is the record and re-formatting "3" into "3.0"
-// would show the operator a value their mod never wrote.
 type SettingRange struct {
 	From string
 	To   string
 }
 
-// ControlKind is how one Setting should be edited. It is decided here and not
-// in the templates because "Boolean is a checkbox" is a fact about BepInEx, not
-// a fact about HTML.
 type ControlKind string
 
 const (
@@ -36,9 +23,6 @@ const (
 	ControlText     ControlKind = "text"
 )
 
-// Setting is one entry of a Generated config, as the mod described it.
-// Everything except Value is documentation the plugin emitted; Value is what
-// the file holds right now.
 type Setting struct {
 	Section        string
 	Name           string
@@ -50,25 +34,16 @@ type Setting struct {
 	Range          *SettingRange
 	MultipleValues bool
 	Value          string
-	// Orphaned marks an entry BepInEx wrote with no description block, which is
-	// what it does for a key no live ConfigEntry claims any more. It is also the
-	// shape agrelha appends an Override in, and BepInEx preserves both.
+
 	Orphaned bool
 
-	// lineIndex is where this entry's `Key = value` line sits in the original
-	// file, so Merge can rewrite that one line and leave every other byte alone.
 	lineIndex int
-	// separator is the exact text between key and value as written (" = ",
-	// "=", ...), preserved so a merge does not reformat the file.
+
 	separator string
 }
 
-// Key identifies a Setting within its file.
 func (s Setting) Key() SettingKey { return SettingKey{Section: s.Section, Name: s.Name} }
 
-// SettingKey addresses one Setting. Section and Name both carry spaces in real
-// files ("[2 - Mining]", "Mining Yield Factor"), so this is never flattened
-// into a single delimited string.
 type SettingKey struct {
 	Section string
 	Name    string
@@ -76,7 +51,6 @@ type SettingKey struct {
 
 func (k SettingKey) String() string { return "[" + k.Section + "] " + k.Name }
 
-// Control decides which input edits this Setting.
 func (s Setting) Control() ControlKind {
 	if s.MultipleValues {
 		return ControlMulti
@@ -99,10 +73,6 @@ func (s Setting) Control() ControlKind {
 	return ControlText
 }
 
-// TrueValue and FalseValue give the on/off words this particular Setting uses.
-// Mods disagree - BepInEx's own Boolean writes true/false, while the widespread
-// ServerSync "Toggle" type writes On/Off - and writing the wrong pair produces a
-// value the mod silently ignores.
 func (s Setting) TrueValue() string {
 	for _, v := range s.Acceptable {
 		if strings.EqualFold(v, "On") {
@@ -121,15 +91,11 @@ func (s Setting) FalseValue() string {
 	return "false"
 }
 
-// IsOn reports whether a toggle Setting currently reads as enabled.
 func (s Setting) IsOn() bool {
 	v := strings.TrimSpace(s.Value)
 	return strings.EqualFold(v, "true") || strings.EqualFold(v, "on")
 }
 
-// DiffersFromDefault reports whether the file's value has moved away from what
-// the mod shipped. A Setting with no `# Default value:` line cannot answer, and
-// says no rather than guessing.
 func (s Setting) DiffersFromDefault() bool {
 	if !s.HasDefault {
 		return false
@@ -137,12 +103,11 @@ func (s Setting) DiffersFromDefault() bool {
 	return strings.TrimSpace(s.Value) != strings.TrimSpace(s.Default)
 }
 
-// Validate checks a candidate value against what the mod said it accepts. It is
-// deliberately strict about enums and ranges and permissive about everything
-// else: the metadata is the only contract we have, and inventing extra rules
-// would reject values the mod is perfectly happy with.
 func (s Setting) Validate(v string) error {
 	v = strings.TrimSpace(v)
+	if s.HasDefault && v == strings.TrimSpace(s.Default) {
+		return nil
+	}
 	if len(s.Acceptable) > 0 && !s.MultipleValues {
 		for _, a := range s.Acceptable {
 			if strings.EqualFold(a, v) {
@@ -199,24 +164,17 @@ func (s Setting) Validate(v string) error {
 	return nil
 }
 
-// ConfigSection groups the Settings under one `[Section]` header, in the order
-// BepInEx wrote them.
 type ConfigSection struct {
 	Name     string
 	Settings []Setting
 }
 
-// ParseWarning records a line the parser did not recognise. Parsing never
-// fails: a file we only half-understand still round-trips byte-for-byte, and
-// the warnings are what tell the UI to offer the raw editor instead of a form
-// it would fill in wrongly.
 type ParseWarning struct {
 	Line   int
 	Text   string
 	Reason string
 }
 
-// ConfigFile is a parsed Generated config.
 type ConfigFile struct {
 	Name          string
 	HeaderLines   []string
@@ -226,8 +184,6 @@ type ConfigFile struct {
 	Sections      []ConfigSection
 	Warnings      []ParseWarning
 
-	// lines is the file exactly as it arrived. Render and Merge work on it, so
-	// anything the parser did not model still survives a write.
 	lines []string
 }
 
@@ -241,9 +197,6 @@ const (
 	headerGUID        = "Plugin GUID: "
 )
 
-// ParseConfigFile reads a BepInEx .cfg. It never returns an error: an
-// unrecognised file yields Warnings and no Sections, which callers check with
-// Parsable before offering a typed editor.
 func ParseConfigFile(name, body string) ConfigFile {
 	normalised := strings.ReplaceAll(body, "\r\n", "\n")
 	f := ConfigFile{Name: name}
@@ -319,10 +272,6 @@ func ParseConfigFile(name, body string) ConfigFile {
 				continue
 			}
 			if curSection < 0 {
-				// BepInEx always writes a [Section] before any entry. A bare
-				// entry means this is not a file we understand, and guessing a
-				// section for it would put the Override somewhere the mod never
-				// reads.
 				f.Warnings = append(f.Warnings, ParseWarning{Line: i + 1, Text: raw, Reason: "entry before any section header"})
 				reset()
 				continue
@@ -345,8 +294,6 @@ func ParseConfigFile(name, body string) ConfigFile {
 	return f
 }
 
-// Render writes the file back out. It is the original bytes: the parser keeps
-// every line it read, so nothing it failed to understand is lost on a save.
 func (f ConfigFile) Render() string {
 	if len(f.lines) == 0 {
 		return ""
@@ -354,14 +301,10 @@ func (f ConfigFile) Render() string {
 	return strings.Join(f.lines, "\n")
 }
 
-// Parsable reports whether this file can be edited as a form. A file with
-// warnings, or with no sections at all, gets the raw editor instead - a typed
-// form over a file we misread would write values into the wrong places.
 func (f ConfigFile) Parsable() bool {
 	return len(f.Warnings) == 0 && len(f.Sections) > 0
 }
 
-// Settings flattens every Setting in file order.
 func (f ConfigFile) Settings() []Setting {
 	var out []Setting
 	for _, s := range f.Sections {
@@ -370,7 +313,6 @@ func (f ConfigFile) Settings() []Setting {
 	return out
 }
 
-// Count reports how many Settings the file declares.
 func (f ConfigFile) Count() int {
 	n := 0
 	for _, s := range f.Sections {
@@ -379,7 +321,6 @@ func (f ConfigFile) Count() int {
 	return n
 }
 
-// ChangedCount reports how many Settings have moved off the mod's default.
 func (f ConfigFile) ChangedCount() int {
 	n := 0
 	for _, sec := range f.Sections {
@@ -392,7 +333,6 @@ func (f ConfigFile) ChangedCount() int {
 	return n
 }
 
-// Lookup finds one Setting by section and name.
 func (f ConfigFile) Lookup(section, name string) (Setting, bool) {
 	for _, sec := range f.Sections {
 		if sec.Name != section {
@@ -407,7 +347,6 @@ func (f ConfigFile) Lookup(section, name string) (Setting, bool) {
 	return Setting{}, false
 }
 
-// SectionNames lists the section headers in file order.
 func (f ConfigFile) SectionNames() []string {
 	out := make([]string, 0, len(f.Sections))
 	for _, s := range f.Sections {
@@ -416,9 +355,6 @@ func (f ConfigFile) SectionNames() []string {
 	return out
 }
 
-// SearchQuery narrows a file down to something a page can actually render.
-// Therzie.Warfare.cfg is 207 KB and thousands of entries; handing all of them
-// to a template is a multi-megabyte response and a hung browser.
 type SearchQuery struct {
 	Text        string
 	Section     string
@@ -426,9 +362,6 @@ type SearchQuery struct {
 	Limit       int
 }
 
-// Search returns the matching Settings and whether the result was cut short.
-// Truncation is reported rather than hidden, because a silently clipped list
-// reads as "this mod has no such setting".
 func (f ConfigFile) Search(q SearchQuery) ([]Setting, bool) {
 	needle := strings.ToLower(strings.TrimSpace(q.Text))
 	var hits []Setting
@@ -467,7 +400,6 @@ func splitEntry(raw string) (key, sep, value string) {
 	key = strings.TrimSpace(left)
 	value = strings.TrimSpace(right)
 
-	// Keep the separator exactly as written so a merge does not reflow the file.
 	sep = left[len(strings.TrimRight(left, " \t")):] + "=" + right[:len(right)-len(strings.TrimLeft(right, " \t"))]
 	return key, sep, value
 }
@@ -498,8 +430,6 @@ func parseRange(s string) *SettingRange {
 	return &SettingRange{From: strings.TrimSpace(from), To: strings.TrimSpace(to)}
 }
 
-// splitPluginAndVersion splits "Some Plugin Name v1.2.3". Plugin names contain
-// spaces, so this splits on the last " v" rather than the first.
 func splitPluginAndVersion(s string) (name, version string) {
 	i := strings.LastIndex(s, " v")
 	if i < 0 {
@@ -546,10 +476,6 @@ func isFloatType(t string) bool {
 
 func isNumericType(t string) bool { return isIntegerType(t) || isFloatType(t) }
 
-// Override is one Setting the operator deliberately pinned. Its existence, not
-// its value, is the statement: an Override that currently equals the mod's
-// default is still kept, because a mod update can move that default and the
-// point of recording it was to say "this value, regardless".
 type Override struct {
 	Section string
 	Name    string
@@ -558,11 +484,6 @@ type Override struct {
 
 func (o Override) Key() SettingKey { return SettingKey{Section: o.Section, Name: o.Name} }
 
-// OverrideSet is every Override for one Generated config. This - and only this
-// - is what lives in git. The Generated config itself never does: three of
-// instance-02's files are over 100 KB against a 1 MiB ConfigMap ceiling, and
-// storing them would make git claim to know which Settings a mod has, which it
-// cannot.
 type OverrideSet struct {
 	items map[SettingKey]string
 }
@@ -576,9 +497,6 @@ func (o *OverrideSet) Set(section, name, value string) {
 	o.items[SettingKey{Section: section, Name: name}] = value
 }
 
-// Unset removes an Override and reports whether there was one. It does not
-// restore the mod's default: the Generated config on disk keeps whatever value
-// was last written to it, and only a fresh write changes that.
 func (o *OverrideSet) Unset(section, name string) bool {
 	k := SettingKey{Section: section, Name: name}
 	if _, ok := o.items[k]; !ok {
@@ -600,7 +518,6 @@ func (o OverrideSet) Has(section, name string) bool {
 
 func (o OverrideSet) Len() int { return len(o.items) }
 
-// All lists the Overrides in canonical order.
 func (o OverrideSet) All() []Override {
 	out := make([]Override, 0, len(o.items))
 	for k, v := range o.items {
@@ -619,13 +536,6 @@ func sortOverrides(in []Override) {
 	})
 }
 
-// Encode writes the set as a BepInEx-syntax fragment - the exact text stored in
-// the Instance's configs ConfigMap. Sections and keys are sorted, so the same
-// set always produces the same bytes and git shows a diff only when the
-// operator's intent actually changed.
-//
-// An empty set encodes to "" and the caller deletes the key rather than writing
-// an empty one; an empty value would make the merge write an empty file.
 func (o OverrideSet) Encode() string {
 	if len(o.items) == 0 {
 		return ""
@@ -645,10 +555,6 @@ func (o OverrideSet) Encode() string {
 	return b.String()
 }
 
-// ParseOverrideSet reads back what Encode wrote. It accepts any BepInEx
-// fragment, so a whole Generated config pasted in is a valid Override set where
-// every key is overridden - which is how the one config already in git migrates
-// with no conversion step.
 func ParseOverrideSet(s string) OverrideSet {
 	set := NewOverrideSet()
 	var section string

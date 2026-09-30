@@ -11,7 +11,7 @@ import "fmt"
 templ ValheimConfigsTab(d InstanceDetailUI) {
 	<div
 		class="space-y-6"
-		data-signals={ fmt.Sprintf("{cfgFile: '', cfgSha: '', cfgSearch: '', cfgSection: '', cfgOnlyChanged: false, cfgRaw: false, cfgDirty: {}, cfgBusy: false, cfgNum: %d}", d.Number) }
+		data-signals={ fmt.Sprintf("{cfgFile: '', cfgSha: '', cfgSearch: '', cfgSection: '', cfgOnlyChanged: false, cfgRaw: false, cfgDirty: {}, cfgBusy: false, cfgNum: %d, cfgImport: '', cfgImportFile: '', cfgImportSha: '', cfgImportOpen: false}", d.Number) }
 	>
 		<div class="flex items-start justify-between gap-4">
 			<div>
@@ -20,11 +20,22 @@ templ ValheimConfigsTab(d InstanceDetailUI) {
 					Settings come from the files the mods generate on the server. agrelha stores only the values you change, and applies them on the next restart.
 				</p>
 			</div>
-			if d.ConfigsPublished != "" {
-				<span class="shrink-0 rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[11px] text-zinc-400">
-					read { d.ConfigsPublished }
-				</span>
-			}
+			<div class="flex shrink-0 items-center gap-2">
+				if d.ConfigsPublished != "" {
+					<span class="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[11px] text-zinc-400">
+						read { d.ConfigsPublished }
+					</span>
+				}
+				if !d.ConfigsUnpublished && len(d.Configs) > 0 {
+					<button
+						type="button"
+						data-on:click={ fmt.Sprintf("$cfgImportOpen = true; @get('/api/valheim/%d/configs/import')", d.Number) }
+						class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+					>
+						Import config
+					</button>
+				}
+			</div>
 		</div>
 		if d.RestartPending {
 			@pendingRestartBanner(d)

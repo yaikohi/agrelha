@@ -79,8 +79,6 @@ func TestAnOccupiedWorldWaitsAndSaysWhy(t *testing.T) {
 	}
 }
 
-// A server that is down, starting, or unreachable is not an empty one.
-// Restarting on an unknown answer is how you disconnect people during a blip.
 func TestUnknownOccupancyIsNotTreatedAsEmpty(t *testing.T) {
 	r := newRig(t)
 	r.known = false
@@ -98,7 +96,6 @@ func TestUnknownOccupancyIsNotTreatedAsEmpty(t *testing.T) {
 }
 
 func TestNoOccupancySourceStillWaits(t *testing.T) {
-	// With nothing wired to answer, the safe reading is "unknown", not "empty".
 	q := New(
 		WithLookup(func(_ context.Context, num int) (*domain.Instance, error) {
 			return &domain.Instance{Number: num}, nil
@@ -115,7 +112,6 @@ func TestNoOccupancySourceStillWaits(t *testing.T) {
 	}
 }
 
-// Force is the operator overruling the wait, so it does not consult occupancy.
 func TestForceRestartsWithPlayersOnline(t *testing.T) {
 	r := newRig(t)
 	r.players, r.known = 5, true
@@ -161,8 +157,6 @@ func TestAFailedRestartStaysPending(t *testing.T) {
 	}
 }
 
-// The operator wants to know how long a change has been waiting, not when they
-// last touched it.
 func TestRequestingTwiceKeepsTheOriginalTimestamp(t *testing.T) {
 	r := newRig(t)
 	start := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)

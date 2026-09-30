@@ -47,9 +47,6 @@ func publish(t *testing.T, snapDir string, files map[string]string) {
 	}
 }
 
-// A world that has never started has published nothing. That is a different
-// answer from "this world has no configs", and rendering it as the latter would
-// tell the operator their mods expose no settings.
 func TestNoSnapshotClaimsNothing(t *testing.T) {
 	snap, err := ReadConfigSnapshot(t.TempDir(), "boppo", 2)
 	if err != nil {
@@ -63,8 +60,6 @@ func TestNoSnapshotClaimsNothing(t *testing.T) {
 	}
 }
 
-// The sidecar writes index.json last. A directory without one is a publish in
-// progress, and reading it as complete would show a half-copied config set.
 func TestSnapshotWithoutAnIndexIsTreatedAsUnpublished(t *testing.T) {
 	backupsDir, snapDir := snapshotDir(t)
 	if err := os.WriteFile(filepath.Join(snapDir, "a.cfg"), []byte("[S]\nK = 1\n"), 0o644); err != nil {
@@ -128,8 +123,6 @@ func TestReadConfigFileReturnsTheDigestOfWhatItActuallyRead(t *testing.T) {
 		t.Error("digest must be of the bytes read, not copied from the index")
 	}
 
-	// The whole point: after BepInEx rewrites the file the digest moves, which
-	// is what lets a save refuse to write an Override against a stale view.
 	if err := os.WriteFile(filepath.Join(snapDir, "mining.cfg"), []byte(body+"Extra = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -162,8 +155,6 @@ func TestSnapshotRefusesToReadOutsideItself(t *testing.T) {
 	}
 }
 
-// The index is a file on a shared export. A name in it that escapes the
-// snapshot directory must be dropped rather than offered to the reader.
 func TestSnapshotIndexCannotSmuggleAPath(t *testing.T) {
 	backupsDir, snapDir := snapshotDir(t)
 	doc := configIndexDocument{
@@ -213,9 +204,6 @@ func TestSnapshotNeedsABackupsDirAndSlug(t *testing.T) {
 	}
 }
 
-// Both readers key off the same per-instance directory, which the deployment
-// template also renders into the sidecars. If these ever disagree, the sidecar
-// writes somewhere agrelha does not look.
 func TestBothReadersAgreeOnTheInstanceDirectory(t *testing.T) {
 	backupsDir, snapDir := snapshotDir(t)
 	publish(t, snapDir, map[string]string{"a.cfg": "[S]\nK = 1\n"})

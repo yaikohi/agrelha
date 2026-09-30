@@ -117,7 +117,6 @@ func TestFilesReportsSettingsAndOverrideCounts(t *testing.T) {
 	}
 }
 
-// Nothing published is a different answer from "this world has no configs".
 func TestNoSnapshotIsNotAnEmptyConfigSet(t *testing.T) {
 	svc := New(WithSnapshot(func(string, int) (*domain.ConfigSnapshot, error) { return nil, nil }))
 	_, _, err := svc.Files(context.Background(), domain.Instance{Slug: "boppo", Number: 2})
@@ -140,15 +139,12 @@ func TestApplyWritesTheOverrideSet(t *testing.T) {
 	if !strings.Contains(got, "Mining Yield Factor = 4") {
 		t.Errorf("stored override set = %q", got)
 	}
-	// Only the override, never the whole generated file: three of instance-02's
-	// configs exceed 100 KB against a 1 MiB ConfigMap ceiling.
+
 	if strings.Contains(got, "# Setting type:") {
 		t.Error("the generated file's metadata must never be stored in git")
 	}
 }
 
-// An Override that happens to equal the current default is still an Override:
-// it records a decision, and a mod update can move the default underneath it.
 func TestAnOverrideEqualToTheDefaultIsStillRecorded(t *testing.T) {
 	h := newHarness(t)
 	changed, err := h.svc.Apply(context.Background(), h.inst, "mining.cfg", digestOf(h.body),
@@ -161,8 +157,6 @@ func TestAnOverrideEqualToTheDefaultIsStillRecorded(t *testing.T) {
 	}
 }
 
-// Deleting the key, not writing an empty one: an empty value would make the
-// merge tool write an empty file over a good config.
 func TestForgettingTheLastOverrideDeletesTheKey(t *testing.T) {
 	h := newHarness(t)
 	h.stored["mining.cfg"] = "[2 - Mining]\nMining Yield Factor = 3\n"
@@ -207,8 +201,6 @@ func TestApplyRejectsAValueTheModWontTake(t *testing.T) {
 	}
 }
 
-// A mod that drops a Setting, or is uninstalled for an afternoon, must not stop
-// the operator keeping their decision.
 func TestOverrideForASettingTheModNoLongerDeclaresIsAllowed(t *testing.T) {
 	h := newHarness(t)
 	changed, err := h.svc.Apply(context.Background(), h.inst, "mining.cfg", digestOf(h.body),
@@ -221,9 +213,6 @@ func TestOverrideForASettingTheModNoLongerDeclaresIsAllowed(t *testing.T) {
 	}
 }
 
-// "Reset to default" must WRITE the default, not forget the override. Removing
-// an override restores nothing - the file on the PVC keeps its current value -
-// so a reset that only forgot would visibly do nothing.
 func TestResetToDefaultWritesTheDefaultRatherThanForgetting(t *testing.T) {
 	h := newHarness(t)
 	h.stored["mining.cfg"] = "[2 - Mining]\nMining Yield Factor = 5\n"
@@ -254,8 +243,6 @@ func TestResetRefusesWhenThereIsNoDefaultToRestore(t *testing.T) {
 	}
 }
 
-// Parsing 1,398 settings on every keystroke of a search is not viable, but a
-// file BepInEx rewrote must never be served from the cache.
 func TestParsedConfigIsCachedUntilTheFileMoves(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
@@ -303,5 +290,96 @@ func TestNilServiceDoesNotPanic(t *testing.T) {
 	}
 	if _, err := s.Apply(context.Background(), domain.Instance{}, "x", "", nil, "a"); !errors.Is(err, ErrNotPublished) {
 		t.Errorf("want ErrNotPublished, got %v", err)
+	}
+}
+
+func TestPlanImportDescribesWhatWouldChange(t *testing.T) {
+	h := newHarness(t)
+	plan, view, err := h.svc.PlanImport(context.Background(), h.inst, "mining.cfg",
+		"[2 - Mining]\nMining Yield Factor = 4\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.SHA256 == "" {
+		t.Error("the plan must carry the digest a later apply has to present")
+	}
+	if plan.Count(domain.ImportApply) != 1 {
+		t.Errorf("want one change, got %+v", plan.Entries)
+	}
+}
+
+func TestApplyImportStoresOnlyTheDifferences(t *testing.T) {
+	h := newHarness(t)
+	n, changed, err := h.svc.ApplyImport(context.Background(), h.inst, "mining.cfg", digestOf(h.body),
+		miningCfg+"\n[2 - Mining]\nMining Yield Factor = 4\n", "ykhi")
+	if err != nil || !changed {
+		t.Fatalf("import failed: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("want 1 value imported, got %d", n)
+	}
+	got := h.writer.saved["mining.cfg"]
+	if !strings.Contains(got, "Mining Yield Factor = 4") {
+		t.Errorf("stored %q", got)
+	}
+	if strings.Contains(got, "# Setting type:") {
+		t.Error("the generated file's metadata must never be stored")
+	}
+}
+
+func TestApplyImportOfAnUnchangedConfigWritesNothing(t *testing.T) {
+	h := newHarness(t)
+	n, changed, err := h.svc.ApplyImport(context.Background(), h.inst, "mining.cfg", digestOf(h.body),
+		miningCfg, "ykhi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 || changed {
+		t.Errorf("nothing differs from the defaults, so nothing should be written: n=%d changed=%v", n, changed)
+	}
+	if len(h.writer.saved) != 0 || len(h.writer.deleted) != 0 {
+		t.Error("git must not be touched")
+	}
+}
+
+func TestImportRefusesAStaleDigest(t *testing.T) {
+	h := newHarness(t)
+	_, _, err := h.svc.ApplyImport(context.Background(), h.inst, "mining.cfg", "0000stale",
+		"[2 - Mining]\nMining Yield Factor = 4\n", "ykhi")
+	if !errors.Is(err, ErrStaleSnapshot) {
+		t.Errorf("want ErrStaleSnapshot, got %v", err)
+	}
+}
+
+func TestImportRefusesAnAbsurdlyLargePaste(t *testing.T) {
+	h := newHarness(t)
+	huge := strings.Repeat("A = 1\n", 200000)
+	if _, _, err := h.svc.PlanImport(context.Background(), h.inst, "mining.cfg", huge); !errors.Is(err, ErrImportTooLarge) {
+		t.Errorf("want ErrImportTooLarge, got %v", err)
+	}
+	if _, err := h.svc.MatchFile(context.Background(), h.inst, huge); !errors.Is(err, ErrImportTooLarge) {
+		t.Errorf("want ErrImportTooLarge, got %v", err)
+	}
+}
+
+func TestMatchFileFindsTheModByItsOwnGUID(t *testing.T) {
+	h := newHarness(t)
+	name, err := h.svc.MatchFile(context.Background(), h.inst,
+		"## Plugin GUID: org.bepinex.plugins.mining\n\n[2 - Mining]\nMining Yield Factor = 4\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "mining.cfg" {
+		t.Errorf("matched %q", name)
+	}
+}
+
+func TestMatchFileCannotGuessWithoutAGUID(t *testing.T) {
+	h := newHarness(t)
+	if _, err := h.svc.MatchFile(context.Background(), h.inst, "[S]\nK = 1\n"); !errors.Is(err, ErrNoMatchingConfig) {
+		t.Errorf("a headerless fragment names no mod, got %v", err)
+	}
+	if _, err := h.svc.MatchFile(context.Background(), h.inst, "## Plugin GUID: com.nobody.here\n\n[S]\nK = 1\n"); !errors.Is(err, ErrNoMatchingConfig) {
+		t.Errorf("an unknown GUID must not silently pick a file, got %v", err)
 	}
 }

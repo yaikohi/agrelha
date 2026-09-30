@@ -87,8 +87,6 @@ func TestMergeCommandAppliesAnOverrideInPlace(t *testing.T) {
 }
 
 func TestMergeCommandLeavesAnUpToDateFileAlone(t *testing.T) {
-	// The publish sidecar watches mtimes. Rewriting an identical file on every
-	// restart would make it republish 651 KB for no reason.
 	generated, overrides := mergeDirs(t)
 	write(t, generated, "x.cfg", miningGenerated)
 	write(t, overrides, "x.cfg", "[2 - Mining]\nMining Yield Factor = 2\n")
@@ -114,7 +112,6 @@ func TestMergeCommandLeavesAnUpToDateFileAlone(t *testing.T) {
 }
 
 func TestMergeCommandWritesABareFileOnAFreshPVC(t *testing.T) {
-	// First boot: the mod has never run, so it has generated nothing yet.
 	generated, overrides := mergeDirs(t)
 	write(t, overrides, "new.cfg", "[General]\nThing = 5\n")
 
@@ -159,8 +156,6 @@ func TestMergeCommandReportsAnOverrideTheModDoesNotDeclare(t *testing.T) {
 }
 
 func TestMergeCommandWithNoOverridesDirectoryStillBoots(t *testing.T) {
-	// A Vanilla world, or one nobody has tuned. Refusing to start here would
-	// take the server down over a directory that was never expected to exist.
 	generated, _ := mergeDirs(t)
 	var stdout, stderr bytes.Buffer
 	code := run(t.Context(), &stdout, &stderr, []string{
@@ -177,8 +172,6 @@ func TestMergeCommandWithNoOverridesDirectoryStillBoots(t *testing.T) {
 }
 
 func TestMergeCommandIgnoresConfigMapProjectionEntries(t *testing.T) {
-	// kubelet projects a ConfigMap as symlinks beside its own "..data"
-	// directory and timestamped snapshots. Those are not config files.
 	generated, overrides := mergeDirs(t)
 	write(t, generated, "real.cfg", miningGenerated)
 	write(t, overrides, "real.cfg", "[2 - Mining]\nMining Yield Factor = 4\n")
@@ -216,7 +209,6 @@ func TestMergeCommandRejectsMissingFlags(t *testing.T) {
 }
 
 func TestMergeCommandEmptyOverrideSetLeavesTheFileAlone(t *testing.T) {
-	// An empty override set must never be turned into an empty config file.
 	generated, overrides := mergeDirs(t)
 	write(t, generated, "x.cfg", miningGenerated)
 	write(t, overrides, "x.cfg", "# only a comment\n")
