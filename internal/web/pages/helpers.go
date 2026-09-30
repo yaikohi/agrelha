@@ -735,3 +735,14 @@ func checkSummary(d InstanceDetailUI) string {
 	}
 	return s + "."
 }
+
+func IncidentWorld(in *domain.Incident) string {
+	if in == nil {
+		return ""
+	}
+	game := "Valheim"
+	if in.GameID == domain.GameMinecraft {
+		game = "Minecraft"
+	}
+	return fmt.Sprintf("%s #%02d", game, in.Number)
+}

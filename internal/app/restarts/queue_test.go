@@ -16,6 +16,8 @@ type rig struct {
 	known    bool
 	restartE error
 	events   []string
+	started  time.Time
+	startOK  bool
 }
 
 func newRig(t *testing.T, opts ...Option) *rig {
@@ -34,6 +36,7 @@ func newRig(t *testing.T, opts ...Option) *rig {
 			return nil
 		}),
 		WithEvent(func(kind, detail string) { r.events = append(r.events, kind+":"+detail) }),
+		WithStartedAt(func(context.Context, domain.Instance) (time.Time, bool) { return r.started, r.startOK }),
 	}
 	r.q = New(append(base, opts...)...)
 	return r
@@ -264,4 +267,68 @@ func indexOf(h, n string) int {
 		}
 	}
 	return -1
+}
+
+func TestARestartByAnyOtherMeansClearsThePending(t *testing.T) {
+	r := newRig(t)
+	queued := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	r.q.now = func() time.Time { return queued }
+	r.q.Request(2, "boppo", "config change")
+
+	r.players, r.known = 5, true
+	r.started, r.startOK = queued.Add(time.Minute), true
+
+	r.q.tick(context.Background())
+
+	if _, still := r.q.Pending(2); still {
+		t.Error("the world restarted after the change was queued, so it has been applied")
+	}
+	if len(r.rolled) != 0 {
+		t.Error("it must not restart again on top of that")
+	}
+}
+
+func TestAnOlderRestartDoesNotCountAsApplied(t *testing.T) {
+	r := newRig(t)
+	queued := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	r.q.now = func() time.Time { return queued }
+	r.q.Request(2, "boppo", "config change")
+
+	r.players, r.known = 0, true
+	r.started, r.startOK = queued.Add(-time.Hour), true
+
+	r.q.tick(context.Background())
+
+	if len(r.rolled) != 1 {
+		t.Error("a pod that started before the change still needs restarting")
+	}
+}
+
+func TestUnknownStartTimeDoesNotClearThePending(t *testing.T) {
+	r := newRig(t)
+	r.q.Request(2, "boppo", "config change")
+	r.known, r.startOK = false, false
+
+	r.q.tick(context.Background())
+
+	if _, still := r.q.Pending(2); !still {
+		t.Error("not knowing when the pod started is not evidence that it restarted")
+	}
+}
+
+func TestSettleClearsWithoutRestartingAnything(t *testing.T) {
+	r := newRig(t)
+	queued := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	r.q.now = func() time.Time { return queued }
+	r.q.Request(2, "boppo", "config change")
+	r.started, r.startOK = queued.Add(time.Minute), true
+
+	r.q.Settle(context.Background())
+
+	if _, still := r.q.Pending(2); still {
+		t.Error("Settle should drop an already-applied change")
+	}
+	if len(r.rolled) != 0 {
+		t.Error("Settle must never restart")
+	}
 }

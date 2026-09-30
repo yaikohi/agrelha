@@ -317,6 +317,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `app/instances` | `InstanceManager`: the central use case. Create, start, stop, delete, mods, configs, backups, budget enforcement. |
 | `app/modpack` | Builds and parses modpack archives: `.mrpack`, Prism zips, raw mod lists. |
 | `app/mods` | **Unused.** Edited the global `valheim-mods` ConfigMap, which no longer exists; its last consumer was removed with the global mods page. Constructed in `wiring` but never read. |
+| `app/occupancy` | Tails each world's pod log for join/leave and reports who is connected, for worlds whose A2S query is unavailable. |
 | `app/modupdates` | Asks the catalogue whether installed mods have newer versions, applies the ones chosen, and holds the single step back. |
 | `app/restarts` | Holds a restart that a committed change needs until the world is empty, and lets the operator force one. |
 

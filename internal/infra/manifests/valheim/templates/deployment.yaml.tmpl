@@ -177,7 +177,7 @@ spec:
               mountPath: /config-mods
               readOnly: true
         - name: config-merge
-          image: registry.ykhi.xyz/agrelha:0.28.0
+          image: registry.ykhi.xyz/agrelha:0.29.2
           command: ["/app/main", "bepinex", "merge"]
           args:
             - "--generated=/config/bepinex"

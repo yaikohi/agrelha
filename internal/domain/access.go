@@ -7,11 +7,12 @@ import (
 
 // HistoryEntry records an audit action or system event for display and inspection.
 type HistoryEntry struct {
-	At     time.Time
-	Source string
-	Kind   string
-	Actor  string
-	Detail string
+	At       time.Time
+	Source   string
+	Kind     string
+	Actor    string
+	Detail   string
+	Incident *Incident
 }
 
 // Player represents a player in the Valheim roster and their connection state.

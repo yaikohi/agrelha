@@ -2,6 +2,8 @@ package pages
 
 import "agrelha/internal/domain"
 
+import "fmt"
+
 templ History(entries []domain.HistoryEntry) {
 	@Layout("History") {
 		@nav()
@@ -10,18 +12,49 @@ templ History(entries []domain.HistoryEntry) {
 		if len(entries) == 0 {
 			<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No activity recorded yet.</p>
 		} else {
-			<ul class="divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900">
-				for _, h := range entries {
-					<li class="flex items-center gap-3 px-4 py-2.5 text-sm">
-						<span class="w-24 flex-none text-xs text-zinc-500">{ h.At.Format("Jan 2 15:04") }</span>
-						<span class={ "flex-none rounded px-2 py-0.5 text-xs " + HistoryBadge(h.Source, h.Kind) }>{ HistoryLabel(h.Kind) }</span>
-						<span class="min-w-0 flex-1 truncate text-zinc-300">
-							if h.Detail != "" {
-								{ h.Detail }
+			<ul class="divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900" data-signals="{openIncident: 0}">
+				for i, h := range entries {
+					<li class="px-4 py-2.5 text-sm">
+						<div class="flex items-center gap-3">
+							<span class="w-24 flex-none text-xs text-zinc-500">{ h.At.Format("Jan 2 15:04") }</span>
+							<span class={ "flex-none rounded px-2 py-0.5 text-xs " + HistoryBadge(h.Source, h.Kind) }>{ HistoryLabel(h.Kind) }</span>
+							<span class="min-w-0 flex-1 truncate text-zinc-300">
+								if h.Incident != nil {
+									<span class="text-zinc-500">{ IncidentWorld(h.Incident) } · </span>
+								}
+								if h.Detail != "" {
+									{ h.Detail }
+								}
+							</span>
+							if h.Incident != nil && h.Incident.LogTail != "" {
+								<button
+									type="button"
+									data-on:click={ fmt.Sprintf("$openIncident = $openIncident === %d ? 0 : %d", i+1, i+1) }
+									class="flex-none rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+								>
+									Logs
+								</button>
 							}
-						</span>
-						if h.Actor != "" {
-							<span class="flex-none text-xs text-zinc-500">{ h.Actor }</span>
+							if h.Actor != "" {
+								<span class="flex-none text-xs text-zinc-500">{ h.Actor }</span>
+							}
+						</div>
+						if h.Incident != nil && h.Incident.LogTail != "" {
+							<div data-show={ fmt.Sprintf("$openIncident === %d", i+1) } class="mt-2">
+								<div class="mb-1 flex flex-wrap gap-3 text-[11px] text-zinc-500">
+									<span>exit { fmt.Sprint(h.Incident.ExitCode) }</span>
+									if h.Incident.OOMKilled {
+										<span class="text-red-400">OOM killed</span>
+									}
+									if h.Incident.RestartCount > 0 {
+										<span>{ fmt.Sprint(h.Incident.RestartCount) } restarts</span>
+									}
+									if h.Incident.Step != "" {
+										<span>failed at { h.Incident.Step }</span>
+									}
+								</div>
+								<pre class="max-h-72 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-400">{ h.Incident.LogTail }</pre>
+							</div>
 						}
 					</li>
 				}

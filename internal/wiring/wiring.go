@@ -20,6 +20,7 @@ import (
 	"agrelha/internal/app/modpack"
 	"agrelha/internal/app/mods"
 	"agrelha/internal/app/modupdates"
+	"agrelha/internal/app/occupancy"
 	"agrelha/internal/app/restarts"
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/auth/local"
@@ -79,6 +80,7 @@ type Deps struct {
 	ValheimConfigs   *appbepinex.Service
 	ValheimRestarts  *restarts.Queue
 	ValheimStatus    *valheimstatus.Client
+	ValheimOccupancy *occupancy.Tracker
 	ModUpdates       *modupdates.Checker
 	MCModUpdates     *modupdates.Checker
 	StateStore       ports.StateStore
@@ -577,19 +579,34 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	// deployment name that does not exist and reported nothing at all.
 	if d.ValheimInstances != nil {
 		d.ValheimStatus = valheimstatus.New(cfg.ValheimNamespace)
+		d.ValheimOccupancy = occupancy.New()
+		watchValheimLogs(ctx, cfg, &d)
+
 		opts := []restarts.Option{
 			restarts.WithLookup(d.ValheimInstances.GetInstance),
 			restarts.WithOccupancy(func(ctx context.Context, inst domain.Instance) (int, bool) {
+				if n, ok := d.ValheimOccupancy.Players(inst.Number); ok {
+					return n, true
+				}
 				return d.ValheimStatus.Players(ctx, inst.ServiceName())
 			}),
 		}
 		if d.ValheimRuntime != nil {
-			opts = append(opts, restarts.WithRestarter(func(ctx context.Context, inst domain.Instance) error {
-				return d.ValheimRuntime.Restart(ctx, ports.ServerRef{
-					Name:  inst.DeploymentName(),
-					Scope: cfg.ValheimNamespace,
-				})
-			}))
+			ref := func(inst domain.Instance) ports.ServerRef {
+				return ports.ServerRef{Name: inst.DeploymentName(), Scope: cfg.ValheimNamespace}
+			}
+			opts = append(opts,
+				restarts.WithRestarter(func(ctx context.Context, inst domain.Instance) error {
+					return d.ValheimRuntime.Restart(ctx, ref(inst))
+				}),
+				restarts.WithStartedAt(func(ctx context.Context, inst domain.Instance) (time.Time, bool) {
+					st, err := d.ValheimRuntime.Status(ctx, ref(inst))
+					if err != nil || st.StartedAt.IsZero() {
+						return time.Time{}, false
+					}
+					return st.StartedAt, true
+				}),
+			)
 		}
 		if st != nil {
 			opts = append(opts, restarts.WithEvent(func(kind, detail string) {
@@ -613,6 +630,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 
 	health.New(st, healthSources(&d)).Start(ctx)
+	startEventPruner(ctx, st)
 
 	return d, nil
 }
@@ -774,4 +792,57 @@ func backfillValheimSource(ctx context.Context, d *Deps, cfgs ...*config.Config)
 			slog.Info("valheim source backfilled from the running deployment", "instance", inst.Number, "name", inst.Name, "source", expectedSource)
 		}
 	}
+}
+
+func watchValheimLogs(ctx context.Context, cfg *config.Config, d *Deps) {
+	if d.ValheimInstances == nil || d.ValheimOccupancy == nil {
+		return
+	}
+	insts, err := d.ValheimInstances.ListInstances(ctx)
+	if err != nil {
+		slog.Warn("occupancy: cannot list valheim instances", "err", err)
+		return
+	}
+	for _, inst := range insts {
+		c, err := newK8sClient(cfg.ValheimNamespace, inst.DeploymentName())
+		if err != nil {
+			slog.Warn("occupancy: no log stream for instance", "instance", inst.Number, "err", err)
+			continue
+		}
+		d.ValheimOccupancy.Watch(ctx, inst.Number, c)
+	}
+}
+
+const (
+	eventRetention = 90 * 24 * time.Hour
+	prunerInterval = 24 * time.Hour
+)
+
+func startEventPruner(ctx context.Context, st *store.Store) {
+	if st == nil {
+		return
+	}
+	prune := func() {
+		n, err := st.PruneEvents(time.Now().Add(-eventRetention))
+		if err != nil {
+			slog.Warn("event prune failed", "err", err)
+			return
+		}
+		if n > 0 {
+			slog.Info("pruned old events", "rows", n, "older_than", eventRetention.String())
+		}
+	}
+	prune()
+	go func() {
+		t := time.NewTicker(prunerInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				prune()
+			}
+		}
+	}()
 }

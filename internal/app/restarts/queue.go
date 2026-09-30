@@ -25,6 +25,8 @@ type Occupancy func(ctx context.Context, inst domain.Instance) (int, bool)
 
 type Restarter func(ctx context.Context, inst domain.Instance) error
 
+type StartedAt func(ctx context.Context, inst domain.Instance) (time.Time, bool)
+
 type InstanceLookup func(ctx context.Context, num int) (*domain.Instance, error)
 
 type EventRecorder func(kind, detail string)
@@ -33,6 +35,7 @@ type Option func(*Queue)
 
 func WithOccupancy(fn Occupancy) Option    { return func(q *Queue) { q.players = fn } }
 func WithRestarter(fn Restarter) Option    { return func(q *Queue) { q.restart = fn } }
+func WithStartedAt(fn StartedAt) Option    { return func(q *Queue) { q.startedAt = fn } }
 func WithLookup(fn InstanceLookup) Option  { return func(q *Queue) { q.lookup = fn } }
 func WithEvent(fn EventRecorder) Option    { return func(q *Queue) { q.event = fn } }
 func WithInterval(d time.Duration) Option  { return func(q *Queue) { q.interval = d } }
@@ -42,12 +45,13 @@ type Queue struct {
 	mu      sync.Mutex
 	pending map[int]Pending
 
-	players  Occupancy
-	restart  Restarter
-	lookup   InstanceLookup
-	event    EventRecorder
-	interval time.Duration
-	now      func() time.Time
+	players   Occupancy
+	restart   Restarter
+	startedAt StartedAt
+	lookup    InstanceLookup
+	event     EventRecorder
+	interval  time.Duration
+	now       func() time.Time
 }
 
 func New(opts ...Option) *Queue {
@@ -109,6 +113,21 @@ func (q *Queue) Cancel(num int) {
 	delete(q.pending, num)
 }
 
+func (q *Queue) Settle(ctx context.Context) {
+	if q == nil {
+		return
+	}
+	for _, p := range q.All() {
+		inst, err := q.resolve(ctx, p)
+		if err != nil {
+			continue
+		}
+		if q.appliedByRestart(ctx, *inst, p) {
+			q.Cancel(p.Number)
+		}
+	}
+}
+
 func (q *Queue) Force(ctx context.Context, num int) error {
 	if q == nil {
 		return fmt.Errorf("restart queue unavailable")
@@ -152,6 +171,11 @@ func (q *Queue) tick(ctx context.Context) {
 			continue
 		}
 
+		if q.appliedByRestart(ctx, *inst, p) {
+			q.Cancel(p.Number)
+			continue
+		}
+
 		players, known := 0, false
 		if q.players != nil {
 			players, known = q.players(ctx, *inst)
@@ -171,6 +195,17 @@ func (q *Queue) tick(ctx context.Context) {
 		}
 		q.Cancel(p.Number)
 	}
+}
+
+func (q *Queue) appliedByRestart(ctx context.Context, inst domain.Instance, p Pending) bool {
+	if q.startedAt == nil {
+		return false
+	}
+	started, ok := q.startedAt(ctx, inst)
+	if !ok || started.IsZero() {
+		return false
+	}
+	return started.After(p.Since)
 }
 
 func (q *Queue) resolve(ctx context.Context, p Pending) (*domain.Instance, error) {

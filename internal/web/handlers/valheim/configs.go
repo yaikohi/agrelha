@@ -354,6 +354,7 @@ func configError(err error) string {
 // means its mods expose no settings, and conflating them tells the operator
 // something false.
 func (h *Handler) configTabState(c *fiber.Ctx, d *pages.InstanceDetailUI, inst domain.Instance) {
+	h.cfg.ValheimRestarts.Settle(c.UserContext())
 	if p, ok := h.cfg.ValheimRestarts.Pending(inst.Number); ok {
 		d.RestartPending = true
 		d.RestartReason = p.Reason
