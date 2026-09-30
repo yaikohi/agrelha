@@ -1,9 +1,17 @@
 package valheim
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gofiber/fiber/v2"
 
 	appbepinex "agrelha/internal/app/bepinex"
 	"agrelha/internal/domain"
@@ -356,7 +364,7 @@ func TestImportPreviewCapsTheRowsItRenders(t *testing.T) {
 }
 
 func TestImportPanelOffersBothPasteAndFile(t *testing.T) {
-	got := renderImportPanel(3)
+	got := renderImportPanel(3, []appbepinex.FileSummary{{Name: "a.cfg", PluginName: "Alpha"}})
 	if !strings.Contains(got, `type="file"`) {
 		t.Error("expected a file picker")
 	}
@@ -368,5 +376,96 @@ func TestImportPanelOffersBothPasteAndFile(t *testing.T) {
 	}
 	if !strings.Contains(got, "only the values that differ") {
 		t.Error("the panel must say what it will actually store")
+	}
+}
+
+func TestImportTargetPrefersTheFilesOwnGUIDOverAStaleHint(t *testing.T) {
+	h, st, mgr := setupTestValheimHandler(t)
+	defer st.Close()
+	_, _ = mgr.CreateInstance(context.Background(), domain.Instance{
+		GameID: domain.GameValheim, Number: 1, Name: "w", Slug: "w",
+		Source: domain.SourceModlist, Tier: domain.TierLarge,
+	}, domain.ModList{}, "t")
+
+	body := "## Plugin GUID: org.bepinex.plugins.mining\n\n[2 - Mining]\nMining Yield Factor = 4\n"
+	h.cfg.ValheimConfigs = importSvc(t, "org.bepinex.plugins.mining.cfg", renderCfg)
+
+	app := fiber.New()
+	app.Post("/t/:num", h.ValheimInstanceConfigImportApply)
+
+	for _, hint := range []string{"", "not a valid name at all", strings.Repeat("x", 300)} {
+		payload, _ := json.Marshal(map[string]any{"file": hint, "content": body})
+		req := httptest.NewRequest("POST", "/t/1", strings.NewReader(string(payload)))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, _ := io.ReadAll(resp.Body)
+		if strings.Contains(string(out), "Invalid config file name") {
+			t.Errorf("hint %q: the GUID in the content identifies the mod; a junk hint must not break the import: %s", hint, string(out))
+		}
+	}
+}
+
+func TestImportWithNothingPastedSaysSo(t *testing.T) {
+	h, st, mgr := setupTestValheimHandler(t)
+	defer st.Close()
+	_, _ = mgr.CreateInstance(context.Background(), domain.Instance{
+		GameID: domain.GameValheim, Number: 1, Name: "w", Slug: "w",
+		Source: domain.SourceModlist, Tier: domain.TierLarge,
+	}, domain.ModList{}, "t")
+	h.cfg.ValheimConfigs = importSvc(t, "mining.cfg", renderCfg)
+
+	app := fiber.New()
+	app.Post("/t/:num", h.ValheimInstanceConfigImportApply)
+	payload, _ := json.Marshal(map[string]any{"file": "", "content": "   "})
+	req := httptest.NewRequest("POST", "/t/1", strings.NewReader(string(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+	out, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(out), "Paste a config or choose a file first") {
+		t.Errorf("an empty import must say what to do, got %s", string(out))
+	}
+}
+
+func importSvc(t *testing.T, name, body string) *appbepinex.Service {
+	t.Helper()
+	sum := sha256.Sum256([]byte(body))
+	digest := hex.EncodeToString(sum[:])
+	return appbepinex.New(
+		appbepinex.WithSnapshot(func(string, int) (*domain.ConfigSnapshot, error) {
+			return &domain.ConfigSnapshot{Files: []domain.SnapshotFile{
+				{Name: name, Size: int64(len(body)), SHA256: digest},
+			}}, nil
+		}),
+		appbepinex.WithFile(func(string, int, string) (string, string, error) { return body, digest, nil }),
+		appbepinex.WithOverrides(func(context.Context, int) (map[string]string, error) { return map[string]string{}, nil }),
+	)
+}
+
+func TestImportPanelLetsYouPickTheTargetWhenTheHeaderIsMissing(t *testing.T) {
+	got := renderImportPanel(3, []appbepinex.FileSummary{
+		{Name: "org.bepinex.plugins.valheim_plus.cfg", PluginName: "Valheim Plus"},
+		{Name: "plain.cfg"},
+	})
+	if !strings.Contains(got, `data-bind="cfgImportFile"`) {
+		t.Error("expected a target picker bound to the import file signal")
+	}
+	if !strings.Contains(got, `<option value="">Detect from the file</option>`) {
+		t.Error("detection should stay the default")
+	}
+	if !strings.Contains(got, `Valheim Plus — org.bepinex.plugins.valheim_plus.cfg`) {
+		t.Errorf("the picker should name the mod, got %s", got)
+	}
+	if !strings.Contains(got, "r2modman drops the plugin header") {
+		t.Error("the panel should explain why detection can fail")
+	}
+}
+
+func TestImportFilePickerRemembersTheChosenFilename(t *testing.T) {
+	got := renderImportPanel(3, nil)
+	if !strings.Contains(got, "$cfgImportFile = evt.target.files[0].name") {
+		t.Errorf("an uploaded file names its own target; that must be captured: %s", got)
 	}
 }

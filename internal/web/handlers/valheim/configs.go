@@ -411,15 +411,9 @@ func (h *Handler) ValheimInstanceConfigImportPreview(c *fiber.Ctx) error {
 		return ssePatchElements(c, "#cfg-import-preview", "")
 	}
 
-	name := strings.Clone(strings.TrimSpace(req.File))
-	if name == "" {
-		name, err = svc.MatchFile(c.UserContext(), *inst, body)
-		if err != nil {
-			return ssePatchElements(c, "#cfg-import-preview", configError(err))
-		}
-	}
-	if !valheimCfgNameRe.MatchString(name) {
-		return ssePatchElements(c, "#cfg-import-preview", configError(errors.New("Invalid config file name.")))
+	name, err := h.importTarget(c, svc, *inst, body, req.File)
+	if err != nil {
+		return ssePatchElements(c, "#cfg-import-preview", configError(err))
 	}
 
 	plan, view, err := svc.PlanImport(c.UserContext(), *inst, name, body)
@@ -446,18 +440,17 @@ func (h *Handler) ValheimInstanceConfigImportApply(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 	body := strings.Clone(strings.ReplaceAll(req.Content, "\r\n", "\n"))
-	name := strings.Clone(strings.TrimSpace(req.File))
-	if name == "" {
-		name, err = svc.MatchFile(c.UserContext(), *inst, body)
-		if err != nil {
-			return shared.SSEToast(c, "err", err.Error(), nil)
-		}
-	}
-	if !valheimCfgNameRe.MatchString(name) {
-		return shared.SSEToast(c, "err", "Invalid config file name.", nil)
+	name, err := h.importTarget(c, svc, *inst, body, req.File)
+	if err != nil {
+		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
 
-	n, changed, err := svc.ApplyImport(c.UserContext(), *inst, name, req.SHA256, body, h.cfg.Actor(c))
+	sha := ""
+	if strings.TrimSpace(req.File) == name {
+		sha = req.SHA256
+	}
+
+	n, changed, err := svc.ApplyImport(c.UserContext(), *inst, name, sha, body, h.cfg.Actor(c))
 	switch {
 	case errors.Is(err, appbepinex.ErrStaleSnapshot):
 		return shared.SSEToast(c, "err", "The server rewrote this config while you were importing. Reopen it and try again.", nil)
@@ -476,9 +469,36 @@ func (h *Handler) ValheimInstanceConfigImportApply(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ValheimInstanceConfigImportOpen(c *fiber.Ctx) error {
-	_, num, _, err := h.configRequest(c)
+	svc, num, _, err := h.configRequest(c)
 	if err != nil {
 		return ssePatchElements(c, "#cfg-panel", configError(err))
 	}
-	return ssePatchElements(c, "#cfg-panel", renderImportPanel(num))
+	inst, err := h.instanceFor(c, num)
+	if err != nil {
+		return ssePatchElements(c, "#cfg-panel", configError(err))
+	}
+	files, _, err := svc.Files(c.UserContext(), *inst)
+	if err != nil {
+		return ssePatchElements(c, "#cfg-panel", configError(err))
+	}
+	return ssePatchElements(c, "#cfg-panel", renderImportPanel(num, files))
+}
+
+func (h *Handler) importTarget(c *fiber.Ctx, svc *appbepinex.Service, inst domain.Instance, body, hinted string) (string, error) {
+	if strings.TrimSpace(body) == "" {
+		return "", errors.New("Paste a config or choose a file first.")
+	}
+	if name, err := svc.MatchFile(c.UserContext(), inst, body); err == nil {
+		return name, nil
+	} else if errors.Is(err, appbepinex.ErrImportTooLarge) {
+		return "", err
+	}
+	name := strings.Clone(strings.TrimSpace(hinted))
+	if name == "" {
+		return "", appbepinex.ErrNoMatchingConfig
+	}
+	if !valheimCfgNameRe.MatchString(name) {
+		return "", fmt.Errorf("could not tell which mod that config belongs to, and %q is not a usable file name", truncate(name, 60))
+	}
+	return name, nil
 }

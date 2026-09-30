@@ -287,25 +287,41 @@ func humanBytes(n int64) string {
 	}
 }
 
-func renderImportPanel(num int) string {
+func renderImportPanel(num int, files []appbepinex.FileSummary) string {
 	esc := html.EscapeString
 	preview := fmt.Sprintf(
 		`@post('/api/valheim/%d/configs/import/preview', {contentType: 'json', payload: {file: $cfgImportFile, content: $cfgImport}})`, num)
 	apply := fmt.Sprintf(
 		`@post('/api/valheim/%d/configs/import/apply', {contentType: 'json', payload: {file: $cfgImportFile, sha256: $cfgImportSha, content: $cfgImport}})`, num)
 
+	var picker strings.Builder
+	picker.WriteString(`<label class="block text-[11px] text-zinc-500">Apply to
+		<select data-bind="cfgImportFile"
+			class="mt-1 block w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-100 focus:border-zinc-400 focus:outline-none">
+		<option value="">Detect from the file</option>`)
+	for _, f := range files {
+		label := f.Name
+		if f.PluginName != "" {
+			label = f.PluginName + " — " + f.Name
+		}
+		fmt.Fprintf(&picker, `<option value="%s">%s</option>`, esc(f.Name), esc(label))
+	}
+	picker.WriteString(`</select></label>`)
+
 	return fmt.Sprintf(`<div class="rounded-xl border border-zinc-800 bg-zinc-900/95 p-4 space-y-3 shadow-xl">
 		<div class="flex items-start justify-between gap-4">
 			<div><h3 class="text-sm font-semibold text-zinc-100">Import a config file</h3>
 			<p class="mt-0.5 text-[11px] leading-relaxed text-zinc-500">
 				Paste a mod's .cfg, or pick the file. agrelha compares it with what the mod generates and stores only the values that differ from its defaults.
-				Values you already manage but that the file does not mention are kept.</p></div>
+				Values you already manage but that the file does not mention are kept.
+				r2modman drops the plugin header when it saves, so pick the mod below if it cannot be detected.</p></div>
 			<button type="button" data-on:click="$cfgImportOpen = false; $cfgImport = ''"
 				class="shrink-0 text-xs text-zinc-400 hover:text-zinc-200">Close</button>
 		</div>
 		<input type="file" accept=".cfg,.txt,.ini,.json"
-			data-on:change="evt.target.files[0] &amp;&amp; evt.target.files[0].text().then(t =&gt; { $cfgImport = t })"
+			data-on:change="evt.target.files[0] &amp;&amp; (($cfgImportFile = evt.target.files[0].name), evt.target.files[0].text().then(t =&gt; { $cfgImport = t }))"
 			class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-200 hover:file:bg-zinc-700"/>
+		%s
 		<textarea data-bind="cfgImport" rows="8" spellcheck="false" placeholder="## Settings file was created by plugin ..."
 			class="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs leading-relaxed text-zinc-200 placeholder-zinc-600 focus:border-zinc-400 focus:outline-none"></textarea>
 		<div class="flex items-center justify-end gap-2">
@@ -315,7 +331,7 @@ func renderImportPanel(num int) string {
 				class="rounded-lg bg-zinc-100 px-4 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white">Import</button>
 		</div>
 		<div id="cfg-import-preview"></div>
-	</div>`, esc(preview), esc(apply))
+	</div>`, picker.String(), esc(preview), esc(apply))
 }
 
 func renderImportPreview(num int, name string, view appbepinex.FileView, plan domain.ImportPlan) string {
