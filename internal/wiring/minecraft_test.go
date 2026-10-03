@@ -49,6 +49,7 @@ func TestMinecraftEndpoints(t *testing.T) {
 
 	cfg := &config.Config{}
 	app := wiring.BuildServer(context.Background(), cfg, wiring.Deps{
+		Auth:  testAdminAuth{},
 		Store: st,
 		MCK8s: k8s.NewWithClientset(cs, "minecraft-neoforge", "minecraft-neoforge"),
 	})
@@ -151,6 +152,7 @@ func TestMinecraftWhitelistToggle(t *testing.T) {
 	defer st.Close()
 
 	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{
+		Auth:  testAdminAuth{},
 		Store: st,
 	})
 

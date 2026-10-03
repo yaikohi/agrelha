@@ -7,7 +7,7 @@ import (
 
 templ ValheimWizard(budget BudgetUI) {
 	@Layout("Create Valheim World") {
-		@nav()
+		@nav(true)
 		<div
 			class="space-y-6"
 			data-signals="{step:1,name:'',password:'',seed:'',source:'vanilla',tier:'medium',cart:[],wizardModSearch:'',wizardModSearchLoading:false,showWizardModDetail:false,manualSlug:'',raw_mods:'',importError:'',importLoading:false,redirect:''}"

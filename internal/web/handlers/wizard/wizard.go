@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"path/filepath"
 	"strconv"
@@ -61,12 +62,12 @@ func (h *Handler) MCWizardPage(c *fiber.Ctx) error {
 }
 
 var (
-	sleep        = time.Sleep
-	innerElement = sse.InnerElement
-	patchSignals = sse.PatchSignals
-	openFile     = func(fh *multipart.FileHeader) (multipart.File, error) { return fh.Open() }
-	readAll      = io.ReadAll
-	parseMrpack  = modpack.ParseMrpack
+	sleep              = time.Sleep
+	innerElement       = sse.InnerElement
+	patchSignals       = sse.PatchSignals
+	openFile           = func(fh *multipart.FileHeader) (multipart.File, error) { return fh.Open() }
+	readAll            = io.ReadAll
+	parseMrpack        = modpack.ParseMrpack
 	provisioningStatus = func(m *instances.InstanceManager, ctx context.Context, num int) (string, bool, error) {
 		return m.ProvisioningStatus(ctx, num)
 	}
@@ -450,9 +451,35 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		inst.Loader = domain.NormalizeLoader(loader)
 	}
 
-	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, domain.ModList{Primary: modsTxt}, h.cfg.Actor(c))
+	p := shared.PrincipalOf(c)
+	inst.CreatedBy = p.Subject
+	mods := domain.ModList{Primary: modsTxt}
+
+	if !p.Admin && h.cfg.Requests != nil {
+		direct, err := h.cfg.Requests.MayCreateDirectly(c.UserContext(), p.Subject)
+		if err != nil {
+			return shared.SSEToast(c, "err", "Could not check your world allowance: "+err.Error(), nil)
+		}
+		if !direct {
+			req, err := h.cfg.Requests.Submit(c.UserContext(), p.Subject, inst, mods)
+			if err != nil {
+				return shared.SSEToast(c, "err", err.Error(), nil)
+			}
+			return shared.SSEToast(c, "ok",
+				fmt.Sprintf("Request for %q sent for approval. You already run a world, so this one needs a yes first.", req.Name),
+				map[string]any{"redirect": "/minecraft"})
+		}
+	}
+
+	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, mods, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Failed to create world: "+err.Error(), nil)
+	}
+
+	if !p.Admin && h.cfg.Requests != nil {
+		if err := h.cfg.Requests.GrantCreator(c.UserContext(), p.Subject, created.GameID, created.Number, h.cfg.Actor(c)); err != nil {
+			slog.Error("world created but creator not granted access", "number", created.Number, "err", err)
+		}
 	}
 
 	_ = h.cfg.MCInstances.StartInstance(c.UserContext(), created.Number, h.cfg.Actor(c))

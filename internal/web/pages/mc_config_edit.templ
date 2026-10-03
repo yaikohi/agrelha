@@ -2,7 +2,7 @@ package pages
 
 templ MinecraftConfigEdit(name, content string, isNew, enabled bool) {
 	@Layout("Edit Minecraft Config") {
-		@nav()
+		@nav(true)
 		<div class="mb-6 flex items-center gap-3">
 			<a href="/minecraft/configs" class="text-sm text-zinc-400 hover:text-zinc-200">← Minecraft Configs</a>
 			<h1 class="text-2xl font-semibold">

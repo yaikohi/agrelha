@@ -38,6 +38,7 @@ type Instance struct {
 	WorldType  string
 	MaxPlayers int
 	LBIP       string
+	CreatedBy  string
 	CreatedAt  time.Time
 	LastUsed   time.Time
 }

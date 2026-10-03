@@ -20,7 +20,10 @@ type Config struct {
 	OIDCClientSecret  string
 	OIDCRedirectURL   string
 	OIDCPostLogoutURL string
-	AllowedEmail      string
+	AuthMode          string
+	ZitadelProjectID  string
+	ZitadelAPIURL     string
+	ZitadelServiceKey string
 
 	// Declarative plane (git)
 	GitRepoURL      string
@@ -130,7 +133,10 @@ func Load() *Config {
 		OIDCClientSecret:  env("OIDC_CLIENT_SECRET", ""),
 		OIDCRedirectURL:   env("OIDC_REDIRECT_URL", ""),
 		OIDCPostLogoutURL: env("OIDC_POST_LOGOUT_URL", ""),
-		AllowedEmail:      env("ALLOWED_EMAIL", ""),
+		AuthMode:          env("AUTH_MODE", ""),
+		ZitadelProjectID:  env("ZITADEL_PROJECT_ID", ""),
+		ZitadelAPIURL:     env("ZITADEL_API_URL", ""),
+		ZitadelServiceKey: env("ZITADEL_SERVICE_KEY", ""),
 
 		GitRepoURL:      env("GIT_REPO_URL", ""),
 		GitBranch:       env("GIT_BRANCH", "main"),

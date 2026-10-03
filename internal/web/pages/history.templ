@@ -6,7 +6,7 @@ import "fmt"
 
 templ History(entries []domain.HistoryEntry) {
 	@Layout("History") {
-		@nav()
+		@nav(true)
 		<h1 class="mb-2 text-2xl font-semibold">History</h1>
 		<p class="mb-6 text-xs text-zinc-500">Recent actions (who did what) and server events (joins, backups, crashes). Times are UTC.</p>
 		if len(entries) == 0 {

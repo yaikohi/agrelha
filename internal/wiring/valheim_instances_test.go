@@ -68,6 +68,7 @@ func setupTestValheimServer(t *testing.T) (*fiber.App, *store.Store, *instances.
 		K8s:              valheimK8s,
 		ValheimInstances: mgr,
 	}
+	d.Auth = testAdminAuth{}
 	app := wiring.BuildServer(context.Background(), cfg, d)
 	return app, st, mgr, d, cfg
 }

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"html"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -578,9 +579,35 @@ func (h *Handler) ValheimWizardCreate(c *fiber.Ctx) error {
 		State:    domain.StateRunning,
 	}
 
-	created, err := h.cfg.ValheimInstances.CreateInstance(c.UserContext(), inst, domain.ModList{Primary: modsTxt}, h.cfg.Actor(c))
+	p := shared.PrincipalOf(c)
+	inst.CreatedBy = p.Subject
+	mods := domain.ModList{Primary: modsTxt}
+
+	if !p.Admin && h.cfg.Requests != nil {
+		direct, err := h.cfg.Requests.MayCreateDirectly(c.UserContext(), p.Subject)
+		if err != nil {
+			return shared.SSEToast(c, "err", "Could not check your world allowance: "+err.Error(), nil)
+		}
+		if !direct {
+			req, err := h.cfg.Requests.Submit(c.UserContext(), p.Subject, inst, mods)
+			if err != nil {
+				return shared.SSEToast(c, "err", err.Error(), nil)
+			}
+			return shared.SSEToast(c, "ok",
+				fmt.Sprintf("Request for %q sent for approval. You already run a world, so this one needs a yes first.", req.Name),
+				map[string]any{"redirect": "/valheim"})
+		}
+	}
+
+	created, err := h.cfg.ValheimInstances.CreateInstance(c.UserContext(), inst, mods, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Failed to create Valheim server: "+err.Error(), nil)
+	}
+
+	if !p.Admin && h.cfg.Requests != nil {
+		if err := h.cfg.Requests.GrantCreator(c.UserContext(), p.Subject, created.GameID, created.Number, h.cfg.Actor(c)); err != nil {
+			slog.Error("world created but creator not granted access", "number", created.Number, "err", err)
+		}
 	}
 
 	_ = h.cfg.ValheimInstances.StartInstance(c.UserContext(), created.Number, h.cfg.Actor(c))

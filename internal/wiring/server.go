@@ -26,6 +26,7 @@ import (
 	consolehttp "agrelha/internal/web/handlers/console"
 	contenthttp "agrelha/internal/web/handlers/content"
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
+	grantshttp "agrelha/internal/web/handlers/grants"
 	minecrafthttp "agrelha/internal/web/handlers/minecraft"
 	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
@@ -78,8 +79,20 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 	valheimH := buildValheimHandler(cfg, d, applyValheimAfterSync, consoleH.ValheimConsole)
 	dashboardH := buildDashboardHandler(cfg, d, contentH, minecraftH, backupsH, valheimH)
 
+	startAuthzLoops(ctx, d)
+
+	grantsH := grantshttp.New(grantshttp.Config{
+		Authz:            d.Authz,
+		Requests:         d.Requests,
+		ValheimInstances: d.ValheimInstances,
+		MCInstances:      d.MCInstances,
+		Actor:            actor,
+	})
+
 	return web.New(web.ServerConfig{
 		Auth:      d.Auth,
+		Authz:     d.Authz,
+		Grants:    grantsH,
 		Access:    accessH,
 		Backups:   backupsH,
 		Console:   consoleH,
@@ -397,6 +410,7 @@ func buildValheimHandler(cfg *config.Config, d Deps, applyValheimAfterSync func(
 	}
 
 	return valheimhttp.New(valheimhttp.Config{
+		Requests:              d.Requests,
 		LastIncident:          incidentReader(d, domain.GameValheim),
 		ServerBuild:           serverBuild,
 		ValheimInstances:      d.ValheimInstances,
@@ -660,6 +674,7 @@ func buildWizardHandler(d Deps) *wizardhttp.Handler {
 	}
 
 	return wizardhttp.New(wizardhttp.Config{
+		Requests:         d.Requests,
 		MCInstances:      d.MCInstances,
 		Actor:            actor,
 		VersionReleases:  releases,
@@ -770,4 +785,55 @@ func incidentReader(d Deps, game domain.GameID) func(context.Context, int) (*dom
 	return func(ctx context.Context, number int) (*domain.Incident, error) {
 		return d.Store.LastIncident(ctx, game, number)
 	}
+}
+
+func startAuthzLoops(ctx context.Context, d Deps) {
+	if d.Authz == nil {
+		return
+	}
+
+	go func() {
+		t := time.NewTicker(time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if n, err := d.Authz.PurgeExpiredSessions(ctx); err != nil {
+					slog.Warn("session purge failed", "err", err)
+				} else if n > 0 {
+					slog.Info("expired sessions purged", "count", n)
+				}
+			}
+		}
+	}()
+
+	if !d.Authz.HasRegistry() {
+		return
+	}
+
+	go func() {
+		rctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+
+		var insts []domain.Instance
+		for _, m := range []*instances.InstanceManager{d.ValheimInstances, d.MCInstances} {
+			if m == nil {
+				continue
+			}
+			got, err := m.ListInstances(rctx)
+			if err != nil {
+				slog.Warn("instance role reconcile: cannot list instances", "err", err)
+				continue
+			}
+			insts = append(insts, got...)
+		}
+		if len(insts) == 0 {
+			return
+		}
+		created, failed := d.Authz.ReconcileInstanceRoles(rctx, insts)
+		slog.Info("instance role reconcile complete",
+			"instances", len(insts), "created", created, "failed", failed)
+	}()
 }

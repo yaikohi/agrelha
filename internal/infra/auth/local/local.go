@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 
 	"github.com/gofiber/fiber/v2"
@@ -175,39 +176,24 @@ func sanitizeReturnTo(target string) string {
 	return "/"
 }
 
-func (a *Authenticator) IsAuthenticated(c *fiber.Ctx) bool {
+func (a *Authenticator) Identify(c *fiber.Ctx) (domain.Identity, bool) {
 	if a == nil {
-		return true
+		return domain.Identity{}, false
 	}
-	_, ok := a.readSession(c)
-	return ok
-}
-
-func (a *Authenticator) Middleware() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		s, ok := a.readSession(c)
-		if !ok {
-			loginTarget := "/auth/login"
-			if target := sanitizeReturnTo(c.OriginalURL()); target != "/" {
-				loginTarget += "?returnTo=" + url.QueryEscape(target)
-			}
-
-			if c.Get("Datastar-Request") == "true" || strings.Contains(c.Get("Accept"), "text/event-stream") {
-				c.Set("Content-Type", "text/event-stream")
-				c.Set("Cache-Control", "no-cache")
-				c.Set("Connection", "keep-alive")
-				msg := fmt.Sprintf("event: datastar-patch-elements\ndata: mode append\ndata: selector body\ndata: elements <script>window.location.href = %q</script>\n\n", loginTarget)
-				return c.SendString(msg)
-			}
-			return c.Redirect(loginTarget, fiber.StatusFound)
-		}
-		actor := s.Username
-		if actor == "" {
-			actor = s.Email
-		}
-		c.Locals("actor", actor)
-		return c.Next()
+	s, ok := a.readSession(c)
+	if !ok {
+		return domain.Identity{}, false
 	}
+	subject := s.Username
+	if subject == "" {
+		subject = s.Email
+	}
+	return domain.Identity{
+		Subject: subject,
+		Email:   s.Email,
+		Name:    s.Username,
+		Roles:   []domain.Role{domain.RoleAdmin, domain.RoleUser},
+	}, true
 }
 
 func (a *Authenticator) Login(c *fiber.Ctx) error {

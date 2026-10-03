@@ -22,7 +22,7 @@ import (
 // ValheimConsole renders the Valheim console/logs page.
 func (h *Handler) ValheimConsole(c *fiber.Ctx) error {
 	fk, fm := shared.TakeFlash(c)
-	return shared.Render(c, pages.ValheimConsole(shared.IsAdmin(h.cfg.Auth, c), fk, fm))
+	return shared.Render(c, pages.ValheimConsole(shared.IsAdmin(c), fk, fm))
 }
 
 // SSELogs streams live log tails into #logs. Supports ?server=valheim (default) or ?server=minecraft.

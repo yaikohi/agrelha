@@ -134,6 +134,7 @@ func TestServer_DockerAdapterBootstrap(t *testing.T) {
 	tempDir := t.TempDir()
 	cfg := &config.Config{
 		DBPath:        filepath.Join(tempDir, "docker_test.db"),
+		AuthMode:      "dev",
 		Runtime:       "docker",
 		LocalStateDir: filepath.Join(tempDir, "state"),
 		ComposeDir:    filepath.Join(tempDir, "compose"),
@@ -155,6 +156,7 @@ func TestServer_DockerAdapterBootstrap(t *testing.T) {
 		t.Errorf("expected compose reconciler to be synchronous (Async() == false)")
 	}
 
+	deps.Auth = testAdminAuth{}
 	s := wiring.BuildServer(context.Background(), cfg, deps)
 
 	// Verify routes work
@@ -172,19 +174,19 @@ func TestBuildVariantsAndRoutes(t *testing.T) {
 	tempDir := t.TempDir()
 
 	cfg := &config.Config{
-		DBPath:                  filepath.Join(tempDir, "git_wiring.db"),
-		GitToken:                "testtoken",
-		GitRepoURL:              "https://codeberg.org/user/repo",
-		GitBranch:               "main",
-		OIDCIssuer:              "https://auth.example.com",
-		OIDCClientSecret:        "secret",
+		DBPath:                filepath.Join(tempDir, "git_wiring.db"),
+		AuthMode:              "dev",
+		GitToken:              "testtoken",
+		GitRepoURL:            "https://codeberg.org/user/repo",
+		GitBranch:             "main",
+		OIDCClientSecret:      "secret",
 		MinecraftRconPassword: "rconpass",
 		MinecraftRconAddr:     "127.0.0.1:25575",
 		ValheimDeployment:     "valheim",
-		ValheimNamespace:        "valheim",
-		MinecraftDeployment:     "minecraft-modded",
-		MinecraftNamespace:      "minecraft-modded",
-		BackupsDir:              t.TempDir(),
+		ValheimNamespace:      "valheim",
+		MinecraftDeployment:   "minecraft-modded",
+		MinecraftNamespace:    "minecraft-modded",
+		BackupsDir:            t.TempDir(),
 	}
 
 	deps, err := wiring.Build(context.Background(), cfg)
@@ -203,6 +205,7 @@ func TestBuildVariantsAndRoutes(t *testing.T) {
 		t.Errorf("expected MCAccess and MCMods initialized")
 	}
 
+	deps.Auth = testAdminAuth{}
 	app := wiring.BuildServer(context.Background(), cfg, deps)
 
 	for _, path := range []string{"/", "/valheim", "/minecraft", "/admins", "/valheim/create", "/minecraft/create", "/configs", "/mods"} {
@@ -216,4 +219,3 @@ func TestBuildVariantsAndRoutes(t *testing.T) {
 		}
 	}
 }
-

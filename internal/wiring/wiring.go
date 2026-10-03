@@ -11,6 +11,7 @@ import (
 
 	mcaccess "agrelha/internal/app/access"
 	"agrelha/internal/app/admins"
+	"agrelha/internal/app/authz"
 	appbepinex "agrelha/internal/app/bepinex"
 	"agrelha/internal/app/games/minecraft"
 	"agrelha/internal/app/games/valheim"
@@ -21,6 +22,7 @@ import (
 	"agrelha/internal/app/mods"
 	"agrelha/internal/app/modupdates"
 	"agrelha/internal/app/occupancy"
+	"agrelha/internal/app/requests"
 	"agrelha/internal/app/restarts"
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/auth/local"
@@ -38,6 +40,7 @@ import (
 	"agrelha/internal/infra/rcon"
 	argocd "agrelha/internal/infra/reconcile/argocd"
 	compose "agrelha/internal/infra/reconcile/compose"
+	zitadelroles "agrelha/internal/infra/roles/zitadel"
 	dockerruntime "agrelha/internal/infra/runtime/docker"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
 	gitstate "agrelha/internal/infra/state/git"
@@ -57,6 +60,8 @@ type Deps struct {
 	K8s              *k8s.Client
 	MCK8s            *k8s.Client
 	Auth             ports.Auth
+	Authz            *authz.Service
+	Requests         *requests.Service
 	ValheimGame      ports.Game
 	MinecraftGame    ports.Game
 	ValheimRuntime   ports.Runtime
@@ -250,6 +255,19 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 	}
 
+	azOpts := []authz.Option{authz.WithAudit(st)}
+	if reg := buildRoleRegistry(cfg); reg != nil {
+		azOpts = append(azOpts, authz.WithRoleRegistry(reg))
+	}
+	d.Authz = authz.New(st, st, azOpts...)
+
+	if d.Authz != nil && d.Authz.HasRegistry() {
+		instOpts = append(instOpts,
+			instances.WithInstanceRoleRegistrar(d.Authz.EnsureInstanceRole),
+			instances.WithInstanceRoleRetirer(d.Authz.RetireInstanceRole),
+		)
+	}
+
 	d.MCInstances = instances.NewInstanceManager(
 		store.NewInstanceRepo(st), d.StateStore, rt,
 		cfg.MCTotalBudgetGiB, cfg.MCMaxInstances, cfg.MCMaxRunning,
@@ -260,7 +278,11 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		instOpts...,
 	)
 
-	d.Auth = buildAuth(ctx, cfg, st)
+	auth, err := buildAuth(ctx, cfg, st, d.Authz)
+	if err != nil {
+		return d, err
+	}
+	d.Auth = auth
 
 	var valheimRuntime ports.Runtime
 	if cfg.Runtime == "docker" {
@@ -377,6 +399,13 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			return ports.ServerRef{Name: depName, Scope: cfg.ValheimNamespace}
 		}),
 	)
+
+	if d.Authz != nil && d.Authz.HasRegistry() {
+		valheimInstOpts = append(valheimInstOpts,
+			instances.WithInstanceRoleRegistrar(d.Authz.EnsureInstanceRole),
+			instances.WithInstanceRoleRetirer(d.Authz.RetireInstanceRole),
+		)
+	}
 
 	d.ValheimInstances = instances.NewInstanceManager(
 		store.NewValheimInstanceRepo(st), d.StateStore, valheimRuntime,
@@ -629,6 +658,40 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		d.MCModUpdates.Start(ctx)
 	}
 
+	d.Requests = requests.New(st,
+		requests.WithAudit(st),
+		requests.WithList(func(ctx context.Context) ([]domain.Instance, error) {
+			var out []domain.Instance
+			for _, m := range []*instances.InstanceManager{d.ValheimInstances, d.MCInstances} {
+				if m == nil {
+					continue
+				}
+				got, err := m.ListInstances(ctx)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, got...)
+			}
+			return out, nil
+		}),
+		requests.WithCreate(func(ctx context.Context, game domain.GameID, inst domain.Instance, mods domain.ModList, actor string) (*domain.Instance, error) {
+			m := d.MCInstances
+			if game == domain.GameValheim {
+				m = d.ValheimInstances
+			}
+			if m == nil {
+				return nil, fmt.Errorf("no instance manager for %s", game)
+			}
+			return m.CreateInstance(ctx, inst, mods, actor)
+		}),
+		requests.WithGrant(func(ctx context.Context, subject string, game domain.GameID, number int, actor string) error {
+			if d.Authz == nil {
+				return nil
+			}
+			return d.Authz.Grant(ctx, subject, game, number, actor)
+		}),
+	)
+
 	health.New(st, healthSources(&d)).Start(ctx)
 	startEventPruner(ctx, st)
 
@@ -709,32 +772,58 @@ func buildRuntime(cfg *config.Config, d *Deps) ports.Runtime {
 	return k8sruntime.New(d.MCK8s)
 }
 
-func buildAuth(ctx context.Context, cfg *config.Config, st *store.Store) ports.Auth {
+func buildRoleRegistry(cfg *config.Config) ports.RoleRegistry {
+	if cfg.ZitadelProjectID == "" || cfg.ZitadelServiceKey == "" {
+		slog.Info("zitadel role registry disabled: ZITADEL_PROJECT_ID or ZITADEL_SERVICE_KEY unset")
+		return nil
+	}
+	c, err := zitadelroles.New(zitadelroles.Config{
+		Issuer:     cfg.OIDCIssuer,
+		APIBaseURL: cfg.ZitadelAPIURL,
+		ProjectID:  cfg.ZitadelProjectID,
+		ServiceKey: []byte(cfg.ZitadelServiceKey),
+	})
+	if err != nil {
+		slog.Error("zitadel role registry unavailable", "err", err)
+		return nil
+	}
+	return c
+}
+
+func buildAuth(ctx context.Context, cfg *config.Config, st *store.Store, az *authz.Service) (ports.Auth, error) {
 	oidcCfg := oidc.Config{
 		Issuer:        cfg.OIDCIssuer,
 		ClientID:      cfg.OIDCClientID,
 		ClientSecret:  cfg.OIDCClientSecret,
 		RedirectURL:   cfg.OIDCRedirectURL,
 		PostLogoutURL: cfg.OIDCPostLogoutURL,
-		AllowedEmail:  cfg.AllowedEmail,
+		ProjectID:     cfg.ZitadelProjectID,
 	}
+	opts := []oidc.Option{oidc.WithSessions(st)}
+	if az != nil {
+		opts = append(opts, oidc.WithOnSignIn(az.RecordSignIn))
+	}
+
 	if cfg.OIDCIssuer != "" {
-		a, err := oidc.New(ctx, oidcCfg)
+		a, err := oidc.New(ctx, oidcCfg, opts...)
 		if err != nil {
-			slog.Warn("oidc unavailable, falling back to local dev auth", "err", err)
-			return oidc.NewDev(oidcCfg)
+			return nil, fmt.Errorf("oidc discovery failed for %q: %w", cfg.OIDCIssuer, err)
 		}
-		return a
+		return a, nil
+	}
+
+	if cfg.AuthMode == "dev" {
+		slog.Warn("AUTH_MODE=dev: passwordless dev authenticator, never use this outside local development")
+		return oidc.NewDev(oidcCfg, opts...), nil
 	}
 
 	users, err := st.ListUsers(ctx)
 	if err == nil && len(users) > 0 {
 		slog.Info("oidc unset: local user accounts found, running with local authenticator", "users", len(users))
-		return local.New(st, cfg.OIDCClientSecret)
+		return local.New(st, cfg.OIDCClientSecret), nil
 	}
 
-	slog.Info("oidc unset: running with local dev authenticator (click 'Admin Sign In' to authenticate)")
-	return oidc.NewDev(oidcCfg)
+	return nil, errors.New("no authentication configured: set OIDC_ISSUER, create a local user, or set AUTH_MODE=dev")
 }
 
 // backfillValheimSource reconciles Valheim Worlds' Source, derived from

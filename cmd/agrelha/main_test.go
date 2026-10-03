@@ -24,6 +24,7 @@ func TestRun_InvalidDB(t *testing.T) {
 
 func TestRun_InvalidListenAddr(t *testing.T) {
 	t.Setenv("DB_PATH", filepath.Join(t.TempDir(), "agrelha.db"))
+	t.Setenv("AUTH_MODE", "dev")
 	t.Setenv("LISTEN_ADDR", "999.999.999.999:99999")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -36,6 +37,7 @@ func TestRun_InvalidListenAddr(t *testing.T) {
 
 func TestRun_GracefulShutdown(t *testing.T) {
 	t.Setenv("DB_PATH", filepath.Join(t.TempDir(), "agrelha.db"))
+	t.Setenv("AUTH_MODE", "dev")
 	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -75,6 +77,7 @@ func TestRun_ForcedShutdownError(t *testing.T) {
 	shutdownTimeout = 1 * time.Millisecond
 
 	t.Setenv("DB_PATH", filepath.Join(t.TempDir(), "agrelha.db"))
+	t.Setenv("AUTH_MODE", "dev")
 	t.Setenv("LISTEN_ADDR", "127.0.0.1:28392")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}

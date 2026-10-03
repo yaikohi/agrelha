@@ -226,12 +226,61 @@ concept — it names a screen, and covers whichever of the two the game exposes.
 Someone who joins a game server. Distinct from the single human who runs agrelha.
 _Avoid_: user, member
 
+**Account**:
+A person who can sign in to agrelha. Identified by the `sub` claim their identity
+provider asserts, never by email, which can change. An Account exists in agrelha
+only once it has signed in at least once.
+_Avoid_: user, member, owner
+
+**Role**:
+A named permission an Account holds, asserted by the identity provider in the
+token. `agrelha-admin` confers everything; `agrelha-user` confers sign-in only;
+`agrelha-<game>-<NN>` confers operating one Instance.
+_Avoid_: scope, permission, claim
+
+**Grant**:
+The pairing of an Account with one Instance, expressed as the Account holding
+that Instance's Role. A Grant covers operating the Instance: lifecycle, logs,
+mod configs, mods and backups.
+_Avoid_: share, assignment
+
+**Request**:
+An Account asking to create an Instance beyond the one it may create unaided.
+Pending until the agrelha operator approves it (which creates the Instance and
+Grants it to the requester) or denies it.
+_Avoid_: ticket, application, proposal
+
 **Operator (agrelha)**:
-The single authenticated human who administers agrelha itself. Where ambiguity is
-possible, say "the agrelha operator" for this and "Operator" for the in-game role.
+An Account holding `agrelha-admin`, who administers agrelha itself. Where
+ambiguity is possible, say "the agrelha operator" for this and "Operator" for the
+in-game role.
 _Avoid_: admin, owner
 
 ## Rules
+
+**The identity provider decides who may do what; agrelha only enforces it.**
+Per-Instance permission is read from the Role claim in the token, so a Grant
+changed in Zitadel takes effect when the Account next signs in. To end access
+immediately, revoke the Grant and then sign the Account out everywhere.
+
+**A Grant can only name an Account that has signed in.**
+agrelha's identity-provider credential is scoped to its own project, so it cannot
+read the user directory. It learns an Account's `sub` only from a sign-in.
+
+**Any Account may create one Instance; the next one needs approval.**
+Creating spends a budget everyone shares, so an Account that already created an
+Instance does not create a second directly — it files a Request the agrelha
+operator approves or denies. Creating an Instance Grants its creator access to
+it.
+
+**A Grant never confers deleting an Instance.**
+Deletion is irreversible and frees a slot others are waiting for, so it stays
+with the agrelha operator even for an Instance the Account created.
+
+**An Instance's Role is a slot reservation.**
+Instance Numbers are reused, so a Role that outlives its Instance would silently
+authorise the next world to take that Number. Creating an Instance therefore
+fails if its Role already exists.
 
 **A Pack owns its Instance's Loader and Minecraft version.**
 When Source is `modpack`, those are facts read from the Pack, not settings. Any

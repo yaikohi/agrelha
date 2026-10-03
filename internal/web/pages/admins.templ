@@ -9,7 +9,7 @@ import (
 
 templ Admins(players []domain.Player, adminIDs []string, passwords []ValheimWorldPasswordUI, enabled bool, flashKind, flashMsg string) {
 	@Layout("Admins") {
-		@nav()
+		@nav(true)
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
 				<h1 class="text-2xl font-semibold text-zinc-100">Valheim Access & Admins</h1>

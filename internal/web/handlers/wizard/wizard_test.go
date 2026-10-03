@@ -260,10 +260,10 @@ func TestMCWizardCartCheck(t *testing.T) {
 	app, _ := setupWizardApp(t, Config{
 		CheckCartCompat: func(ctx context.Context, slugs []string, mcVersion string) mccontent.CartCompatibility {
 			return mccontent.CartCompatibility{
-				BestLoader:   "neoforge",
-				NeoForgeFit:  len(slugs),
-				FabricFit:    len(slugs) - 1,
-				TotalMods:    len(slugs),
+				BestLoader:  "neoforge",
+				NeoForgeFit: len(slugs),
+				FabricFit:   len(slugs) - 1,
+				TotalMods:   len(slugs),
 			}
 		},
 	})

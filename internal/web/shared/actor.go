@@ -1,12 +1,13 @@
 package shared
 
 import (
-	"agrelha/internal/ports"
+	"agrelha/internal/domain"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-// Actor returns the authenticated user/email stored in Locals, or "-" if unset.
+const PrincipalKey = "principal"
+
 func Actor(c *fiber.Ctx) string {
 	if a, ok := c.Locals("actor").(string); ok && a != "" {
 		return a
@@ -14,10 +15,11 @@ func Actor(c *fiber.Ctx) string {
 	return "-"
 }
 
-// IsAdmin checks whether the current request is from an authenticated admin.
-func IsAdmin(auth ports.Auth, c *fiber.Ctx) bool {
-	if auth == nil {
-		return true
+func PrincipalOf(c *fiber.Ctx) domain.Principal {
+	if p, ok := c.Locals(PrincipalKey).(domain.Principal); ok {
+		return p
 	}
-	return auth.IsAuthenticated(c)
+	return domain.Principal{}
 }
+
+func IsAdmin(c *fiber.Ctx) bool { return PrincipalOf(c).Admin }

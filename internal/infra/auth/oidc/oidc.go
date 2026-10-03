@@ -9,12 +9,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/url"
 	"strings"
 	"time"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 
 	coreosOIDC "github.com/coreos/go-oidc/v3/oidc"
@@ -25,19 +25,21 @@ import (
 const (
 	sessionCookie = "agrelha_session"
 	oidcCookie    = "agrelha_oidc"
-	sessionTTL    = 12 * time.Hour
+	sessionTTL    = 2 * time.Hour
 	loginTTL      = 10 * time.Minute
+	rolesClaim    = "urn:zitadel:iam:org:project:roles"
 )
 
-// Config holds configuration parameters for the OIDC authenticator.
 type Config struct {
 	Issuer        string
 	ClientID      string
 	ClientSecret  string
 	RedirectURL   string
 	PostLogoutURL string
-	AllowedEmail  string
+	ProjectID     string
 }
+
+type SignInHook func(ctx context.Context, id domain.Identity) error
 
 type Authenticator struct {
 	cfg      Config
@@ -45,6 +47,8 @@ type Authenticator struct {
 	verifier *coreosOIDC.IDTokenVerifier
 	oauth    oauth2.Config
 	key      []byte
+	sessions ports.Sessions
+	onSignIn SignInHook
 
 	endSession string
 	postLogout string
@@ -53,13 +57,27 @@ type Authenticator struct {
 
 var _ ports.Auth = (*Authenticator)(nil)
 
-type sessionData struct {
-	Email   string `json:"email"`
-	IDToken string `json:"idt"`
-	Exp     int64  `json:"exp"`
+type Option func(*Authenticator)
+
+func WithSessions(s ports.Sessions) Option {
+	return func(a *Authenticator) { a.sessions = s }
 }
 
-func New(ctx context.Context, cfg Config) (*Authenticator, error) {
+func WithOnSignIn(fn SignInHook) Option {
+	return func(a *Authenticator) { a.onSignIn = fn }
+}
+
+func postLogoutURL(cfg Config) string {
+	if cfg.PostLogoutURL != "" {
+		return cfg.PostLogoutURL
+	}
+	if u, err := url.Parse(cfg.RedirectURL); err == nil && u.Host != "" {
+		return u.Scheme + "://" + u.Host + "/"
+	}
+	return "/"
+}
+
+func New(ctx context.Context, cfg Config, opts ...Option) (*Authenticator, error) {
 	provider, err := coreosOIDC.NewProvider(ctx, cfg.Issuer)
 	if err != nil {
 		return nil, err
@@ -69,46 +87,46 @@ func New(ctx context.Context, cfg Config) (*Authenticator, error) {
 	}
 	_ = provider.Claims(&disco)
 
-	postLogout := "/"
-	if cfg.PostLogoutURL != "" {
-		postLogout = cfg.PostLogoutURL
-	} else if u, err := url.Parse(cfg.RedirectURL); err == nil && u.Host != "" {
-		postLogout = u.Scheme + "://" + u.Host + "/"
-	}
-
 	sum := sha256.Sum256([]byte("agrelha-session-v1:" + cfg.ClientSecret))
 
-	return &Authenticator{
+	scopes := []string{coreosOIDC.ScopeOpenID, "email", "profile"}
+	if cfg.ProjectID != "" {
+		scopes = append(scopes, "urn:zitadel:iam:org:project:id:"+cfg.ProjectID+":aud")
+	}
+
+	a := &Authenticator{
 		cfg:        cfg,
 		provider:   provider,
 		verifier:   provider.Verifier(&coreosOIDC.Config{ClientID: cfg.ClientID}),
 		key:        sum[:],
 		endSession: disco.EndSession,
-		postLogout: postLogout,
+		postLogout: postLogoutURL(cfg),
 		oauth: oauth2.Config{
 			ClientID:     cfg.ClientID,
 			ClientSecret: cfg.ClientSecret,
 			RedirectURL:  cfg.RedirectURL,
 			Endpoint:     provider.Endpoint(),
-			Scopes:       []string{coreosOIDC.ScopeOpenID, "email", "profile"},
+			Scopes:       scopes,
 		},
-	}, nil
+	}
+	for _, o := range opts {
+		o(a)
+	}
+	return a, nil
 }
 
-func NewDev(cfg Config) *Authenticator {
-	postLogout := "/"
-	if cfg.PostLogoutURL != "" {
-		postLogout = cfg.PostLogoutURL
-	} else if u, err := url.Parse(cfg.RedirectURL); err == nil && u.Host != "" {
-		postLogout = u.Scheme + "://" + u.Host + "/"
-	}
+func NewDev(cfg Config, opts ...Option) *Authenticator {
 	sum := sha256.Sum256([]byte("agrelha-dev-secret-key-v1"))
-	return &Authenticator{
+	a := &Authenticator{
 		cfg:        cfg,
 		key:        sum[:],
-		postLogout: postLogout,
+		postLogout: postLogoutURL(cfg),
 		isDev:      true,
 	}
+	for _, o := range opts {
+		o(a)
+	}
+	return a
 }
 
 func randHex(n int) string {
@@ -145,19 +163,70 @@ func (a *Authenticator) unsign(v string) ([]byte, bool) {
 	return payload, true
 }
 
-func (a *Authenticator) readSession(c *fiber.Ctx) (sessionData, bool) {
+func (a *Authenticator) secure() bool {
+	return !strings.HasPrefix(a.cfg.RedirectURL, "http://")
+}
+
+func (a *Authenticator) setSessionCookie(c *fiber.Ctx, id string, expires time.Time) {
+	c.Cookie(&fiber.Cookie{
+		Name:     sessionCookie,
+		Value:    a.sign([]byte(id)),
+		HTTPOnly: true,
+		Secure:   a.secure(),
+		SameSite: "Lax",
+		Path:     "/",
+		Expires:  expires,
+	})
+}
+
+func (a *Authenticator) clearCookie(c *fiber.Ctx, name string) {
+	c.Cookie(&fiber.Cookie{
+		Name:     name,
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Now().Add(-24 * time.Hour),
+		MaxAge:   -1,
+		Secure:   a.secure(),
+		HTTPOnly: true,
+		SameSite: "Lax",
+	})
+}
+
+func (a *Authenticator) sessionID(c *fiber.Ctx) (string, bool) {
 	payload, ok := a.unsign(c.Cookies(sessionCookie))
-	if !ok {
-		return sessionData{}, false
+	if !ok || len(payload) == 0 {
+		return "", false
 	}
-	var s sessionData
-	if err := json.Unmarshal(payload, &s); err != nil {
-		return sessionData{}, false
+	return string(payload), true
+}
+
+func (a *Authenticator) startSession(c *fiber.Ctx, id domain.Identity, rawIDToken string) error {
+	if a.sessions == nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "no session store configured")
 	}
-	if time.Now().Unix() >= s.Exp {
-		return sessionData{}, false
+	ctx := c.UserContext()
+	if a.onSignIn != nil {
+		if err := a.onSignIn(ctx, id); err != nil {
+			slog.Error("auth: record sign-in failed", "subject", id.Subject, "err", err)
+		}
 	}
-	return s, true
+	now := time.Now()
+	expires := now.Add(sessionTTL)
+	sid := randHex(32)
+	if err := a.sessions.CreateSession(ctx, ports.Session{
+		ID:        sid,
+		Subject:   id.Subject,
+		Email:     id.Email,
+		Name:      id.Name,
+		Roles:     id.Roles,
+		IDToken:   rawIDToken,
+		CreatedAt: now,
+		ExpiresAt: expires,
+	}); err != nil {
+		return err
+	}
+	a.setSessionCookie(c, sid, expires)
+	return nil
 }
 
 func sanitizeReturnTo(target string) string {
@@ -172,57 +241,26 @@ func sanitizeReturnTo(target string) string {
 	return "/"
 }
 
-func isEmailAllowed(allowedList, email string) bool {
-	if email == "" {
-		return false
-	}
-	email = strings.ToLower(strings.TrimSpace(email))
-	for part := range strings.SplitSeq(allowedList, ",") {
-		part = strings.ToLower(strings.TrimSpace(part))
-		if part != "" && part == email {
-			return true
-		}
-	}
-	return false
-}
-
 func (a *Authenticator) Login(c *fiber.Ctx) error {
 	returnTo := sanitizeReturnTo(c.Query("returnTo"))
 	if a.isDev {
-		email := "admin@local.dev"
-		if a.cfg.AllowedEmail != "" {
-			for part := range strings.SplitSeq(a.cfg.AllowedEmail, ",") {
-				trimmed := strings.TrimSpace(part)
-				if trimmed != "" {
-					email = trimmed
-					break
-				}
-			}
+		id := domain.Identity{
+			Subject: "dev-admin",
+			Email:   "admin@local.dev",
+			Name:    "Dev Admin",
+			Roles:   []domain.Role{domain.RoleAdmin, domain.RoleUser},
 		}
-		data, _ := json.Marshal(sessionData{
-			Email:   email,
-			IDToken: "dev-mock-id-token",
-			Exp:     time.Now().Add(sessionTTL).Unix(),
-		})
-		isSecure := strings.HasPrefix(a.cfg.RedirectURL, "https://")
-		c.Cookie(&fiber.Cookie{
-			Name:     sessionCookie,
-			Value:    a.sign(data),
-			HTTPOnly: true,
-			Secure:   isSecure,
-			SameSite: "Lax",
-			Path:     "/",
-			Expires:  time.Now().Add(sessionTTL),
-		})
-		slog.Info("auth: signed in (dev mode)", "email", email)
+		if err := a.startSession(c, id, "dev-mock-id-token"); err != nil {
+			return err
+		}
+		slog.Warn("auth: signed in (dev mode)", "email", id.Email)
 		return c.Redirect(returnTo, fiber.StatusFound)
 	}
 
 	state, nonce := randHex(16), randHex(16)
-	isSecure := !strings.HasPrefix(a.cfg.RedirectURL, "http://")
 	c.Cookie(&fiber.Cookie{
 		Name: oidcCookie, Value: a.sign([]byte(state + ":" + nonce + ":" + returnTo)),
-		HTTPOnly: true, Secure: isSecure, SameSite: "Lax", Path: "/",
+		HTTPOnly: true, Secure: a.secure(), SameSite: "Lax", Path: "/",
 		Expires: time.Now().Add(loginTTL),
 	})
 	return c.Redirect(a.oauth.AuthCodeURL(state, coreosOIDC.Nonce(nonce)), fiber.StatusFound)
@@ -235,17 +273,7 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	ctx := c.UserContext()
 
 	payload, ok := a.unsign(c.Cookies(oidcCookie))
-	isSecure := !strings.HasPrefix(a.cfg.RedirectURL, "http://")
-	c.Cookie(&fiber.Cookie{
-		Name:     oidcCookie,
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Now().Add(-24 * time.Hour),
-		MaxAge:   -1,
-		Secure:   isSecure,
-		HTTPOnly: true,
-		SameSite: "Lax",
-	})
+	a.clearCookie(c, oidcCookie)
 	if !ok {
 		return fiber.NewError(fiber.StatusBadRequest, "missing or bad login state")
 	}
@@ -280,7 +308,9 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	}
 
 	var claims struct {
-		Email string `json:"email"`
+		Email string                     `json:"email"`
+		Name  string                     `json:"name"`
+		Roles map[string]json.RawMessage `json:"urn:zitadel:iam:org:project:roles"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "claims parse failed")
@@ -290,47 +320,37 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 			claims.Email = ui.Email
 		}
 	}
-	if claims.Email == "" || !isEmailAllowed(a.cfg.AllowedEmail, claims.Email) {
-		slog.Warn("auth: sign-in rejected", "email", claims.Email, "allowed", a.cfg.AllowedEmail)
+
+	id := domain.Identity{Subject: idToken.Subject, Email: claims.Email, Name: claims.Name}
+	for k := range claims.Roles {
+		id.Roles = append(id.Roles, domain.Role(k))
+	}
+	if !id.MaySignIn() {
+		slog.Warn("auth: sign-in rejected, no agrelha role",
+			"subject", id.Subject, "email", id.Email, "roles", len(claims.Roles))
 		return fiber.NewError(fiber.StatusForbidden, "not authorized")
 	}
 
-	data, _ := json.Marshal(sessionData{
-		Email: claims.Email, IDToken: rawID, Exp: time.Now().Add(sessionTTL).Unix(),
-	})
-	c.Cookie(&fiber.Cookie{
-		Name: sessionCookie, Value: a.sign(data), HTTPOnly: true, Secure: isSecure,
-		SameSite: "Lax", Path: "/", Expires: time.Now().Add(sessionTTL),
-	})
-	slog.Info("auth: signed in", "email", claims.Email)
+	if err := a.startSession(c, id, rawID); err != nil {
+		return err
+	}
+	slog.Info("auth: signed in", "email", id.Email, "roles", id.Roles)
 	return c.Redirect(returnTo, fiber.StatusFound)
 }
 
 func (a *Authenticator) Logout(c *fiber.Ctx) error {
-	s, _ := a.readSession(c)
+	var idTokenHint string
+	if sid, ok := a.sessionID(c); ok && a.sessions != nil {
+		if s, err := a.sessions.LoadSession(c.UserContext(), sid); err == nil && s != nil {
+			idTokenHint = s.IDToken
+		}
+		if err := a.sessions.DeleteSession(c.UserContext(), sid); err != nil {
+			slog.Error("auth: delete session failed", "err", err)
+		}
+	}
 
-	isSecure := !strings.HasPrefix(a.cfg.RedirectURL, "http://")
-
-	c.Cookie(&fiber.Cookie{
-		Name:     sessionCookie,
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Now().Add(-24 * time.Hour),
-		MaxAge:   -1,
-		Secure:   isSecure,
-		HTTPOnly: true,
-		SameSite: "Lax",
-	})
-	c.Cookie(&fiber.Cookie{
-		Name:     oidcCookie,
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Now().Add(-24 * time.Hour),
-		MaxAge:   -1,
-		Secure:   isSecure,
-		HTTPOnly: true,
-		SameSite: "Lax",
-	})
+	a.clearCookie(c, sessionCookie)
+	a.clearCookie(c, oidcCookie)
 
 	if a.isDev || a.endSession == "" {
 		return c.Redirect("/", fiber.StatusFound)
@@ -342,40 +362,35 @@ func (a *Authenticator) Logout(c *fiber.Ctx) error {
 	q := u.Query()
 	q.Set("post_logout_redirect_uri", a.postLogout)
 	q.Set("client_id", a.cfg.ClientID)
-	if s.IDToken != "" {
-		q.Set("id_token_hint", s.IDToken)
+	if idTokenHint != "" {
+		q.Set("id_token_hint", idTokenHint)
 	}
 	u.RawQuery = q.Encode()
 	return c.Redirect(u.String(), fiber.StatusFound)
 }
 
-func (a *Authenticator) IsAuthenticated(c *fiber.Ctx) bool {
-	if a == nil {
-		return true
+func (a *Authenticator) Identify(c *fiber.Ctx) (domain.Identity, bool) {
+	if a == nil || a.sessions == nil {
+		return domain.Identity{}, false
 	}
-	_, ok := a.readSession(c)
-	return ok
-}
-
-func (a *Authenticator) Middleware() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		s, ok := a.readSession(c)
-		if !ok {
-			loginTarget := "/auth/login"
-			if target := sanitizeReturnTo(c.OriginalURL()); target != "/" {
-				loginTarget += "?returnTo=" + url.QueryEscape(target)
-			}
-
-			if c.Get("Datastar-Request") == "true" || strings.Contains(c.Get("Accept"), "text/event-stream") {
-				c.Set("Content-Type", "text/event-stream")
-				c.Set("Cache-Control", "no-cache")
-				c.Set("Connection", "keep-alive")
-				msg := fmt.Sprintf("event: datastar-patch-elements\ndata: mode append\ndata: selector body\ndata: elements <script>window.location.href = %q</script>\n\n", loginTarget)
-				return c.SendString(msg)
-			}
-			return c.Redirect(loginTarget, fiber.StatusFound)
+	sid, ok := a.sessionID(c)
+	if !ok {
+		return domain.Identity{}, false
+	}
+	s, err := a.sessions.LoadSession(c.UserContext(), sid)
+	if err != nil || s == nil {
+		return domain.Identity{}, false
+	}
+	if time.Until(s.ExpiresAt) < sessionTTL/2 {
+		expires := time.Now().Add(sessionTTL)
+		if err := a.sessions.TouchSession(c.UserContext(), sid, expires); err == nil {
+			a.setSessionCookie(c, sid, expires)
 		}
-		c.Locals("actor", s.Email)
-		return c.Next()
 	}
+	return domain.Identity{
+		Subject: s.Subject,
+		Email:   s.Email,
+		Name:    s.Name,
+		Roles:   s.Roles,
+	}, true
 }

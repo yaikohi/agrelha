@@ -58,6 +58,25 @@ func (m *mockUserStore) DeleteUser(_ context.Context, username string) error {
 
 var _ ports.UserStore = (*mockUserStore)(nil)
 
+func testMiddleware(a *Authenticator) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		id, ok := a.Identify(c)
+		if !ok {
+			if c.Get("Datastar-Request") == "true" || strings.Contains(c.Get("Accept"), "text/event-stream") {
+				c.Set("Content-Type", "text/event-stream")
+				return c.SendString("event: datastar-patch-elements\ndata: mode append\ndata: selector body\ndata: elements <script>window.location.href = \"/auth/login\"</script>\n\n")
+			}
+			return c.Redirect("/auth/login", fiber.StatusFound)
+		}
+		actor := id.Name
+		if actor == "" {
+			actor = id.Email
+		}
+		c.Locals("actor", actor)
+		return c.Next()
+	}
+}
+
 func TestArgon2idHashAndVerify(t *testing.T) {
 	password := "super-secret-password-123"
 	hash, err := HashPassword(password)
@@ -113,7 +132,7 @@ func TestLocalAuthenticatorFlow(t *testing.T) {
 	app.Post("/auth/login", auth.Login)
 	app.Get("/auth/logout", auth.Logout)
 
-	protected := app.Group("/admin", auth.Middleware())
+	protected := app.Group("/admin", testMiddleware(auth))
 	protected.Get("/dashboard", func(c *fiber.Ctx) error {
 		return c.SendString("Welcome, " + c.Locals("actor").(string))
 	})
@@ -226,21 +245,20 @@ func TestLocalAuthenticator_EdgeCases(t *testing.T) {
 	store := newMockUserStore()
 	auth := New(store, "") // secretKey == "" default
 
-	// Nil auth IsAuthenticated
 	var nilAuth *Authenticator
-	if !nilAuth.IsAuthenticated(nil) {
-		t.Error("nil auth IsAuthenticated should return true")
+	if _, ok := nilAuth.Identify(nil); ok {
+		t.Error("nil authenticator must not identify anyone")
 	}
 
 	app := fiber.New()
 	app.Get("/auth/callback", auth.Callback)
 	app.Get("/auth/login", auth.Login)
 	app.Post("/auth/login", auth.Login)
-	app.Get("/protected", auth.Middleware(), func(c *fiber.Ctx) error {
+	app.Get("/protected", testMiddleware(auth), func(c *fiber.Ctx) error {
 		return c.SendString(c.Locals("actor").(string))
 	})
 	app.Get("/check", func(c *fiber.Ctx) error {
-		if auth.IsAuthenticated(c) {
+		if _, ok := auth.Identify(c); ok {
 			return c.SendString("ok")
 		}
 		return c.SendStatus(fiber.StatusUnauthorized)
@@ -352,7 +370,7 @@ func TestLocalAuth_RemainingBranches(t *testing.T) {
 
 	// 3. readSession: signed non-JSON & expired session & email-only actor
 	app := fiber.New()
-	app.Use(auth.Middleware())
+	app.Use(testMiddleware(auth))
 	app.Get("/actor", func(c *fiber.Ctx) error {
 		return c.SendString(c.Locals("actor").(string))
 	})
@@ -409,4 +427,3 @@ func TestLocalAuth_RemainingBranches(t *testing.T) {
 		t.Errorf("status=%d, want 503 for nil store login", respNil.StatusCode)
 	}
 }
-

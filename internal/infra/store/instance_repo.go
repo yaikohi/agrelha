@@ -115,6 +115,7 @@ func fromRecord(rec InstanceRecord, gameID domain.GameID) domain.Instance {
 		WorldType:  rec.WorldType,
 		MaxPlayers: rec.MaxPlayers,
 		LBIP:       rec.LBIP,
+		CreatedBy:  rec.CreatedBy,
 		CreatedAt:  rec.CreatedAt,
 		LastUsed:   rec.LastUsed,
 	}
@@ -147,6 +148,7 @@ func toRecord(inst domain.Instance) InstanceRecord {
 		WorldType:  inst.WorldType,
 		MaxPlayers: inst.MaxPlayers,
 		LBIP:       inst.LBIP,
+		CreatedBy:  inst.CreatedBy,
 		CreatedAt:  inst.CreatedAt,
 		LastUsed:   inst.LastUsed,
 	}

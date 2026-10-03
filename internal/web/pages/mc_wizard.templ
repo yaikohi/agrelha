@@ -7,7 +7,7 @@ import (
 
 templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 	@Layout("Create Minecraft World") {
-		@nav()
+		@nav(true)
 		<div
 			class="space-y-6"
 			data-signals="{step:1,name:'',seed:'',source:'modpack',loader:'',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false,redirect:''}"

@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"agrelha/internal/ports"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -31,6 +32,7 @@ type mockIDP struct {
 
 	mu                sync.Mutex
 	userEmail         string
+	userRoles         []string
 	customNonce       string
 	tokenExpiryOffset time.Duration
 	failTokenEndpoint bool
@@ -54,6 +56,7 @@ func newMockIDP(t *testing.T) *mockIDP {
 		clientID:          "test-client-id",
 		clientSecret:      "test-client-secret",
 		userEmail:         "admin@example.com",
+		userRoles:         []string{"agrelha-admin", "agrelha-user"},
 		tokenExpiryOffset: 1 * time.Hour,
 		includeEndSession: true,
 	}
@@ -136,6 +139,7 @@ func (idp *mockIDP) handleToken(w http.ResponseWriter, r *http.Request) {
 	fail := idp.failTokenEndpoint
 	signingKey := idp.signingKey
 	email := idp.userEmail
+	roles := append([]string{}, idp.userRoles...)
 	expiryOffset := idp.tokenExpiryOffset
 	customNonce := idp.customNonce
 	lastNonce := idp.lastNonce
@@ -169,6 +173,13 @@ func (idp *mockIDP) handleToken(w http.ResponseWriter, r *http.Request) {
 		"iat":   now.Unix(),
 		"email": email,
 		"nonce": nonce,
+	}
+	if len(roles) > 0 {
+		rc := map[string]any{}
+		for _, r := range roles {
+			rc[r] = map[string]string{"orgid": "example.com"}
+		}
+		claims["urn:zitadel:iam:org:project:roles"] = rc
 	}
 
 	rawIDToken, err := jwt.Signed(signer).Claims(claims).Serialize()
@@ -208,17 +219,35 @@ func (idp *mockIDP) handleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
-func setupTestApp(t *testing.T, idp *mockIDP, allowedEmail string) (*fiber.App, *Authenticator, Config) {
+func testMiddleware(a *Authenticator) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		id, ok := a.Identify(c)
+		if !ok {
+			target := "/auth/login"
+			if rt := c.OriginalURL(); rt != "" && rt != "/" {
+				target += "?returnTo=" + url.QueryEscape(rt)
+			}
+			if c.Get("Datastar-Request") == "true" || strings.Contains(c.Get("Accept"), "text/event-stream") {
+				c.Set("Content-Type", "text/event-stream")
+				return c.SendString(fmt.Sprintf("event: datastar-patch-elements\ndata: mode append\ndata: selector body\ndata: elements <script>window.location.href = %q</script>\n\n", target))
+			}
+			return c.Redirect(target, fiber.StatusFound)
+		}
+		c.Locals("actor", id.Email)
+		return c.Next()
+	}
+}
+
+func setupTestApp(t *testing.T, idp *mockIDP, _ string) (*fiber.App, *Authenticator, Config) {
 	t.Helper()
 	cfg := Config{
 		Issuer:       idp.Issuer(),
 		ClientID:     idp.clientID,
 		ClientSecret: idp.clientSecret,
 		RedirectURL:  "http://localhost:8080/auth/callback",
-		AllowedEmail: allowedEmail,
 	}
 
-	a, err := New(context.Background(), cfg)
+	a, err := New(context.Background(), cfg, WithSessions(newFakeSessions()))
 	if err != nil {
 		t.Fatalf("auth.New failed: %v", err)
 	}
@@ -228,7 +257,7 @@ func setupTestApp(t *testing.T, idp *mockIDP, allowedEmail string) (*fiber.App, 
 	app.Get("/auth/callback", a.Callback)
 	app.Get("/auth/logout", a.Logout)
 
-	app.Get("/protected", a.Middleware(), func(c *fiber.Ctx) error {
+	app.Get("/protected", testMiddleware(a), func(c *fiber.Ctx) error {
 		return c.SendString("protected: actor=" + c.Locals("actor").(string))
 	})
 
@@ -423,9 +452,10 @@ func TestForbiddenIdentity(t *testing.T) {
 	idp := newMockIDP(t)
 	defer idp.Close()
 
-	app, _, _ := setupTestApp(t, idp, "allowed@example.com")
-	// IdP returns an unauthorized email
-	idp.userEmail = "unauthorized@evil.com"
+	app, _, _ := setupTestApp(t, idp, "")
+	// The IdP asserts an identity carrying no agrelha role at all.
+	idp.userEmail = "outsider@example.com"
+	idp.userRoles = nil
 
 	loginReq := httptest.NewRequest(fiber.MethodGet, "/auth/login", nil)
 	loginResp, err := app.Test(loginReq)
@@ -443,7 +473,7 @@ func TestForbiddenIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cbResp.StatusCode != fiber.StatusForbidden {
-		t.Errorf("expected 403 Forbidden for unauthorized email, got %d", cbResp.StatusCode)
+		t.Errorf("expected 403 Forbidden for an identity with no agrelha role, got %d", cbResp.StatusCode)
 	}
 	if session := extractCookie(cbResp, "agrelha_session"); session != nil && session.Value != "" {
 		t.Errorf("expected no session cookie issued for unauthorized identity")
@@ -730,15 +760,15 @@ func TestExpiredTokenRejected(t *testing.T) {
 	}
 }
 
-func TestMultipleAllowedEmailsAuthorized(t *testing.T) {
+func TestAnyAgrelhaRoleGrantsSignIn(t *testing.T) {
 	idp := newMockIDP(t)
 	defer idp.Close()
 
-	// Configure multiple admin emails
-	app, _, _ := setupTestApp(t, idp, "alice@example.com, bob@example.com, charlie@example.com")
+	app, _, _ := setupTestApp(t, idp, "")
 
-	// 1. Alice is allowed
+	// 1. The base agrelha-user role is enough to sign in.
 	idp.userEmail = "alice@example.com"
+	idp.userRoles = []string{"agrelha-user"}
 	loginReq := httptest.NewRequest(fiber.MethodGet, "/auth/login", nil)
 	loginResp, _ := app.Test(loginReq)
 	oidcCookie := extractCookie(loginResp, "agrelha_oidc")
@@ -752,11 +782,12 @@ func TestMultipleAllowedEmailsAuthorized(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cbResp.StatusCode != fiber.StatusFound {
-		t.Fatalf("expected 302 for allowed email Alice, got %d", cbResp.StatusCode)
+		t.Fatalf("expected 302 for an account holding agrelha-user, got %d", cbResp.StatusCode)
 	}
 
-	// 2. Bob is allowed
+	// 2. A per-instance role alone is also enough to sign in.
 	idp.userEmail = "bob@example.com"
+	idp.userRoles = []string{"agrelha-valheim-02"}
 	loginReq = httptest.NewRequest(fiber.MethodGet, "/auth/login", nil)
 	loginResp, _ = app.Test(loginReq)
 	oidcCookie = extractCookie(loginResp, "agrelha_oidc")
@@ -770,11 +801,12 @@ func TestMultipleAllowedEmailsAuthorized(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cbResp.StatusCode != fiber.StatusFound {
-		t.Fatalf("expected 302 for allowed email Bob, got %d", cbResp.StatusCode)
+		t.Fatalf("expected 302 for an account holding only a per-instance role, got %d", cbResp.StatusCode)
 	}
 
-	// 3. Eve is rejected
+	// 3. An identity with no agrelha role is refused.
 	idp.userEmail = "eve@example.com"
+	idp.userRoles = []string{"grafana-admin"}
 	loginReq = httptest.NewRequest(fiber.MethodGet, "/auth/login", nil)
 	loginResp, _ = app.Test(loginReq)
 	oidcCookie = extractCookie(loginResp, "agrelha_oidc")
@@ -788,25 +820,24 @@ func TestMultipleAllowedEmailsAuthorized(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cbResp.StatusCode != fiber.StatusForbidden {
-		t.Fatalf("expected 403 Forbidden for unlisted email Eve, got %d", cbResp.StatusCode)
+		t.Fatalf("expected 403 Forbidden for an identity with no agrelha role, got %d", cbResp.StatusCode)
 	}
 }
 
 func TestNewDev_And_IsAuthenticated(t *testing.T) {
 	cfg := Config{
-		AllowedEmail: "admin@example.com,dev@local.dev",
-		RedirectURL:  "http://localhost:3000/auth/callback",
+		RedirectURL: "http://localhost:3000/auth/callback",
 	}
-	devAuth := NewDev(cfg)
+	devAuth := NewDev(cfg, WithSessions(newFakeSessions()))
 
 	app := fiber.New()
 	app.Get("/auth/login", devAuth.Login)
 	app.Get("/auth/logout", devAuth.Logout)
-	app.Get("/protected", devAuth.Middleware(), func(c *fiber.Ctx) error {
+	app.Get("/protected", testMiddleware(devAuth), func(c *fiber.Ctx) error {
 		return c.SendString("ok")
 	})
 	app.Get("/check", func(c *fiber.Ctx) error {
-		if devAuth.IsAuthenticated(c) {
+		if _, ok := devAuth.Identify(c); ok {
 			return c.SendString("authenticated")
 		}
 		return c.SendStatus(fiber.StatusUnauthorized)
@@ -885,50 +916,49 @@ func TestUnsign_And_ReadSession_EdgeCases(t *testing.T) {
 		t.Error("unsign with tampered signature should fail")
 	}
 
-	// ReadSession with expired session
-	app := fiber.New()
-	expiredSession := sessionData{
-		Email: "test@example.com",
-		Exp:   time.Now().Add(-1 * time.Hour).Unix(),
-	}
-	expiredBytes, _ := json.Marshal(expiredSession)
-	expiredCookieVal := a.sign(expiredBytes)
+	// Sessions now live server-side: expiry, unknown ids and garbage cookies all fail closed.
+	fs := newFakeSessions()
+	a2 := NewDev(Config{RedirectURL: "http://localhost:3000/auth/callback"}, WithSessions(fs))
 
-	app.Get("/test-expired", func(c *fiber.Ctx) error {
-		_, ok := a.readSession(c)
-		if ok {
+	app := fiber.New()
+	app.Get("/check", func(c *fiber.Ctx) error {
+		if _, ok := a2.Identify(c); ok {
 			return c.SendString("valid")
 		}
 		return c.SendStatus(fiber.StatusUnauthorized)
 	})
 
-	req := httptest.NewRequest(fiber.MethodGet, "/test-expired", nil)
-	req.AddCookie(&http.Cookie{Name: "agrelha_session", Value: expiredCookieVal})
-	resp, _ := app.Test(req)
-	if resp.StatusCode != fiber.StatusUnauthorized {
-		t.Errorf("expired session should fail, got status %d", resp.StatusCode)
-	}
+	_ = fs.CreateSession(context.Background(), ports.Session{
+		ID:        "expired-id",
+		Subject:   "s",
+		ExpiresAt: time.Now().Add(-time.Hour),
+	})
 
-	// ReadSession with invalid json
-	invalidJSONVal := a.sign([]byte("not json"))
-	req2 := httptest.NewRequest(fiber.MethodGet, "/test-expired", nil)
-	req2.AddCookie(&http.Cookie{Name: "agrelha_session", Value: invalidJSONVal})
-	resp2, _ := app.Test(req2)
-	if resp2.StatusCode != fiber.StatusUnauthorized {
-		t.Errorf("invalid json session should fail, got status %d", resp2.StatusCode)
+	for name, cookie := range map[string]string{
+		"expired":  a2.sign([]byte("expired-id")),
+		"unknown":  a2.sign([]byte("no-such-id")),
+		"unsigned": "not-a-signed-value",
+	} {
+		req := httptest.NewRequest(fiber.MethodGet, "/check", nil)
+		req.AddCookie(&http.Cookie{Name: "agrelha_session", Value: cookie})
+		resp, _ := app.Test(req)
+		if resp.StatusCode != fiber.StatusUnauthorized {
+			t.Errorf("%s session should fail closed, got status %d", name, resp.StatusCode)
+		}
 	}
 }
 
 func TestOIDC_RemainingBranches(t *testing.T) {
-	// 1. IsAuthenticated on nil Authenticator
+	// 1. A nil Authenticator identifies nobody.
 	var nilAuth *Authenticator
-	if !nilAuth.IsAuthenticated(nil) {
-		t.Error("nil Authenticator.IsAuthenticated should return true")
+	if _, ok := nilAuth.Identify(nil); ok {
+		t.Error("nil Authenticator must not identify anyone")
 	}
 
-	// 2. isEmailAllowed with empty email returns false
-	if isEmailAllowed("admin@example.com", "") {
-		t.Error("isEmailAllowed with empty email should return false")
+	// 2. An Authenticator with no session store identifies nobody.
+	noStore := NewDev(Config{})
+	if _, ok := noStore.Identify(nil); ok {
+		t.Error("Authenticator without a session store must not identify anyone")
 	}
 
 	// 3. Callback when a.isDev == true (lines 232-234)
@@ -981,5 +1011,3 @@ func TestOIDC_RemainingBranches(t *testing.T) {
 		t.Errorf("expected 302 redirect for invalid endSession url, got %d", respLogout.StatusCode)
 	}
 }
-
-

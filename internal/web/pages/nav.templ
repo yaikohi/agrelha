@@ -4,7 +4,7 @@ func isNavAdmin(admin []bool) bool {
 	if len(admin) > 0 {
 		return admin[0]
 	}
-	return true
+	return false
 }
 
 templ nav(admin ...bool) {
@@ -60,6 +60,22 @@ templ nav(admin ...bool) {
 						class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
 					>
 						History
+					</a>
+
+					<!-- Accounts -->
+					<a
+						href="/accounts"
+						class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
+					>
+						Accounts
+					</a>
+
+					<!-- Requests -->
+					<a
+						href="/requests"
+						class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
+					>
+						Requests
 					</a>
 				}
 			</div>

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/web"
 	"agrelha/internal/web/handlers/access"
 	backupshttp "agrelha/internal/web/handlers/backups"
@@ -19,11 +20,16 @@ import (
 
 type mockRoutesAuth struct{}
 
-func (m *mockRoutesAuth) IsAuthenticated(c *fiber.Ctx) bool { return true }
-func (m *mockRoutesAuth) Middleware() fiber.Handler         { return func(c *fiber.Ctx) error { return c.Next() } }
-func (m *mockRoutesAuth) Login(c *fiber.Ctx) error          { return c.SendString("login") }
-func (m *mockRoutesAuth) Callback(c *fiber.Ctx) error       { return c.SendString("callback") }
-func (m *mockRoutesAuth) Logout(c *fiber.Ctx) error         { return c.SendString("logout") }
+func (m *mockRoutesAuth) Identify(c *fiber.Ctx) (domain.Identity, bool) {
+	return domain.Identity{
+		Subject: "test-admin",
+		Email:   "admin@example.com",
+		Roles:   []domain.Role{domain.RoleAdmin, domain.RoleUser},
+	}, true
+}
+func (m *mockRoutesAuth) Login(c *fiber.Ctx) error    { return c.SendString("login") }
+func (m *mockRoutesAuth) Callback(c *fiber.Ctx) error { return c.SendString("callback") }
+func (m *mockRoutesAuth) Logout(c *fiber.Ctx) error   { return c.SendString("logout") }
 
 func TestRoutes_HealthzAndMetrics(t *testing.T) {
 	app := web.New(web.ServerConfig{})

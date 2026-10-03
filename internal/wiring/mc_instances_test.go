@@ -68,6 +68,7 @@ func setupTestMCServer(t *testing.T) (*fiber.App, *store.Store, *instances.Insta
 		MCInstances: mgr,
 		MCRconPool:  rcon.NewPool("testpass", 3*time.Second),
 	}
+	d.Auth = testAdminAuth{}
 	app := wiring.BuildServer(context.Background(), cfg, d)
 	return app, st, mgr, d, cfg
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"agrelha/internal/domain"
+
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -24,8 +26,7 @@ type UserStore interface {
 
 // Auth defines the web authentication and session lifecycle contract.
 type Auth interface {
-	IsAuthenticated(c *fiber.Ctx) bool
-	Middleware() fiber.Handler
+	Identify(c *fiber.Ctx) (domain.Identity, bool)
 	Login(c *fiber.Ctx) error
 	Callback(c *fiber.Ctx) error
 	Logout(c *fiber.Ctx) error

@@ -13,7 +13,7 @@ func containsUser(list []string, item string) bool {
 
 templ MinecraftAccess(ops []string, whitelist []string, onlinePlayers []string, whitelistEnforced bool, enabled bool, flashKind, flashMsg string) {
 	@Layout("Minecraft Access") {
-		@nav()
+		@nav(true)
 		<h1 class="mb-6 text-2xl font-semibold">Minecraft Access Management</h1>
 		@flashBanner(flashKind, flashMsg)
 

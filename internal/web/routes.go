@@ -7,12 +7,15 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 
+	"agrelha/internal/app/authz"
 	"agrelha/internal/ports"
+	"agrelha/internal/web/guard"
 	"agrelha/internal/web/handlers/access"
 	backupshttp "agrelha/internal/web/handlers/backups"
 	consolehttp "agrelha/internal/web/handlers/console"
 	contenthttp "agrelha/internal/web/handlers/content"
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
+	grantshttp "agrelha/internal/web/handlers/grants"
 	minecrafthttp "agrelha/internal/web/handlers/minecraft"
 	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
@@ -23,11 +26,13 @@ import (
 // ServerConfig defines the handlers and authentication provider used to mount web routes.
 type ServerConfig struct {
 	Auth      ports.Auth
+	Authz     *authz.Service
 	Access    *access.Handler
 	Backups   *backupshttp.Handler
 	Console   *consolehttp.Handler
 	Content   *contenthttp.Handler
 	Dashboard *dashboardhttp.Handler
+	Grants    *grantshttp.Handler
 	Minecraft *minecrafthttp.Handler
 	Valheim   *valheimhttp.Handler
 	Wizard    *wizardhttp.Handler
@@ -36,6 +41,7 @@ type ServerConfig struct {
 // RegisterRoutes attaches middleware and all endpoints (public and protected) to the Fiber app.
 func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 	app.Use(shared.RequestLogger())
+	app.Use(guard.Optional(cfg.Auth, cfg.Authz))
 	app.Get("/healthz", func(c *fiber.Ctx) error { return c.SendString("ok") })
 	app.Get("/metrics", adaptor.HTTPHandler(metrics.Handler()))
 	app.Use("/assets", filesystem.New(filesystem.Config{
@@ -74,9 +80,9 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 
 	// Protected routes (admin authentication required)
 	protected := app.Group("/")
-	if cfg.Auth != nil {
-		protected.Use(cfg.Auth.Middleware())
-	}
+	protected.Use(guard.Required())
+
+	guard.Apply(protected)
 
 	if cfg.Access != nil {
 		cfg.Access.Register(protected)
@@ -95,6 +101,9 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 	}
 	if cfg.Minecraft != nil {
 		cfg.Minecraft.RegisterProtected(protected)
+	}
+	if cfg.Grants != nil {
+		cfg.Grants.Register(protected)
 	}
 	if cfg.Wizard != nil {
 		cfg.Wizard.Register(protected)

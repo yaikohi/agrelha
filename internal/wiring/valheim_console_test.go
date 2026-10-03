@@ -23,6 +23,7 @@ func TestValheimConsolePage(t *testing.T) {
 	defer st.Close()
 
 	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{
+		Auth:  testAdminAuth{},
 		Store: st,
 	})
 

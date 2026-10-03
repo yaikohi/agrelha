@@ -96,6 +96,7 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 
 	backupsDir := t.TempDir()
 	cfg.BackupsDir = backupsDir
+	d.Auth = testAdminAuth{}
 	app = wiring.BuildServer(context.Background(), cfg, d)
 
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{

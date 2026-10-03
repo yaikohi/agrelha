@@ -80,7 +80,7 @@ func (h *Handler) Register(router fiber.Router) {
 // DashboardPage renders the public/admin landing view.
 func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 	fk, fm := shared.TakeFlash(c)
-	isAdmin := shared.IsAdmin(h.cfg.Auth, c)
+	isAdmin := shared.IsAdmin(c)
 	mcSummary := pages.MinecraftSummaryUI{
 		MaxInstances:   4,
 		MaxRunning:     2,

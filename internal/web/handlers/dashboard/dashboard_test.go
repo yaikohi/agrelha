@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"agrelha/internal/web/shared"
 	"context"
 	"fmt"
 	"io"
@@ -27,9 +28,17 @@ func TestDashboardPage(t *testing.T) {
 	})
 
 	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		if c.Query("admin") == "1" {
+			c.Locals(shared.PrincipalKey, domain.NewPrincipal(domain.Identity{
+				Subject: "admin", Roles: []domain.Role{domain.RoleAdmin},
+			}))
+		}
+		return c.Next()
+	})
 	h.Register(app)
 
-	// 1. Visit dashboard as guest
+	// 1. The dashboard stays public: a guest still gets a page.
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	resp, err := app.Test(req)
 	if err != nil {
@@ -38,9 +47,20 @@ func TestDashboardPage(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET / status = %d, want 200", resp.StatusCode)
 	}
-	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), "game-01") {
-		t.Errorf("expected node name game-01 in dashboard body")
+	guestBody, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(guestBody), "game-01") {
+		t.Errorf("guest dashboard must not expose the node name")
+	}
+
+	// 2. An admin sees the operational detail.
+	reqAdmin := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+	respAdmin, err := app.Test(reqAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminBody, _ := io.ReadAll(respAdmin.Body)
+	if !strings.Contains(string(adminBody), "game-01") {
+		t.Errorf("expected node name game-01 in the admin dashboard body")
 	}
 }
 
@@ -355,5 +375,3 @@ func TestDashboardRemainingEdges(t *testing.T) {
 	}
 	_, _ = sseCtx.Response.WriteTo(&failAfterWriteOnce{})
 }
-
-

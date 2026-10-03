@@ -32,6 +32,7 @@ func TestServerControlSSEToast(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "valheim", Namespace: "valheim"},
 	})
 	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{
+		Auth:  testAdminAuth{},
 		Store: st,
 		K8s:   k8s.NewWithClientset(cs, "valheim", "valheim"),
 	})
@@ -65,7 +66,7 @@ func TestServerControlNoK8sNoAudit(t *testing.T) {
 	}
 	defer st.Close()
 
-	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{Store: st})
+	app := wiring.BuildServer(context.Background(), &config.Config{}, wiring.Deps{Auth: testAdminAuth{}, Store: st})
 
 	resp, err := app.Test(httptest.NewRequest(fiber.MethodPost, "/server/stop", nil))
 	if err != nil {
@@ -103,6 +104,7 @@ func TestMinecraftServerControlSSEToast(t *testing.T) {
 		MinecraftNamespace:  "minecraft-neoforge",
 	}
 	app := wiring.BuildServer(context.Background(), cfg, wiring.Deps{
+		Auth:  testAdminAuth{},
 		Store: st,
 		MCK8s: k8s.NewWithClientset(cs, "minecraft-neoforge", "minecraft-neoforge"),
 	})
@@ -134,6 +136,7 @@ func TestRootDashboard(t *testing.T) {
 	defer st.Close()
 
 	app := wiring.BuildServer(context.Background(), &config.Config{GrafanaDashboardURL: "https://grafana.example.com"}, wiring.Deps{
+		Auth:  testAdminAuth{},
 		Store: st,
 	})
 
@@ -266,12 +269,8 @@ func TestDevAuthenticatorLifecycle(t *testing.T) {
 	}
 	defer st.Close()
 
-	cfg := &config.Config{
-		AllowedEmail: "ykhi@proton.me",
-	}
-	devAuth := auth.NewDev(auth.Config{
-		AllowedEmail: cfg.AllowedEmail,
-	})
+	cfg := &config.Config{}
+	devAuth := auth.NewDev(auth.Config{}, auth.WithSessions(st))
 	app := wiring.BuildServer(context.Background(), cfg, wiring.Deps{
 		Store: st,
 		Auth:  devAuth,

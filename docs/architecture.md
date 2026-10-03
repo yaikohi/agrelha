@@ -307,6 +307,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `ports` | The interfaces the core needs from outside: Runtime, StateStore, Reconciler, Game, Console, Auth, PackageCatalog, InstanceRepository, and the recorder interfaces. |
 | `app/access` | Minecraft mods, whitelist and operator persistence (`ModManager`, `AccessManager`), synchronised to the live console. |
 | `app/admins` | Valheim admin Steam64 IDs, held in declarative state. |
+| `app/authz` | Accounts and the access decision: who may act on which Instance, and the Role that names it in the identity provider. |
 | `app/backups` | Scheduled world snapshots and retention pruning. |
 | `app/bepinex` | Reconciles the Generated configs a mod writes on the PVC with the Override set agrelha keeps in git, and commits the operator's edits. |
 | `app/content` | Mod cart compatibility analysis before an instance is created. |
@@ -319,6 +320,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `app/mods` | **Unused.** Edited the global `valheim-mods` ConfigMap, which no longer exists; its last consumer was removed with the global mods page. Constructed in `wiring` but never read. |
 | `app/occupancy` | Tails each world's pod log for join/leave and reports who is connected, for worlds whose A2S query is unavailable. |
 | `app/modupdates` | Asks the catalogue whether installed mods have newer versions, applies the ones chosen, and holds the single step back. |
+| `app/requests` | World creation requests from non-admin Accounts: submit, approve, deny, and the cap on how many an Account may create unaided. |
 | `app/restarts` | Holds a restart that a committed change needs until the world is empty, and lets the operator force one. |
 
 ### Driven adapters
@@ -327,6 +329,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 |---|---|
 | `infra/auth/local` | Password authentication with Argon2 hashing and session cookies. |
 | `infra/auth/oidc` | OIDC authentication against Zitadel, plus a dev-mode bypass. |
+| `infra/roles/zitadel` | Zitadel client: mints and retires one project Role per Instance, and grants them to Accounts, as a project-scoped service user. |
 | `infra/backups` | Backup archive naming, stat and pruning on the local or NFS filesystem. |
 | `infra/content/mcversions` | Minecraft version list and version comparison. |
 | `infra/content/modpackindex` | Modpack Index REST client. |
@@ -354,11 +357,13 @@ this list and `go list ./internal/...` disagree, in either direction.
 |---|---|
 | `web` | Route registration and the Fiber app: which handlers are public and which sit behind auth. |
 | `web/components` | Typed presentation primitives — Button, StatusPill, TabBar, Modal — and the colour language that goes with them. |
+| `web/guard` | Resolves the request Principal and refuses what the Account's roles do not cover, as a page redirect, a Datastar patch or a JSON error. |
 | `web/handlers/access` | Admin grant and revoke, and the history page. |
 | `web/handlers/backups` | Backup create, restore in place, restore as new, download. |
 | `web/handlers/console` | Live console, log streaming and direct server commands. |
 | `web/handlers/content` | Mod detail pages, global configs, and the SSRF-guarded image proxy. |
 | `web/handlers/dashboard` | The public hub page and the main SSE signal stream. |
+| `web/handlers/grants` | The Accounts and world-request pages: which Account may operate which Instance, signing an Account out everywhere, and approving the worlds Accounts ask to create. |
 | `web/handlers/minecraft` | Minecraft instance pages: detail tabs, mod search and install, configs, lifecycle. |
 | `web/handlers/valheim` | Valheim instance pages: detail tabs, mod search, mod updates, configs, lifecycle, profile export. |
 | `web/handlers/wizard` | The Minecraft provisioning flow: pack and mod search, cart validation, creation. |

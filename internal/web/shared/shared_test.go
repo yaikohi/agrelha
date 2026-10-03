@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"agrelha/internal/domain"
 	"context"
 	"io"
 	"net/http"
@@ -120,7 +121,25 @@ func TestActorAndIsAdmin(t *testing.T) {
 	}
 
 	app.Get("/is-admin", func(c *fiber.Ctx) error {
-		if IsAdmin(nil, c) {
+		if IsAdmin(c) {
+			return c.SendString("true")
+		}
+		return c.SendString("false")
+	})
+	app.Get("/is-admin-set", func(c *fiber.Ctx) error {
+		c.Locals(PrincipalKey, domain.NewPrincipal(domain.Identity{
+			Subject: "s", Roles: []domain.Role{domain.RoleAdmin},
+		}))
+		if IsAdmin(c) {
+			return c.SendString("true")
+		}
+		return c.SendString("false")
+	})
+	app.Get("/is-admin-plain", func(c *fiber.Ctx) error {
+		c.Locals(PrincipalKey, domain.NewPrincipal(domain.Identity{
+			Subject: "s", Roles: []domain.Role{domain.RoleUser},
+		}))
+		if IsAdmin(c) {
 			return c.SendString("true")
 		}
 		return c.SendString("false")
@@ -129,8 +148,22 @@ func TestActorAndIsAdmin(t *testing.T) {
 	reqAdmin := httptest.NewRequest(http.MethodGet, "/is-admin", nil)
 	respAdmin, _ := app.Test(reqAdmin)
 	n, _ = respAdmin.Body.Read(buf)
+	if string(buf[:n]) != "false" {
+		t.Errorf("IsAdmin with no principal must be false, got %q", string(buf[:n]))
+	}
+
+	reqSet := httptest.NewRequest(http.MethodGet, "/is-admin-set", nil)
+	respSet, _ := app.Test(reqSet)
+	n, _ = respSet.Body.Read(buf)
 	if string(buf[:n]) != "true" {
-		t.Errorf("IsAdmin(nil) should be true, got %q", string(buf[:n]))
+		t.Errorf("IsAdmin with agrelha-admin must be true, got %q", string(buf[:n]))
+	}
+
+	reqPlain := httptest.NewRequest(http.MethodGet, "/is-admin-plain", nil)
+	respPlain, _ := app.Test(reqPlain)
+	n, _ = respPlain.Body.Read(buf)
+	if string(buf[:n]) != "false" {
+		t.Errorf("IsAdmin with only agrelha-user must be false, got %q", string(buf[:n]))
 	}
 }
 
@@ -158,11 +191,15 @@ type mockAuth struct {
 	authenticated bool
 }
 
-func (m *mockAuth) Middleware() fiber.Handler         { return func(c *fiber.Ctx) error { return c.Next() } }
-func (m *mockAuth) IsAuthenticated(c *fiber.Ctx) bool { return m.authenticated }
-func (m *mockAuth) Login(c *fiber.Ctx) error          { return nil }
-func (m *mockAuth) Callback(c *fiber.Ctx) error       { return nil }
-func (m *mockAuth) Logout(c *fiber.Ctx) error         { return nil }
+func (m *mockAuth) Identify(c *fiber.Ctx) (domain.Identity, bool) {
+	if !m.authenticated {
+		return domain.Identity{}, false
+	}
+	return domain.Identity{Subject: "mock", Roles: []domain.Role{domain.RoleAdmin}}, true
+}
+func (m *mockAuth) Login(c *fiber.Ctx) error    { return nil }
+func (m *mockAuth) Callback(c *fiber.Ctx) error { return nil }
+func (m *mockAuth) Logout(c *fiber.Ctx) error   { return nil }
 
 func TestSharedRemainingEdges(t *testing.T) {
 	app := fiber.New()
@@ -181,10 +218,13 @@ func TestSharedRemainingEdges(t *testing.T) {
 		t.Errorf("expected empty flash on corrupt cookie, got %q", string(body[:n]))
 	}
 
-	// 2. IsAdmin with Auth implementation
+	// 2. IsAdmin follows the Principal resolved from Auth.Identify
 	app.Get("/is-admin-auth", func(c *fiber.Ctx) error {
 		var auth ports.Auth = &mockAuth{authenticated: c.Query("admin") == "1"}
-		if IsAdmin(auth, c) {
+		if id, ok := auth.Identify(c); ok {
+			c.Locals(PrincipalKey, domain.NewPrincipal(id))
+		}
+		if IsAdmin(c) {
 			return c.SendString("true")
 		}
 		return c.SendString("false")

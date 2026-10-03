@@ -14,11 +14,15 @@ import (
 type Store struct{ db *sql.DB }
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	dsn := path
+	if !strings.Contains(dsn, "?") {
+		dsn += "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	}
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;`); err != nil {
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
 		return nil, err
 	}
 	s := &Store{db: db}
@@ -143,6 +147,41 @@ func (s *Store) migrate() error {
 		key   TEXT PRIMARY KEY,
 		value TEXT
 	);
+	CREATE TABLE IF NOT EXISTS accounts (
+		subject    TEXT PRIMARY KEY,
+		email      TEXT NOT NULL DEFAULT '',
+		name       TEXT NOT NULL DEFAULT '',
+		first_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_seen  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
+	CREATE TABLE IF NOT EXISTS sessions (
+		id         TEXT PRIMARY KEY,
+		subject    TEXT NOT NULL,
+		email      TEXT NOT NULL DEFAULT '',
+		name       TEXT NOT NULL DEFAULT '',
+		roles      TEXT NOT NULL DEFAULT '',
+		id_token   TEXT NOT NULL DEFAULT '',
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		expires_at TIMESTAMP NOT NULL
+	);
+	CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+	CREATE INDEX IF NOT EXISTS idx_sessions_subject ON sessions(subject);
+	CREATE TABLE IF NOT EXISTS instance_requests (
+		id         TEXT PRIMARY KEY,
+		subject    TEXT NOT NULL,
+		game_id    TEXT NOT NULL,
+		name       TEXT NOT NULL,
+		spec       TEXT NOT NULL,
+		status     TEXT NOT NULL DEFAULT 'pending',
+		note       TEXT NOT NULL DEFAULT '',
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		decided_at TIMESTAMP,
+		decided_by TEXT NOT NULL DEFAULT '',
+		number     INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE INDEX IF NOT EXISTS idx_requests_status ON instance_requests(status);
+	CREATE INDEX IF NOT EXISTS idx_requests_subject ON instance_requests(subject);
 	`)
 	if err != nil {
 		return err
@@ -151,6 +190,8 @@ func (s *Store) migrate() error {
 		`ALTER TABLE players ADD COLUMN online INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE players ADD COLUMN online_since TIMESTAMP`,
 		`ALTER TABLE valheim_instances ADD COLUMN source TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE valheim_instances ADD COLUMN created_by TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE mc_instances ADD COLUMN created_by TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err

@@ -388,6 +388,7 @@ func TestWiring_InstanceManagerClosures(t *testing.T) {
 
 	cfg := &config.Config{
 		DBPath:              dbPath,
+		AuthMode:            "dev",
 		MinecraftDeployment: "minecraft-modded",
 		MinecraftNamespace:  "minecraft-modded",
 		ValheimDeployment:   "valheim",
@@ -587,6 +588,7 @@ func TestWiring_BuildServer_LegacyValheimFailure(t *testing.T) {
 	// Close store so repo.Get(1) fails with database closed error
 	st.Close()
 
+	d.Auth = testAdminAuth{}
 	app := BuildServer(context.Background(), cfg, d)
 	if app == nil {
 		t.Fatal("expected server app")
@@ -622,6 +624,7 @@ func TestWiring_ValheimVersionResolver_Branches(t *testing.T) {
 
 	cfg := &config.Config{
 		DBPath:           dbPath,
+		AuthMode:         "dev",
 		ThunderstoreAPI:  tsSrv.URL,
 		ValheimNamespace: "valheim",
 		LocalStateDir:    filepath.Join(tempDir, "state"),

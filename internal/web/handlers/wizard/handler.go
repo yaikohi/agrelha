@@ -1,6 +1,7 @@
 package wizard
 
 import (
+	"agrelha/internal/app/requests"
 	"context"
 
 	mccontent "agrelha/internal/app/content"
@@ -28,6 +29,7 @@ type ModHit struct {
 
 // Config defines the narrow delivery dependencies for the Minecraft provisioning wizard.
 type Config struct {
+	Requests         *requests.Service
 	MCInstances      *instances.InstanceManager
 	Actor            func(*fiber.Ctx) string
 	VersionReleases  func(ctx context.Context, limit int) []string

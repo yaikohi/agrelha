@@ -4,7 +4,7 @@ import "fmt"
 
 templ MinecraftProvisioning(inst InstanceUI) {
 	@Layout("Provisioning " + inst.Name) {
-		@nav()
+		@nav(true)
 		<div
 			class="mx-auto max-w-2xl space-y-6"
 			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,lb_ip:%q,num:%d,detail:'Waiting for ArgoCD synchronization...'}", inst.LBIP, inst.Number) }

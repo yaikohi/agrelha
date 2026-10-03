@@ -25,6 +25,7 @@ type InstanceRecord struct {
 	WorldType    string
 	MaxPlayers   int
 	LBIP         string
+	CreatedBy    string
 	CreatedAt    time.Time
 	LastUsed     time.Time
 }
@@ -33,8 +34,8 @@ func (s *Store) UpsertInstance(inst InstanceRecord) error {
 	_, err := s.db.Exec(`
 		INSERT INTO mc_instances (
 			number, name, slug, seed, loader, source, pack, pack_provider, pack_ref,
-			mc_version, tier, state, motd, difficulty, gamemode, world_type, max_players, lb_ip, last_used
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			mc_version, tier, state, motd, difficulty, gamemode, world_type, max_players, lb_ip, created_by, last_used
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(number) DO UPDATE SET
 			name          = excluded.name,
 			slug          = excluded.slug,
@@ -53,11 +54,12 @@ func (s *Store) UpsertInstance(inst InstanceRecord) error {
 			world_type    = excluded.world_type,
 			max_players   = excluded.max_players,
 			lb_ip         = excluded.lb_ip,
+			created_by    = CASE WHEN mc_instances.created_by = '' THEN excluded.created_by ELSE mc_instances.created_by END,
 			last_used     = CURRENT_TIMESTAMP`,
 		inst.Number, inst.Name, inst.Slug, inst.Seed, inst.Loader, inst.Source,
 		inst.Pack, inst.PackProvider, inst.PackRef, inst.MCVersion, inst.Tier,
 		inst.State, inst.MOTD, inst.Difficulty, inst.Gamemode, inst.WorldType,
-		inst.MaxPlayers, inst.LBIP,
+		inst.MaxPlayers, inst.LBIP, inst.CreatedBy,
 	)
 	return err
 }
@@ -69,7 +71,7 @@ func (s *Store) GetInstance(number int) (*InstanceRecord, error) {
 		       COALESCE(mc_version,''), tier, state, COALESCE(motd,''),
 		       COALESCE(difficulty,'normal'), COALESCE(gamemode,'survival'),
 		       COALESCE(world_type,'default'), COALESCE(max_players,20),
-		       COALESCE(lb_ip,''), created_at, last_used
+		       COALESCE(lb_ip,''), COALESCE(created_by,''), created_at, last_used
 		FROM mc_instances WHERE number = ?`, number)
 
 	var inst InstanceRecord
@@ -78,7 +80,7 @@ func (s *Store) GetInstance(number int) (*InstanceRecord, error) {
 		&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Loader, &inst.Source,
 		&inst.Pack, &inst.PackProvider, &inst.PackRef, &inst.MCVersion, &inst.Tier,
 		&inst.State, &inst.MOTD, &inst.Difficulty, &inst.Gamemode, &inst.WorldType,
-		&inst.MaxPlayers, &inst.LBIP, &created, &used,
+		&inst.MaxPlayers, &inst.LBIP, &inst.CreatedBy, &created, &used,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -98,7 +100,7 @@ func (s *Store) ListInstances() ([]InstanceRecord, error) {
 		       COALESCE(mc_version,''), tier, state, COALESCE(motd,''),
 		       COALESCE(difficulty,'normal'), COALESCE(gamemode,'survival'),
 		       COALESCE(world_type,'default'), COALESCE(max_players,20),
-		       COALESCE(lb_ip,''), created_at, last_used
+		       COALESCE(lb_ip,''), COALESCE(created_by,''), created_at, last_used
 		FROM mc_instances ORDER BY number ASC`)
 	if err != nil {
 		return nil, err
@@ -113,7 +115,7 @@ func (s *Store) ListInstances() ([]InstanceRecord, error) {
 			&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Loader, &inst.Source,
 			&inst.Pack, &inst.PackProvider, &inst.PackRef, &inst.MCVersion, &inst.Tier,
 			&inst.State, &inst.MOTD, &inst.Difficulty, &inst.Gamemode, &inst.WorldType,
-			&inst.MaxPlayers, &inst.LBIP, &created, &used,
+			&inst.MaxPlayers, &inst.LBIP, &inst.CreatedBy, &created, &used,
 		); err != nil {
 			return nil, err
 		}
@@ -137,8 +139,8 @@ func (s *Store) DeleteInstance(number int) error {
 func (s *Store) UpsertValheimInstance(inst InstanceRecord) error {
 	_, err := s.db.Exec(`
 		INSERT INTO valheim_instances (
-			number, name, slug, seed, password, tier, state, motd, max_players, lb_ip, source, last_used
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			number, name, slug, seed, password, tier, state, motd, max_players, lb_ip, source, created_by, last_used
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(number) DO UPDATE SET
 			name        = excluded.name,
 			slug        = excluded.slug,
@@ -150,9 +152,10 @@ func (s *Store) UpsertValheimInstance(inst InstanceRecord) error {
 			max_players = excluded.max_players,
 			lb_ip       = excluded.lb_ip,
 			source      = excluded.source,
+			created_by  = CASE WHEN valheim_instances.created_by = '' THEN excluded.created_by ELSE valheim_instances.created_by END,
 			last_used   = CURRENT_TIMESTAMP`,
 		inst.Number, inst.Name, inst.Slug, inst.Seed, inst.Password,
-		inst.Tier, inst.State, inst.MOTD, inst.MaxPlayers, inst.LBIP, inst.Source,
+		inst.Tier, inst.State, inst.MOTD, inst.MaxPlayers, inst.LBIP, inst.Source, inst.CreatedBy,
 	)
 	return err
 }
@@ -161,7 +164,7 @@ func (s *Store) GetValheimInstance(number int) (*InstanceRecord, error) {
 	row := s.db.QueryRow(`
 		SELECT number, name, slug, COALESCE(seed,''), COALESCE(password,''),
 		       tier, state, COALESCE(motd,''), COALESCE(max_players,10),
-		       COALESCE(lb_ip,''), COALESCE(source,''), created_at, last_used
+		       COALESCE(lb_ip,''), COALESCE(source,''), COALESCE(created_by,''), created_at, last_used
 		FROM valheim_instances WHERE number = ?`, number)
 
 	var inst InstanceRecord
@@ -169,7 +172,7 @@ func (s *Store) GetValheimInstance(number int) (*InstanceRecord, error) {
 	err := row.Scan(
 		&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Password,
 		&inst.Tier, &inst.State, &inst.MOTD, &inst.MaxPlayers,
-		&inst.LBIP, &inst.Source, &created, &used,
+		&inst.LBIP, &inst.Source, &inst.CreatedBy, &created, &used,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -186,7 +189,7 @@ func (s *Store) ListValheimInstances() ([]InstanceRecord, error) {
 	rows, err := s.db.Query(`
 		SELECT number, name, slug, COALESCE(seed,''), COALESCE(password,''),
 		       tier, state, COALESCE(motd,''), COALESCE(max_players,10),
-		       COALESCE(lb_ip,''), COALESCE(source,''), created_at, last_used
+		       COALESCE(lb_ip,''), COALESCE(source,''), COALESCE(created_by,''), created_at, last_used
 		FROM valheim_instances ORDER BY number ASC`)
 	if err != nil {
 		return nil, err
@@ -200,7 +203,7 @@ func (s *Store) ListValheimInstances() ([]InstanceRecord, error) {
 		if err := rows.Scan(
 			&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Password,
 			&inst.Tier, &inst.State, &inst.MOTD, &inst.MaxPlayers,
-			&inst.LBIP, &inst.Source, &created, &used,
+			&inst.LBIP, &inst.Source, &inst.CreatedBy, &created, &used,
 		); err != nil {
 			return nil, err
 		}

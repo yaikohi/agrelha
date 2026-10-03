@@ -53,6 +53,8 @@ type InstanceManager struct {
 	backupsDir          string
 	preStopHook         func(ctx context.Context, inst domain.Instance)
 	preDeleteHook       func(ctx context.Context, inst domain.Instance)
+	roleRegistrar       func(ctx context.Context, inst domain.Instance) error
+	roleRetirer         func(ctx context.Context, inst domain.Instance) error
 	telemetryProvider   func(ctx context.Context, inst domain.Instance) (players int, known bool)
 	afterSyncHook       func(cm, dep, key string, want func(string) bool)
 	commandExecutor     func(ctx context.Context, inst domain.Instance, cmd string) (string, error)
@@ -142,6 +144,14 @@ func WithPreStopHook(fn func(ctx context.Context, inst domain.Instance)) Option 
 
 func WithPreDeleteHook(fn func(ctx context.Context, inst domain.Instance)) Option {
 	return func(m *InstanceManager) { m.preDeleteHook = fn }
+}
+
+func WithInstanceRoleRegistrar(fn func(ctx context.Context, inst domain.Instance) error) Option {
+	return func(m *InstanceManager) { m.roleRegistrar = fn }
+}
+
+func WithInstanceRoleRetirer(fn func(ctx context.Context, inst domain.Instance) error) Option {
+	return func(m *InstanceManager) { m.roleRetirer = fn }
 }
 
 func WithTelemetryProvider(fn func(ctx context.Context, inst domain.Instance) (players int, known bool)) Option {
@@ -405,6 +415,12 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 		return nil, err
 	}
 
+	if m.roleRegistrar != nil {
+		if err := m.roleRegistrar(ctx, inst); err != nil {
+			return nil, fmt.Errorf("reserve access role for instance %02d: %w", inst.Number, err)
+		}
+	}
+
 	files, err := m.renderer.Render(inst, mods)
 	if err != nil {
 		return nil, fmt.Errorf("render manifests: %w", err)
@@ -553,6 +569,18 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int, actor ...
 
 	if err := m.repo.Delete(num); err != nil {
 		return err
+	}
+
+	if m.roleRetirer != nil {
+		if err := m.roleRetirer(ctx, *inst); err != nil {
+			slog.Error("instance role not retired, orphaned in the identity provider",
+				"game", m.gamePrefix(), "number", num, "err", err)
+			if m.audit != nil {
+				_ = m.audit.RecordAudit(actorOrHyphen(actor),
+					fmt.Sprintf("%s-instance-role-orphaned", m.gamePrefix()),
+					fmt.Sprintf("Instance #%02d: %v", num, err))
+			}
+		}
 	}
 
 	deleteAction := fmt.Sprintf("%s-instance-delete", m.gamePrefix())

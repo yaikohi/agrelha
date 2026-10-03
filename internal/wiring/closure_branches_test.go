@@ -308,6 +308,7 @@ func TestWiring_WiringRemainingBranches(t *testing.T) {
 
 	cfg := &config.Config{
 		DBPath:                dbPath,
+		AuthMode:              "dev",
 		ThunderstoreAPI:       tsSrv.URL,
 		ModrinthAPI:           mrSrv.URL,
 		MinecraftRconAddr:     rconAddr,
@@ -539,7 +540,10 @@ func TestWiring_BuildAuth_OIDCSuccess(t *testing.T) {
 		OIDCClientSecret: "client-secret",
 	}
 
-	auth := buildAuth(context.Background(), cfg, st)
+	auth, err := buildAuth(context.Background(), cfg, st, nil)
+	if err != nil {
+		t.Fatalf("buildAuth with a reachable OIDC issuer: %v", err)
+	}
 	if auth == nil {
 		t.Fatal("expected non-nil auth from buildAuth")
 	}
@@ -711,6 +715,7 @@ func TestWiring_ValheimGame_Options_Branches(t *testing.T) {
 
 	cfg := &config.Config{
 		DBPath:            dbPath,
+		AuthMode:          "dev",
 		ValheimDeployment: "valheim",
 		ValheimNamespace:  "valheim",
 	}
@@ -852,6 +857,7 @@ func TestWiring_MinecraftGame_Options_Branches(t *testing.T) {
 
 	cfg := &config.Config{
 		DBPath:              dbPath,
+		AuthMode:            "dev",
 		MinecraftDeployment: "mc",
 		MinecraftNamespace:  "mc",
 		ModrinthAPI:         failSrv.URL,
@@ -945,6 +951,7 @@ func TestWiring_ValheimSourceReconciliation_Branches(t *testing.T) {
 
 	cfgWired := &config.Config{
 		DBPath:            dbPath,
+		AuthMode:          "dev",
 		ValheimDeployment: "valheim-legacy",
 		ValheimNamespace:  "valheim",
 	}

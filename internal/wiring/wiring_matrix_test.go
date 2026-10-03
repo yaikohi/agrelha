@@ -283,6 +283,7 @@ func TestWiring_Build_FullK8sMatrix(t *testing.T) {
 
 	cfg := &config.Config{
 		DBPath:                dbPath,
+		AuthMode:              "dev",
 		MinecraftRconPassword: "matrixpass",
 		MinecraftRconAddr:     rconAddr,
 		ValheimDeployment:     "valheim",
@@ -397,6 +398,7 @@ func TestWiring_Build_FullK8sMatrix(t *testing.T) {
 	_, _ = deps.MinecraftGame.ExportClientBundle(ctx, domain.Instance{Number: 1, Slug: "mc-matrix-01", Loader: "", MCVersion: ""})
 
 	// Build Server
+	deps.Auth = testAdminAuth{}
 	app := BuildServer(ctx, cfg, deps)
 
 	// Call endpoints to exercise handlers and callbacks
@@ -444,6 +446,7 @@ func TestWiring_Build_FallbacksAndErrors(t *testing.T) {
 
 	cfg := &config.Config{
 		DBPath:            dbPath,
+		AuthMode:          "dev",
 		Runtime:           "docker",
 		LocalStateDir:     filepath.Join(tempDir, "local_state"),
 		ComposeDir:        filepath.Join(tempDir, "compose"),
@@ -481,19 +484,20 @@ func TestWiring_Build_FallbacksAndErrors(t *testing.T) {
 		t.Errorf("expected unconfigured state store and nil committer")
 	}
 
-	// Test buildAuth with invalid OIDC issuer (falls back to dev auth)
 	cfgOIDC := &config.Config{
 		OIDCIssuer: "http://invalid-oidc-issuer.example.com",
 	}
-	auth := buildAuth(context.Background(), cfgOIDC, st)
-	if auth == nil {
-		t.Errorf("expected dev auth fallback")
+	if _, err := buildAuth(context.Background(), cfgOIDC, st, nil); err == nil {
+		t.Errorf("expected buildAuth to fail closed on unreachable OIDC issuer")
 	}
 
-	// Test buildAuth with empty store (no users, no OIDC) -> oidc.NewDev
-	authDev := buildAuth(context.Background(), &config.Config{}, st)
-	if authDev == nil {
-		t.Errorf("expected dev auth fallback when store has no users")
+	if _, err := buildAuth(context.Background(), &config.Config{}, st, nil); err == nil {
+		t.Errorf("expected buildAuth to fail closed with no OIDC, no users and no AUTH_MODE")
+	}
+
+	authDev, err := buildAuth(context.Background(), &config.Config{AuthMode: "dev"}, st, nil)
+	if err != nil || authDev == nil {
+		t.Errorf("expected dev authenticator with AUTH_MODE=dev, got %v", err)
 	}
 }
 
