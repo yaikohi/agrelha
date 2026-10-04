@@ -84,7 +84,7 @@ func buildApp() *fiber.App {
 // how a handler actually registered its route rather than how it is spelled.
 func normalise(p string) []string {
 	var out []string
-	for _, seg := range strings.Split(strings.Trim(p, "/"), "/") {
+	for seg := range strings.SplitSeq(strings.Trim(p, "/"), "/") {
 		if strings.HasPrefix(seg, ":") {
 			if i := strings.Index(seg, "<"); i >= 0 {
 				seg = seg[:i]

@@ -275,8 +275,8 @@ func TestContentEdges(t *testing.T) {
 	c := app.AcquireCtx(&fastCtx)
 	defer app.ReleaseCtx(c)
 
-	if a := hActor.cfg.Actor(c); a != "local" {
-		t.Errorf("expected 'local', got %q", a)
+	if a := hActor.cfg.Actor(c); a != "-" {
+		t.Errorf("expected '-', got %q", a)
 	}
 	c.Locals("actor", "supermod")
 	if a := hActor.cfg.Actor(c); a != "supermod" {
@@ -417,5 +417,3 @@ func TestContentEdges(t *testing.T) {
 		t.Errorf("expected 502 for network failure, got %d", respImgFail.StatusCode)
 	}
 }
-
-

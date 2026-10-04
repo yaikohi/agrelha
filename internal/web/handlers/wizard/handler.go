@@ -2,6 +2,7 @@ package wizard
 
 import (
 	"agrelha/internal/app/requests"
+	"agrelha/internal/web/shared"
 	"context"
 
 	mccontent "agrelha/internal/app/content"
@@ -46,12 +47,7 @@ type Handler struct {
 
 func New(cfg Config) *Handler {
 	if cfg.Actor == nil {
-		cfg.Actor = func(c *fiber.Ctx) string {
-			if a, ok := c.Locals("actor").(string); ok && a != "" {
-				return a
-			}
-			return "local"
-		}
+		cfg.Actor = shared.Actor
 	}
 	return &Handler{cfg: cfg}
 }

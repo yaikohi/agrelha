@@ -264,14 +264,12 @@ func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
 	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	for i, ref := range refs {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			v, _, err := c.latestVersionForRef(ctx, ref, inst)
 			results[i] = result{ref: ref, latest: v, err: err}
-		}()
+		})
 	}
 	wg.Wait()
 

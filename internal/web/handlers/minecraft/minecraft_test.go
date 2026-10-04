@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -75,9 +76,7 @@ func (s *mockMCStateStore) PutTree(_ context.Context, _ string, tree map[string]
 	if s.docs == nil {
 		s.docs = make(map[string]ports.Document)
 	}
-	for k, v := range tree {
-		s.docs[k] = v
-	}
+	maps.Copy(s.docs, tree)
 	return nil
 }
 
@@ -636,7 +635,6 @@ func TestMCConfigAndInstanceConfigEndpoints(t *testing.T) {
 		t.Errorf("expected file name required toast, got: %s", string(bodyEmptyDel))
 	}
 
-
 	// Delete valid
 	reqInstDelete := httptest.NewRequest("POST", "/api/minecraft/1/configs/delete", strings.NewReader(`{"file":"server.properties"}`))
 	reqInstDelete.Header.Set("Content-Type", "application/json")
@@ -817,4 +815,3 @@ func TestMCDashboardInstanceActions(t *testing.T) {
 		}
 	}
 }
-

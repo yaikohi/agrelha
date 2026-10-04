@@ -139,8 +139,8 @@ func TestValheimHandlerEdges(t *testing.T) {
 
 	resp1, _ := app.Test(httptest.NewRequest("GET", "/actor", nil))
 	b1, _ := io.ReadAll(resp1.Body)
-	if string(b1) != "local" {
-		t.Errorf("expected local, got %s", b1)
+	if string(b1) != "-" {
+		t.Errorf("expected -, got %s", b1)
 	}
 
 	resp2, _ := app.Test(httptest.NewRequest("GET", "/actor-custom", nil))
@@ -151,8 +151,8 @@ func TestValheimHandlerEdges(t *testing.T) {
 
 	resp3, _ := app.Test(httptest.NewRequest("GET", "/actor-empty", nil))
 	b3, _ := io.ReadAll(resp3.Body)
-	if string(b3) != "local" {
-		t.Errorf("expected local, got %s", b3)
+	if string(b3) != "-" {
+		t.Errorf("expected -, got %s", b3)
 	}
 
 	// 2. Default ApplyValheimAfterSync

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,9 +95,7 @@ func (s *mockOpStateStore) PutTree(_ context.Context, _ string, tree map[string]
 	if s.docs == nil {
 		s.docs = make(map[string]ports.Document)
 	}
-	for k, v := range tree {
-		s.docs[k] = v
-	}
+	maps.Copy(s.docs, tree)
 	return nil
 }
 func (s *mockOpStateStore) Patch(ctx context.Context, path, msg string, fn func(*ports.Document) (bool, error)) (bool, error) {

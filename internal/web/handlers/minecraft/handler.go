@@ -1,6 +1,7 @@
 package minecraft
 
 import (
+	"agrelha/internal/web/shared"
 	"context"
 	"fmt"
 	"io"
@@ -56,12 +57,7 @@ type Handler struct {
 // New creates a new Minecraft Handler.
 func New(cfg Config) *Handler {
 	if cfg.Actor == nil {
-		cfg.Actor = func(c *fiber.Ctx) string {
-			if a, ok := c.Locals("actor").(string); ok && a != "" {
-				return a
-			}
-			return "local"
-		}
+		cfg.Actor = shared.Actor
 	}
 	if cfg.ApplyMinecraftAfterSync == nil {
 		cfg.ApplyMinecraftAfterSync = func(string, string, string, func(string) bool) {}

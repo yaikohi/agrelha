@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -54,21 +55,11 @@ type Identity struct {
 }
 
 func (i Identity) HasRole(want Role) bool {
-	for _, r := range i.Roles {
-		if r == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(i.Roles, want)
 }
 
 func (i Identity) MaySignIn() bool {
-	for _, r := range i.Roles {
-		if IsAgrelhaRole(r) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(i.Roles, IsAgrelhaRole)
 }
 
 func (i Identity) InstanceRoles() []Role {

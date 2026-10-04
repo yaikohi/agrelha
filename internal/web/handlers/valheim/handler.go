@@ -2,6 +2,7 @@ package valheim
 
 import (
 	"agrelha/internal/app/requests"
+	"agrelha/internal/web/shared"
 	"context"
 	"fmt"
 	"io"
@@ -72,12 +73,7 @@ type Handler struct {
 // New creates a new Valheim Handler.
 func New(cfg Config) *Handler {
 	if cfg.Actor == nil {
-		cfg.Actor = func(c *fiber.Ctx) string {
-			if a, ok := c.Locals("actor").(string); ok && a != "" {
-				return a
-			}
-			return "local"
-		}
+		cfg.Actor = shared.Actor
 	}
 	if cfg.ApplyValheimAfterSync == nil {
 		cfg.ApplyValheimAfterSync = func(string, string, string, func(string) bool) {}

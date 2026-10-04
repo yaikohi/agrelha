@@ -544,4 +544,3 @@ func TestConsoleEdges(t *testing.T) {
 	_ = sseCtx.Response.CloseBodyStream()
 	time.Sleep(50 * time.Millisecond)
 }
-

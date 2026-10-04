@@ -1,6 +1,7 @@
 package content
 
 import (
+	"agrelha/internal/web/shared"
 	"context"
 	"fmt"
 	"io"
@@ -34,12 +35,7 @@ type Handler struct {
 // New constructs a new content Handler.
 func New(cfg Config) *Handler {
 	if cfg.Actor == nil {
-		cfg.Actor = func(c *fiber.Ctx) string {
-			if a, ok := c.Locals("actor").(string); ok && a != "" {
-				return a
-			}
-			return "local"
-		}
+		cfg.Actor = shared.Actor
 	}
 	if cfg.ApplyAfterSync == nil {
 		cfg.ApplyAfterSync = func(string, string, func(string) bool) {}
@@ -145,4 +141,3 @@ func PublicHost(host string) bool {
 	}
 	return true
 }
-

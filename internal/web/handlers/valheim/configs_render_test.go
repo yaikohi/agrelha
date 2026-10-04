@@ -166,7 +166,7 @@ func TestTruncationIsStatedNotHidden(t *testing.T) {
 func TestRawEditorHoldsTheOverrideSetNotTheGeneratedFile(t *testing.T) {
 	big := strings.Builder{}
 	big.WriteString("[Huge]\n\n")
-	for i := 0; i < 5000; i++ {
+	for range 5000 {
 		big.WriteString("## a description line that makes this file large\n")
 		big.WriteString("# Setting type: Int32\n# Default value: 0\n")
 		big.WriteString("Setting ")
@@ -206,7 +206,7 @@ func TestPanelForAnUnparsableFileOffersTheRawEditor(t *testing.T) {
 func TestPanelDoesNotRenderEverySettingUpFront(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("[S]\n\n")
-	for i := 0; i < 800; i++ {
+	for range 800 {
 		b.WriteString("## description\n# Setting type: Int32\n# Default value: 0\n")
 		b.WriteString("Setting ")
 		b.WriteString(strings.Repeat("y", 10))
@@ -345,7 +345,7 @@ func TestImportPreviewCapsTheRowsItRenders(t *testing.T) {
 	gen.WriteString("[S]\n\n")
 	var paste strings.Builder
 	paste.WriteString("[S]\n")
-	for i := 0; i < 300; i++ {
+	for i := range 300 {
 		fmt.Fprintf(&gen, "## d\n# Setting type: Int32\n# Default value: 0\nKey%03d = 0\n", i)
 		fmt.Fprintf(&paste, "Key%03d = 1\n", i)
 	}

@@ -819,5 +819,3 @@ func TestAccessRemainingEdges(t *testing.T) {
 		t.Errorf("set err JSON status = %d, want 500", respSetErrJSON.StatusCode)
 	}
 }
-
-

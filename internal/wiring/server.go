@@ -30,6 +30,7 @@ import (
 	minecrafthttp "agrelha/internal/web/handlers/minecraft"
 	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
+	"agrelha/internal/web/shared"
 )
 
 // BuildServer constructs the HTTP application with all handlers and background reconciliation loops.
@@ -104,12 +105,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 	})
 }
 
-func actor(c *fiber.Ctx) string {
-	if v, ok := c.Locals("actor").(string); ok && v != "" {
-		return v
-	}
-	return "local"
-}
+func actor(c *fiber.Ctx) string { return shared.Actor(c) }
 
 var (
 	syncPollInterval = 10 * time.Second

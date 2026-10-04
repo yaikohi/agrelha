@@ -35,22 +35,22 @@ type BackupSummary struct {
 
 // Config defines dependencies for the dashboard page and main SSE loop.
 type Config struct {
-	GrafanaDashboardURL  string
-	ValheimAddress       string
-	GameNodeName         string
+	GrafanaDashboardURL   string
+	ValheimAddress        string
+	GameNodeName          string
 	ModUpdateTotal        func() int
 	ValheimModUpdateTotal func() int
 	MCModUpdateTotal      func() int
-	ValheimInstances     *instances.InstanceManager
-	MCInstances          *instances.InstanceManager
-	ValheimGame          ports.Game
-	MinecraftGame        ports.Game
-	Auth                 ports.Auth
-	Actor                func(*fiber.Ctx) string
-	BackupInfo           func() (BackupSummary, bool)
-	InstanceStats        func(context.Context, []domain.Instance) map[int]InstanceStat
-	ValheimInstanceStats func(context.Context, []domain.Instance) map[int]InstanceStat
-	SSEInterval          time.Duration
+	ValheimInstances      *instances.InstanceManager
+	MCInstances           *instances.InstanceManager
+	ValheimGame           ports.Game
+	MinecraftGame         ports.Game
+	Auth                  ports.Auth
+	Actor                 func(*fiber.Ctx) string
+	BackupInfo            func() (BackupSummary, bool)
+	InstanceStats         func(context.Context, []domain.Instance) map[int]InstanceStat
+	ValheimInstanceStats  func(context.Context, []domain.Instance) map[int]InstanceStat
+	SSEInterval           time.Duration
 }
 
 // Handler serves the dashboard landing page and the continuous tile SSE stream.

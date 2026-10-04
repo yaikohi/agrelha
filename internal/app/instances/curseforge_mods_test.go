@@ -88,7 +88,7 @@ func TestInstalledCurseForgeEntriesArePinned(t *testing.T) {
 	if _, err := mgr.InstallCurseForgeMod(context.Background(), 3, "jei"); err != nil {
 		t.Fatalf("InstallCurseForgeMod: %v", err)
 	}
-	for _, line := range strings.Split(strings.TrimSpace(st.curseforge), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(st.curseforge), "\n") {
 		if !strings.Contains(line, ":") {
 			t.Errorf("entry %q is unpinned", line)
 		}

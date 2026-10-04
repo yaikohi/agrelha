@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -230,9 +231,7 @@ func (s *mockStateStore) PutTree(_ context.Context, _ string, tree map[string]po
 	if s.docs == nil {
 		s.docs = make(map[string]ports.Document)
 	}
-	for k, v := range tree {
-		s.docs[k] = v
-	}
+	maps.Copy(s.docs, tree)
 	return nil
 }
 
@@ -747,5 +746,3 @@ func TestBackupsEdges(t *testing.T) {
 		t.Errorf("expected Backups directory unconfigured: %s", string(body))
 	}
 }
-
-

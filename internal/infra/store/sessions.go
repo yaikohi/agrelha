@@ -26,7 +26,7 @@ func encodeRoles(roles []domain.Role) string {
 
 func decodeRoles(s string) []domain.Role {
 	var out []domain.Role
-	for _, f := range strings.Fields(s) {
+	for f := range strings.FieldsSeq(s) {
 		out = append(out, domain.Role(f))
 	}
 	return out

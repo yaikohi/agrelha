@@ -79,8 +79,7 @@ func TestCountsWhoIsConnected(t *testing.T) {
 	s := &streamer{bodies: []string{joined + joined2}, blockCh: done}
 
 	tr := New(WithSettle(0))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	tr.Watch(ctx, 1, s)
 
 	waitFor(t, func() bool { n, ok := tr.Players(1); return ok && n == 2 })
@@ -92,8 +91,7 @@ func TestADisconnectRemovesThePlayer(t *testing.T) {
 	s := &streamer{bodies: []string{joined + joined2 + left}, blockCh: done}
 
 	tr := New(WithSettle(0))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	tr.Watch(ctx, 1, s)
 
 	waitFor(t, func() bool { n, ok := tr.Players(1); return ok && n == 1 })
@@ -117,8 +115,7 @@ func TestAFreshStreamIsUnknownUntilItHasSettled(t *testing.T) {
 
 	now := time.Now()
 	tr := New(WithSettle(time.Minute), WithClock(func() time.Time { return now }))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	tr.Watch(ctx, 1, s)
 
 	time.Sleep(50 * time.Millisecond)
@@ -134,8 +131,7 @@ func TestALostStreamGoesBackToUnknown(t *testing.T) {
 	s := &streamer{bodies: []string{joined}}
 
 	tr := New(WithSettle(0), WithRetry(time.Hour))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	tr.Watch(ctx, 1, s)
 
 	waitFor(t, func() bool { _, ok := tr.Players(1); return !ok })
@@ -151,8 +147,7 @@ func TestAReconnectStartsFromTheLogAgainRatherThanAccumulating(t *testing.T) {
 	}
 
 	tr := New(WithSettle(0), WithRetry(time.Millisecond))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	tr.Watch(ctx, 1, s)
 
 	waitFor(t, func() bool {

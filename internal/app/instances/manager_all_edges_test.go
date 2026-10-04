@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,12 +17,12 @@ import (
 )
 
 type fullMockRepo struct {
-	instances   map[int]domain.Instance
-	listErr     error
-	getErr      error
-	upsertErr   error
-	upStateErr  error
-	deleteErr   error
+	instances  map[int]domain.Instance
+	listErr    error
+	getErr     error
+	upsertErr  error
+	upStateErr error
+	deleteErr  error
 }
 
 func newFullMockRepo() *fullMockRepo {
@@ -155,9 +156,7 @@ func (s *fullMockStateStore) PutTree(ctx context.Context, dir string, tree map[s
 	if s.treeErr != nil {
 		return s.treeErr
 	}
-	for k, v := range tree {
-		s.docs[k] = v
-	}
+	maps.Copy(s.docs, tree)
 	return nil
 }
 
@@ -839,10 +838,10 @@ func TestManagerConfigsEdges(t *testing.T) {
 	store := newFullMockStateStore()
 	events := &fullMockAuditAndEvent{}
 	mgr := &InstanceManager{
-		stateStore:          store,
-		instancesRelPath:    "manifests",
-		globalConfigsPath:   "manifests/global.yaml",
-		audit:               events,
+		stateStore:        store,
+		instancesRelPath:  "manifests",
+		globalConfigsPath: "manifests/global.yaml",
+		audit:             events,
 	}
 
 	// 1. ListConfigs & GetConfig

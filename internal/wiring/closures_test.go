@@ -47,8 +47,8 @@ func TestActorHelper(t *testing.T) {
 
 	req1 := httptest.NewRequest(fiber.MethodGet, "/default", nil)
 	_, _ = app.Test(req1)
-	if gotDefault != "local" {
-		t.Errorf("actor default = %q, want 'local'", gotDefault)
+	if gotDefault != "-" {
+		t.Errorf("actor default = %q, want '-' for an unauthenticated request", gotDefault)
 	}
 
 	req2 := httptest.NewRequest(fiber.MethodGet, "/custom", nil)

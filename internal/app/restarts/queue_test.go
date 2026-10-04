@@ -240,8 +240,7 @@ func TestRunAppliesOnItsInterval(t *testing.T) {
 	r.players, r.known = 0, true
 	r.q.Request(2, "boppo", "config change")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	r.q.Run(ctx)
 
 	deadline := time.Now().Add(2 * time.Second)

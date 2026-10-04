@@ -117,7 +117,7 @@ func (s Setting) Validate(v string) error {
 		return fmt.Errorf("%q is not one of: %s", v, strings.Join(s.Acceptable, ", "))
 	}
 	if s.MultipleValues {
-		for _, part := range strings.Split(v, ",") {
+		for part := range strings.SplitSeq(v, ",") {
 			part = strings.TrimSpace(part)
 			if part == "" {
 				continue
@@ -392,11 +392,11 @@ func settingMatches(s Setting, needle string) bool {
 }
 
 func splitEntry(raw string) (key, sep, value string) {
-	i := strings.Index(raw, "=")
-	if i < 0 {
+	before, after, ok := strings.Cut(raw, "=")
+	if !ok {
 		return "", "", ""
 	}
-	left, right := raw[:i], raw[i+1:]
+	left, right := before, after
 	key = strings.TrimSpace(left)
 	value = strings.TrimSpace(right)
 
@@ -439,8 +439,8 @@ func splitPluginAndVersion(s string) (name, version string) {
 }
 
 func cutPrefix(s, prefix string) (string, bool) {
-	if strings.HasPrefix(s, prefix) {
-		return strings.TrimSpace(strings.TrimPrefix(s, prefix)), true
+	if after, ok := strings.CutPrefix(s, prefix); ok {
+		return strings.TrimSpace(after), true
 	}
 	return s, false
 }
@@ -558,7 +558,7 @@ func (o OverrideSet) Encode() string {
 func ParseOverrideSet(s string) OverrideSet {
 	set := NewOverrideSet()
 	var section string
-	for _, raw := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
+	for raw := range strings.SplitSeq(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

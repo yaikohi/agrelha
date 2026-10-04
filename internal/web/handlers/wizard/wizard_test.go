@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"mime/multipart"
 	"net/http/httptest"
 	"net/url"
@@ -52,9 +53,7 @@ func (s *mockStore) PutTree(_ context.Context, _ string, tree map[string]ports.D
 	if s.docs == nil {
 		s.docs = make(map[string]ports.Document)
 	}
-	for k, v := range tree {
-		s.docs[k] = v
-	}
+	maps.Copy(s.docs, tree)
 	return nil
 }
 func (s *mockStore) Patch(ctx context.Context, path, msg string, fn func(*ports.Document) (bool, error)) (bool, error) {
@@ -435,8 +434,8 @@ func TestActorFallback(t *testing.T) {
 	req1 := httptest.NewRequest("GET", "/test-actor", nil)
 	resp1, _ := app.Test(req1)
 	b1, _ := io.ReadAll(resp1.Body)
-	if string(b1) != "local" {
-		t.Errorf("expected local, got %s", b1)
+	if string(b1) != "-" {
+		t.Errorf("expected -, got %s", b1)
 	}
 
 	req2 := httptest.NewRequest("GET", "/test-actor-custom", nil)
@@ -449,8 +448,8 @@ func TestActorFallback(t *testing.T) {
 	req3 := httptest.NewRequest("GET", "/test-actor-empty", nil)
 	resp3, _ := app.Test(req3)
 	b3, _ := io.ReadAll(resp3.Body)
-	if string(b3) != "local" {
-		t.Errorf("expected local, got %s", b3)
+	if string(b3) != "-" {
+		t.Errorf("expected -, got %s", b3)
 	}
 }
 
