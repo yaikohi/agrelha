@@ -176,6 +176,11 @@ type InstanceUI struct {
 	// strictly apart from a Mod update. The UI must never merge the two.
 	ServerUpdate       bool
 	ServerBuild        string
+	Gamemode           string
+	Map                string
+	CollectionID       string
+	CollectionTitle    string
+	CollectionItems    int
 	CanStart           bool
 	StartBlockedReason string
 }

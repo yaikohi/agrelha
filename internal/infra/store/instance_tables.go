@@ -122,9 +122,33 @@ func valheimColumns() []instanceColumn {
 	}
 }
 
+func gmodColumns() []instanceColumn {
+	return []instanceColumn{
+		textCol("pack",
+			func(r *InstanceRecord) any { return r.Pack },
+			func(r *InstanceRecord) any { return &r.Pack }),
+		textCol("pack_provider",
+			func(r *InstanceRecord) any { return r.PackProvider },
+			func(r *InstanceRecord) any { return &r.PackProvider }),
+		textCol("pack_ref",
+			func(r *InstanceRecord) any { return r.PackRef },
+			func(r *InstanceRecord) any { return &r.PackRef }),
+		{name: "gamemode", sel: "COALESCE(gamemode,'sandbox')",
+			bind: func(r *InstanceRecord) any { return r.Gamemode },
+			dest: func(r *InstanceRecord) any { return &r.Gamemode }},
+		{name: "map", sel: "COALESCE(map,'gm_construct')",
+			bind: func(r *InstanceRecord) any { return r.Map },
+			dest: func(r *InstanceRecord) any { return &r.Map }},
+		textCol("password",
+			func(r *InstanceRecord) any { return r.Password },
+			func(r *InstanceRecord) any { return &r.Password }),
+	}
+}
+
 var instanceTables = map[domain.GameID]instanceTable{
 	domain.GameMinecraft: {name: "mc_instances", columns: append(coreInstanceColumns(), minecraftColumns()...)},
 	domain.GameValheim:   {name: "valheim_instances", columns: append(coreInstanceColumns(), valheimColumns()...)},
+	domain.GameGMod:      {name: "gmod_instances", columns: append(coreInstanceColumns(), gmodColumns()...)},
 }
 
 func tableFor(gameID domain.GameID) (instanceTable, error) {

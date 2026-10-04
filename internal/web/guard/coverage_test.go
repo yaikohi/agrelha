@@ -13,6 +13,7 @@ import (
 	consolehttp "agrelha/internal/web/handlers/console"
 	contenthttp "agrelha/internal/web/handlers/content"
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
+	gmodhttp "agrelha/internal/web/handlers/gmod"
 	grantshttp "agrelha/internal/web/handlers/grants"
 	minecrafthttp "agrelha/internal/web/handlers/minecraft"
 	valheimhttp "agrelha/internal/web/handlers/valheim"
@@ -48,6 +49,9 @@ var anyAccount = map[string]bool{
 	"/valheim/mods":          true,
 	"/valheim/configs":       true,
 	"/valheim/access":        true,
+	"/gmod":                  true,
+	"/gmod/access":           true,
+	"/gmod/create":           true,
 	"/mods":                  true,
 	"/configs":               true,
 	"/minecraft/mods":        true,
@@ -64,6 +68,7 @@ var anyAccount = map[string]bool{
 var anyAccountPrefixes = []string{
 	"/api/valheim/wizard",
 	"/api/minecraft/wizard",
+	"/api/gmod/wizard",
 }
 
 func buildApp() *fiber.App {
@@ -73,6 +78,7 @@ func buildApp() *fiber.App {
 		Console:   consolehttp.New(consolehttp.Config{}),
 		Content:   contenthttp.New(contenthttp.Config{}),
 		Dashboard: dashboardhttp.New(dashboardhttp.Config{}),
+		GMod:      gmodhttp.New(gmodhttp.Config{}),
 		Grants:    grantshttp.New(grantshttp.Config{}),
 		Minecraft: minecrafthttp.New(minecrafthttp.Config{}),
 		Valheim:   valheimhttp.New(valheimhttp.Config{}),

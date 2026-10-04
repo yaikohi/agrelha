@@ -33,3 +33,7 @@ type PackageCatalog interface {
 	Readme(ctx context.Context, ns, name, version string) (string, error)
 	ResolveTree(ctx context.Context, ns, name string) ([]string, error)
 }
+
+type WorkshopResolver interface {
+	GetCollection(ctx context.Context, id string) (domain.WorkshopCollection, error)
+}

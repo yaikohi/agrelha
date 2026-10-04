@@ -26,6 +26,7 @@ import (
 	consolehttp "agrelha/internal/web/handlers/console"
 	contenthttp "agrelha/internal/web/handlers/content"
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
+	gmodhttp "agrelha/internal/web/handlers/gmod"
 	grantshttp "agrelha/internal/web/handlers/grants"
 	minecrafthttp "agrelha/internal/web/handlers/minecraft"
 	overviewhttp "agrelha/internal/web/handlers/overview"
@@ -80,12 +81,14 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 	wizardH := buildWizardHandler(d)
 	valheimH := buildValheimHandler(cfg, d, applyValheimAfterSync, consoleH.ValheimConsole)
 	dashboardH := buildDashboardHandler(cfg, d, contentH, minecraftH, backupsH, valheimH)
+	gmodH := buildGModHandler(cfg, d)
 
 	startAuthzLoops(ctx, d)
 
 	instanceManagers := map[domain.GameID]*instances.InstanceManager{
 		domain.GameValheim:   d.ValheimInstances,
 		domain.GameMinecraft: d.MCInstances,
+		domain.GameGMod:      d.GModInstances,
 	}
 
 	overviewH := overviewhttp.New(overviewhttp.Config{
@@ -100,6 +103,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 		Requests:         d.Requests,
 		ValheimInstances: d.ValheimInstances,
 		MCInstances:      d.MCInstances,
+		GModInstances:    d.GModInstances,
 		Actor:            actor,
 	})
 
@@ -113,6 +117,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 		Console:   consoleH,
 		Content:   contentH,
 		Dashboard: dashboardH,
+		GMod:      gmodH,
 		Minecraft: minecraftH,
 		Valheim:   valheimH,
 		Wizard:    wizardH,
@@ -768,6 +773,11 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 	}
 	return dashboardhttp.New(dashboardhttp.Config{
 		Games:                 d.Games,
+		InstanceManagers: map[domain.GameID]*instances.InstanceManager{
+			domain.GameValheim:   d.ValheimInstances,
+			domain.GameMinecraft: d.MCInstances,
+			domain.GameGMod:      d.GModInstances,
+		},
 		ModUpdateTotal:        modUpdateTotal,
 		ValheimModUpdateTotal: vhModUpdateTotal,
 		MCModUpdateTotal:      mcModUpdateTotal,
@@ -783,6 +793,15 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 		BackupInfo:            bkInfo,
 		InstanceStats:         instStats,
 		ValheimInstanceStats:  vhInstStats,
+	})
+}
+
+func buildGModHandler(cfg *config.Config, d Deps) *gmodhttp.Handler {
+	return gmodhttp.New(gmodhttp.Config{
+		Instances: d.GModInstances,
+		Workshop:  d.Steam,
+		Requests:  d.Requests,
+		Actor:     actor,
 	})
 }
 
@@ -829,7 +848,7 @@ func startAuthzLoops(ctx context.Context, d Deps) {
 		defer cancel()
 
 		var insts []domain.Instance
-		for _, m := range []*instances.InstanceManager{d.ValheimInstances, d.MCInstances} {
+		for _, m := range []*instances.InstanceManager{d.ValheimInstances, d.MCInstances, d.GModInstances} {
 			if m == nil {
 				continue
 			}

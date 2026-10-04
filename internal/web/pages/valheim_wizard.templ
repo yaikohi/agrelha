@@ -10,7 +10,7 @@ templ ValheimWizard(budget BudgetUI) {
 		@nav(true)
 		<div
 			class="space-y-6"
-			data-signals="{step:1,name:'',password:'',seed:'',source:'vanilla',tier:'medium',cart:[],wizardModSearch:'',wizardModSearchLoading:false,showWizardModDetail:false,manualSlug:'',raw_mods:'',importError:'',importLoading:false,redirect:''}"
+			data-signals="{step:1,name:'',password:'',seed:'',source:'vanilla',tier:'medium',cart:[],wizardModSearch:'',wizardModSearchLoading:false,showWizardModDetail:false,manualSlug:'',raw_mods:'',importError:'',importLoading:false,creating:false,redirect:''}"
 			data-effect="if ($redirect) { window.location.href = $redirect }"
 		>
 			<!-- Stepper progress header -->
@@ -270,16 +270,19 @@ templ ValheimWizard(budget BudgetUI) {
 
 					<div class="pt-4 flex justify-between">
 						@components.Button(components.ButtonProps{
-							Variant: components.VariantSecondary,
-							Size:    components.SizeMd,
-							OnClick: "$step = 2",
-							Text:    "← Back",
+							Variant:   components.VariantSecondary,
+							Size:      components.SizeMd,
+							OnClick:   "if (!$creating) $step = 2",
+							Indicator: "creating",
+							Text:      "← Back",
 						})
 						@components.Button(components.ButtonProps{
-							Variant: components.VariantPrimary,
-							Size:    components.SizeMd,
-							OnClick: "@post('/api/valheim/wizard/create', {contentType: 'json'})",
-							Text:    "Provision & Launch Server 🚀",
+							Variant:     components.VariantPrimary,
+							Size:        components.SizeMd,
+							Indicator:   "creating",
+							LoadingText: "Provisioning & Launching Server...",
+							OnClick:     "if ($creating) return; @post('/api/valheim/wizard/create', {contentType: 'json'})",
+							Text:        "Provision & Launch Server 🚀",
 						})
 					</div>
 				</div>

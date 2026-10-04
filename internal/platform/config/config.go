@@ -74,6 +74,15 @@ type Config struct {
 	ValheimLBBaseIP       string
 	ValheimInstancesPath  string
 
+	// Garry's Mod Multi-Instance settings
+	SteamWebAPIKey     string
+	GModNamespace      string
+	GModTotalBudgetGiB int
+	GModMaxInstances   int
+	GModMaxRunning     int
+	GModLBBaseIP       string
+	GModInstancesPath  string
+
 	// Runtime & Engine (k8s vs docker)
 	Runtime       string
 	DockerSocket  string
@@ -123,6 +132,9 @@ func Load() *Config {
 	valheimTotalBudget := envInt("VALHEIM_TOTAL_BUDGET_GIB", 16)
 	valheimMaxInstances := envInt("VALHEIM_MAX_INSTANCES", 4)
 	valheimMaxRunning := envInt("VALHEIM_MAX_RUNNING", 2)
+	gmodTotalBudget := envInt("GMOD_TOTAL_BUDGET_GIB", 16)
+	gmodMaxInstances := envInt("GMOD_MAX_INSTANCES", 4)
+	gmodMaxRunning := envInt("GMOD_MAX_RUNNING", 2)
 
 	return &Config{
 		ListenAddr: env("LISTEN_ADDR", ":8080"),
@@ -183,6 +195,14 @@ func Load() *Config {
 		ValheimMaxRunning:     valheimMaxRunning,
 		ValheimLBBaseIP:       env("VALHEIM_LB_BASE_IP", ""),
 		ValheimInstancesPath:  env("VALHEIM_INSTANCES_PATH", "manifests/valheim"),
+
+		SteamWebAPIKey:     env("STEAM_WEB_API_KEY", ""),
+		GModNamespace:      env("GMOD_NAMESPACE", "gmod"),
+		GModTotalBudgetGiB: gmodTotalBudget,
+		GModMaxInstances:   gmodMaxInstances,
+		GModMaxRunning:     gmodMaxRunning,
+		GModLBBaseIP:       env("GMOD_LB_BASE_IP", "192.168.20.230"),
+		GModInstancesPath:  env("GMOD_INSTANCES_PATH", "manifests/gmod"),
 
 		Runtime:       env("RUNTIME", "k8s"),
 		DockerSocket:  env("DOCKER_SOCKET", "/var/run/docker.sock"),

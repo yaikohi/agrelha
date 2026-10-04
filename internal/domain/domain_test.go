@@ -493,10 +493,10 @@ func TestDomainEdgeCasesAndHelpers(t *testing.T) {
 	}
 
 	// 2. FormatDuration
-	if d := FormatDuration(48 * time.Hour + 3 * time.Hour); d != "2d 3h" {
+	if d := FormatDuration(48*time.Hour + 3*time.Hour); d != "2d 3h" {
 		t.Errorf("expected 2d 3h, got %s", d)
 	}
-	if d := FormatDuration(2 * time.Hour + 15 * time.Minute); d != "2h 15m" {
+	if d := FormatDuration(2*time.Hour + 15*time.Minute); d != "2h 15m" {
 		t.Errorf("expected 2h 15m, got %s", d)
 	}
 	if d := FormatDuration(45 * time.Minute); d != "45m" {
@@ -705,7 +705,7 @@ func TestGameProfileAndInstanceID(t *testing.T) {
 }
 
 func TestUnregisteredGamePanics(t *testing.T) {
-	fakeProfile := GameProfile{ID: "garrysmod", Prefix: "gmod"}
+	fakeProfile := GameProfile{ID: "pinball", Prefix: "pinball"}
 	inst := Instance{Slug: "ttt", Number: 1}
 
 	assertPanics := func(name string, f func()) {
@@ -750,11 +750,15 @@ func TestParseInstanceRoleRegistered(t *testing.T) {
 		t.Errorf("failed to parse Valheim role: %v, %v, %v", g, n, ok)
 	}
 
-	// Unregistered game role
-	_, _, ok = ParseInstanceRole(Role("agrelha-gmod-01"))
+	// Garry's Mod role: grants only work if a third game's roles parse.
+	g, n, ok = ParseInstanceRole(Role("agrelha-gmod-03"))
+	if !ok || g != GameGMod || n != 3 {
+		t.Errorf("failed to parse Garry's Mod role: %v, %v, %v", g, n, ok)
+	}
+
+	// A genuinely unregistered game must still be refused.
+	_, _, ok = ParseInstanceRole(Role("agrelha-pinball-01"))
 	if ok {
 		t.Errorf("unregistered game role should not parse as valid instance role")
 	}
 }
-
-

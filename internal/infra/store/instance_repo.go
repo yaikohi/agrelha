@@ -119,6 +119,35 @@ var gameRecordMappers = map[domain.GameID]GameRecordMapper{
 			}
 		},
 	},
+	domain.GameGMod: {
+		ToRecord: func(inst domain.Instance, rec *InstanceRecord) {
+			if inst.GMod == nil {
+				return
+			}
+			rec.Gamemode = inst.GMod.Gamemode
+			rec.Map = inst.GMod.Map
+			rec.Password = inst.GMod.Password
+			if inst.GMod.Pack != nil {
+				rec.Pack = inst.GMod.Pack.Name
+				rec.PackProvider = string(inst.GMod.Pack.Provider)
+				rec.PackRef = inst.GMod.Pack.Ref
+			}
+		},
+		FromRecord: func(rec InstanceRecord, inst *domain.Instance) {
+			inst.GMod = &domain.GModConfig{
+				Gamemode: rec.Gamemode,
+				Map:      rec.Map,
+				Password: rec.Password,
+			}
+			if rec.PackRef != "" {
+				provider := domain.Provider(rec.PackProvider)
+				if provider == "" {
+					provider = domain.ProviderSteamWorkshop
+				}
+				inst.GMod.Pack = &domain.Pack{Provider: provider, Ref: rec.PackRef, Name: rec.Pack}
+			}
+		},
+	},
 	domain.GameValheim: {
 		ToRecord: func(inst domain.Instance, rec *InstanceRecord) {
 			if inst.Valheim != nil {

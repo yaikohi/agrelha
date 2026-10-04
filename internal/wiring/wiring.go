@@ -15,6 +15,7 @@ import (
 	appbepinex "agrelha/internal/app/bepinex"
 	"agrelha/internal/app/capacity"
 	"agrelha/internal/app/games"
+	gmodgame "agrelha/internal/app/games/gmod"
 	"agrelha/internal/app/games/minecraft"
 	"agrelha/internal/app/games/valheim"
 	"agrelha/internal/app/health"
@@ -34,10 +35,12 @@ import (
 	"agrelha/internal/infra/content/mcversions"
 	"agrelha/internal/infra/content/modpackindex"
 	"agrelha/internal/infra/content/modrinth"
+	"agrelha/internal/infra/content/steam"
 	"agrelha/internal/infra/content/thunderstore"
 	"agrelha/internal/infra/gitops"
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/manifests"
+	gmodmanifests "agrelha/internal/infra/manifests/gmod"
 	valheimmanifests "agrelha/internal/infra/manifests/valheim"
 	"agrelha/internal/infra/rcon"
 	argocd "agrelha/internal/infra/reconcile/argocd"
@@ -61,6 +64,7 @@ type Deps struct {
 	Store            *store.Store
 	K8s              *k8s.Client
 	MCK8s            *k8s.Client
+	GModK8s          *k8s.Client
 	Auth             ports.Auth
 	Authz            *authz.Service
 	Capacity         *capacity.Service
@@ -86,6 +90,11 @@ type Deps struct {
 	MCRconPool       *rcon.Pool
 	MCInstances      *instances.InstanceManager
 	ValheimInstances *instances.InstanceManager
+	GModInstances    *instances.InstanceManager
+	GModGame         ports.Game
+	GModRuntime      ports.Runtime
+	GModRef          ports.ServerRef
+	Steam            ports.WorkshopResolver
 	ValheimConfigs   *appbepinex.Service
 	ValheimRestarts  *restarts.Queue
 	ValheimStatus    *valheimstatus.Client
@@ -601,6 +610,63 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		}),
 	)
 
+	var gmodRuntime ports.Runtime
+	if cfg.Runtime == "docker" {
+		gmodRuntime = rt
+	} else {
+		if gmodK8s, err := newK8sClient(cfg.GModNamespace, ""); err != nil {
+			slog.Warn("gmod k8s client unavailable (dev?)", "err", err)
+		} else {
+			gmodK8s.SetNodeSelector(cfg.GameNodeSelector)
+			d.GModK8s = gmodK8s
+		}
+		if d.GModK8s != nil {
+			gmodRuntime = k8sruntime.New(d.GModK8s)
+		} else if d.K8s != nil {
+			gmodRuntime = k8sruntime.New(d.K8s)
+		}
+	}
+	d.GModRuntime = gmodRuntime
+	d.GModRef = ports.ServerRef{Name: "gmod", Scope: cfg.GModNamespace}
+
+	d.Steam = steam.New(cfg.SteamWebAPIKey)
+
+	d.GModGame = gmodgame.New(
+		gmodgame.WithRuntime(gmodRuntime, d.GModRef),
+	)
+
+	var gmodInstOpts []instances.Option
+	gmodInstOpts = append(gmodInstOpts,
+		instances.WithGameID(domain.GameGMod),
+		instances.WithAudit(st),
+		instances.WithEvent(st),
+		instances.WithBackupsDir(cfg.BackupsDir),
+		instances.WithServerRefResolver(func(inst domain.Instance) ports.ServerRef {
+			depName := inst.DeploymentName(domain.GModProfile)
+			return ports.ServerRef{Name: depName, Scope: cfg.GModNamespace}
+		}),
+	)
+	if d.Authz != nil && d.Authz.HasRegistry() {
+		gmodInstOpts = append(gmodInstOpts,
+			instances.WithInstanceRoleRegistrar(d.Authz.EnsureInstanceRole),
+			instances.WithInstanceRoleRetirer(d.Authz.RetireInstanceRole),
+		)
+	}
+
+	d.GModInstances = instances.NewInstanceManager(
+		store.NewGameInstanceRepo(st, domain.GModProfile),
+		d.StateStore,
+		gmodRuntime,
+		cfg.GModTotalBudgetGiB,
+		cfg.GModMaxInstances,
+		cfg.GModMaxRunning,
+		cfg.GModInstancesPath,
+		cfg.GModLBBaseIP,
+		gmodmanifests.New(cfg.GameNodeSelector, cfg.GModNamespace),
+		cfg.GModNamespace,
+		gmodInstOpts...,
+	)
+
 	d.Games = games.NewRegistry()
 	d.Games.Register(games.Entry{
 		Profile: domain.MinecraftProfile,
@@ -609,6 +675,10 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	d.Games.Register(games.Entry{
 		Profile: domain.ValheimProfile,
 		Engine:  d.ValheimGame,
+	})
+	d.Games.Register(games.Entry{
+		Profile: domain.GModProfile,
+		Engine:  d.GModGame,
 	})
 
 	backfillValheimSource(ctx, &d, cfg)
@@ -716,6 +786,8 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				m = d.MCInstances
 			case domain.GameValheim:
 				m = d.ValheimInstances
+			case domain.GameGMod:
+				m = d.GModInstances
 			default:
 				return nil, fmt.Errorf("no instance manager for %s", game)
 			}

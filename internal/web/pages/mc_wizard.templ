@@ -10,7 +10,7 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 		@nav(true)
 		<div
 			class="space-y-6"
-			data-signals="{step:1,name:'',seed:'',source:'modpack',loader:'',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false,redirect:''}"
+			data-signals="{step:1,name:'',seed:'',source:'modpack',loader:'',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false,creating:false,redirect:''}"
 			data-effect="if ($redirect) { window.location.href = $redirect }"
 		>
 			<!-- Stepper progress header -->
@@ -531,16 +531,19 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 
 				<div class="mt-8 flex items-center justify-between border-t border-zinc-800/80 pt-4">
 					@components.Button(components.ButtonProps{
-						Variant: components.VariantGhost,
-						Size:    components.SizeSm,
-						OnClick: "$step = 3",
-						Text:    "← Back",
+						Variant:   components.VariantGhost,
+						Size:      components.SizeSm,
+						OnClick:   "if (!$creating) $step = 3",
+						Indicator: "creating",
+						Text:      "← Back",
 					})
 					@components.Button(components.ButtonProps{
-						Variant: components.VariantPrimary,
-						Size:    components.SizeMd,
-						OnClick: "@post('/api/minecraft/wizard/create')",
-						Text:    "Create Instance & Launch",
+						Variant:     components.VariantPrimary,
+						Size:        components.SizeMd,
+						Indicator:   "creating",
+						LoadingText: "Creating Instance & Launching...",
+						OnClick:     "if ($creating) return; @post('/api/minecraft/wizard/create')",
+						Text:        "Create Instance & Launch",
 					})
 				</div>
 			</div>

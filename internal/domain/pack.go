@@ -3,7 +3,16 @@ package domain
 import (
 	"regexp"
 	"strings"
+	"time"
 )
+
+type WorkshopCollection struct {
+	ID          string
+	Title       string
+	ItemCount   int
+	ItemIDs     []string
+	TimeUpdated time.Time
+}
 
 type Source string
 type Provider string
@@ -17,6 +26,10 @@ const (
 	ProviderCurseForge   Provider = "curseforge"
 	ProviderModrinth     Provider = "modrinth"
 	ProviderThunderstore Provider = "thunderstore"
+
+	// ProviderSteamWorkshop is a collection the server resolves itself from a
+	// single id, not a set of individually pinned packages.
+	ProviderSteamWorkshop Provider = "steam-workshop"
 
 	LoaderFabric   Loader = "fabric"
 	LoaderNeoForge Loader = "neoforge"

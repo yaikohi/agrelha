@@ -23,6 +23,7 @@ type Config struct {
 	Requests         *requests.Service
 	ValheimInstances *instances.InstanceManager
 	MCInstances      *instances.InstanceManager
+	GModInstances    *instances.InstanceManager
 	Actor            func(*fiber.Ctx) string
 }
 
@@ -55,7 +56,7 @@ func parseTarget(raw string) (domain.GameID, int, error) {
 		return "", 0, fmt.Errorf("malformed target %q", raw)
 	}
 	game := domain.GameID(parts[0])
-	if game != domain.GameValheim && game != domain.GameMinecraft {
+	if _, ok := domain.ProfileFor(game); !ok {
 		return "", 0, fmt.Errorf("unknown game %q", parts[0])
 	}
 	num, err := strconv.Atoi(parts[1])
@@ -68,7 +69,7 @@ func parseTarget(raw string) (domain.GameID, int, error) {
 func (h *Handler) instanceOptions(c *fiber.Ctx) ([]pages.InstanceOptionUI, map[string]string) {
 	var out []pages.InstanceOptionUI
 	labels := map[string]string{}
-	for _, m := range []*instances.InstanceManager{h.cfg.ValheimInstances, h.cfg.MCInstances} {
+	for _, m := range []*instances.InstanceManager{h.cfg.ValheimInstances, h.cfg.MCInstances, h.cfg.GModInstances} {
 		if m == nil {
 			continue
 		}

@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .DeploymentName }}
+  namespace: {{ .Namespace }}
+  labels:
+    app: {{ .DeploymentName }}
+    role: gmod-instance
+    instance: "{{ .Number }}"
+    world: "{{ .Slug }}"
+spec:
+  replicas: {{ if eq .State "running" }}1{{ else }}0{{ end }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .DeploymentName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .DeploymentName }}
+        role: gmod-instance
+        instance: "{{ .Number }}"
+        world: "{{ .Slug }}"
+    spec:
+      securityContext:
+        fsGroup: 1000
+{{- if .NodeSelectorKey }}
+      nodeSelector:
+        {{ .NodeSelectorKey }}: "{{ .NodeSelectorValue }}"
+{{- end }}
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "gameserver"
+          effect: "NoSchedule"
+      containers:
+        - name: gmod
+          image: {{ .Image }}
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: {{ .ConfigCMName }}
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: "Europe/Amsterdam"
+            - name: AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .SteamKeySecret }}
+                  key: steam-web-api-key
+                  optional: true
+          ports:
+            - containerPort: 27015
+              name: game
+              protocol: UDP
+            - containerPort: 27015
+              name: rcon
+              protocol: TCP
+          startupProbe:
+            exec:
+              command: ["/home/gmod/health.sh"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 180
+          readinessProbe:
+            exec:
+              command: ["/home/gmod/health.sh"]
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: {{ .CPURequestMilli }}m
+              memory: {{ .MemoryGiB }}Gi
+            limits:
+{{- if gt .CPULimitMilli 0 }}
+              cpu: {{ .CPULimitMilli }}m
+{{- end }}
+              memory: {{ .MemoryLimitGiB }}Gi
+          volumeMounts:
+            - name: data-volume
+              mountPath: {{ .DataMountPath }}
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: {{ .PVCName }}

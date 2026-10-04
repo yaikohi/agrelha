@@ -315,6 +315,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `app/games` | Game registry associating declarative GameProfiles with runtime game engines. |
 | `app/games/minecraft` | The Minecraft `ports.Game`: runtime spec, content resolution, client bundle export, telemetry. |
 | `app/games/valheim` | The Valheim `ports.Game`, including BepInEx handling and `.r2z` profile export. |
+| `app/games/gmod` | The Garry's Mod `ports.Game`: runtime spec, telemetry, and client bundle handling. |
 | `app/health` | Turns what the runtime knows about a dead server into a recorded Incident. |
 | `app/ingest` | Tails server logs and turns connection lines into the player roster and join events. |
 | `app/instances` | `InstanceManager`: the central use case. Create, start, stop, delete, mods, configs, backups, budget enforcement. |
@@ -338,10 +339,12 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/content/curseforge` | CurseForge v1 client: mod search, file pinning, dependency resolution and export URLs. Needs an API key; absent without one. |
 | `infra/content/modrinth` | Modrinth v2 REST client: projects, versions, dependencies. |
 | `infra/content/thunderstore` | Thunderstore client: warm package index for search, per-package version and README lookups. |
+| `infra/content/steam` | Steam Web API client: Workshop collection listing and last-updated timestamp for drift detection. |
 | `infra/gitops` | Clones the ops repository, edits a document in place preserving YAML structure, commits and pushes. |
 | `infra/kube` | client-go wrapper: deployments, pods, logs, exec, services, PVCs, jobs, metrics. |
 | `infra/manifests` | Renders the Minecraft manifest set for an Instance from templates. |
 | `infra/manifests/valheim` | Renders the Valheim manifest set, including the mod-reconciler init container. |
+| `infra/manifests/gmod` | Renders the Garry's Mod manifest set: one container, a Workshop collection passed as srcds arguments. |
 | `infra/rcon` | Minecraft RCON client and connection pool. |
 | `infra/reconcile/argocd` | `ports.Reconciler` for ArgoCD: converge and report sync status. |
 | `infra/reconcile/compose` | `ports.Reconciler` for Docker Compose. |
@@ -367,6 +370,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `web/handlers/overview` | The Overview page: every world across every game, the resources each runs on, the Tier catalogues and the limits. |
 | `web/handlers/dashboard` | The public hub page and the main SSE signal stream. |
 | `web/handlers/grants` | The Accounts and world-request pages: which Account may operate which Instance, signing an Account out everywhere, and approving the worlds Accounts ask to create. |
+| `web/handlers/gmod` | Garry's Mod instance pages: dashboard, creation wizard, detail overview, lifecycle. |
 | `web/handlers/minecraft` | Minecraft instance pages: detail tabs, mod search and install, configs, lifecycle. |
 | `web/handlers/valheim` | Valheim instance pages: detail tabs, mod search, mod updates, configs, lifecycle, profile export. |
 | `web/handlers/wizard` | The Minecraft provisioning flow: pack and mod search, cart validation, creation. |

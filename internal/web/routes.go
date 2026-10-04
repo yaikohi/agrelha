@@ -15,6 +15,7 @@ import (
 	consolehttp "agrelha/internal/web/handlers/console"
 	contenthttp "agrelha/internal/web/handlers/content"
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
+	gmodhttp "agrelha/internal/web/handlers/gmod"
 	grantshttp "agrelha/internal/web/handlers/grants"
 	minecrafthttp "agrelha/internal/web/handlers/minecraft"
 	overviewhttp "agrelha/internal/web/handlers/overview"
@@ -33,6 +34,7 @@ type ServerConfig struct {
 	Console   *consolehttp.Handler
 	Content   *contenthttp.Handler
 	Dashboard *dashboardhttp.Handler
+	GMod      *gmodhttp.Handler
 	Grants    *grantshttp.Handler
 	Overview  *overviewhttp.Handler
 	Minecraft *minecrafthttp.Handler
@@ -94,6 +96,9 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 	}
 	if cfg.Valheim != nil {
 		cfg.Valheim.RegisterProtected(protected)
+	}
+	if cfg.GMod != nil {
+		cfg.GMod.RegisterProtected(protected)
 	}
 	if cfg.Console != nil {
 		cfg.Console.Register(protected)

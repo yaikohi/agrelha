@@ -10,6 +10,7 @@ type GameID string
 const (
 	GameValheim   GameID = "valheim"
 	GameMinecraft GameID = "minecraft"
+	GameGMod      GameID = "gmod"
 )
 
 // InstanceID is the composite identity of an Instance: its game and number together.
@@ -33,6 +34,7 @@ func (id InstanceID) IsZero() bool {
 // Capabilities declares what operational features a game supports.
 type Capabilities struct {
 	Mods               bool
+	Modpacks           bool
 	Configs            bool
 	Backups            bool
 	AdmissionPassword  bool
@@ -63,6 +65,7 @@ var (
 		},
 		Capabilities: Capabilities{
 			Mods:               true,
+			Modpacks:           true,
 			Configs:            true,
 			Backups:            true,
 			AdmissionAllowlist: true,
@@ -91,11 +94,33 @@ var (
 		},
 		DefaultMaxPlayers: 10,
 	}
+
+	// Garry's Mod runs whatever a single Steam Workshop collection contains, so
+	// it has no per-mod browser and no config editor. Operators and player
+	// counts are deliberately absent: admin belongs to whatever addon the
+	// collection ships, and A2S player queries are not implemented.
+	GModProfile = GameProfile{
+		ID:     GameGMod,
+		Prefix: "gmod",
+		Table:  "gmod_instances",
+		Display: Display{
+			Name:   "Garry's Mod",
+			Icon:   "wrench",
+			Accent: "sky",
+		},
+		Capabilities: Capabilities{
+			Modpacks:          true,
+			Backups:           true,
+			AdmissionPassword: true,
+		},
+		DefaultMaxPlayers: 16,
+	}
 )
 
 var defaultProfiles = map[GameID]GameProfile{
 	GameMinecraft: MinecraftProfile,
 	GameValheim:   ValheimProfile,
+	GameGMod:      GModProfile,
 }
 
 // ProfileFor returns the GameProfile for a known GameID, or false if unregistered.
@@ -109,6 +134,7 @@ func Profiles() []GameProfile {
 	return []GameProfile{
 		ValheimProfile,
 		MinecraftProfile,
+		GModProfile,
 	}
 }
 

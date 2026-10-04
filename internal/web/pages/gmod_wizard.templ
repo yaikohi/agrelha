@@ -1,0 +1,159 @@
+package pages
+
+import (
+	"fmt"
+	"agrelha/internal/web/components"
+)
+
+templ GModWizard(budget BudgetUI) {
+	@Layout("Create Garry's Mod World") {
+		@nav(true)
+		<div
+			class="space-y-6"
+			data-signals="{step:1,name:'',password:'',gamemode:'sandbox',map:'gm_construct',collectionID:'',tier:'small',creating:false,redirect:''}"
+			data-effect="if ($redirect) { window.location.href = $redirect }"
+		>
+			@components.StepIndicator(components.StepIndicatorProps{
+				Steps: []components.StepItem{
+					{Number: 1, Label: "World & Workshop"},
+					{Number: 2, Label: "Tier & Review"},
+				},
+			})
+
+			<div data-show="$step == 1" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 1: Garry's Mod Server Configuration</h2>
+				<p class="mt-1 text-xs text-zinc-400">Configure your world title, Workshop collection ID, gamemode, and map.</p>
+
+				<div class="mt-6 max-w-md space-y-4">
+					@components.Input(components.InputProps{
+						Label:       "World / Server Name",
+						Required:    true,
+						Placeholder: "e.g. Trouble in Terrorist Town",
+						Bind:        "name",
+					})
+
+					@components.Input(components.InputProps{
+						Label:       "Steam Workshop Collection ID (Optional)",
+						Placeholder: "e.g. 104604903",
+						Bind:        "collectionID",
+						Class:       "font-mono",
+						HelperText:  "Addons in this collection will be mounted automatically by the server.",
+					})
+
+					@components.Input(components.InputProps{
+						Label:       "Gamemode",
+						Placeholder: "e.g. sandbox, terrortown, darkrp",
+						Bind:        "gamemode",
+						HelperText:  "Defaults to sandbox if empty.",
+					})
+
+					@components.Input(components.InputProps{
+						Label:       "Map",
+						Placeholder: "e.g. gm_construct, gm_flatgrass, ttt_minecraft_b5",
+						Bind:        "map",
+						Class:       "font-mono",
+						HelperText:  "Initial map to load upon server boot.",
+					})
+
+					@components.Input(components.InputProps{
+						Label:       "Server Password (Optional)",
+						Placeholder: "e.g. secret123",
+						Bind:        "password",
+						HelperText:  "Leave empty for a public server.",
+					})
+
+					<div class="pt-4 flex justify-end">
+						@components.Button(components.ButtonProps{
+							Variant: components.VariantPrimary,
+							Size:    components.SizeMd,
+							OnClick: "if ($name.trim()) { $step = 2 } else { alert('Please enter a world name') }",
+							Text:    "Next: Choose Tier →",
+						})
+					</div>
+				</div>
+			</div>
+
+			<div data-show="$step == 2" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
+				<h2 class="text-lg font-bold text-zinc-100">Step 2: Resource Tier & Confirmation</h2>
+				<p class="mt-1 text-xs text-zinc-400">Select memory allocation and verify server details.</p>
+
+				<div class="mt-6 space-y-6 max-w-md">
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Memory Tier</label>
+						<div class="mt-2 space-y-2">
+							@components.OptionCard(components.OptionCardProps{
+								Name:        "tier",
+								Value:       "small",
+								BindSignal:  "tier",
+								Title:       "Small (2 GiB)",
+								Subtitle:    "Lightweight Sandbox or TTT, up to 12 players",
+								Badge:       "2 GiB",
+							})
+							@components.OptionCard(components.OptionCardProps{
+								Name:        "tier",
+								Value:       "medium",
+								BindSignal:  "tier",
+								Title:       "Medium (4 GiB)",
+								Subtitle:    "Standard modded collections and game modes, up to 24 players",
+								Badge:       "4 GiB",
+							})
+							@components.OptionCard(components.OptionCardProps{
+								Name:        "tier",
+								Value:       "large",
+								BindSignal:  "tier",
+								Title:       "Large (8 GiB)",
+								Subtitle:    "Heavy DarkRP or extensive custom prop/content collections",
+								Badge:       "8 GiB",
+							})
+						</div>
+					</div>
+
+					<div class="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4 space-y-2 text-xs">
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Server Name:</span>
+							<span class="font-semibold text-zinc-200" data-text="$name"></span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Gamemode:</span>
+							<span class="text-zinc-200" data-text="$gamemode || 'sandbox'"></span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Map:</span>
+							<span class="font-mono text-zinc-200" data-text="$map || 'gm_construct'"></span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Workshop Collection:</span>
+							<span class="font-mono text-zinc-200" data-text="$collectionID || 'None'"></span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Password:</span>
+							<span class="font-mono text-zinc-200" data-text="$password ? $password : 'None (Public)'"></span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-zinc-500">Memory Budget:</span>
+							<span class="font-mono text-zinc-200">{ fmt.Sprintf("%d / %d GiB used", budget.UsedGiB, budget.TotalBudgetGiB) }</span>
+						</div>
+					</div>
+
+					<div class="pt-4 flex justify-between">
+						@components.Button(components.ButtonProps{
+							Variant:   components.VariantSecondary,
+							Size:      components.SizeMd,
+							OnClick:   "if (!$creating) $step = 1",
+							Indicator: "creating",
+							Text:      "← Back",
+						})
+						@components.Button(components.ButtonProps{
+							Variant:     components.VariantPrimary,
+							Size:        components.SizeMd,
+							Indicator:   "creating",
+							LoadingText: "Creating Garry's Mod World...",
+							OnClick:     "if ($creating) return; @post('/api/gmod/wizard/create')",
+							Text:        "+ Create Garry's Mod World",
+						})
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}

@@ -1,0 +1,147 @@
+package pages
+
+import (
+	"fmt"
+	"agrelha/internal/web/components"
+)
+
+templ GModDashboard(instances []InstanceUI, budget BudgetUI) {
+	@Layout("Garry's Mod") {
+		@nav()
+		<div class="space-y-6">
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<h1 class="text-xl font-bold tracking-tight text-zinc-100">Garry's Mod Instances</h1>
+					<p class="mt-0.5 text-xs text-zinc-400">Manage dedicated Garry's Mod servers with Steam Workshop collection support.</p>
+				</div>
+				@components.BudgetBar(components.BudgetBarProps{
+					UsedGiB:        budget.UsedGiB,
+					TotalBudgetGiB: budget.TotalBudgetGiB,
+					RunningCount:   budget.RunningCount,
+					MaxRunning:     budget.MaxRunning,
+					TotalInstances: budget.TotalInstances,
+					MaxInstances:   budget.MaxInstances,
+					ActionHref:     "/admins",
+					ActionText:     "Access (Admins)",
+				})
+			</div>
+
+			if len(instances) == 0 {
+				@components.EmptyState(components.EmptyStateProps{
+					Icon:        "🔧",
+					Title:       "Create your first Garry's Mod world",
+					Description: "Spin up a dedicated Garry's Mod server with Steam Workshop collection, gamemode, and map.",
+					ActionHref:  "/gmod/create",
+					ActionText:  "+ Create New World",
+				})
+			} else {
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					for _, inst := range instances {
+						<div class="flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-sm">
+							<div>
+								<div class="flex items-start justify-between">
+									<div>
+										<div class="flex items-center gap-2">
+											<span class="font-mono text-xs text-zinc-500">{ fmt.Sprintf("#%02d", inst.Number) }</span>
+											<a href={ templ.SafeURL(fmt.Sprintf("/gmod/%d", inst.Number)) } class="text-base font-semibold text-zinc-100 hover:text-zinc-300 transition">
+												{ inst.Name } &rarr;
+											</a>
+										</div>
+										<p class="mt-0.5 font-mono text-xs text-zinc-400">{ ConnectAddress(inst.LBIP, 27015) }</p>
+									</div>
+									<div>
+										@components.StatusPill(components.StatusPillProps{State: inst.State})
+									</div>
+								</div>
+
+								<div class="mt-4 flex flex-wrap gap-1.5">
+									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-300 ring-1 ring-zinc-700/60">Garry's Mod</span>
+									if inst.Gamemode != "" {
+										<span class="rounded bg-sky-950/60 px-2 py-0.5 text-[11px] font-medium text-sky-300 ring-1 ring-sky-800/60">{ inst.Gamemode }</span>
+									}
+									if inst.Map != "" {
+										<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-mono text-zinc-300 ring-1 ring-zinc-700/60">{ inst.Map }</span>
+									}
+									<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
+										{ fmt.Sprintf("%s (%d GiB)", inst.Tier, inst.MemoryGiB) }
+									</span>
+
+									if inst.Password != "" {
+										<span class="rounded bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-300">
+											🔒 Password
+										</span>
+									}
+
+									if inst.CollectionID != "" {
+										<span class="rounded bg-emerald-950/60 px-2 py-0.5 text-[11px] font-mono text-emerald-300 ring-1 ring-emerald-800/60" title="Steam Workshop Collection">
+											📦 { inst.CollectionID }
+										</span>
+									}
+								</div>
+							</div>
+
+							<div class="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/60 pt-3">
+								<div class="flex flex-wrap items-center gap-1.5">
+									@components.Button(components.ButtonProps{
+										Variant: components.VariantSecondary,
+										Size:    components.SizeXs,
+										Href:    fmt.Sprintf("/gmod/%d/overview", inst.Number),
+										Text:    "Manage",
+									})
+								</div>
+
+								<div class="flex items-center gap-2">
+									if inst.State == "running" {
+										@components.Button(components.ButtonProps{
+											Variant: components.VariantWarning,
+											Size:    components.SizeXs,
+											OnClick: fmt.Sprintf("@post('/api/gmod/instances/%d/stop')", inst.Number),
+											Text:    "Stop",
+										})
+									} else {
+										if inst.CanStart {
+											@components.Button(components.ButtonProps{
+												Variant: components.VariantSuccess,
+												Size:    components.SizeXs,
+												OnClick: fmt.Sprintf("@post('/api/gmod/instances/%d/start')", inst.Number),
+												Text:    "Start",
+											})
+										} else {
+											@components.Button(components.ButtonProps{
+												Variant:       components.VariantSecondary,
+												Size:          components.SizeXs,
+												Disabled:      true,
+												DisabledTitle: inst.StartBlockedReason,
+												Text:          "Start",
+											})
+										}
+									}
+
+									if inst.State != "running" {
+										@components.Button(components.ButtonProps{
+											Variant: components.VariantDanger,
+											Size:    components.SizeXs,
+											OnClick: fmt.Sprintf("if (confirm('Delete Garry\\'s Mod instance #%02d (%s)? World data will be removed.')) @delete('/api/gmod/instances/%d')", inst.Number, inst.Name, inst.Number),
+											Text:    "Delete",
+										})
+									}
+								</div>
+							</div>
+						</div>
+					}
+
+					if len(instances) < budget.MaxInstances {
+						<a
+							href="/gmod/create"
+							class="flex min-h-[160px] flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 p-6 text-center transition hover:border-zinc-700 hover:bg-zinc-900/60"
+						>
+							<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 text-lg text-zinc-300">+</span>
+							<span class="mt-3 text-sm font-medium text-zinc-300">Create New World</span>
+							<span class="mt-0.5 text-xs text-zinc-500">{ fmt.Sprintf("%d slots available", budget.MaxInstances - len(instances)) }</span>
+						</a>
+					}
+				</div>
+			}
+		</div>
+	}
+}

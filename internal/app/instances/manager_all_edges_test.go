@@ -1486,3 +1486,89 @@ func TestManagerExactEdgeCases(t *testing.T) {
 	}
 	repo.listErr = nil
 }
+
+func TestCreateInstance_RoleRollbackOnFailure(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("writeManifests failure rolls back role", func(t *testing.T) {
+		repo := newFullMockRepo()
+		store := newFullMockStateStore()
+		store.treeErr = fmt.Errorf("git push conflict")
+		rt := &fullMockRuntime{}
+
+		var registered, retired bool
+		mgr := NewInstanceManager(
+			repo,
+			store,
+			rt,
+			16,
+			5,
+			2,
+			"instances",
+			"192.168.1.1",
+			&fullMockRenderer{},
+			"default",
+			WithGameID(domain.GameGMod),
+			WithInstanceRoleRegistrar(func(ctx context.Context, inst domain.Instance) error {
+				registered = true
+				return nil
+			}),
+			WithInstanceRoleRetirer(func(ctx context.Context, inst domain.Instance) error {
+				retired = true
+				return nil
+			}),
+		)
+
+		_, err := mgr.CreateInstance(ctx, domain.Instance{Name: "GMod 01", GameID: domain.GameGMod}, domain.ModList{})
+		if err == nil {
+			t.Fatalf("expected error from failed commit")
+		}
+		if !registered {
+			t.Fatalf("expected role registrar to be called")
+		}
+		if !retired {
+			t.Fatalf("expected role retirer to be called on rollback")
+		}
+	})
+
+	t.Run("repo upsert failure rolls back role", func(t *testing.T) {
+		repo := newFullMockRepo()
+		repo.upsertErr = fmt.Errorf("disk full")
+		store := newFullMockStateStore()
+		rt := &fullMockRuntime{}
+
+		var registered, retired bool
+		mgr := NewInstanceManager(
+			repo,
+			store,
+			rt,
+			16,
+			5,
+			2,
+			"instances",
+			"192.168.1.1",
+			&fullMockRenderer{},
+			"default",
+			WithGameID(domain.GameGMod),
+			WithInstanceRoleRegistrar(func(ctx context.Context, inst domain.Instance) error {
+				registered = true
+				return nil
+			}),
+			WithInstanceRoleRetirer(func(ctx context.Context, inst domain.Instance) error {
+				retired = true
+				return nil
+			}),
+		)
+
+		_, err := mgr.CreateInstance(ctx, domain.Instance{Name: "GMod 01", GameID: domain.GameGMod}, domain.ModList{})
+		if err == nil {
+			t.Fatalf("expected error from failed upsert")
+		}
+		if !registered {
+			t.Fatalf("expected role registrar to be called")
+		}
+		if !retired {
+			t.Fatalf("expected role retirer to be called on rollback")
+		}
+	})
+}

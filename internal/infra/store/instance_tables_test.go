@@ -18,7 +18,7 @@ func TestUnregisteredGameHasNoTable(t *testing.T) {
 	}
 	defer st.Close()
 
-	gmod := domain.GameID("garrysmod")
+	gmod := domain.GameID("pinball")
 
 	if err := st.upsertInstanceRow(gmod, InstanceRecord{Number: 1, Name: "ttt", Slug: "ttt"}); err == nil {
 		t.Error("writing an unregistered game must fail, not land in another game's table")

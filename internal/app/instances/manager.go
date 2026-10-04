@@ -458,6 +458,8 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 	if strings.TrimSpace(inst.Name) == "" {
 		if inst.GameID == domain.GameValheim {
 			inst.Name = fmt.Sprintf("Valheim %02d", inst.Number)
+		} else if inst.GameID == domain.GameGMod {
+			inst.Name = fmt.Sprintf("GMod %02d", inst.Number)
 		} else {
 			inst.Name = fmt.Sprintf("World %02d", inst.Number)
 		}
@@ -480,10 +482,16 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 
 	commitMsg := fmt.Sprintf("%s: create instance %02d (%s)", m.gamePrefix(), inst.Number, inst.Name)
 	if err := m.writeManifests(ctx, inst, mods, commitMsg); err != nil {
+		if m.roleRetirer != nil {
+			_ = m.roleRetirer(context.WithoutCancel(ctx), inst)
+		}
 		return nil, err
 	}
 
 	if err := m.repo.Upsert(inst); err != nil {
+		if m.roleRetirer != nil {
+			_ = m.roleRetirer(context.WithoutCancel(ctx), inst)
+		}
 		return nil, fmt.Errorf("save instance record: %w", err)
 	}
 
@@ -1860,6 +1868,14 @@ func (m *InstanceManager) RestoreNew(ctx context.Context, num int, newName, tier
 	if srcInst.Valheim != nil {
 		vhCopy := *srcInst.Valheim
 		newInst.Valheim = &vhCopy
+	}
+	if srcInst.GMod != nil {
+		gmodCopy := *srcInst.GMod
+		if srcInst.GMod.Pack != nil {
+			packCopy := *srcInst.GMod.Pack
+			gmodCopy.Pack = &packCopy
+		}
+		newInst.GMod = &gmodCopy
 	}
 
 	// Duplicate carries both halves: a copy that silently dropped the CurseForge

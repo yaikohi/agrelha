@@ -221,6 +221,15 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 			uinst.Password = inst.Valheim.Password
 			uinst.Seed = inst.Valheim.Seed
 		}
+		if inst.GMod != nil {
+			uinst.Password = inst.GMod.Password
+			uinst.Gamemode = inst.GMod.Gamemode
+			uinst.Map = inst.GMod.Map
+			if inst.GMod.Pack != nil {
+				uinst.CollectionID = inst.GMod.Pack.Ref
+				uinst.Pack = inst.GMod.Pack.Name
+			}
+		}
 
 		if stats != nil {
 			if st, ok := stats[inst.Number]; ok {
