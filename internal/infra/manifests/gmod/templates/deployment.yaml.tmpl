@@ -84,7 +84,16 @@ spec:
           volumeMounts:
             - name: data-volume
               mountPath: {{ .DataMountPath }}
+            - name: cache-volume
+              mountPath: {{ .AddonCacheMountPath }}
+              subPath: addons
+            - name: cache-volume
+              mountPath: {{ .SteamCacheMountPath }}
+              subPath: steam
       volumes:
         - name: data-volume
           persistentVolumeClaim:
             claimName: {{ .PVCName }}
+        - name: cache-volume
+          persistentVolumeClaim:
+            claimName: {{ .CachePVCName }}

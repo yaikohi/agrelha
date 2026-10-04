@@ -776,20 +776,24 @@ func InstanceTabs(game string, num int, active string, vanilla bool) []component
 	return tabs
 }
 
-// GamePath returns the route prefix for the instance's game ("minecraft" or "valheim").
+// GamePath returns the route prefix for the instance's game, or "" if unregistered.
 func (d InstanceDetailUI) GamePath() string {
-	if d.GameID == string(domain.GameMinecraft) || d.GameID == "minecraft" {
-		return "minecraft"
+	p, ok := domain.ProfileFor(domain.GameID(d.GameID))
+	if !ok {
+		return ""
 	}
-	return "valheim"
+	return string(p.ID)
 }
 
-// UpstreamCatalogName returns the user-facing name of the upstream package index ("Modrinth" or "Thunderstore").
+// UpstreamCatalogName returns the name of the upstream package index, or "" if the game has none.
 func (d InstanceDetailUI) UpstreamCatalogName() string {
-	if d.GamePath() == "minecraft" {
+	switch d.GameID {
+	case string(domain.GameMinecraft):
 		return "Modrinth"
+	case string(domain.GameValheim):
+		return "Thunderstore"
 	}
-	return "Thunderstore"
+	return ""
 }
 
 // updateClick guards an apply button behind a confirmation, but only when the

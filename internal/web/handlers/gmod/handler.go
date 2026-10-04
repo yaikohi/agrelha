@@ -285,6 +285,11 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
 
+	tab := strings.ToLower(strings.TrimSpace(c.Params("tab", "overview")))
+	if tab != "overview" {
+		return c.Status(fiber.StatusNotFound).SendString("Unknown tab for a Garry's Mod world: " + tab)
+	}
+
 	inst, err := h.cfg.Instances.GetInstance(c.UserContext(), num)
 	if err != nil || inst == nil {
 		return c.Status(fiber.StatusNotFound).SendString("Garry's Mod instance not found")
@@ -325,7 +330,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 			MOTD:         inst.MOTD,
 			LBIP:         lbIP,
 		},
-		ActiveTab: "overview",
+		ActiveTab: tab,
 	}
 
 	if collectionID != "" && h.cfg.Workshop != nil {

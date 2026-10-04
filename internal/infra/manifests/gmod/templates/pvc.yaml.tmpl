@@ -13,3 +13,19 @@ spec:
   resources:
     requests:
       storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .CachePVCName }}
+  namespace: {{ .Namespace }}
+  labels:
+    app: {{ .DeploymentName }}
+    instance: "{{ .Number }}"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
