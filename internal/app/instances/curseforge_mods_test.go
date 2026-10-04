@@ -44,7 +44,11 @@ func cfManager(st *cfStore, resolve func(ctx context.Context, slug, mcVersion, l
 		cfResolver:       resolve,
 		repo: &ipRepo{items: []domain.Instance{{
 			GameID: domain.GameMinecraft, Number: 3, Name: "bob", Slug: "bob",
-			Source: domain.SourceModlist, Loader: domain.LoaderFabric, MCVersion: "1.21.1",
+			Source: domain.SourceModlist,
+			Minecraft: &domain.MinecraftConfig{
+				Loader:    domain.LoaderFabric,
+				MCVersion: "1.21.1",
+			},
 		}}},
 	}
 }

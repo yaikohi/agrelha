@@ -12,6 +12,9 @@ import (
 	"agrelha/internal/ports"
 )
 
+// FreeCreations is the fallback when no limit has been configured. The live
+// value is a global setting owned by app/capacity, injected via
+// WithCreationLimit, and counts worlds across every game.
 const FreeCreations = 1
 
 type CreateFunc func(ctx context.Context, game domain.GameID, inst domain.Instance, mods domain.ModList, actor string) (*domain.Instance, error)
@@ -26,6 +29,7 @@ type Service struct {
 	grant  GrantFunc
 	list   ListFunc
 	audit  ports.AuditRecorder
+	limit  func(context.Context) int
 	now    func() time.Time
 }
 
@@ -36,6 +40,10 @@ func WithGrant(fn GrantFunc) Option   { return func(s *Service) { s.grant = fn }
 func WithList(fn ListFunc) Option     { return func(s *Service) { s.list = fn } }
 
 func WithAudit(a ports.AuditRecorder) Option { return func(s *Service) { s.audit = a } }
+
+func WithCreationLimit(fn func(context.Context) int) Option {
+	return func(s *Service) { s.limit = fn }
+}
 
 func WithClock(fn func() time.Time) Option { return func(s *Service) { s.now = fn } }
 
@@ -70,12 +78,23 @@ func (s *Service) CreatedBy(ctx context.Context, subject string) (int, error) {
 	return n, nil
 }
 
+func (s *Service) CreationLimit(ctx context.Context) int {
+	if s == nil || s.limit == nil {
+		return FreeCreations
+	}
+	n := s.limit(ctx)
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
 func (s *Service) MayCreateDirectly(ctx context.Context, subject string) (bool, error) {
 	n, err := s.CreatedBy(ctx, subject)
 	if err != nil {
 		return false, err
 	}
-	return n < FreeCreations, nil
+	return n < s.CreationLimit(ctx), nil
 }
 
 func (s *Service) Submit(ctx context.Context, subject string, inst domain.Instance, mods domain.ModList) (*domain.InstanceRequest, error) {

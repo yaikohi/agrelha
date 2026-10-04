@@ -341,8 +341,10 @@ func TestModrinthLatestAndInstance(t *testing.T) {
 
 	// LatestVersionForInstance
 	inst := domain.Instance{
-		Loader:    domain.LoaderNeoForge,
-		MCVersion: "1.21.1",
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
 	}
 	ref := domain.ModRef{Name: "test-mod"}
 	ver, deps, err := c.LatestVersionForInstance(context.Background(), ref, inst)
@@ -706,7 +708,7 @@ func TestModrinthClient_MoreEdgeCases(t *testing.T) {
 	}
 
 	// 9. ResolveTreeForInstance: dep without versions appends just slug
-	tree, err := c.ResolveTreeForInstance(context.Background(), domain.ModRef{Namespace: "tree-mod"}, domain.Instance{MCVersion: "1.20.1"})
+	tree, err := c.ResolveTreeForInstance(context.Background(), domain.ModRef{Namespace: "tree-mod"}, domain.Instance{Minecraft: &domain.MinecraftConfig{MCVersion: "1.20.1"}})
 	if err != nil {
 		t.Fatalf("ResolveTreeForInstance failed: %v", err)
 	}

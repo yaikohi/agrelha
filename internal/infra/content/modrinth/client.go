@@ -359,8 +359,12 @@ func (c *Client) LatestVersionForInstance(ctx context.Context, ref domain.ModRef
 	if slug == "" {
 		slug = ref.Namespace
 	}
-	loader := string(domain.NormalizeLoader(string(inst.Loader)))
-	mcVer := inst.MCVersion
+	loader := ""
+	mcVer := ""
+	if inst.Minecraft != nil {
+		loader = string(domain.NormalizeLoader(string(inst.Minecraft.Loader)))
+		mcVer = inst.Minecraft.MCVersion
+	}
 
 	vers, err := c.GetProjectVersions(ctx, slug, mcVer, loader)
 	if err != nil {
@@ -390,8 +394,12 @@ func (c *Client) ResolveTreeForInstance(ctx context.Context, ref domain.ModRef, 
 	if slug == "" {
 		slug = ref.Namespace
 	}
-	loader := string(domain.NormalizeLoader(string(inst.Loader)))
-	mcVer := inst.MCVersion
+	loader := ""
+	mcVer := ""
+	if inst.Minecraft != nil {
+		loader = string(domain.NormalizeLoader(string(inst.Minecraft.Loader)))
+		mcVer = inst.Minecraft.MCVersion
+	}
 
 	depSlugs, err := c.ResolveRequiredDependencies(ctx, slug, mcVer, loader)
 	if err != nil {

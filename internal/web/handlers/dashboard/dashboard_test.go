@@ -15,7 +15,6 @@ import (
 	"agrelha/internal/app/instances"
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/store"
-	"agrelha/internal/ports"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/valyala/fasthttp"
@@ -101,12 +100,6 @@ type fakeGameEngine struct {
 	telemetry domain.GameTelemetry
 }
 
-func (f *fakeGameEngine) ID() domain.GameID                  { return "mock" }
-func (f *fakeGameEngine) Display() domain.Display            { return domain.Display{Name: "Mock"} }
-func (f *fakeGameEngine) Providers() []ports.ContentProvider { return nil }
-func (f *fakeGameEngine) ResolveContent(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
-	return domain.ContentSet{}, nil
-}
 func (f *fakeGameEngine) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
 	return domain.Bundle{}, nil
 }
@@ -116,8 +109,6 @@ func (f *fakeGameEngine) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 func (f *fakeGameEngine) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
 	return f.telemetry, nil
 }
-func (f *fakeGameEngine) AdmissionModel() domain.AdmissionModel { return "" }
-func (f *fakeGameEngine) OperatorIDKind() domain.OperatorIDKind { return "" }
 
 func TestTileSignalsWithGameEngines(t *testing.T) {
 	valheim := &fakeGameEngine{
@@ -182,14 +173,16 @@ func TestDashboardPageWithInstances(t *testing.T) {
 
 	mcRepo := store.NewInstanceRepo(st)
 	_ = mcRepo.Upsert(domain.Instance{
-		Number:    1,
-		Slug:      "ducktopia",
-		Name:      "Ducktopia",
-		State:     domain.StateRunning,
-		GameID:    domain.GameMinecraft,
-		Loader:    domain.LoaderNeoForge,
-		MCVersion: "1.21.1",
-		Tier:      domain.TierMedium,
+		Number: 1,
+		Slug:   "ducktopia",
+		Name:   "Ducktopia",
+		State:  domain.StateRunning,
+		GameID: domain.GameMinecraft,
+		Tier:   domain.TierMedium,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
 	})
 
 	mcMgr := instances.NewInstanceManager(
@@ -203,13 +196,13 @@ func TestDashboardPageWithInstances(t *testing.T) {
 
 	vhRepo := store.NewValheimInstanceRepo(st)
 	_ = vhRepo.Upsert(domain.Instance{
-		Number:   1,
-		Slug:     "midgard",
-		Name:     "Midgard",
-		State:    domain.StateRunning,
-		GameID:   domain.GameValheim,
-		Tier:     domain.TierMedium,
-		Password: "pass",
+		Number:  1,
+		Slug:    "midgard",
+		Name:    "Midgard",
+		State:   domain.StateRunning,
+		GameID:  domain.GameValheim,
+		Tier:    domain.TierMedium,
+		Valheim: &domain.ValheimConfig{Password: "pass"},
 	})
 
 	vhMgr := instances.NewInstanceManager(

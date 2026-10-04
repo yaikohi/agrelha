@@ -8,17 +8,19 @@ import (
 
 func TestRenderInstanceManifests(t *testing.T) {
 	inst := domain.Instance{
-		Number:     1,
-		Name:       "Fluxweave",
-		Slug:       "fluxweave",
-		Seed:       "123456789",
-		Loader:     domain.LoaderNeoForge,
-		Source:     domain.SourceModlist,
-		MCVersion:  "1.21.1",
-		Tier:       domain.TierMedium,
-		State:      domain.StateRunning,
-		Difficulty: "hard",
-		Gamemode:   "survival",
+		Number: 1,
+		Name:   "Fluxweave",
+		Slug:   "fluxweave",
+		Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			Seed:       "123456789",
+			Loader:     domain.LoaderNeoForge,
+			MCVersion:  "1.21.1",
+			Difficulty: "hard",
+			Gamemode:   "survival",
+		},
+		Tier:  domain.TierMedium,
+		State: domain.StateRunning,
 		// Explicit: with no MC_LB_BASE_IP configured, agrelha pins no address
 		// and lets the load balancer allocate one.
 		LBIP: "192.168.20.225",
@@ -62,7 +64,10 @@ func TestMinecraftReadinessUsesMCHealth(t *testing.T) {
 	inst := domain.Instance{
 		Number: 1, Name: "almere", Slug: "almere",
 		Tier: domain.TierMedium, State: domain.StateRunning,
-		Loader: domain.LoaderNeoForge, MCVersion: "1.21.1",
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
 	}
 
 	files, err := Render(inst, domain.ModList{}, "", "minecraft-modded")
@@ -82,14 +87,16 @@ func TestMinecraftReadinessUsesMCHealth(t *testing.T) {
 func TestRenderer_FabricAndStopped(t *testing.T) {
 	r := New("topology.kubernetes.io/zone=us-east-1a", "minecraft-modded")
 	inst := domain.Instance{
-		Number:    2,
-		Name:      "Fabric World",
-		Slug:      "fabric-world",
-		Loader:    domain.LoaderFabric,
-		Source:    domain.SourceModlist,
-		MCVersion: "1.20.1",
-		Tier:      domain.TierSmall,
-		State:     domain.StateStopped,
+		Number: 2,
+		Name:   "Fabric World",
+		Slug:   "fabric-world",
+		Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderFabric,
+			MCVersion: "1.20.1",
+		},
+		Tier:  domain.TierSmall,
+		State: domain.StateStopped,
 	}
 
 	files, err := r.Render(inst, domain.ModList{Primary: "fabric-api\nsodium\n"})
@@ -115,12 +122,14 @@ func TestRenderer_FabricAndStopped(t *testing.T) {
 
 	// Test SourceVanilla omits mods.yaml
 	instVanilla := domain.Instance{
-		Number:    3,
-		Name:      "Vanilla Server",
-		Slug:      "vanilla-server",
-		Source:    domain.SourceVanilla,
-		MCVersion: "1.21.1",
-		Tier:      domain.TierSmall,
+		Number: 3,
+		Name:   "Vanilla Server",
+		Slug:   "vanilla-server",
+		Source: domain.SourceVanilla,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+		},
+		Tier: domain.TierSmall,
 	}
 	filesV, err := Render(instVanilla, domain.ModList{}, "", "")
 	if err != nil {

@@ -23,7 +23,7 @@ type Budget struct {
 }
 
 // CalculateBudget computes memory and running server counts across instances.
-func CalculateBudget(instances []Instance, totalBudgetGiB, maxRunning, maxInstances int) Budget {
+func CalculateBudget(profile GameProfile, instances []Instance, totalBudgetGiB, maxRunning, maxInstances int) Budget {
 	if totalBudgetGiB <= 0 {
 		totalBudgetGiB = DefaultTotalBudgetGiB
 	}
@@ -39,7 +39,7 @@ func CalculateBudget(instances []Instance, totalBudgetGiB, maxRunning, maxInstan
 	for _, inst := range instances {
 		if inst.State == StateRunning {
 			runningCount++
-			usedGiB += inst.MemoryGiB()
+			usedGiB += inst.MemoryGiB(profile)
 		}
 	}
 
@@ -60,13 +60,13 @@ func (b *Budget) AddUsage(runningCount, usedGiB int) {
 }
 
 // CanStart checks whether inst can be started within this budget.
-func (b Budget) CanStart(inst Instance) error {
+func (b Budget) CanStart(profile GameProfile, inst Instance) error {
 	if b.MaxRunning > 0 && b.RunningCount >= b.MaxRunning {
 		return fmt.Errorf("cannot start instance: maximum of %d running instances reached (please stop another server first)", b.MaxRunning)
 	}
-	if b.TotalBudgetGiB > 0 && b.UsedGiB+inst.MemoryGiB() > b.TotalBudgetGiB {
+	if b.TotalBudgetGiB > 0 && b.UsedGiB+inst.MemoryGiB(profile) > b.TotalBudgetGiB {
 		return fmt.Errorf("cannot start instance: RAM budget exceeded (%d GiB in use, requires %d GiB, total budget is %d GiB)",
-			b.UsedGiB, inst.MemoryGiB(), b.TotalBudgetGiB)
+			b.UsedGiB, inst.MemoryGiB(profile), b.TotalBudgetGiB)
 	}
 	return nil
 }

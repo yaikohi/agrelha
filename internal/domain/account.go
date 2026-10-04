@@ -32,7 +32,7 @@ func ParseInstanceRole(r Role) (GameID, int, bool) {
 		return "", 0, false
 	}
 	game := GameID(rest[:cut])
-	if game != GameValheim && game != GameMinecraft {
+	if _, ok := ProfileFor(game); !ok {
 		return "", 0, false
 	}
 	number, err := strconv.Atoi(rest[cut+1:])

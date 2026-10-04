@@ -21,11 +21,13 @@ func TestMinecraftInstanceConfigsAndBackups(t *testing.T) {
 	defer st.Close()
 
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "Ducktopia",
-		Loader:    domain.LoaderNeoForge,
-		Source:    domain.SourceModpack,
-		MCVersion: "1.21.1",
-		Tier:      domain.TierLarge,
+		Name:   "Ducktopia",
+		Source: domain.SourceModpack,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
+		Tier: domain.TierLarge,
 	}, domain.ModList{})
 	if err != nil {
 		t.Fatal(err)
@@ -100,11 +102,13 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	app = wiring.BuildServer(context.Background(), cfg, d)
 
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "Fluxweave",
-		Loader:    domain.LoaderNeoForge,
-		Source:    domain.SourceModlist,
-		MCVersion: "1.21.1",
-		Tier:      domain.TierMedium,
+		Name:   "Fluxweave",
+		Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
+		Tier: domain.TierMedium,
 	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)

@@ -503,7 +503,12 @@ type fakeInstanceCatalog struct {
 }
 
 func (f *fakeInstanceCatalog) LatestVersionForInstance(_ context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error) {
-	key := fmt.Sprintf("%s|%s|%s", ref.Name, inst.MCVersion, inst.Loader)
+	var mcVersion, loader string
+	if inst.Minecraft != nil {
+		mcVersion = inst.Minecraft.MCVersion
+		loader = string(inst.Minecraft.Loader)
+	}
+	key := fmt.Sprintf("%s|%s|%s", ref.Name, mcVersion, loader)
 	v, ok := f.instanceVersions[key]
 	if !ok {
 		return "", nil, nil
@@ -512,15 +517,20 @@ func (f *fakeInstanceCatalog) LatestVersionForInstance(_ context.Context, ref do
 }
 
 func (f *fakeInstanceCatalog) ResolveTreeForInstance(_ context.Context, ref domain.ModRef, inst domain.Instance) ([]string, error) {
-	key := fmt.Sprintf("%s|%s|%s", ref.Name, inst.MCVersion, inst.Loader)
+	var mcVersion, loader string
+	if inst.Minecraft != nil {
+		mcVersion = inst.Minecraft.MCVersion
+		loader = string(inst.Minecraft.Loader)
+	}
+	key := fmt.Sprintf("%s|%s|%s", ref.Name, mcVersion, loader)
 	return f.instanceTrees[key], nil
 }
 
 func TestRefreshFiltersByInstanceLoader(t *testing.T) {
 	insts := &fakeInstances{
 		insts: []domain.Instance{
-			{Number: 1, Name: "FabricWorld", GameID: domain.GameMinecraft, Loader: domain.LoaderFabric, MCVersion: "1.21.1", Source: domain.SourceModlist},
-			{Number: 2, Name: "NeoWorld", GameID: domain.GameMinecraft, Loader: domain.LoaderNeoForge, MCVersion: "1.21.1", Source: domain.SourceModlist},
+			{Number: 1, Name: "FabricWorld", GameID: domain.GameMinecraft, Minecraft: &domain.MinecraftConfig{Loader: domain.LoaderFabric, MCVersion: "1.21.1"}, Source: domain.SourceModlist},
+			{Number: 2, Name: "NeoWorld", GameID: domain.GameMinecraft, Minecraft: &domain.MinecraftConfig{Loader: domain.LoaderNeoForge, MCVersion: "1.21.1"}, Source: domain.SourceModlist},
 		},
 		entries: map[int][]string{
 			1: {"sodium:0.5.11+mc1.21"},
@@ -560,7 +570,7 @@ func TestRefreshFiltersByInstanceLoader(t *testing.T) {
 func TestMinecraftModUpdatesApplyAndUndo(t *testing.T) {
 	insts := &fakeInstances{
 		insts: []domain.Instance{
-			{Number: 2, Name: "NeoWorld", GameID: domain.GameMinecraft, Loader: domain.LoaderNeoForge, MCVersion: "1.21.1", Source: domain.SourceModlist},
+			{Number: 2, Name: "NeoWorld", GameID: domain.GameMinecraft, Minecraft: &domain.MinecraftConfig{Loader: domain.LoaderNeoForge, MCVersion: "1.21.1"}, Source: domain.SourceModlist},
 		},
 		entries: map[int][]string{
 			2: {"sodium:0.5.11+mc1.21", "cloth-config:15.0.127"},
@@ -605,7 +615,7 @@ func TestMinecraftModUpdatesApplyAndUndo(t *testing.T) {
 func TestMinecraftUnpinnedModCanBeUpdatedAndPinned(t *testing.T) {
 	insts := &fakeInstances{
 		insts: []domain.Instance{
-			{Number: 3, Name: "BobWorld", GameID: domain.GameMinecraft, Loader: domain.LoaderFabric, MCVersion: "1.21.1", Source: domain.SourceModlist},
+			{Number: 3, Name: "BobWorld", GameID: domain.GameMinecraft, Minecraft: &domain.MinecraftConfig{Loader: domain.LoaderFabric, MCVersion: "1.21.1"}, Source: domain.SourceModlist},
 		},
 		entries: map[int][]string{
 			3: {"xaeros-minimap"},
@@ -648,7 +658,7 @@ func TestCheckerMethodsAndEdges(t *testing.T) {
 	insts := &fakeInstances{
 		insts: []domain.Instance{
 			{Number: 1, Name: "VanillaWorld", GameID: domain.GameValheim, Source: domain.SourceVanilla},
-			{Number: 2, Name: "PackWorld", GameID: domain.GameValheim, Source: domain.SourceModpack, Pack: &domain.Pack{Name: "Pack"}},
+			{Number: 2, Name: "PackWorld", GameID: domain.GameValheim, Source: domain.SourceModpack},
 			{Number: 3, Name: "ModdedWorld", GameID: domain.GameValheim, Source: domain.SourceModlist},
 		},
 		entries: map[int][]string{
@@ -760,7 +770,7 @@ func TestCheckerAllEdgeCases(t *testing.T) {
 	vanillaInsts := &fakeInstances{
 		insts: []domain.Instance{
 			{Number: 1, Source: domain.SourceVanilla},
-			{Number: 2, Source: domain.SourceModpack, Pack: &domain.Pack{Name: "pack"}},
+			{Number: 2, Source: domain.SourceModpack},
 			{Number: 3, Source: domain.SourceModlist}, // empty mods
 		},
 		entries: map[int][]string{

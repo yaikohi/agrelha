@@ -15,8 +15,10 @@ func TestValheimRenderBasic(t *testing.T) {
 		Number:   1,
 		Name:     "Odin's Domain",
 		Slug:     "odins-domain",
-		Password: "secretpassword",
-		Seed:     "valheim123",
+		Valheim: &domain.ValheimConfig{
+			Password: "secretpassword",
+			Seed:     "valheim123",
+		},
 		Tier:     domain.TierMedium,
 		State:    domain.StateRunning,
 		LBIP:     "192.168.20.210",

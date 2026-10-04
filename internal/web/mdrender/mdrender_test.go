@@ -18,9 +18,9 @@ type failMarkdown struct {
 func (m *failMarkdown) Convert(source []byte, writer io.Writer, opts ...parser.ParseOption) error {
 	return m.err
 }
-func (m *failMarkdown) Parser() parser.Parser        { return nil }
-func (m *failMarkdown) SetParser(p parser.Parser)    {}
-func (m *failMarkdown) Renderer() renderer.Renderer  { return nil }
+func (m *failMarkdown) Parser() parser.Parser           { return nil }
+func (m *failMarkdown) SetParser(p parser.Parser)       {}
+func (m *failMarkdown) Renderer() renderer.Renderer     { return nil }
 func (m *failMarkdown) SetRenderer(r renderer.Renderer) {}
 
 func TestRender(t *testing.T) {

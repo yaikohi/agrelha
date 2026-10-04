@@ -26,13 +26,13 @@ func TestResourceTiersMemoryMapping(t *testing.T) {
 
 	for _, tc := range cases {
 		inst := domain.Instance{Tier: tc.tier}
-		if got := inst.MemoryGiB(); got != tc.wantMem {
+		if got := inst.MemoryGiB(domain.MinecraftProfile); got != tc.wantMem {
 			t.Errorf("tier %s MemoryGiB = %d, want %d", tc.tier, got, tc.wantMem)
 		}
-		if got := inst.MemoryLimitGiB(); got != tc.wantLimit {
+		if got := inst.MemoryLimitGiB(domain.MinecraftProfile); got != tc.wantLimit {
 			t.Errorf("tier %s MemoryLimitGiB = %d, want %d", tc.tier, got, tc.wantLimit)
 		}
-		if got := inst.HeapInitMemoryGiB(); got != tc.wantHeapInit {
+		if got := inst.HeapInitMemoryGiB(domain.MinecraftProfile); got != tc.wantHeapInit {
 			t.Errorf("tier %s HeapInitMemoryGiB = %d, want %d", tc.tier, got, tc.wantHeapInit)
 		}
 	}
@@ -54,9 +54,11 @@ func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 		inst := domain.Instance{
 			Number: 1, Name: "CF domain.Pack", Slug: "cf-pack",
 			Source: domain.SourceModpack,
-			Pack:   &domain.Pack{Provider: domain.ProviderCurseForge, Ref: "https://curseforge.com/pack", Name: "ATM9"},
+			Minecraft: &domain.MinecraftConfig{
+				Pack: &domain.Pack{Provider: domain.ProviderCurseForge, Ref: "https://curseforge.com/pack", Name: "ATM9"},
+			},
 		}
-		env := inst.Env()
+		env := inst.Env(domain.MinecraftProfile)
 		if env["TYPE"] != "AUTO_CURSEFORGE" {
 			t.Fatalf("expected TYPE=AUTO_CURSEFORGE, got %q", env["TYPE"])
 		}
@@ -75,9 +77,11 @@ func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 		inst := domain.Instance{
 			Number: 2, Name: "MR domain.Pack", Slug: "mr-pack",
 			Source: domain.SourceModpack,
-			Pack:   &domain.Pack{Provider: domain.ProviderModrinth, Ref: "mr-pack-slug", Name: "Fabulously Optimized"},
+			Minecraft: &domain.MinecraftConfig{
+				Pack: &domain.Pack{Provider: domain.ProviderModrinth, Ref: "mr-pack-slug", Name: "Fabulously Optimized"},
+			},
 		}
-		env := inst.Env()
+		env := inst.Env(domain.MinecraftProfile)
 		if env["TYPE"] != "MODRINTH" {
 			t.Fatalf("expected TYPE=MODRINTH, got %q", env["TYPE"])
 		}
@@ -95,9 +99,12 @@ func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 	t.Run("vanilla", func(t *testing.T) {
 		inst := domain.Instance{
 			Number: 3, Name: "Vanilla", Slug: "vanilla",
-			Source: domain.SourceVanilla, MCVersion: "1.21.4",
+			Source: domain.SourceVanilla,
+			Minecraft: &domain.MinecraftConfig{
+				MCVersion: "1.21.4",
+			},
 		}
-		env := inst.Env()
+		env := inst.Env(domain.MinecraftProfile)
 		if env["TYPE"] != "VANILLA" {
 			t.Fatalf("expected TYPE=VANILLA, got %q", env["TYPE"])
 		}
@@ -124,9 +131,13 @@ func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 	t.Run("modlist_fabric", func(t *testing.T) {
 		inst := domain.Instance{
 			Number: 4, Name: "Fabric Modded", Slug: "fabric-modded",
-			Source: domain.SourceModlist, Loader: domain.LoaderFabric, MCVersion: "1.21.1",
+			Source: domain.SourceModlist,
+			Minecraft: &domain.MinecraftConfig{
+				Loader:    domain.LoaderFabric,
+				MCVersion: "1.21.1",
+			},
 		}
-		env := inst.Env()
+		env := inst.Env(domain.MinecraftProfile)
 		if env["TYPE"] != "FABRIC" {
 			t.Fatalf("expected TYPE=FABRIC, got %q", env["TYPE"])
 		}
@@ -144,9 +155,13 @@ func TestEnvDisjointKeySetsPerSource(t *testing.T) {
 	t.Run("modlist_neoforge", func(t *testing.T) {
 		inst := domain.Instance{
 			Number: 5, Name: "NeoForge Modded", Slug: "neoforge-modded",
-			Source: domain.SourceModlist, Loader: domain.LoaderNeoForge, MCVersion: "1.21.1",
+			Source: domain.SourceModlist,
+			Minecraft: &domain.MinecraftConfig{
+				Loader:    domain.LoaderNeoForge,
+				MCVersion: "1.21.1",
+			},
 		}
-		env := inst.Env()
+		env := inst.Env(domain.MinecraftProfile)
 		if env["TYPE"] != "NEOFORGE" {
 			t.Fatalf("expected TYPE=NEOFORGE, got %q", env["TYPE"])
 		}
@@ -179,7 +194,7 @@ func TestBudgetRejectsRAMOvercommit(t *testing.T) {
 	_, err = mgr.CreateInstance(ctx, domain.Instance{
 		Name:      "Heavy Server",
 		Source:    domain.SourceVanilla,
-		MCVersion: "1.21.4",
+		Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.4"},
 		Tier:      domain.TierLarge, // 12 GiB
 	}, domain.ModList{})
 	if err != nil {
@@ -190,7 +205,7 @@ func TestBudgetRejectsRAMOvercommit(t *testing.T) {
 	_, err = mgr.CreateInstance(ctx, domain.Instance{
 		Name:      "Medium Server",
 		Source:    domain.SourceVanilla,
-		MCVersion: "1.21.4",
+		Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.4"},
 		Tier:      domain.TierMedium, // 8 GiB
 	}, domain.ModList{})
 	if err != nil {
@@ -225,17 +240,17 @@ func TestMaxInstancesLimit(t *testing.T) {
 		store.NewInstanceRepo(st), nil, nil, 24, 2, 2, "manifests/mc", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
 	ctx := context.Background()
 
-	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "One", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, domain.ModList{})
+	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "One", Source: domain.SourceVanilla, Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.4"}}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create One: %v", err)
 	}
-	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Two", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, domain.ModList{})
+	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Two", Source: domain.SourceVanilla, Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.4"}}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create Two: %v", err)
 	}
 
 	// Third creation must be rejected
-	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Three", Source: domain.SourceVanilla, MCVersion: "1.21.4"}, domain.ModList{})
+	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "Three", Source: domain.SourceVanilla, Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.4"}}, domain.ModList{})
 	if err == nil {
 		t.Fatalf("expected error when exceeding max instances limit of 2, got nil")
 	}

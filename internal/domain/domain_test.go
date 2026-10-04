@@ -12,7 +12,7 @@ func TestBudget(t *testing.T) {
 	inst3 := Instance{Number: 3, Name: "Small", Tier: TierSmall, State: StateStopped}   // 4 GiB
 
 	// Budget: 24 GiB total, max 2 running, max 4 instances
-	b := CalculateBudget([]Instance{inst1, inst2, inst3}, 24, 2, 4)
+	b := CalculateBudget(MinecraftProfile, []Instance{inst1, inst2, inst3}, 24, 2, 4)
 	if b.UsedGiB != 20 {
 		t.Fatalf("UsedGiB = %d, want 20", b.UsedGiB)
 	}
@@ -21,24 +21,24 @@ func TestBudget(t *testing.T) {
 	}
 
 	// 1. CanStart fails due to maxRunning
-	if err := b.CanStart(inst3); err == nil || !strings.Contains(err.Error(), "maximum of 2 running instances reached") {
+	if err := b.CanStart(MinecraftProfile, inst3); err == nil || !strings.Contains(err.Error(), "maximum of 2 running instances reached") {
 		t.Fatalf("expected maxRunning error, got %v", err)
 	}
 
 	// 2. CanStart fails due to RAM budget
-	b2 := CalculateBudget([]Instance{inst1}, 14, 2, 4) // 12 used of 14
-	if err := b2.CanStart(inst3); err == nil || !strings.Contains(err.Error(), "RAM budget exceeded") {
+	b2 := CalculateBudget(MinecraftProfile, []Instance{inst1}, 14, 2, 4) // 12 used of 14
+	if err := b2.CanStart(MinecraftProfile, inst3); err == nil || !strings.Contains(err.Error(), "RAM budget exceeded") {
 		t.Fatalf("expected RAM budget error, got %v", err)
 	}
 
 	// 3. CanStart succeeds
-	b3 := CalculateBudget([]Instance{inst1}, 24, 2, 4) // 12 used of 24, 1 running
-	if err := b3.CanStart(inst3); err != nil {
+	b3 := CalculateBudget(MinecraftProfile, []Instance{inst1}, 24, 2, 4) // 12 used of 24, 1 running
+	if err := b3.CanStart(MinecraftProfile, inst3); err != nil {
 		t.Fatalf("expected CanStart to succeed, got %v", err)
 	}
 
 	// 4. CanCreate
-	bFull := CalculateBudget([]Instance{inst1, inst2, inst3, inst3}, 24, 2, 4)
+	bFull := CalculateBudget(MinecraftProfile, []Instance{inst1, inst2, inst3, inst3}, 24, 2, 4)
 	if err := bFull.CanCreate(); err == nil || !strings.Contains(err.Error(), "maximum limit of 4 instances reached") {
 		t.Fatalf("expected CanCreate error when full, got %v", err)
 	}
@@ -74,7 +74,7 @@ func TestPackInvariantsAndSlugify(t *testing.T) {
 	}
 
 	pack := &Pack{Provider: ProviderCurseForge, Ref: "ref-1", Name: "ATM9"}
-	inst := Instance{Source: SourceModpack, Pack: pack}
+	inst := Instance{Source: SourceModpack, Minecraft: &MinecraftConfig{Pack: pack}}
 	if !inst.PackDefined() {
 		t.Errorf("expected PackDefined=true")
 	}
@@ -93,7 +93,7 @@ func TestPackInvariantsAndSlugify(t *testing.T) {
 
 func TestInstanceDefaultsAndEnv(t *testing.T) {
 	inst := Instance{Name: "World Alpha", Number: 1}
-	inst.EnsureDefaults("192.168.20.224")
+	inst.EnsureDefaults(MinecraftProfile, "192.168.20.224")
 
 	if inst.GameID != GameMinecraft {
 		t.Errorf("GameID = %s, want minecraft", inst.GameID)
@@ -111,7 +111,7 @@ func TestInstanceDefaultsAndEnv(t *testing.T) {
 		t.Errorf("LBIP = %s, want 192.168.20.225", inst.LBIP)
 	}
 
-	env := inst.Env()
+	env := inst.Env(MinecraftProfile)
 	if env["LEVEL"] != "world-alpha" {
 		t.Errorf("LEVEL = %q, want world-alpha", env["LEVEL"])
 	}
@@ -122,37 +122,39 @@ func TestInstanceDefaultsAndEnv(t *testing.T) {
 
 func TestInstanceAnnotationsAndNaming(t *testing.T) {
 	inst := Instance{
-		Name:      "Testing Server",
-		Slug:      "testing-server",
-		Number:    3,
-		Loader:    LoaderFabric,
-		Source:    SourceModpack,
-		Pack:      &Pack{Provider: ProviderModrinth, Ref: "modrinth-ref", Name: "Fabulously Optimized"},
-		MCVersion: "1.21.1",
-		Tier:      TierLarge,
-		Seed:      "424242",
+		Name:   "Testing Server",
+		Slug:   "testing-server",
+		Number: 3,
+		Source: SourceModpack,
+		Tier:   TierLarge,
+		Minecraft: &MinecraftConfig{
+			Loader:    LoaderFabric,
+			Pack:      &Pack{Provider: ProviderModrinth, Ref: "modrinth-ref", Name: "Fabulously Optimized"},
+			MCVersion: "1.21.1",
+			Seed:      "424242",
+		},
 	}
 
-	if inst.DeploymentName() != "mc-testing-server-03" {
-		t.Errorf("DeploymentName = %q", inst.DeploymentName())
+	if inst.DeploymentName(MinecraftProfile) != "mc-testing-server-03" {
+		t.Errorf("DeploymentName = %q", inst.DeploymentName(MinecraftProfile))
 	}
-	if inst.ServiceName() != "mc-testing-server-03" {
-		t.Errorf("ServiceName = %q", inst.ServiceName())
+	if inst.ServiceName(MinecraftProfile) != "mc-testing-server-03" {
+		t.Errorf("ServiceName = %q", inst.ServiceName(MinecraftProfile))
 	}
-	if inst.PVCName() != "mc-instance-03-data" {
-		t.Errorf("PVCName = %q", inst.PVCName())
+	if inst.PVCName(MinecraftProfile) != "mc-instance-03-data" {
+		t.Errorf("PVCName = %q", inst.PVCName(MinecraftProfile))
 	}
-	if inst.ConfigCMName() != "mc-testing-server-03-slot" {
-		t.Errorf("ConfigCMName = %q", inst.ConfigCMName())
+	if inst.ConfigCMName(MinecraftProfile) != "mc-testing-server-03-slot" {
+		t.Errorf("ConfigCMName = %q", inst.ConfigCMName(MinecraftProfile))
 	}
-	if inst.ModsCMName() != "mc-testing-server-03-mods" {
-		t.Errorf("ModsCMName = %q", inst.ModsCMName())
+	if inst.ModsCMName(MinecraftProfile) != "mc-testing-server-03-mods" {
+		t.Errorf("ModsCMName = %q", inst.ModsCMName(MinecraftProfile))
 	}
-	if inst.ConfigsCMName() != "mc-testing-server-03-configs" {
-		t.Errorf("ConfigsCMName = %q", inst.ConfigsCMName())
+	if inst.ConfigsCMName(MinecraftProfile) != "mc-testing-server-03-configs" {
+		t.Errorf("ConfigsCMName = %q", inst.ConfigsCMName(MinecraftProfile))
 	}
 
-	ann := inst.Annotations()
+	ann := inst.Annotations(MinecraftProfile)
 	if ann["agrelha.dev/instance-number"] != "3" {
 		t.Errorf("ann instance-number = %q", ann["agrelha.dev/instance-number"])
 	}
@@ -166,7 +168,7 @@ func TestInstanceAnnotationsAndNaming(t *testing.T) {
 		t.Errorf("ann pack-name = %q", ann["agrelha.dev/pack-name"])
 	}
 
-	env := inst.Env()
+	env := inst.Env(MinecraftProfile)
 	if env["TYPE"] != "MODRINTH" || env["MODRINTH_MODPACK"] != "modrinth-ref" {
 		t.Errorf("modrinth env unexpected: %v", env)
 	}
@@ -176,9 +178,9 @@ func TestInstanceAnnotationsAndNaming(t *testing.T) {
 		Slug:      "vanilla",
 		Number:    4,
 		Source:    SourceVanilla,
-		MCVersion: "1.21.4",
+		Minecraft: &MinecraftConfig{MCVersion: "1.21.4"},
 	}
-	vanillaEnv := vanillaInst.Env()
+	vanillaEnv := vanillaInst.Env(MinecraftProfile)
 	if vanillaEnv["TYPE"] != "VANILLA" || vanillaEnv["VERSION"] != "1.21.4" {
 		t.Errorf("vanilla env unexpected: %v", vanillaEnv)
 	}
@@ -240,14 +242,16 @@ user2 # inline comment without space handled
 
 func TestValheimInstance(t *testing.T) {
 	vInst := Instance{
-		GameID:   GameValheim,
-		Name:     "Viking World",
-		Number:   1,
-		Password: "secretpassword",
-		Seed:     "valheimseed123",
-		Tier:     TierSmall,
+		GameID: GameValheim,
+		Name:   "Viking World",
+		Number: 1,
+		Tier:   TierSmall,
+		Valheim: &ValheimConfig{
+			Password: "secretpassword",
+			Seed:     "valheimseed123",
+		},
 	}
-	vInst.EnsureDefaults("192.168.20.210")
+	vInst.EnsureDefaults(ValheimProfile, "192.168.20.210")
 
 	if vInst.GameID != GameValheim {
 		t.Fatalf("GameID = %s, want valheim", vInst.GameID)
@@ -263,42 +267,42 @@ func TestValheimInstance(t *testing.T) {
 	}
 
 	// Memory calculations for Valheim
-	if vInst.MemoryGiB() != 4 || vInst.MemoryLimitGiB() != 5 || vInst.HeapInitMemoryGiB() != 0 {
-		t.Fatalf("Valheim TierSmall unexpected memory: %d, %d, %d", vInst.MemoryGiB(), vInst.MemoryLimitGiB(), vInst.HeapInitMemoryGiB())
+	if vInst.MemoryGiB(ValheimProfile) != 4 || vInst.MemoryLimitGiB(ValheimProfile) != 5 || vInst.HeapInitMemoryGiB(ValheimProfile) != 0 {
+		t.Fatalf("Valheim TierSmall unexpected memory: %d, %d, %d", vInst.MemoryGiB(ValheimProfile), vInst.MemoryLimitGiB(ValheimProfile), vInst.HeapInitMemoryGiB(ValheimProfile))
 	}
 
 	vInstMed := Instance{GameID: GameValheim, Tier: TierMedium}
-	if vInstMed.MemoryGiB() != 6 || vInstMed.MemoryLimitGiB() != 7 {
-		t.Fatalf("Valheim TierMedium unexpected memory: %d, %d", vInstMed.MemoryGiB(), vInstMed.MemoryLimitGiB())
+	if vInstMed.MemoryGiB(ValheimProfile) != 6 || vInstMed.MemoryLimitGiB(ValheimProfile) != 7 {
+		t.Fatalf("Valheim TierMedium unexpected memory: %d, %d", vInstMed.MemoryGiB(ValheimProfile), vInstMed.MemoryLimitGiB(ValheimProfile))
 	}
 
 	vInstLarge := Instance{GameID: GameValheim, Tier: TierLarge}
-	if vInstLarge.MemoryGiB() != 8 || vInstLarge.MemoryLimitGiB() != 10 {
-		t.Fatalf("Valheim TierLarge unexpected memory: %d, %d", vInstLarge.MemoryGiB(), vInstLarge.MemoryLimitGiB())
+	if vInstLarge.MemoryGiB(ValheimProfile) != 8 || vInstLarge.MemoryLimitGiB(ValheimProfile) != 10 {
+		t.Fatalf("Valheim TierLarge unexpected memory: %d, %d", vInstLarge.MemoryGiB(ValheimProfile), vInstLarge.MemoryLimitGiB(ValheimProfile))
 	}
 
 	// Naming
-	if vInst.DeploymentName() != "valheim-viking-world-01" {
-		t.Errorf("DeploymentName = %q, want valheim-viking-world-01", vInst.DeploymentName())
+	if vInst.DeploymentName(ValheimProfile) != "valheim-viking-world-01" {
+		t.Errorf("DeploymentName = %q, want valheim-viking-world-01", vInst.DeploymentName(ValheimProfile))
 	}
-	if vInst.ServiceName() != "valheim-viking-world-01" {
-		t.Errorf("ServiceName = %q, want valheim-viking-world-01", vInst.ServiceName())
+	if vInst.ServiceName(ValheimProfile) != "valheim-viking-world-01" {
+		t.Errorf("ServiceName = %q, want valheim-viking-world-01", vInst.ServiceName(ValheimProfile))
 	}
-	if vInst.PVCName() != "valheim-instance-01-data" {
-		t.Errorf("PVCName = %q, want valheim-instance-01-data", vInst.PVCName())
+	if vInst.PVCName(ValheimProfile) != "valheim-instance-01-data" {
+		t.Errorf("PVCName = %q, want valheim-instance-01-data", vInst.PVCName(ValheimProfile))
 	}
-	if vInst.ConfigCMName() != "valheim-viking-world-01-slot" {
-		t.Errorf("ConfigCMName = %q, want valheim-viking-world-01-slot", vInst.ConfigCMName())
+	if vInst.ConfigCMName(ValheimProfile) != "valheim-viking-world-01-slot" {
+		t.Errorf("ConfigCMName = %q, want valheim-viking-world-01-slot", vInst.ConfigCMName(ValheimProfile))
 	}
-	if vInst.ModsCMName() != "valheim-viking-world-01-mods" {
-		t.Errorf("ModsCMName = %q, want valheim-viking-world-01-mods", vInst.ModsCMName())
+	if vInst.ModsCMName(ValheimProfile) != "valheim-viking-world-01-mods" {
+		t.Errorf("ModsCMName = %q, want valheim-viking-world-01-mods", vInst.ModsCMName(ValheimProfile))
 	}
-	if vInst.ConfigsCMName() != "valheim-viking-world-01-configs" {
-		t.Errorf("ConfigsCMName = %q, want valheim-viking-world-01-configs", vInst.ConfigsCMName())
+	if vInst.ConfigsCMName(ValheimProfile) != "valheim-viking-world-01-configs" {
+		t.Errorf("ConfigsCMName = %q, want valheim-viking-world-01-configs", vInst.ConfigsCMName(ValheimProfile))
 	}
 
 	// Env
-	env := vInst.Env()
+	env := vInst.Env(ValheimProfile)
 	if env["SERVER_NAME"] != "Viking World" || env["WORLD_NAME"] != "viking-world" || env["SERVER_PASS"] != "secretpassword" {
 		t.Errorf("Valheim Env unexpected: %v", env)
 	}
@@ -307,13 +311,13 @@ func TestValheimInstance(t *testing.T) {
 	}
 
 	// Annotations
-	ann := vInst.Annotations()
+	ann := vInst.Annotations(ValheimProfile)
 	if ann["agrelha.dev/game"] != "valheim" || ann["agrelha.dev/instance-number"] != "1" || ann["agrelha.dev/seed"] != "valheimseed123" {
 		t.Errorf("Valheim Annotations unexpected: %v", ann)
 	}
 
 	// Backup file naming
-	bkpName := FormatGameBackupFileName(GameValheim, "viking-world", 1, "manual")
+	bkpName := FormatGameBackupFileName(ValheimProfile, "viking-world", 1, "manual")
 	if !strings.HasPrefix(bkpName, "valheim-viking-world-01-manual-") || !strings.HasSuffix(bkpName, ".tar.gz") {
 		t.Errorf("Valheim backup name unexpected: %s", bkpName)
 	}
@@ -327,9 +331,10 @@ func TestServiceNameMatchesDeploymentName(t *testing.T) {
 		{GameID: GameMinecraft, Slug: "bob", Number: 3},
 		{GameID: GameValheim, Slug: "boppo", Number: 2},
 	} {
-		if inst.ServiceName() != inst.DeploymentName() {
+		profile, _ := ProfileFor(inst.GameID)
+		if inst.ServiceName(profile) != inst.DeploymentName(profile) {
 			t.Errorf("%s: ServiceName %q != DeploymentName %q — the runtime looks a Service up by the deployment name in ServerRef, so divergence makes every address read as unallocated",
-				inst.GameID, inst.ServiceName(), inst.DeploymentName())
+				inst.GameID, inst.ServiceName(profile), inst.DeploymentName(profile))
 		}
 	}
 }
@@ -422,7 +427,7 @@ func TestVanillaInstanceRefusesMods(t *testing.T) {
 	if vanilla.VanillaImmutableErr() == nil {
 		t.Error("the refusal must explain itself")
 	}
-	if got := vanilla.Env()["BEPINEX"]; got != "false" {
+	if got := vanilla.Env(ValheimProfile)["BEPINEX"]; got != "false" {
 		t.Errorf("vanilla must run without BepInEx, got BEPINEX=%q", got)
 	}
 
@@ -430,7 +435,7 @@ func TestVanillaInstanceRefusesMods(t *testing.T) {
 	if !modded.CanInstallMods() {
 		t.Error("a modded world accepts mods")
 	}
-	if got := modded.Env()["BEPINEX"]; got != "true" {
+	if got := modded.Env(ValheimProfile)["BEPINEX"]; got != "true" {
 		t.Errorf("modded must run BepInEx, got BEPINEX=%q", got)
 	}
 }
@@ -478,11 +483,11 @@ func TestIncidentSummaryDistinguishesSetupFromCrash(t *testing.T) {
 
 func TestDomainEdgeCasesAndHelpers(t *testing.T) {
 	// 1. Budget defaults and CanCreate
-	bZero := CalculateBudget(nil, 0, 0, 0)
+	bZero := CalculateBudget(MinecraftProfile, nil, 0, 0, 0)
 	if bZero.TotalBudgetGiB != DefaultTotalBudgetGiB || bZero.MaxRunning != DefaultMaxRunning || bZero.MaxInstances != DefaultMaxInstances {
 		t.Errorf("expected default budget values, got %+v", bZero)
 	}
-	bNotFull := CalculateBudget(nil, 24, 2, 4)
+	bNotFull := CalculateBudget(MinecraftProfile, nil, 24, 2, 4)
 	if err := bNotFull.CanCreate(); err != nil {
 		t.Errorf("CanCreate should succeed when not full, got: %v", err)
 	}
@@ -518,11 +523,11 @@ func TestDomainEdgeCasesAndHelpers(t *testing.T) {
 
 	// 4. Instance memory and backup name helpers
 	mcInst := Instance{GameID: GameMinecraft, Tier: TierMedium}
-	if mcInst.MemoryLimitGiB() != TierMedium.MemoryLimitGiB() {
-		t.Errorf("MemoryLimitGiB for mcInst = %d, want %d", mcInst.MemoryLimitGiB(), TierMedium.MemoryLimitGiB())
+	if mcInst.MemoryLimitGiB(MinecraftProfile) != TierMedium.MemoryLimitGiB() {
+		t.Errorf("MemoryLimitGiB for mcInst = %d, want %d", mcInst.MemoryLimitGiB(MinecraftProfile), TierMedium.MemoryLimitGiB())
 	}
-	if mcInst.HeapInitMemoryGiB() != TierMedium.HeapInitMemoryGiB() {
-		t.Errorf("HeapInitMemoryGiB for mcInst = %d, want %d", mcInst.HeapInitMemoryGiB(), TierMedium.HeapInitMemoryGiB())
+	if mcInst.HeapInitMemoryGiB(MinecraftProfile) != TierMedium.HeapInitMemoryGiB() {
+		t.Errorf("HeapInitMemoryGiB for mcInst = %d, want %d", mcInst.HeapInitMemoryGiB(MinecraftProfile), TierMedium.HeapInitMemoryGiB())
 	}
 
 	// AssignLBIP invalid last octet
@@ -532,34 +537,38 @@ func TestDomainEdgeCasesAndHelpers(t *testing.T) {
 
 	// EnsureDefaults with empty LBIP
 	noLB := Instance{Name: "Solo"}
-	noLB.EnsureDefaults("")
+	noLB.EnsureDefaults(MinecraftProfile, "")
 	if noLB.MOTD != "Solo" {
 		t.Errorf("expected MOTD Solo, got %s", noLB.MOTD)
 	}
 
 	// Level type and Curseforge pack env
 	envInst := Instance{
-		GameID:    GameMinecraft,
-		Name:      "CF-Pack",
-		Source:    SourceModpack,
-		WorldType: "flat",
-		Pack:      &Pack{Provider: ProviderCurseForge, Ref: "https://curseforge.com/modpack"},
-		Loader:    LoaderFabric,
+		GameID: GameMinecraft,
+		Name:   "CF-Pack",
+		Source: SourceModpack,
+		Minecraft: &MinecraftConfig{
+			WorldType: "flat",
+			Pack:      &Pack{Provider: ProviderCurseForge, Ref: "https://curseforge.com/modpack"},
+			Loader:    LoaderFabric,
+		},
 	}
-	env := envInst.Env()
+	env := envInst.Env(MinecraftProfile)
 	if env["LEVEL_TYPE"] != "flat" || env["TYPE"] != "AUTO_CURSEFORGE" || env["CF_PAGE_URL"] != "https://curseforge.com/modpack" {
 		t.Errorf("unexpected env: %+v", env)
 	}
 
 	// Fabric env in default loader branch
 	fabricInst := Instance{
-		GameID:    GameMinecraft,
-		Name:      "FabricNormal",
-		Source:    SourceModlist,
-		Loader:    LoaderFabric,
-		MCVersion: "1.21.1",
+		GameID: GameMinecraft,
+		Name:   "FabricNormal",
+		Source: SourceModlist,
+		Minecraft: &MinecraftConfig{
+			Loader:    LoaderFabric,
+			MCVersion: "1.21.1",
+		},
 	}
-	fEnv := fabricInst.Env()
+	fEnv := fabricInst.Env(MinecraftProfile)
 	if fEnv["TYPE"] != "FABRIC" {
 		t.Errorf("expected TYPE FABRIC, got %s", fEnv["TYPE"])
 	}
@@ -653,6 +662,98 @@ func TestDomainEdgeCasesAndHelpers(t *testing.T) {
 	}
 	if VersionNewer("1.0.0", "v1.0.0") {
 		t.Errorf("1.0.0 should not be newer than v1.0.0")
+	}
+}
+
+func TestGameProfileAndInstanceID(t *testing.T) {
+	id := NewInstanceID(GameValheim, 3)
+	if id.String() != "valheim-03" {
+		t.Errorf("expected valheim-03, got %s", id.String())
+	}
+	if id.IsZero() {
+		t.Errorf("id should not be zero")
+	}
+	zeroID := InstanceID{}
+	if !zeroID.IsZero() {
+		t.Errorf("zeroID should be zero")
+	}
+
+	inst := Instance{GameID: GameMinecraft, Number: 7}
+	if inst.ID() != NewInstanceID(GameMinecraft, 7) {
+		t.Errorf("inst.ID() mismatch: got %+v", inst.ID())
+	}
+
+	mc, ok := ProfileFor(GameMinecraft)
+	if !ok || mc.ID != GameMinecraft || mc.Prefix != "mc" || mc.Table != "mc_instances" {
+		t.Errorf("expected Minecraft profile, got %+v", mc)
+	}
+	if !mc.Capabilities.AdmissionAllowlist || mc.Capabilities.AdmissionPassword {
+		t.Errorf("unexpected Minecraft capabilities: %+v", mc.Capabilities)
+	}
+
+	val, ok := ProfileFor(GameValheim)
+	if !ok || val.ID != GameValheim || val.Prefix != "valheim" || val.Table != "valheim_instances" {
+		t.Errorf("expected Valheim profile, got %+v", val)
+	}
+	if !val.Capabilities.AdmissionPassword || val.Capabilities.AdmissionAllowlist {
+		t.Errorf("unexpected Valheim capabilities: %+v", val.Capabilities)
+	}
+
+	if _, ok := ProfileFor(GameID("unregistered")); ok {
+		t.Errorf("unregistered game should return false")
+	}
+}
+
+func TestUnregisteredGamePanics(t *testing.T) {
+	fakeProfile := GameProfile{ID: "garrysmod", Prefix: "gmod"}
+	inst := Instance{Slug: "ttt", Number: 1}
+
+	assertPanics := func(name string, f func()) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("%s did not panic on unregistered profile", name)
+			}
+		}()
+		f()
+	}
+
+	assertPanics("DeploymentName", func() { inst.DeploymentName(fakeProfile) })
+	assertPanics("ServiceName", func() { inst.ServiceName(fakeProfile) })
+	assertPanics("PVCName", func() { inst.PVCName(fakeProfile) })
+	assertPanics("ConfigCMName", func() { inst.ConfigCMName(fakeProfile) })
+	assertPanics("ModsCMName", func() { inst.ModsCMName(fakeProfile) })
+	assertPanics("ConfigsCMName", func() { inst.ConfigsCMName(fakeProfile) })
+	assertPanics("MemoryGiB", func() { inst.MemoryGiB(fakeProfile) })
+	assertPanics("MemoryLimitGiB", func() { inst.MemoryLimitGiB(fakeProfile) })
+	assertPanics("HeapInitMemoryGiB", func() { inst.HeapInitMemoryGiB(fakeProfile) })
+	assertPanics("Env", func() { inst.Env(fakeProfile) })
+	assertPanics("Annotations", func() { inst.Annotations(fakeProfile) })
+	assertPanics("EnsureDefaults", func() {
+		i := inst
+		i.EnsureDefaults(fakeProfile, "")
+	})
+	assertPanics("FormatGameBackupFileName", func() {
+		FormatGameBackupFileName(fakeProfile, "ttt", 1, "")
+	})
+}
+
+func TestParseInstanceRoleRegistered(t *testing.T) {
+	// Minecraft role
+	g, n, ok := ParseInstanceRole(Role("agrelha-minecraft-01"))
+	if !ok || g != GameMinecraft || n != 1 {
+		t.Errorf("failed to parse Minecraft role: %v, %v, %v", g, n, ok)
+	}
+
+	// Valheim role
+	g, n, ok = ParseInstanceRole(Role("agrelha-valheim-02"))
+	if !ok || g != GameValheim || n != 2 {
+		t.Errorf("failed to parse Valheim role: %v, %v, %v", g, n, ok)
+	}
+
+	// Unregistered game role
+	_, _, ok = ParseInstanceRole(Role("agrelha-gmod-01"))
+	if ok {
+		t.Errorf("unregistered game role should not parse as valid instance role")
 	}
 }
 

@@ -18,23 +18,6 @@ import (
 func TestValheimGameImplementation(t *testing.T) {
 	g := New()
 	var _ ports.Game = g
-
-	if g.ID() != domain.GameValheim {
-		t.Errorf("ID = %s, want valheim", g.ID())
-	}
-
-	display := g.Display()
-	if display.Name != "Valheim" || display.Icon != "axe" || display.Accent != "amber" {
-		t.Errorf("Display unexpected: %+v", display)
-	}
-
-	if g.AdmissionModel() != domain.AdmissionPassword {
-		t.Errorf("AdmissionModel = %s, want password", g.AdmissionModel())
-	}
-
-	if g.OperatorIDKind() != domain.IDKindSteam64 {
-		t.Errorf("OperatorIDKind = %s, want steam64", g.OperatorIDKind())
-	}
 }
 
 func TestValheimRuntimeSpec(t *testing.T) {
@@ -204,7 +187,7 @@ func TestValheimTelemetry(t *testing.T) {
 	}
 }
 
-func TestValheimResolveContentAndBundleSource(t *testing.T) {
+func TestValheimBundleSource(t *testing.T) {
 	g := New(
 		WithBundleSource(func(ctx context.Context, _ domain.Instance) ([]string, map[string]string, error) {
 			return []string{"author/coolmod/1.2.0"}, map[string]string{"coolmod.cfg": "active=true"}, nil
@@ -212,14 +195,6 @@ func TestValheimResolveContentAndBundleSource(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	content, err := g.ResolveContent(ctx, domain.Instance{Name: "Agrelha"})
-	if err != nil {
-		t.Fatalf("ResolveContent failed: %v", err)
-	}
-	if len(content.Items) != 1 || content.Items[0].Name != "coolmod" || content.Items[0].Version != "1.2.0" {
-		t.Errorf("unexpected content items: %+v", content.Items)
-	}
-
 	bundle, err := g.ExportClientBundle(ctx, domain.Instance{Name: "Server", Slug: "server"})
 	if err != nil {
 		t.Fatalf("ExportClientBundle failed: %v", err)
@@ -326,12 +301,13 @@ func TestExportFallsBackWhenResolverFails(t *testing.T) {
 func TestRuntimeSpecEnvMatchesTheInstance(t *testing.T) {
 	inst := domain.Instance{
 		GameID: domain.GameValheim, Number: 1, Name: "lareira-V2", Slug: "lareira-v2",
-		Source: domain.SourceVanilla, Seed: "piertje", Password: "hunter2",
+		Source: domain.SourceVanilla,
+		Valheim: &domain.ValheimConfig{Seed: "piertje", Password: "hunter2"},
 	}
 	spec := New().RuntimeSpec(inst)
 
 	// One env source: whatever Kubernetes gets, Docker gets.
-	for k, want := range inst.Env() {
+	for k, want := range inst.Env(domain.ValheimProfile) {
 		if got := spec.Env[k]; got != want {
 			t.Errorf("RuntimeSpec.Env[%q] = %q, want %q — a second env map is how Docker silently loses password/seed/BEPINEX", k, got, want)
 		}
@@ -377,22 +353,7 @@ func TestValheimTelemetryAndOptions(t *testing.T) {
 		t.Errorf("expected Custom telemetry, got %+v, err %v", tele, err)
 	}
 
-	// 2. WithContentResolver & ResolveContent
-	gContent := New(WithContentResolver(func(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
-		return domain.ContentSet{Items: []domain.ContentItem{{Name: "Resolved"}}}, nil
-	}))
-	cs, err := gContent.ResolveContent(ctx, domain.Instance{})
-	if err != nil || len(cs.Items) != 1 || cs.Items[0].Name != "Resolved" {
-		t.Errorf("unexpected ResolveContent: %+v, err %v", cs, err)
-	}
-
-	// 3. WithProvider
-	gProv := New(WithProvider(nil))
-	if len(gProv.providers) != 1 {
-		t.Errorf("expected 1 provider registered")
-	}
-
-	// 4. Telemetry with LifecycleStopped
+	// 2. Telemetry with LifecycleStopped
 	rtStopped := &fakeValheimRuntime{status: ports.Status{Lifecycle: ports.LifecycleStopped, Available: false}}
 	gStopped := New(WithRuntime(rtStopped, ports.ServerRef{Name: "v1"}))
 	teleStopped, _ := gStopped.Telemetry(ctx)
@@ -423,11 +384,6 @@ func TestValheimTelemetryAndOptions(t *testing.T) {
 	b, err := gDef.ExportClientBundle(ctx, domain.Instance{})
 	if err != nil || b.Filename != "valheim-mods.r2z" {
 		t.Errorf("expected valheim-mods.r2z filename, got %s, err %v", b.Filename, err)
-	}
-
-	// 8. Providers()
-	if len(gDef.Providers()) != 0 {
-		t.Errorf("expected empty providers by default")
 	}
 
 	// 9. BuildClientBundle success

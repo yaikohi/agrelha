@@ -29,6 +29,9 @@ func Open(path string) (*Store, error) {
 	if err := s.migrate(); err != nil {
 		return nil, err
 	}
+	if err := s.backfillInstanceResources(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -182,6 +185,27 @@ func (s *Store) migrate() error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_requests_status ON instance_requests(status);
 	CREATE INDEX IF NOT EXISTS idx_requests_subject ON instance_requests(subject);
+	CREATE TABLE IF NOT EXISTS tiers (
+		game_id           TEXT NOT NULL,
+		key               TEXT NOT NULL,
+		name              TEXT NOT NULL DEFAULT '',
+		mem_request_gib   INTEGER NOT NULL DEFAULT 0,
+		mem_limit_gib     INTEGER NOT NULL DEFAULT 0,
+		cpu_request_milli INTEGER NOT NULL DEFAULT 0,
+		cpu_limit_milli   INTEGER NOT NULL DEFAULT 0,
+		heap_init_gib     INTEGER NOT NULL DEFAULT 0,
+		sort_order        INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (game_id, key)
+	);
+	CREATE TABLE IF NOT EXISTS game_settings (
+		game_id           TEXT PRIMARY KEY,
+		total_budget_gib  INTEGER NOT NULL DEFAULT 0,
+		max_instances     INTEGER NOT NULL DEFAULT 0,
+		max_running       INTEGER NOT NULL DEFAULT 0,
+		ceiling_mem_gib   INTEGER NOT NULL DEFAULT 0,
+		ceiling_cpu_milli INTEGER NOT NULL DEFAULT 0,
+		updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	`)
 	if err != nil {
 		return err
@@ -192,6 +216,15 @@ func (s *Store) migrate() error {
 		`ALTER TABLE valheim_instances ADD COLUMN source TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE valheim_instances ADD COLUMN created_by TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE mc_instances ADD COLUMN created_by TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE valheim_instances ADD COLUMN mem_request_gib INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE valheim_instances ADD COLUMN mem_limit_gib INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE valheim_instances ADD COLUMN cpu_request_milli INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE valheim_instances ADD COLUMN cpu_limit_milli INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE mc_instances ADD COLUMN mem_request_gib INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE mc_instances ADD COLUMN mem_limit_gib INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE mc_instances ADD COLUMN cpu_request_milli INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE mc_instances ADD COLUMN cpu_limit_milli INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE mc_instances ADD COLUMN heap_init_gib INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err

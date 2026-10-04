@@ -37,6 +37,7 @@ type InstanceManager struct {
 	renderer          ports.SpecRenderer
 	namespace         string
 	gameID            domain.GameID
+	profile           domain.GameProfile
 	backupsPVC        string
 	serverRefResolver func(inst domain.Instance) ports.ServerRef
 
@@ -65,7 +66,21 @@ type InstanceManager struct {
 type Option func(*InstanceManager)
 
 func WithGameID(id domain.GameID) Option {
-	return func(m *InstanceManager) { m.gameID = id }
+	return func(m *InstanceManager) {
+		m.gameID = id
+		if p, ok := domain.ProfileFor(id); ok {
+			m.profile = p
+		} else {
+			panic(fmt.Sprintf("unknown or unregistered game ID %q", id))
+		}
+	}
+}
+
+func WithGameProfile(p domain.GameProfile) Option {
+	return func(m *InstanceManager) {
+		m.gameID = p.ID
+		m.profile = p
+	}
 }
 
 func WithBackupsPVC(pvc string) Option {
@@ -212,11 +227,19 @@ func NewInstanceManager(
 		namespace:         namespace,
 		globalConfigsPath: "manifests/minecraft-modded/configs.yaml",
 		gameID:            domain.GameMinecraft,
+		profile:           domain.MinecraftProfile,
 	}
 	for _, opt := range opts {
 		opt(m)
 	}
-	if m.gameID == domain.GameValheim && m.globalConfigsPath == "manifests/minecraft-modded/configs.yaml" {
+	if m.profile.ID == "" {
+		if p, ok := domain.ProfileFor(m.gameID); ok {
+			m.profile = p
+		} else {
+			panic(fmt.Sprintf("unknown or unregistered game ID %q", m.gameID))
+		}
+	}
+	if m.profile.ID == domain.GameValheim && m.globalConfigsPath == "manifests/minecraft-modded/configs.yaml" {
 		m.globalConfigsPath = "manifests/valheim-mod-configs.yaml"
 	}
 	return m
@@ -231,26 +254,63 @@ func (m *InstanceManager) ApplyOptions(opts ...Option) {
 	}
 }
 
-func (m *InstanceManager) TotalBudgetGiB() int   { return m.totalBudgetGiB }
-func (m *InstanceManager) MaxInstances() int     { return m.maxInstances }
-func (m *InstanceManager) MaxRunning() int       { return m.maxRunning }
-func (m *InstanceManager) GameID() domain.GameID { return m.gameID }
+func (m *InstanceManager) TotalBudgetGiB() int         { return m.totalBudgetGiB }
+func (m *InstanceManager) MaxInstances() int           { return m.maxInstances }
+func (m *InstanceManager) MaxRunning() int             { return m.maxRunning }
+func (m *InstanceManager) GameID() domain.GameID       { return m.gameID }
+func (m *InstanceManager) Profile() domain.GameProfile { return m.profile }
+
+func (m *InstanceManager) profileFor(inst domain.Instance) domain.GameProfile {
+	if inst.GameID != "" {
+		if p, ok := domain.ProfileFor(inst.GameID); ok {
+			return p
+		}
+	}
+	if m.profile.ID != "" {
+		return m.profile
+	}
+	if m.gameID != "" {
+		if p, ok := domain.ProfileFor(m.gameID); ok {
+			return p
+		}
+	}
+	return domain.MinecraftProfile
+}
 
 func (m *InstanceManager) gamePrefix() string {
-	if m.gameID == domain.GameValheim {
-		return "valheim"
+	if m.gameID != "" {
+		if p, ok := domain.ProfileFor(m.gameID); ok {
+			return p.Prefix
+		}
 	}
-	return "mc"
+	if m.profile.ID != "" {
+		return m.profile.Prefix
+	}
+	return domain.MinecraftProfile.Prefix
 }
 
 func (m *InstanceManager) effectiveBackupsPVC() string {
 	if m.backupsPVC != "" {
 		return m.backupsPVC
 	}
-	if m.gameID == domain.GameValheim {
-		return "valheim-backups"
+	id := m.gameID
+	if id == "" {
+		id = m.profile.ID
 	}
-	return "minecraft-modded-backups"
+	switch id {
+	case domain.GameValheim:
+		return "valheim-backups"
+	case domain.GameMinecraft:
+		return "minecraft-modded-backups"
+	default:
+		if p, ok := domain.ProfileFor(id); ok {
+			return fmt.Sprintf("%s-backups", p.Prefix)
+		}
+		if m.profile.Prefix != "" {
+			return fmt.Sprintf("%s-backups", m.profile.Prefix)
+		}
+		return "minecraft-modded-backups"
+	}
 }
 
 // serverRef addresses one Instance in whatever runtime is configured.
@@ -258,7 +318,7 @@ func (m *InstanceManager) serverRef(inst domain.Instance) ports.ServerRef {
 	if m.serverRefResolver != nil {
 		return m.serverRefResolver(inst)
 	}
-	return ports.ServerRef{Name: inst.DeploymentName(), Scope: m.namespace}
+	return ports.ServerRef{Name: inst.DeploymentName(m.profileFor(inst)), Scope: m.namespace}
 }
 
 // stateFromStatus maps the runtime's Lifecycle/Available pair onto the
@@ -365,7 +425,8 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 		existingInstances = append(existingInstances, e)
 	}
 
-	budget := domain.CalculateBudget(existingInstances, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
+	profile := m.profileFor(inst)
+	budget := domain.CalculateBudget(profile, existingInstances, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
 	if err := budget.CanCreate(); err != nil {
 		return nil, err
 	}
@@ -391,11 +452,7 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 	}
 
 	if inst.GameID == "" {
-		if m.gameID != "" {
-			inst.GameID = m.gameID
-		} else {
-			inst.GameID = domain.GameMinecraft
-		}
+		inst.GameID = profile.ID
 	}
 
 	if strings.TrimSpace(inst.Name) == "" {
@@ -405,7 +462,7 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 			inst.Name = fmt.Sprintf("World %02d", inst.Number)
 		}
 	}
-	inst.EnsureDefaults(m.lbBaseIP)
+	inst.EnsureDefaults(profile, m.lbBaseIP)
 
 	if err := m.checkLBIPFree(inst); err != nil {
 		return nil, err
@@ -421,22 +478,9 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 		}
 	}
 
-	files, err := m.renderer.Render(inst, mods)
-	if err != nil {
-		return nil, fmt.Errorf("render manifests: %w", err)
-	}
-
-	dirRel := fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, inst.Number)
 	commitMsg := fmt.Sprintf("%s: create instance %02d (%s)", m.gamePrefix(), inst.Number, inst.Name)
-
-	if m.stateStore != nil {
-		docs := make(map[string]ports.Document, len(files))
-		for fname, content := range files {
-			docs[fname] = ports.Document{Raw: content}
-		}
-		if err := m.stateStore.PutTree(ctx, dirRel, docs, commitMsg); err != nil {
-			return nil, fmt.Errorf("state store write instance manifests: %w", err)
-		}
+	if err := m.writeManifests(ctx, inst, mods, commitMsg); err != nil {
+		return nil, err
 	}
 
 	if err := m.repo.Upsert(inst); err != nil {
@@ -452,6 +496,90 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 	}
 
 	return &inst, nil
+}
+
+// writeManifests renders an Instance and commits the result to the declarative
+// plane. Callers must pass the Instance's CURRENT mods: rendering with an empty
+// ModList would rewrite mods.yaml and strip every mod from the world.
+//
+// Without a state store there is nowhere to write, so this is a no-op rather
+// than a silent partial render.
+func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instance, mods domain.ModList, commitMsg string) error {
+	files, err := m.renderer.Render(inst, mods)
+	if err != nil {
+		return fmt.Errorf("render manifests: %w", err)
+	}
+	if m.stateStore == nil {
+		return nil
+	}
+	dirRel := fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, inst.Number)
+	docs := make(map[string]ports.Document, len(files))
+	for fname, content := range files {
+		docs[fname] = ports.Document{Raw: content}
+	}
+	if err := m.stateStore.PutTree(ctx, dirRel, docs, commitMsg); err != nil {
+		return fmt.Errorf("state store write instance manifests: %w", err)
+	}
+	return nil
+}
+
+// SetResources resizes a world. Unlike UpdateSettings, which only touched the
+// database, this re-renders the Instance's manifests so the change actually
+// reaches the cluster - which means it restarts the world.
+func (m *InstanceManager) SetResources(ctx context.Context, num int, r domain.Resources, actor ...string) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil {
+		return err
+	}
+	if inst == nil {
+		return fmt.Errorf("instance %d not found", num)
+	}
+
+	mods, err := m.GetModList(ctx, num)
+	if err != nil {
+		return fmt.Errorf("read current mods for instance %d: %w", num, err)
+	}
+
+	inst.Resources = r
+	commitMsg := fmt.Sprintf("%s: resize instance %02d to %d/%d GiB",
+		m.gamePrefix(), num, r.MemRequestGiB, r.MemLimitGiB)
+	if err := m.writeManifests(ctx, *inst, mods, commitMsg); err != nil {
+		return err
+	}
+	if err := m.repo.Upsert(*inst); err != nil {
+		return fmt.Errorf("save instance %d resources: %w", num, err)
+	}
+
+	action := fmt.Sprintf("%s-instance-resize", m.gamePrefix())
+	if m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), action,
+			fmt.Sprintf("#%02d -> %d/%d GiB", num, r.MemRequestGiB, r.MemLimitGiB))
+	}
+	return nil
+}
+
+// ApplyTier re-sizes a world back onto a Tier's resources. Opt-in per world:
+// changing a Tier definition never moves an existing world by itself.
+func (m *InstanceManager) ApplyTier(ctx context.Context, num int, tier domain.Tier, actor ...string) error {
+	inst, err := m.GetInstance(ctx, num)
+	if err != nil {
+		return err
+	}
+	if inst == nil {
+		return fmt.Errorf("instance %d not found", num)
+	}
+	if err := m.SetResources(ctx, num, tier.Resources, actor...); err != nil {
+		return err
+	}
+	if tier.Key == "" || domain.ResourceTier(tier.Key) == inst.Tier {
+		return nil
+	}
+	inst.Tier = domain.NormalizeTier(tier.Key)
+	inst.Resources = tier.Resources
+	return m.repo.Upsert(*inst)
 }
 
 func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...string) error {
@@ -478,8 +606,9 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...s
 		}
 	}
 
-	budget := domain.CalculateBudget(others, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
-	if err := budget.CanStart(*inst); err != nil {
+	profile := m.profileFor(*inst)
+	budget := domain.CalculateBudget(profile, others, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
+	if err := budget.CanStart(profile, *inst); err != nil {
 		return err
 	}
 
@@ -633,11 +762,16 @@ func (m *InstanceManager) UpdateSettings(ctx context.Context, num int, name, mot
 	inst.MOTD = motd
 	inst.Tier = domain.NormalizeTier(tier)
 
-	if mcVersion != "" && mcVersion != inst.MCVersion {
-		if !inst.CanSetVersion() {
-			return inst.PackOwnedFieldErr("Minecraft version")
+	if mcVersion != "" {
+		if inst.Minecraft == nil {
+			inst.Minecraft = &domain.MinecraftConfig{}
 		}
-		inst.MCVersion = mcVersion
+		if mcVersion != inst.Minecraft.MCVersion {
+			if !inst.CanSetVersion() {
+				return inst.PackOwnedFieldErr("Minecraft version")
+			}
+			inst.Minecraft.MCVersion = mcVersion
+		}
 	}
 
 	if err := m.repo.Upsert(*inst); err != nil {
@@ -666,7 +800,10 @@ func (m *InstanceManager) UpdateValheimSettings(ctx context.Context, num int, na
 	inst.MOTD = motd
 	inst.Tier = domain.NormalizeTier(tier)
 	if password != "" {
-		inst.Password = password
+		if inst.Valheim == nil {
+			inst.Valheim = &domain.ValheimConfig{}
+		}
+		inst.Valheim.Password = password
 	}
 
 	if err := m.repo.Upsert(*inst); err != nil {
@@ -771,7 +908,13 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 
 	wanted := []string{slug}
 	if m.depResolver != nil {
-		deps, err := m.depResolver(ctx, slug, inst.MCVersion, string(inst.Loader))
+		mcVer := ""
+		loader := ""
+		if inst.Minecraft != nil {
+			mcVer = inst.Minecraft.MCVersion
+			loader = string(inst.Minecraft.Loader)
+		}
+		deps, err := m.depResolver(ctx, slug, mcVer, loader)
 		if err != nil {
 			slog.Warn("could not resolve all mod dependencies", "slug", slug, "instance", num, "err", err)
 		} else {
@@ -915,7 +1058,8 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 		for _, e := range entries {
 			want[strings.TrimSpace(e)] = true
 		}
-		m.afterSyncHook(inst.ModsCMName(), m.serverRef(*inst).Name, "mods.txt", func(txt string) bool {
+		p := m.profileFor(*inst)
+		m.afterSyncHook(inst.ModsCMName(p), m.serverRef(*inst).Name, "mods.txt", func(txt string) bool {
 			have := map[string]bool{}
 			for line := range strings.SplitSeq(txt, "\n") {
 				have[strings.TrimSpace(line)] = true
@@ -963,12 +1107,18 @@ func (m *InstanceManager) InstallCurseForgeMod(ctx context.Context, num int, slu
 
 	// Resolved before any write. A half-resolved list is worse than no change:
 	// the server would download what it could and fail on the rest at boot.
-	wanted, err := m.cfResolver(ctx, slug, inst.MCVersion, string(inst.Loader))
+	mcVer := ""
+	loader := ""
+	if inst.Minecraft != nil {
+		mcVer = inst.Minecraft.MCVersion
+		loader = string(inst.Minecraft.Loader)
+	}
+	wanted, err := m.cfResolver(ctx, slug, mcVer, loader)
 	if err != nil {
 		return 0, fmt.Errorf("cannot install %s: %w", slug, err)
 	}
 	if len(wanted) == 0 {
-		return 0, fmt.Errorf("no CurseForge mod named %s exists for %s/%s", slug, inst.MCVersion, inst.Loader)
+		return 0, fmt.Errorf("no CurseForge mod named %s exists for %s/%s", slug, mcVer, loader)
 	}
 
 	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
@@ -1405,7 +1555,7 @@ func (m *InstanceManager) ProvisioningStatus(ctx context.Context, num int) (phas
 type BudgetInfo = domain.Budget
 
 func (m *InstanceManager) Budget(instances []domain.Instance) BudgetInfo {
-	return domain.CalculateBudget(instances, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
+	return domain.CalculateBudget(m.profileFor(domain.Instance{}), instances, m.totalBudgetGiB, m.maxRunning, m.maxInstances)
 }
 
 // InstanceLogs streams logs for an instance using the configured runtime.
@@ -1572,11 +1722,12 @@ func (m *InstanceManager) CreateBackup(ctx context.Context, num int, actor ...st
 		}
 	}
 
-	backupName := domain.FormatGameBackupFileName(inst.GameID, inst.Slug, inst.Number, "")
+	p := m.profileFor(*inst)
+	backupName := domain.FormatGameBackupFileName(p, inst.Slug, inst.Number, "")
 	jobName := fmt.Sprintf("%s-bkp-%s-%d-%s", m.gamePrefix(), inst.Slug, inst.Number, time.Now().Format("150405"))
 
 	if m.jobRunner != nil {
-		dataPVC := inst.PVCName()
+		dataPVC := inst.PVCName(p)
 		backupsPVC := m.effectiveBackupsPVC()
 		if err := m.jobRunner.CreateBackupJob(ctx, jobName, backupName, dataPVC, backupsPVC); err != nil {
 			return "", fmt.Errorf("failed to launch backup Job: %w", err)
@@ -1646,12 +1797,13 @@ func (m *InstanceManager) RestoreInPlace(ctx context.Context, num int, archive s
 	}
 
 	if m.jobRunner != nil {
-		safetyArchive := domain.FormatGameBackupFileName(inst.GameID, inst.Slug, inst.Number, "prerestore")
+		p := m.profileFor(*inst)
+		safetyArchive := domain.FormatGameBackupFileName(p, inst.Slug, inst.Number, "prerestore")
 		safetyJob := fmt.Sprintf("%s-bkp-%s-%d-%s", m.gamePrefix(), inst.Slug, inst.Number, time.Now().Format("150405"))
-		_ = m.jobRunner.CreateBackupJob(ctx, safetyJob, safetyArchive, inst.PVCName(), m.effectiveBackupsPVC())
+		_ = m.jobRunner.CreateBackupJob(ctx, safetyJob, safetyArchive, inst.PVCName(p), m.effectiveBackupsPVC())
 
 		restoreJobName := fmt.Sprintf("%s-rst-%s-%d-%s", m.gamePrefix(), inst.Slug, inst.Number, time.Now().Format("150405"))
-		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, inst.PVCName(), m.effectiveBackupsPVC()); err != nil {
+		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, inst.PVCName(p), m.effectiveBackupsPVC()); err != nil {
 			return fmt.Errorf("failed to launch restore Job: %w", err)
 		}
 	}
@@ -1690,20 +1842,24 @@ func (m *InstanceManager) RestoreNew(ctx context.Context, num int, newName, tier
 	}
 
 	newInst := domain.Instance{
-		GameID:     srcInst.GameID,
-		Name:       newName,
-		Seed:       srcInst.Seed,
-		Password:   srcInst.Password,
-		Loader:     srcInst.Loader,
-		Source:     srcInst.Source,
-		Pack:       srcInst.Pack,
-		MCVersion:  srcInst.MCVersion,
-		Tier:       newTier,
-		MOTD:       fmt.Sprintf("%s (Restored)", newName),
-		Difficulty: srcInst.Difficulty,
-		Gamemode:   srcInst.Gamemode,
-		WorldType:  srcInst.WorldType,
-		State:      domain.StateStopped,
+		GameID: srcInst.GameID,
+		Name:   newName,
+		Source: srcInst.Source,
+		Tier:   newTier,
+		MOTD:   fmt.Sprintf("%s (Restored)", newName),
+		State:  domain.StateStopped,
+	}
+	if srcInst.Minecraft != nil {
+		mcCopy := *srcInst.Minecraft
+		if srcInst.Minecraft.Pack != nil {
+			packCopy := *srcInst.Minecraft.Pack
+			mcCopy.Pack = &packCopy
+		}
+		newInst.Minecraft = &mcCopy
+	}
+	if srcInst.Valheim != nil {
+		vhCopy := *srcInst.Valheim
+		newInst.Valheim = &vhCopy
 	}
 
 	// Duplicate carries both halves: a copy that silently dropped the CurseForge
@@ -1716,8 +1872,9 @@ func (m *InstanceManager) RestoreNew(ctx context.Context, num int, newName, tier
 	}
 
 	if m.jobRunner != nil {
+		p := m.profileFor(*created)
 		restoreJobName := fmt.Sprintf("%s-rst-%s-%d-%s", m.gamePrefix(), created.Slug, created.Number, time.Now().Format("150405"))
-		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, created.PVCName(), m.effectiveBackupsPVC()); err != nil {
+		if err := m.jobRunner.CreateRestoreJob(ctx, restoreJobName, archiveName, created.PVCName(p), m.effectiveBackupsPVC()); err != nil {
 			return created, fmt.Errorf("instance created, but restore Job failed: %w", err)
 		}
 	}

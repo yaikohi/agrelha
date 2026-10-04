@@ -584,13 +584,13 @@ func TestValheimDetailAllEdges(t *testing.T) {
 
 	// Create modded instance (num 1)
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		GameID:   domain.GameValheim,
-		Number:   1,
-		Name:     "Modded World",
-		Password: "password1",
-		Tier:     domain.TierMedium,
-		State:    domain.StateRunning,
-		Source:   domain.SourceModlist,
+		GameID:  domain.GameValheim,
+		Number:  1,
+		Name:    "Modded World",
+		Tier:    domain.TierMedium,
+		State:   domain.StateRunning,
+		Source:  domain.SourceModlist,
+		Valheim: &domain.ValheimConfig{Password: "password1"},
 	}, domain.ModList{Primary: "Smoothbrain-Mining-1.2.0\n"}, "tester")
 	if err != nil {
 		t.Fatal(err)
@@ -598,13 +598,13 @@ func TestValheimDetailAllEdges(t *testing.T) {
 
 	// Create vanilla instance (num 2)
 	_, err = mgr.CreateInstance(context.Background(), domain.Instance{
-		GameID:   domain.GameValheim,
-		Number:   2,
-		Name:     "Vanilla World",
-		Password: "password2",
-		Tier:     domain.TierSmall,
-		State:    domain.StateStopped,
-		Source:   domain.SourceVanilla,
+		GameID:  domain.GameValheim,
+		Number:  2,
+		Name:    "Vanilla World",
+		Tier:    domain.TierSmall,
+		State:   domain.StateStopped,
+		Source:  domain.SourceVanilla,
+		Valheim: &domain.ValheimConfig{Password: "password2"},
 	}, domain.ModList{}, "tester")
 	if err != nil {
 		t.Fatal(err)

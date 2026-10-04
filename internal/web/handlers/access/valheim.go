@@ -28,11 +28,15 @@ func (h *Handler) AdminsPage(c *fiber.Ctx) error {
 				if inst.LBIP != "" {
 					addr = fmt.Sprintf("%s:2456", inst.LBIP)
 				}
+				pass := ""
+				if inst.Valheim != nil {
+					pass = inst.Valheim.Password
+				}
 				passwords = append(passwords, pages.ValheimWorldPasswordUI{
 					Number:   inst.Number,
 					Name:     inst.Name,
 					State:    string(inst.State),
-					Password: inst.Password,
+					Password: pass,
 					Address:  addr,
 				})
 			}

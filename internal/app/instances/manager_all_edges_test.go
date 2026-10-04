@@ -621,18 +621,19 @@ func TestManagerUpdateSettingsEdges(t *testing.T) {
 	mgr := &InstanceManager{repo: repo, audit: events}
 
 	repo.Upsert(domain.Instance{
-		Number:    1,
-		Name:      "MC1",
-		MCVersion: "1.21.1",
-		Source:    domain.SourceModpack, // CanSetVersion() == false
-		Pack:      &domain.Pack{Name: "ATM"},
+		Number: 1,
+		Name:   "MC1",
+		Source: domain.SourceModpack, // CanSetVersion() == false
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Pack:      &domain.Pack{Name: "ATM"},
+		},
 	})
 	repo.Upsert(domain.Instance{
-		Number:    2,
-		GameID:    domain.GameValheim,
-		Name:      "VH2",
-		MCVersion: "1.21.1",
-		Source:    domain.SourceModlist,
+		Number: 2,
+		GameID: domain.GameValheim,
+		Name:   "VH2",
+		Source: domain.SourceModlist,
 	})
 
 	// UpdateSettings
@@ -677,7 +678,7 @@ func TestManagerModsEdges(t *testing.T) {
 		audit:            events,
 	}
 
-	repo.Upsert(domain.Instance{Number: 1, Source: domain.SourceModlist, MCVersion: "1.21.1", Loader: domain.LoaderNeoForge})
+	repo.Upsert(domain.Instance{Number: 1, Source: domain.SourceModlist, Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1", Loader: domain.LoaderNeoForge}})
 	repo.Upsert(domain.Instance{Number: 2, Source: domain.SourceVanilla})
 
 	// 1. GetInstalledMods
@@ -1381,12 +1382,12 @@ func TestManagerExactEdgeCases(t *testing.T) {
 	}
 
 	// 5. UpdateSettings version update success
-	repo.Upsert(domain.Instance{Number: 60, Name: "MC60", MCVersion: "1.21.1"})
+	repo.Upsert(domain.Instance{Number: 60, Name: "MC60", Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"}})
 	if err := mgr.UpdateSettings(ctx, 60, "MC60", "motd", "medium", "1.21.4"); err != nil {
 		t.Errorf("unexpected error on UpdateSettings version change: %v", err)
 	}
-	if inst, _ := repo.Get(60); inst.MCVersion != "1.21.4" {
-		t.Errorf("expected MCVersion 1.21.4, got %s", inst.MCVersion)
+	if inst, _ := repo.Get(60); inst.Minecraft == nil || inst.Minecraft.MCVersion != "1.21.4" {
+		t.Errorf("expected MCVersion 1.21.4, got %v", inst.Minecraft)
 	}
 
 	// 6. ReplaceMods afterSyncHook predicate returning true

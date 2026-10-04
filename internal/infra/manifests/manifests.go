@@ -15,6 +15,7 @@ var templateFS embed.FS
 
 type Data struct {
 	domain.Instance
+	Profile       domain.GameProfile
 	Annotations   map[string]string
 	Env           map[string]string
 	ModsTxt       string
@@ -24,6 +25,18 @@ type Data struct {
 	NodeSelectorValue string
 	Namespace         string
 }
+
+func (rd Data) DeploymentName() string { return rd.Instance.DeploymentName(rd.Profile) }
+func (rd Data) ServiceName() string    { return rd.Instance.ServiceName(rd.Profile) }
+func (rd Data) PVCName() string        { return rd.Instance.PVCName(rd.Profile) }
+func (rd Data) ConfigCMName() string   { return rd.Instance.ConfigCMName(rd.Profile) }
+func (rd Data) ModsCMName() string     { return rd.Instance.ModsCMName(rd.Profile) }
+func (rd Data) ConfigsCMName() string  { return rd.Instance.ConfigsCMName(rd.Profile) }
+func (rd Data) MemoryGiB() int         { return rd.Instance.MemoryGiB(rd.Profile) }
+func (rd Data) MemoryLimitGiB() int    { return rd.Instance.MemoryLimitGiB(rd.Profile) }
+func (rd Data) HeapInitMemoryGiB() int { return rd.Instance.HeapInitMemoryGiB(rd.Profile) }
+func (rd Data) CPURequestMilli() int   { return rd.Instance.CPURequestMilli(rd.Profile) }
+func (rd Data) CPULimitMilli() int     { return rd.Instance.CPULimitMilli(rd.Profile) }
 
 func (rd Data) IndentModsTxt() string { return indentBlock(rd.ModsTxt) }
 
@@ -58,12 +71,13 @@ func (r *Renderer) Render(inst domain.Instance, mods domain.ModList) (map[string
 }
 
 func Render(inst domain.Instance, mods domain.ModList, nodeSelector, namespace string) (map[string][]byte, error) {
-	inst.EnsureDefaults("")
+	inst.EnsureDefaults(domain.MinecraftProfile, "")
 
 	data := Data{
 		Instance:      inst,
-		Annotations:   inst.Annotations(),
-		Env:           inst.EnvWith(mods),
+		Profile:       domain.MinecraftProfile,
+		Annotations:   inst.Annotations(domain.MinecraftProfile),
+		Env:           inst.EnvWith(domain.MinecraftProfile, mods),
 		ModsTxt:       mods.Primary,
 		CurseForgeTxt: mods.CurseForge,
 		Namespace:     namespace,

@@ -28,11 +28,13 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 
 	// 1. Create first instance (auto-number 1)
 	inst1, err := mgr.CreateInstance(ctx, domain.Instance{
-		Name:      "Fluxweave",
-		Loader:    domain.LoaderNeoForge,
-		Source:    domain.SourceModlist,
-		MCVersion: "1.21.1",
-		Tier:      domain.TierLarge, // 12 GiB
+		Name:   "Fluxweave",
+		Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
+		Tier: domain.TierLarge, // 12 GiB
 	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatalf("create instance 1 failed: %v", err)
@@ -46,10 +48,12 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 
 	// 2. Create second instance (auto-number 2)
 	inst2, err := mgr.CreateInstance(ctx, domain.Instance{
-		Name:      "Vanilla Survival",
-		Source:    domain.SourceVanilla,
-		MCVersion: "1.21.4",
-		Tier:      domain.TierLarge, // 12 GiB
+		Name:   "Vanilla Survival",
+		Source: domain.SourceVanilla,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.4",
+		},
+		Tier: domain.TierLarge, // 12 GiB
 	}, domain.ModList{})
 	if err != nil {
 		t.Fatalf("create instance 2 failed: %v", err)
@@ -63,11 +67,13 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 
 	// 3. Create third instance
 	inst3, err := mgr.CreateInstance(ctx, domain.Instance{
-		Name:      "Cobblemon",
-		Loader:    domain.LoaderFabric,
-		Source:    domain.SourceModlist,
-		MCVersion: "1.20.1",
-		Tier:      domain.TierSmall, // 4 GiB
+		Name:   "Cobblemon",
+		Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderFabric,
+			MCVersion: "1.20.1",
+		},
+		Tier: domain.TierSmall, // 4 GiB
 	}, domain.ModList{Primary: "fabric-api\n"})
 	if err != nil {
 		t.Fatalf("create instance 3 failed: %v", err)
@@ -217,11 +223,13 @@ func TestInstanceManagerDeepWorkflows(t *testing.T) {
 
 	// Create
 	inst, err := mgr.CreateInstance(ctx, domain.Instance{
-		Name:      "Deep World",
-		Loader:    domain.LoaderNeoForge,
-		Source:    domain.SourceModlist,
-		MCVersion: "1.21.1",
-		Tier:      domain.TierMedium,
+		Name:   "Deep World",
+		Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
+		Tier: domain.TierMedium,
 	}, domain.ModList{Primary: "jei\n"}, "alice")
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
@@ -338,10 +346,12 @@ func TestValheimInstanceManager(t *testing.T) {
 
 	// 1. Create first Valheim instance
 	inst1, err := mgr.CreateInstance(ctx, domain.Instance{
-		Name:     "Viking Outpost",
-		Password: "outpostpassword",
-		Seed:     "seed999",
-		Tier:     domain.TierMedium, // 6 GiB
+		Name: "Viking Outpost",
+		Valheim: &domain.ValheimConfig{
+			Password: "outpostpassword",
+			Seed:     "seed999",
+		},
+		Tier: domain.TierMedium, // 6 GiB
 	}, domain.ModList{Primary: "denikson/BepInExPack_Valheim\n"}, "admin@agrelha.local")
 	if err != nil {
 		t.Fatalf("create valheim instance failed: %v", err)
@@ -353,8 +363,8 @@ func TestValheimInstanceManager(t *testing.T) {
 	if inst1.GameID != domain.GameValheim {
 		t.Fatalf("expected GameValheim, got %s", inst1.GameID)
 	}
-	if inst1.DeploymentName() != "valheim-viking-outpost-01" {
-		t.Fatalf("unexpected deployment name: %s", inst1.DeploymentName())
+	if inst1.DeploymentName(domain.ValheimProfile) != "valheim-viking-outpost-01" {
+		t.Fatalf("unexpected deployment name: %s", inst1.DeploymentName(domain.ValheimProfile))
 	}
 	if inst1.LBIP != "192.168.20.211" {
 		t.Fatalf("unexpected LBIP: %s", inst1.LBIP)
@@ -372,9 +382,11 @@ func TestValheimInstanceManager(t *testing.T) {
 
 	// 2. Create second Valheim instance
 	inst2, err := mgr.CreateInstance(ctx, domain.Instance{
-		Name:     "Farms of Valheim",
-		Password: "farmspassword",
-		Tier:     domain.TierLarge, // 8 GiB
+		Name: "Farms of Valheim",
+		Valheim: &domain.ValheimConfig{
+			Password: "farmspassword",
+		},
+		Tier: domain.TierLarge, // 8 GiB
 	}, domain.ModList{}, "admin@agrelha.local")
 	if err != nil {
 		t.Fatalf("create second instance failed: %v", err)
@@ -411,7 +423,7 @@ func TestValheimInstanceManager(t *testing.T) {
 	if err != nil || updated == nil {
 		t.Fatalf("get updated instance failed: %v", err)
 	}
-	if updated.Name != "Viking Stronghold" || updated.Password != "newpass" || updated.Tier != domain.TierLarge {
+	if updated.Name != "Viking Stronghold" || updated.Password() != "newpass" || updated.Tier != domain.TierLarge {
 		t.Fatalf("updated instance unexpected: %+v", updated)
 	}
 

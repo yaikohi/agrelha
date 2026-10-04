@@ -21,26 +21,17 @@ const (
 
 // Game implements ports.Game for Valheim.
 type Game struct {
-	providers       []ports.ContentProvider
-	image           string
-	runtime         ports.Runtime
-	serverRef       ports.ServerRef
-	playerCountFn   func() (int, error)
-	statusProvider  func(context.Context) (domain.GameTelemetry, error)
-	contentResolver func(context.Context, domain.Instance) (domain.ContentSet, error)
-	bundleSource    func(context.Context, domain.Instance) (entries []string, configs map[string]string, err error)
-	bepInExVersion  func(context.Context) (string, error)
+	image          string
+	runtime        ports.Runtime
+	serverRef      ports.ServerRef
+	playerCountFn  func() (int, error)
+	statusProvider func(context.Context) (domain.GameTelemetry, error)
+	bundleSource   func(context.Context, domain.Instance) (entries []string, configs map[string]string, err error)
+	bepInExVersion func(context.Context) (string, error)
 }
 
 // Option configures a Valheim Game instance.
 type Option func(*Game)
-
-// WithProvider registers a content provider (e.g. Thunderstore).
-func WithProvider(p ports.ContentProvider) Option {
-	return func(g *Game) {
-		g.providers = append(g.providers, p)
-	}
-}
 
 // WithImage overrides the container image.
 func WithImage(img string) Option {
@@ -73,13 +64,6 @@ func WithStatusProvider(fn func(context.Context) (domain.GameTelemetry, error)) 
 	}
 }
 
-// WithContentResolver sets the content resolution strategy.
-func WithContentResolver(fn func(context.Context, domain.Instance) (domain.ContentSet, error)) Option {
-	return func(g *Game) {
-		g.contentResolver = fn
-	}
-}
-
 // WithBepInExVersion resolves the BepInEx pack version to ship in an exported
 // profile. Without it the export falls back to a constant, which goes stale the
 // moment Valheim updates - a pre-1.0 BepInEx on a 1.0 game simply never loads.
@@ -107,30 +91,6 @@ func New(opts ...Option) *Game {
 
 var _ ports.Game = (*Game)(nil)
 
-func (g *Game) ID() domain.GameID {
-	return domain.GameValheim
-}
-
-func (g *Game) Display() domain.Display {
-	return domain.Display{
-		Name:   "Valheim",
-		Icon:   "axe",
-		Accent: "amber",
-	}
-}
-
-func (g *Game) AdmissionModel() domain.AdmissionModel {
-	return domain.AdmissionPassword
-}
-
-func (g *Game) OperatorIDKind() domain.OperatorIDKind {
-	return domain.IDKindSteam64
-}
-
-func (g *Game) Providers() []ports.ContentProvider {
-	return g.providers
-}
-
 // RuntimeSpec defines the execution shape of a Valheim server container.
 func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 	// Environment comes from the Instance, not from a second map maintained
@@ -142,7 +102,7 @@ func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 	// Minecraft's environment out of the Valheim game. The manifests renderer
 	// makes the same assertion.
 	inst.GameID = domain.GameValheim
-	env := inst.Env()
+	env := inst.Env(domain.ValheimProfile)
 	return domain.RuntimeSpec{
 		Image: g.image,
 		Ports: []domain.PortSpec{
@@ -220,34 +180,6 @@ func (g *Game) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
 	}
 
 	return tele, nil
-}
-
-func (g *Game) ResolveContent(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
-	if g.contentResolver != nil {
-		return g.contentResolver(ctx, inst)
-	}
-	var entries []string
-	if g.bundleSource != nil {
-		entries, _, _ = g.bundleSource(ctx, inst)
-	}
-	var items []domain.ContentItem
-	for _, e := range entries {
-		parts := strings.Split(e, "/")
-		name := e
-		ver := ""
-		if len(parts) >= 2 {
-			name = parts[1]
-		}
-		if len(parts) >= 3 {
-			ver = parts[2]
-		}
-		items = append(items, domain.ContentItem{
-			ID:      e,
-			Name:    name,
-			Version: ver,
-		})
-	}
-	return domain.ContentSet{Items: items}, nil
 }
 
 var modpackBuild = modpack.Build

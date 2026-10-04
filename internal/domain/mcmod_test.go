@@ -55,10 +55,11 @@ func TestJoinModLinesEmptyStaysEmpty(t *testing.T) {
 func TestEnvOnlyPointsAtCurseForgeWhenThereAreCurseForgeMods(t *testing.T) {
 	inst := Instance{
 		GameID: GameMinecraft, Number: 3, Name: "bob", Slug: "bob",
-		Source: SourceModlist, Loader: LoaderFabric, MCVersion: "1.21.1",
+		Source: SourceModlist,
+		Minecraft: &MinecraftConfig{Loader: LoaderFabric, MCVersion: "1.21.1"},
 	}
 
-	without := inst.EnvWith(ModList{Primary: "terralith:2.6.4\n"})
+	without := inst.EnvWith(MinecraftProfile, ModList{Primary: "terralith:2.6.4\n"})
 	if _, ok := without["CURSEFORGE_FILES"]; ok {
 		t.Error("no CurseForge mods, so no CURSEFORGE_FILES")
 	}
@@ -66,7 +67,7 @@ func TestEnvOnlyPointsAtCurseForgeWhenThereAreCurseForgeMods(t *testing.T) {
 		t.Error("Modrinth must be unaffected")
 	}
 
-	with := inst.EnvWith(ModList{Primary: "terralith:2.6.4\n", CurseForge: "jei:4593548\n"})
+	with := inst.EnvWith(MinecraftProfile, ModList{Primary: "terralith:2.6.4\n", CurseForge: "jei:4593548\n"})
 	if with["CURSEFORGE_FILES"] != "@/config-mods/curseforge.txt" {
 		t.Errorf("want the CurseForge list wired, got %q", with["CURSEFORGE_FILES"])
 	}
@@ -79,9 +80,10 @@ func TestEnvOnlyPointsAtCurseForgeWhenThereAreCurseForgeMods(t *testing.T) {
 func TestEnvWithoutModsKnownNeverWiresCurseForge(t *testing.T) {
 	inst := Instance{
 		GameID: GameMinecraft, Number: 3, Slug: "bob",
-		Source: SourceModlist, Loader: LoaderFabric, MCVersion: "1.21.1",
+		Source: SourceModlist,
+		Minecraft: &MinecraftConfig{Loader: LoaderFabric, MCVersion: "1.21.1"},
 	}
-	if _, ok := inst.Env()["CURSEFORGE_FILES"]; ok {
+	if _, ok := inst.Env(MinecraftProfile)["CURSEFORGE_FILES"]; ok {
 		t.Error("Env() knows of no mods, so it must not point at a CurseForge file")
 	}
 }
@@ -91,9 +93,11 @@ func TestEnvWithoutModsKnownNeverWiresCurseForge(t *testing.T) {
 func TestPackDefinedIgnoresModList(t *testing.T) {
 	inst := Instance{
 		GameID: GameMinecraft, Number: 1, Slug: "fluxweave", Source: SourceModpack,
-		Pack: &Pack{Provider: ProviderCurseForge, Ref: "https://curseforge.com/x", Name: "Fluxweave"},
+		Minecraft: &MinecraftConfig{
+			Pack: &Pack{Provider: ProviderCurseForge, Ref: "https://curseforge.com/x", Name: "Fluxweave"},
+		},
 	}
-	env := inst.EnvWith(ModList{CurseForge: "jei:4593548\n"})
+	env := inst.EnvWith(MinecraftProfile, ModList{CurseForge: "jei:4593548\n"})
 	if env["TYPE"] != "AUTO_CURSEFORGE" {
 		t.Fatalf("want AUTO_CURSEFORGE, got %q", env["TYPE"])
 	}

@@ -215,8 +215,7 @@ func TestValheimInstancesStoreAndRepo(t *testing.T) {
 		Number:     1,
 		Name:       "Odin's Hall",
 		Slug:       "odins-hall",
-		Seed:       "seed123",
-		Password:   "valheimpass",
+		Valheim:    &domain.ValheimConfig{Seed: "seed123", Password: "valheimpass"},
 		Tier:       domain.TierLarge,
 		State:      domain.StateRunning,
 		MOTD:       "Welcome to Valheim",
@@ -237,7 +236,7 @@ func TestValheimInstancesStoreAndRepo(t *testing.T) {
 	if got == nil {
 		t.Fatalf("expected instance 1, got nil")
 	}
-	if got.GameID != domain.GameValheim || got.Name != "Odin's Hall" || got.Password != "valheimpass" || got.Tier != domain.TierLarge {
+	if got.GameID != domain.GameValheim || got.Name != "Odin's Hall" || got.Password() != "valheimpass" || got.Tier != domain.TierLarge {
 		t.Fatalf("unexpected instance retrieved: %+v", got)
 	}
 
@@ -637,4 +636,3 @@ func TestStore_ClosedStoreErrors(t *testing.T) {
 		t.Error("expected error from vhRepo.Get on closed store")
 	}
 }
-

@@ -165,27 +165,35 @@ type Mount struct {
 }
 
 func Mounts() []Mount {
-	return []Mount{
-		{Prefix: "/api/valheim/instances/:num", Game: domain.GameValheim},
-		{Prefix: "/api/valheim/:num<int>", Game: domain.GameValheim},
-		{Prefix: "/valheim/:num<int>", Game: domain.GameValheim},
-		{Prefix: "/api/minecraft/instances/:num", Game: domain.GameMinecraft},
-		{Prefix: "/api/minecraft/:num<int>", Game: domain.GameMinecraft},
-		{Prefix: "/minecraft/:num<int>", Game: domain.GameMinecraft},
-		{Prefix: "/minecraft/provisioning/:num", Game: domain.GameMinecraft},
-		{Prefix: "/api/minecraft/provisioning/:num", Game: domain.GameMinecraft},
-
-		{Prefix: "/admins", Admin: true},
-		{Prefix: "/history", Admin: true},
-		{Prefix: "/accounts", Admin: true},
-		{Prefix: "/requests", Admin: true},
-		{Prefix: "/minecraft/access", Admin: true},
-		{Prefix: "/api/minecraft/access", Admin: true},
-		{Prefix: "/minecraft/configs", Admin: true},
-		{Prefix: "/server", Admin: true},
-		{Prefix: "/minecraft/server", Admin: true},
-		{Prefix: "/sse/logs", Admin: true},
+	var mounts []Mount
+	for _, p := range domain.Profiles() {
+		mounts = append(mounts,
+			Mount{Prefix: fmt.Sprintf("/api/%s/instances/:num", p.ID), Game: p.ID},
+			Mount{Prefix: fmt.Sprintf("/api/%s/:num<int>", p.ID), Game: p.ID},
+			Mount{Prefix: fmt.Sprintf("/%s/:num<int>", p.ID), Game: p.ID},
+		)
+		if p.ID == domain.GameMinecraft {
+			mounts = append(mounts,
+				Mount{Prefix: "/minecraft/provisioning/:num", Game: domain.GameMinecraft},
+				Mount{Prefix: "/api/minecraft/provisioning/:num", Game: domain.GameMinecraft},
+			)
+		}
 	}
+
+	mounts = append(mounts,
+		Mount{Prefix: "/admins", Admin: true},
+		Mount{Prefix: "/history", Admin: true},
+		Mount{Prefix: "/accounts", Admin: true},
+		Mount{Prefix: "/overview", Admin: true},
+		Mount{Prefix: "/requests", Admin: true},
+		Mount{Prefix: "/minecraft/access", Admin: true},
+		Mount{Prefix: "/api/minecraft/access", Admin: true},
+		Mount{Prefix: "/minecraft/configs", Admin: true},
+		Mount{Prefix: "/server", Admin: true},
+		Mount{Prefix: "/minecraft/server", Admin: true},
+		Mount{Prefix: "/sse/logs", Admin: true},
+	)
+	return mounts
 }
 
 func Apply(router fiber.Router) {

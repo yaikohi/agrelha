@@ -66,7 +66,7 @@ func AdoptLegacyValheim(
 		CreatedAt:  time.Now().UTC(),
 		LastUsed:   time.Now().UTC(),
 	}
-	inst.EnsureDefaults(defaultLBIP)
+	inst.EnsureDefaults(domain.ValheimProfile, defaultLBIP)
 
 	if err := repo.Upsert(inst); err != nil {
 		return nil, fmt.Errorf("adopt legacy valheim instance into slot #1: %w", err)

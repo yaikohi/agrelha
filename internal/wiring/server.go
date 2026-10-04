@@ -28,6 +28,7 @@ import (
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
 	grantshttp "agrelha/internal/web/handlers/grants"
 	minecrafthttp "agrelha/internal/web/handlers/minecraft"
+	overviewhttp "agrelha/internal/web/handlers/overview"
 	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
 	"agrelha/internal/web/shared"
@@ -82,6 +83,18 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 
 	startAuthzLoops(ctx, d)
 
+	instanceManagers := map[domain.GameID]*instances.InstanceManager{
+		domain.GameValheim:   d.ValheimInstances,
+		domain.GameMinecraft: d.MCInstances,
+	}
+
+	overviewH := overviewhttp.New(overviewhttp.Config{
+		Games:            d.Games,
+		InstanceManagers: instanceManagers,
+		Capacity:         d.Capacity,
+		Actor:            actor,
+	})
+
 	grantsH := grantshttp.New(grantshttp.Config{
 		Authz:            d.Authz,
 		Requests:         d.Requests,
@@ -94,6 +107,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 		Auth:      d.Auth,
 		Authz:     d.Authz,
 		Grants:    grantsH,
+		Overview:  overviewH,
 		Access:    accessH,
 		Backups:   backupsH,
 		Console:   consoleH,
@@ -460,7 +474,7 @@ func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 						}
 						return nil, err
 					}
-					return d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName())
+					return d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName(domain.MinecraftProfile))
 				}),
 				instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
 					inst, err := d.MCInstances.GetInstance(ctx, num)
@@ -470,7 +484,7 @@ func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 						}
 						return nil, err
 					}
-					cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName())
+					cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName(domain.MinecraftProfile))
 					if err != nil {
 						return nil, err
 					}
@@ -753,6 +767,7 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 		mcModUpdateTotal = d.MCModUpdates.Total
 	}
 	return dashboardhttp.New(dashboardhttp.Config{
+		Games:                 d.Games,
 		ModUpdateTotal:        modUpdateTotal,
 		ValheimModUpdateTotal: vhModUpdateTotal,
 		MCModUpdateTotal:      mcModUpdateTotal,

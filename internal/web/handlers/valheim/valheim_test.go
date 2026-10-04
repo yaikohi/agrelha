@@ -316,10 +316,10 @@ func TestValheimInstancePage(t *testing.T) {
 
 	ctx := context.Background()
 	_, err := mgr.CreateInstance(ctx, domain.Instance{
-		GameID:   domain.GameValheim,
-		Name:     "Midgard",
-		Password: "secretpassword",
-		Tier:     domain.TierLarge,
+		GameID:  domain.GameValheim,
+		Name:    "Midgard",
+		Tier:    domain.TierLarge,
+		Valheim: &domain.ValheimConfig{Password: "secretpassword"},
 	}, domain.ModList{Primary: "denikson-BepInExPack_Valheim\n"}, "tester")
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
@@ -759,11 +759,11 @@ func TestValheimDetailTabsAndActions(t *testing.T) {
 
 	ctx := context.Background()
 	inst, err := mgr.CreateInstance(ctx, domain.Instance{
-		GameID:   domain.GameValheim,
-		Name:     "Odin Realm",
-		Password: "secret",
-		Tier:     domain.TierMedium,
-		State:    domain.StateRunning,
+		GameID:  domain.GameValheim,
+		Name:    "Odin Realm",
+		Tier:    domain.TierMedium,
+		State:   domain.StateRunning,
+		Valheim: &domain.ValheimConfig{Password: "secret"},
 	}, domain.ModList{}, "tester")
 	if err != nil {
 		t.Fatal(err)

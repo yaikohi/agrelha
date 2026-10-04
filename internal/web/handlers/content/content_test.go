@@ -115,12 +115,6 @@ type fakeValheimGame struct {
 	bundle domain.Bundle
 }
 
-func (f *fakeValheimGame) ID() domain.GameID                  { return domain.GameValheim }
-func (f *fakeValheimGame) Display() domain.Display            { return domain.Display{Name: "Valheim"} }
-func (f *fakeValheimGame) Providers() []ports.ContentProvider { return nil }
-func (f *fakeValheimGame) ResolveContent(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
-	return domain.ContentSet{}, nil
-}
 func (f *fakeValheimGame) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
 	return f.bundle, nil
 }
@@ -130,8 +124,6 @@ func (f *fakeValheimGame) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 func (f *fakeValheimGame) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
 	return domain.GameTelemetry{}, nil
 }
-func (f *fakeValheimGame) AdmissionModel() domain.AdmissionModel { return domain.AdmissionPassword }
-func (f *fakeValheimGame) OperatorIDKind() domain.OperatorIDKind { return domain.IDKindSteam64 }
 
 type memStateStore struct {
 	mu   sync.Mutex

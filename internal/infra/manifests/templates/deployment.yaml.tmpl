@@ -120,9 +120,12 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              cpu: 2000m
+              cpu: {{ .CPURequestMilli }}m
               memory: {{ .MemoryGiB }}Gi
             limits:
+{{- if gt .CPULimitMilli 0 }}
+              cpu: {{ .CPULimitMilli }}m
+{{- end }}
               memory: {{ .MemoryLimitGiB }}Gi
           volumeMounts:
             - name: data-volume

@@ -1,0 +1,204 @@
+package pages
+
+import "fmt"
+
+type OverviewWorldUI struct {
+	Game      string
+	Number    int
+	Name      string
+	State     string
+	Tier      string
+	MemReq    int
+	MemLimit  int
+	CPUReq    int
+	CPULimit  int
+	Drifts    bool
+	TierLabel string
+	CreatedBy string
+}
+
+func (w OverviewWorldUI) Target() string { return fmt.Sprintf("%s:%d", w.Game, w.Number) }
+
+type OverviewTierUI struct {
+	Key      string
+	Name     string
+	MemReq   int
+	MemLimit int
+	CPUReq   int
+	CPULimit int
+	HeapInit int
+	InUse    int
+}
+
+type OverviewGameUI struct {
+	Game           string
+	Display        string
+	TotalBudgetGiB int
+	UsedGiB        int
+	MaxInstances   int
+	MaxRunning     int
+	CeilingMemGiB  int
+	ShowHeap       bool
+	Tiers          []OverviewTierUI
+}
+
+templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, flashKind, flashMsg string) {
+	@Layout("Overview") {
+		@nav(true)
+		<div class="mb-6">
+			<h1 class="text-2xl font-semibold text-zinc-100">Overview</h1>
+			<p class="mt-1 text-xs text-zinc-400">
+				Every world across every game, the hardware each one runs on, and the limits that apply.
+			</p>
+		</div>
+		@flashBanner(flashKind, flashMsg)
+
+		<div class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
+			<div class="mb-4 border-b border-zinc-800/80 pb-3">
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Worlds</h2>
+				<p class="text-xs text-zinc-400">
+					Saving a size rewrites the world's manifests and restarts it.
+				</p>
+			</div>
+
+			if len(worlds) == 0 {
+				<div class="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-4 text-center text-xs text-zinc-500">
+					No worlds yet.
+				</div>
+			} else {
+				<div class="space-y-3">
+					for _, w := range worlds {
+						<div class="rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-4">
+							<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-300">
+										{ w.Game }
+									</span>
+									<span class="text-sm font-medium text-zinc-100">{ fmt.Sprintf("%02d  %s", w.Number, w.Name) }</span>
+									<span class="text-[11px] text-zinc-500">{ w.State }</span>
+									if w.Drifts {
+										<span class="rounded-full border border-amber-700/60 bg-amber-900/30 px-2 py-0.5 text-[10px] text-amber-300">
+											off { w.Tier }
+										</span>
+									} else {
+										<span class="text-[11px] text-zinc-500">{ w.Tier }</span>
+									}
+								</div>
+								if w.Drifts && w.TierLabel != "" {
+									<form method="POST" action="/overview/apply-tier">
+										<input type="hidden" name="target" value={ w.Target() }/>
+										<button
+											type="submit"
+											class="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-400 hover:border-emerald-700 hover:text-emerald-300 transition"
+										>
+											Restore { w.TierLabel }
+										</button>
+									</form>
+								}
+							</div>
+
+							<form method="POST" action="/overview/resources" class="flex flex-wrap items-end gap-3">
+								<input type="hidden" name="target" value={ w.Target() }/>
+								@numField("memreq", "RAM request (GiB)", w.MemReq)
+								@numField("memlimit", "RAM limit (GiB)", w.MemLimit)
+								@numField("cpureq", "CPU request (m)", w.CPUReq)
+								@numField("cpulimit", "CPU limit (m)", w.CPULimit)
+								<button
+									type="submit"
+									class="rounded-lg border border-emerald-800/60 bg-emerald-900/40 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:border-emerald-600 hover:text-emerald-100 transition"
+								>
+									Save &amp; restart
+								</button>
+							</form>
+						</div>
+					}
+				</div>
+			}
+		</div>
+
+		for _, g := range games {
+			<div class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
+				<div class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+					<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">{ g.Display }</h2>
+					<span class="text-[11px] text-zinc-500">
+						{ fmt.Sprintf("%d of %d GiB in use", g.UsedGiB, g.TotalBudgetGiB) }
+					</span>
+				</div>
+
+				<form method="POST" action="/overview/settings" class="mb-5 flex flex-wrap items-end gap-3">
+					<input type="hidden" name="game" value={ g.Game }/>
+					@numField("budget", "Budget (GiB)", g.TotalBudgetGiB)
+					@numField("maxinstances", "Max worlds", g.MaxInstances)
+					@numField("maxrunning", "Max running", g.MaxRunning)
+					@numField("ceiling", "Ceiling (GiB)", g.CeilingMemGiB)
+					<button
+						type="submit"
+						class="rounded-lg border border-zinc-700 bg-zinc-800/70 px-3 py-1.5 text-xs text-zinc-200 hover:border-zinc-500 transition"
+					>
+						Save limits
+					</button>
+				</form>
+
+				<p class="mb-2 text-[11px] uppercase tracking-wider text-zinc-500">Tiers</p>
+				<p class="mb-3 text-xs text-zinc-400">
+					Presets for new worlds. Editing one never resizes an existing world on its own.
+				</p>
+				<div class="space-y-2">
+					for _, tier := range g.Tiers {
+						<form method="POST" action="/overview/tier" class="flex flex-wrap items-end gap-3 rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-3">
+							<input type="hidden" name="game" value={ g.Game }/>
+							<input type="hidden" name="key" value={ tier.Key }/>
+							<div class="min-w-28">
+								<p class="text-xs font-medium text-zinc-200">{ tier.Name }</p>
+								<p class="text-[11px] text-zinc-500">{ fmt.Sprintf("%d world(s)", tier.InUse) }</p>
+							</div>
+							@numField("memreq", "RAM req", tier.MemReq)
+							@numField("memlimit", "RAM limit", tier.MemLimit)
+							@numField("cpureq", "CPU req (m)", tier.CPUReq)
+							if g.ShowHeap {
+								@numField("heap", "Heap (GiB)", tier.HeapInit)
+							}
+							<button
+								type="submit"
+								class="rounded-lg border border-zinc-700 bg-zinc-800/70 px-3 py-1.5 text-xs text-zinc-200 hover:border-zinc-500 transition"
+							>
+								Save tier
+							</button>
+						</form>
+					}
+				</div>
+			</div>
+		}
+
+		<div class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
+			<div class="mb-4 border-b border-zinc-800/80 pb-3">
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Creation allowance</h2>
+				<p class="text-xs text-zinc-400">
+					How many worlds a non-admin may create before needing your approval. Counts across all games. Zero means every world is requested.
+				</p>
+			</div>
+			<form method="POST" action="/overview/allowance" class="flex flex-wrap items-end gap-3">
+				@numField("allowance", "Worlds per account", allowance)
+				<button
+					type="submit"
+					class="rounded-lg border border-zinc-700 bg-zinc-800/70 px-3 py-1.5 text-xs text-zinc-200 hover:border-zinc-500 transition"
+				>
+					Save
+				</button>
+			</form>
+		</div>
+	}
+}
+
+templ numField(name, label string, value int) {
+	<label class="block">
+		<span class="mb-1 block text-[11px] text-zinc-500">{ label }</span>
+		<input
+			type="number"
+			name={ name }
+			value={ fmt.Sprintf("%d", value) }
+			min="0"
+			class="w-28 rounded-lg border border-zinc-800 bg-zinc-950/70 px-2.5 py-1.5 text-xs text-zinc-200 focus:border-emerald-700 focus:outline-none"
+		/>
+	</label>
+}

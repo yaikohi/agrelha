@@ -249,14 +249,16 @@ func TestMCBackupsEndpoints(t *testing.T) {
 
 	repo := store.NewInstanceRepo(st)
 	_ = repo.Upsert(domain.Instance{
-		Number:    1,
-		Slug:      "ducktopia",
-		Name:      "Ducktopia",
-		State:     domain.StateStopped,
-		GameID:    domain.GameMinecraft,
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
-		Tier:      domain.TierMedium,
+		Number: 1,
+		Slug:   "ducktopia",
+		Name:   "Ducktopia",
+		State:  domain.StateStopped,
+		GameID: domain.GameMinecraft,
+		Tier:   domain.TierMedium,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
 	})
 
 	stateStore := &mockStateStore{}
@@ -353,13 +355,13 @@ func TestValheimBackupsEndpoints(t *testing.T) {
 
 	repo := store.NewValheimInstanceRepo(st)
 	_ = repo.Upsert(domain.Instance{
-		Number:   1,
-		Slug:     "midgard",
-		Name:     "Midgard",
-		State:    domain.StateStopped,
-		GameID:   domain.GameValheim,
-		Password: "secretpassword",
-		Tier:     domain.TierMedium,
+		Number:  1,
+		Slug:    "midgard",
+		Name:    "Midgard",
+		State:   domain.StateStopped,
+		GameID:  domain.GameValheim,
+		Valheim: &domain.ValheimConfig{Password: "secretpassword"},
+		Tier:    domain.TierMedium,
 	})
 
 	stateStore := &mockStateStore{}

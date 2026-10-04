@@ -62,10 +62,17 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 		} else if budget.RunningCount >= budget.MaxRunning {
 			canStart = false
 			blockedReason = fmt.Sprintf("Max %d running instances reached", budget.MaxRunning)
-		} else if budget.UsedGiB+inst.MemoryGiB() > budget.TotalBudgetGiB {
+		} else if budget.UsedGiB+inst.MemoryGiB(domain.ValheimProfile) > budget.TotalBudgetGiB {
 			canStart = false
 			blockedReason = fmt.Sprintf("Exceeds %d GiB RAM budget (%d used + %d required)",
-				budget.TotalBudgetGiB, budget.UsedGiB, inst.MemoryGiB())
+				budget.TotalBudgetGiB, budget.UsedGiB, inst.MemoryGiB(domain.ValheimProfile))
+		}
+
+		pass := ""
+		seed := ""
+		if inst.Valheim != nil {
+			pass = inst.Valheim.Password
+			seed = inst.Valheim.Seed
 		}
 
 		uiInstances = append(uiInstances, pages.InstanceUI{
@@ -73,11 +80,11 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 			Number:             inst.Number,
 			Name:               inst.Name,
 			Slug:               inst.Slug,
-			Password:           inst.Password,
+			Password:           pass,
 			Source:             string(inst.Source),
-			Seed:               inst.Seed,
+			Seed:               seed,
 			Tier:               string(inst.Tier),
-			MemoryGiB:          inst.MemoryGiB(),
+			MemoryGiB:          inst.MemoryGiB(domain.ValheimProfile),
 			State:              string(inst.State),
 			MOTD:               inst.MOTD,
 			LBIP:               inst.LBIP,

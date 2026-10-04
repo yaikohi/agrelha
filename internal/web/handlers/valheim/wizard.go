@@ -570,13 +570,15 @@ func (h *Handler) ValheimWizardCreate(c *fiber.Ctx) error {
 	}
 
 	inst := domain.Instance{
-		GameID:   domain.GameValheim,
-		Name:     name,
-		Password: password,
-		Seed:     seed,
-		Tier:     tier,
-		Source:   instSource,
-		State:    domain.StateRunning,
+		GameID: domain.GameValheim,
+		Name:   name,
+		Tier:   tier,
+		Source: instSource,
+		State:  domain.StateRunning,
+		Valheim: &domain.ValheimConfig{
+			Password: password,
+			Seed:     seed,
+		},
 	}
 
 	p := shared.PrincipalOf(c)

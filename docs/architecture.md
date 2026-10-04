@@ -308,9 +308,11 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `app/access` | Minecraft mods, whitelist and operator persistence (`ModManager`, `AccessManager`), synchronised to the live console. |
 | `app/admins` | Valheim admin Steam64 IDs, held in declarative state. |
 | `app/authz` | Accounts and the access decision: who may act on which Instance, and the Role that names it in the identity provider. |
+| `app/capacity` | Per-game Tier catalogues, budgets and the ceiling a non-admin Account may not exceed. The single gate for how large a world may be. |
 | `app/backups` | Scheduled world snapshots and retention pruning. |
 | `app/bepinex` | Reconciles the Generated configs a mod writes on the PVC with the Override set agrelha keeps in git, and commits the operator's edits. |
 | `app/content` | Mod cart compatibility analysis before an instance is created. |
+| `app/games` | Game registry associating declarative GameProfiles with runtime game engines. |
 | `app/games/minecraft` | The Minecraft `ports.Game`: runtime spec, content resolution, client bundle export, telemetry. |
 | `app/games/valheim` | The Valheim `ports.Game`, including BepInEx handling and `.r2z` profile export. |
 | `app/health` | Turns what the runtime knows about a dead server into a recorded Incident. |
@@ -362,6 +364,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `web/handlers/backups` | Backup create, restore in place, restore as new, download. |
 | `web/handlers/console` | Live console, log streaming and direct server commands. |
 | `web/handlers/content` | Mod detail pages, global configs, and the SSRF-guarded image proxy. |
+| `web/handlers/overview` | The Overview page: every world across every game, the resources each runs on, the Tier catalogues and the limits. |
 | `web/handlers/dashboard` | The public hub page and the main SSE signal stream. |
 | `web/handlers/grants` | The Accounts and world-request pages: which Account may operate which Instance, signing an Account out everywhere, and approving the worlds Accounts ask to create. |
 | `web/handlers/minecraft` | Minecraft instance pages: detail tabs, mod search and install, configs, lifecycle. |

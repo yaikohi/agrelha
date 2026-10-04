@@ -150,14 +150,16 @@ func TestWiring_Build_FullK8sMatrix(t *testing.T) {
 	// Seed Minecraft instance
 	mcRepo := store.NewInstanceRepo(st)
 	_ = mcRepo.Upsert(domain.Instance{
-		Number:    1,
-		Slug:      "mc-matrix-01",
-		Name:      "Matrix Craft",
-		GameID:    domain.GameMinecraft,
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
-		Source:    domain.SourceModlist,
-		LBIP:      "127.0.0.1",
+		Number: 1,
+		Slug:   "mc-matrix-01",
+		Name:   "Matrix Craft",
+		GameID: domain.GameMinecraft,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
+		Source: domain.SourceModlist,
+		LBIP:   "127.0.0.1",
 	})
 
 	// Mock RCON
@@ -395,7 +397,7 @@ func TestWiring_Build_FullK8sMatrix(t *testing.T) {
 
 	// 6. Test bundle builders with defaults
 	_, _ = deps.ValheimGame.ExportClientBundle(ctx, domain.Instance{Number: 0})
-	_, _ = deps.MinecraftGame.ExportClientBundle(ctx, domain.Instance{Number: 1, Slug: "mc-matrix-01", Loader: "", MCVersion: ""})
+	_, _ = deps.MinecraftGame.ExportClientBundle(ctx, domain.Instance{Number: 1, Slug: "mc-matrix-01"})
 
 	// Build Server
 	deps.Auth = testAdminAuth{}

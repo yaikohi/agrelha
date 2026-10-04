@@ -36,10 +36,18 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 	packName := ""
 	packRef := ""
 	packProvider := ""
-	if inst.Pack != nil {
-		packName = inst.Pack.Name
-		packRef = inst.Pack.Ref
-		packProvider = string(inst.Pack.Provider)
+	seed := ""
+	loader := ""
+	mcVersion := ""
+	if inst.Minecraft != nil {
+		seed = inst.Minecraft.Seed
+		loader = string(inst.Minecraft.Loader)
+		mcVersion = inst.Minecraft.MCVersion
+		if inst.Minecraft.Pack != nil {
+			packName = inst.Minecraft.Pack.Name
+			packRef = inst.Minecraft.Pack.Ref
+			packProvider = string(inst.Minecraft.Pack.Provider)
+		}
 	}
 
 	d := pages.InstanceDetailUI{
@@ -48,15 +56,15 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 			Number:       inst.Number,
 			Name:         inst.Name,
 			Slug:         inst.Slug,
-			Seed:         inst.Seed,
-			Loader:       string(inst.Loader),
+			Seed:         seed,
+			Loader:       loader,
 			Source:       string(inst.Source),
 			Pack:         packName,
 			PackRef:      packRef,
 			PackProvider: packProvider,
-			MCVersion:    inst.MCVersion,
+			MCVersion:    mcVersion,
 			Tier:         string(inst.Tier),
-			MemoryGiB:    inst.MemoryGiB(),
+			MemoryGiB:    inst.MemoryGiB(domain.MinecraftProfile),
 			State:        string(inst.State),
 			MOTD:         inst.MOTD,
 			LBIP:         inst.LBIP,

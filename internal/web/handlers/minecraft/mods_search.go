@@ -61,8 +61,10 @@ func (h *Handler) MCInstanceModsSearch(c *fiber.Ctx) error {
 	installed := map[string]bool{}
 	if h.cfg.MCInstances != nil {
 		if inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num); err == nil && inst != nil {
-			mcVersion = inst.MCVersion
-			loader = string(inst.Loader)
+			if inst.Minecraft != nil {
+				mcVersion = inst.Minecraft.MCVersion
+				loader = string(inst.Minecraft.Loader)
+			}
 		}
 		// Keyed by Provider as well as slug: the same slug on Modrinth and on
 		// CurseForge is two different mods, and marking one Installed because the

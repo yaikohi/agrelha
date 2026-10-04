@@ -17,34 +17,19 @@ import (
 func TestMinecraftGameImplementation(t *testing.T) {
 	g := New()
 	var _ ports.Game = g
-
-	if g.ID() != domain.GameMinecraft {
-		t.Errorf("ID = %s, want minecraft", g.ID())
-	}
-
-	display := g.Display()
-	if display.Name != "Minecraft" || display.Icon != "pickaxe" || display.Accent != "emerald" {
-		t.Errorf("Display unexpected: %+v", display)
-	}
-
-	if g.AdmissionModel() != domain.AdmissionAllowlist {
-		t.Errorf("AdmissionModel = %s, want allowlist", g.AdmissionModel())
-	}
-
-	if g.OperatorIDKind() != domain.IDKindUsername {
-		t.Errorf("OperatorIDKind = %s, want username", g.OperatorIDKind())
-	}
 }
 
 func TestMinecraftRuntimeSpec(t *testing.T) {
 	g := New(WithImage("custom/mc:java25"))
 	inst := domain.Instance{
-		Number:    1,
-		Name:      "Fluxweave",
-		Slug:      "fluxweave",
-		Loader:    domain.LoaderNeoForge,
-		Source:    domain.SourceModlist,
-		MCVersion: "1.21.1",
+		Number: 1,
+		Name:   "Fluxweave",
+		Slug:   "fluxweave",
+		Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
 	}
 	spec := g.RuntimeSpec(inst)
 
@@ -69,10 +54,12 @@ func TestMinecraftExportClientBundle(t *testing.T) {
 	g := New()
 	ctx := context.Background()
 	inst := domain.Instance{
-		Name:      "Ayyy World",
-		Slug:      "ayyy-world",
-		Loader:    domain.LoaderNeoForge,
-		MCVersion: "1.21.1",
+		Name: "Ayyy World",
+		Slug: "ayyy-world",
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
 	}
 
 	bundle, err := g.ExportClientBundle(ctx, inst)
@@ -224,13 +211,7 @@ func (f *fakeMCRuntime) WatchAvailability(context.Context, ports.ServerRef, time
 func TestMinecraftEdgeCasesAndOptions(t *testing.T) {
 	ctx := context.Background()
 
-	// 1. WithProvider & Providers()
-	gProv := New(WithProvider(nil))
-	if len(gProv.Providers()) != 1 {
-		t.Errorf("expected 1 provider, got %d", len(gProv.Providers()))
-	}
-
-	// 2. WithStatusProvider
+	// 1. WithStatusProvider
 	gStat := New(WithStatusProvider(func(ctx context.Context) (domain.GameTelemetry, error) {
 		return domain.GameTelemetry{State: "CustomMC"}, nil
 	}))
@@ -239,21 +220,7 @@ func TestMinecraftEdgeCasesAndOptions(t *testing.T) {
 		t.Errorf("unexpected status provider telemetry: %+v, err %v", tele, err)
 	}
 
-	// 3. WithContentResolver & ResolveContent
-	gContent := New(WithContentResolver(func(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
-		return domain.ContentSet{Items: []domain.ContentItem{{Name: "ModItem"}}}, nil
-	}))
-	cs, err := gContent.ResolveContent(ctx, domain.Instance{})
-	if err != nil || len(cs.Items) != 1 {
-		t.Errorf("unexpected custom ResolveContent: %+v, err %v", cs, err)
-	}
-	// Default ResolveContent without resolver
-	csDef, err := New().ResolveContent(ctx, domain.Instance{})
-	if err != nil || len(csDef.Items) != 0 {
-		t.Errorf("unexpected default ResolveContent: %+v, err %v", csDef, err)
-	}
-
-	// 4. activeInstanceFn with custom loader (e.g. Forge)
+	// 2. activeInstanceFn with custom loader (e.g. Forge)
 	gForge := New(WithActiveInstance(func(context.Context) (domain.Loader, string) {
 		return domain.Loader("Forge"), "MyPack"
 	}))

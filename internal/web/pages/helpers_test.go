@@ -307,4 +307,3 @@ func TestIncidentViewAndDetailUI(t *testing.T) {
 		t.Errorf("checkSummary partial = %s", s)
 	}
 }
-

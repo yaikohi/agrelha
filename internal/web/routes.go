@@ -17,6 +17,7 @@ import (
 	dashboardhttp "agrelha/internal/web/handlers/dashboard"
 	grantshttp "agrelha/internal/web/handlers/grants"
 	minecrafthttp "agrelha/internal/web/handlers/minecraft"
+	overviewhttp "agrelha/internal/web/handlers/overview"
 	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
 	"agrelha/internal/web/metrics"
@@ -33,6 +34,7 @@ type ServerConfig struct {
 	Content   *contenthttp.Handler
 	Dashboard *dashboardhttp.Handler
 	Grants    *grantshttp.Handler
+	Overview  *overviewhttp.Handler
 	Minecraft *minecrafthttp.Handler
 	Valheim   *valheimhttp.Handler
 	Wizard    *wizardhttp.Handler
@@ -104,6 +106,9 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 	}
 	if cfg.Grants != nil {
 		cfg.Grants.Register(protected)
+	}
+	if cfg.Overview != nil {
+		cfg.Overview.Register(protected)
 	}
 	if cfg.Wizard != nil {
 		cfg.Wizard.Register(protected)

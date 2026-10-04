@@ -1,6 +1,6 @@
 package pages
 
-templ Dashboard(grafanaURL, valheimAddr, nodeName string, vhSummary ValheimSummaryUI, mcSummary MinecraftSummaryUI, isAdmin bool, flashKind, flashMsg string) {
+templ Dashboard(grafanaURL string, games []DashboardGameUI, isAdmin bool, flashKind, flashMsg string) {
 	@Layout("Agrelha · Game Server Portal") {
 		@nav(isAdmin)
 		@flashBanner(flashKind, flashMsg)
@@ -41,17 +41,13 @@ templ Dashboard(grafanaURL, valheimAddr, nodeName string, vhSummary ValheimSumma
 				</div>
 			</div>
 
-			<!-- Both cards render through the same component: anything that differs
-			     is DATA, not markup, so they cannot drift apart again. -->
+			<!-- Dynamic registered game cards driven by the list -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				@gameCard(ValheimCard(valheimAddr, nodeName, isAdmin, vhSummary)) {
-					if isAdmin {
-						@cardActions(ValheimActions(vhSummary))
-					}
-				}
-				@gameCard(MinecraftCard(mcSummary, isAdmin)) {
-					if isAdmin {
-						@cardActions(MinecraftActions(mcSummary))
+				for _, g := range games {
+					@gameCard(g.Card) {
+						if isAdmin {
+							@cardActions(g.Actions)
+						}
 					}
 				}
 			</div>

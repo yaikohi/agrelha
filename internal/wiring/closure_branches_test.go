@@ -354,18 +354,20 @@ func TestWiring_WiringRemainingBranches(t *testing.T) {
 
 	// Seed an instance with pack defined for ActiveInstance
 	mcInst := domain.Instance{
-		Number:    1,
-		Slug:      "mc-01",
-		Name:      "Minecraft 01",
-		GameID:    domain.GameMinecraft,
-		State:     domain.StateRunning,
-		Loader:    domain.LoaderNeoForge,
-		MCVersion: "1.21.1",
-		Source:    domain.SourceModpack,
-		Pack: &domain.Pack{
-			Provider: domain.ProviderCurseForge,
-			Ref:      "1",
-			Name:     "All The Mods",
+		Number: 1,
+		Slug:   "mc-01",
+		Name:   "Minecraft 01",
+		GameID: domain.GameMinecraft,
+		State:  domain.StateRunning,
+		Source: domain.SourceModpack,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+			Pack: &domain.Pack{
+				Provider: domain.ProviderCurseForge,
+				Ref:      "1",
+				Name:     "All The Mods",
+			},
 		},
 		LBIP: rconAddr,
 	}

@@ -1,227 +1,84 @@
 package store
 
 import (
-	"database/sql"
 	"time"
+
+	"agrelha/internal/domain"
 )
 
 type InstanceRecord struct {
-	Number       int
-	Name         string
-	Slug         string
-	Seed         string
-	Password     string
-	Loader       string
-	Source       string
-	Pack         string
-	PackProvider string
-	PackRef      string
-	MCVersion    string
-	Tier         string
-	State        string
-	MOTD         string
-	Difficulty   string
-	Gamemode     string
-	WorldType    string
-	MaxPlayers   int
-	LBIP         string
-	CreatedBy    string
-	CreatedAt    time.Time
-	LastUsed     time.Time
+	Number          int
+	Name            string
+	Slug            string
+	Seed            string
+	Password        string
+	Loader          string
+	Source          string
+	Pack            string
+	PackProvider    string
+	PackRef         string
+	MCVersion       string
+	Tier            string
+	State           string
+	MOTD            string
+	Difficulty      string
+	Gamemode        string
+	WorldType       string
+	MaxPlayers      int
+	LBIP            string
+	MemRequestGiB   int
+	MemLimitGiB     int
+	CPURequestMilli int
+	CPULimitMilli   int
+	HeapInitGiB     int
+	CreatedBy       string
+	CreatedAt       time.Time
+	LastUsed        time.Time
 }
 
+// The per-game methods below are thin wrappers over the table-driven
+// implementation in instance_tables.go. The SQL lives there, described once as
+// column lists, so a new game declares a table rather than adding a branch to
+// each of these.
+
 func (s *Store) UpsertInstance(inst InstanceRecord) error {
-	_, err := s.db.Exec(`
-		INSERT INTO mc_instances (
-			number, name, slug, seed, loader, source, pack, pack_provider, pack_ref,
-			mc_version, tier, state, motd, difficulty, gamemode, world_type, max_players, lb_ip, created_by, last_used
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(number) DO UPDATE SET
-			name          = excluded.name,
-			slug          = excluded.slug,
-			seed          = excluded.seed,
-			loader        = excluded.loader,
-			source        = excluded.source,
-			pack          = excluded.pack,
-			pack_provider = excluded.pack_provider,
-			pack_ref      = excluded.pack_ref,
-			mc_version    = excluded.mc_version,
-			tier          = excluded.tier,
-			state         = excluded.state,
-			motd          = excluded.motd,
-			difficulty    = excluded.difficulty,
-			gamemode      = excluded.gamemode,
-			world_type    = excluded.world_type,
-			max_players   = excluded.max_players,
-			lb_ip         = excluded.lb_ip,
-			created_by    = CASE WHEN mc_instances.created_by = '' THEN excluded.created_by ELSE mc_instances.created_by END,
-			last_used     = CURRENT_TIMESTAMP`,
-		inst.Number, inst.Name, inst.Slug, inst.Seed, inst.Loader, inst.Source,
-		inst.Pack, inst.PackProvider, inst.PackRef, inst.MCVersion, inst.Tier,
-		inst.State, inst.MOTD, inst.Difficulty, inst.Gamemode, inst.WorldType,
-		inst.MaxPlayers, inst.LBIP, inst.CreatedBy,
-	)
-	return err
+	return s.upsertInstanceRow(domain.GameMinecraft, inst)
 }
 
 func (s *Store) GetInstance(number int) (*InstanceRecord, error) {
-	row := s.db.QueryRow(`
-		SELECT number, name, slug, COALESCE(seed,''), loader, source,
-		       COALESCE(pack,''), COALESCE(pack_provider,''), COALESCE(pack_ref,''),
-		       COALESCE(mc_version,''), tier, state, COALESCE(motd,''),
-		       COALESCE(difficulty,'normal'), COALESCE(gamemode,'survival'),
-		       COALESCE(world_type,'default'), COALESCE(max_players,20),
-		       COALESCE(lb_ip,''), COALESCE(created_by,''), created_at, last_used
-		FROM mc_instances WHERE number = ?`, number)
-
-	var inst InstanceRecord
-	var created, used any
-	err := row.Scan(
-		&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Loader, &inst.Source,
-		&inst.Pack, &inst.PackProvider, &inst.PackRef, &inst.MCVersion, &inst.Tier,
-		&inst.State, &inst.MOTD, &inst.Difficulty, &inst.Gamemode, &inst.WorldType,
-		&inst.MaxPlayers, &inst.LBIP, &inst.CreatedBy, &created, &used,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	inst.CreatedAt = asTime(created)
-	inst.LastUsed = asTime(used)
-	return &inst, nil
+	return s.getInstanceRow(domain.GameMinecraft, number)
 }
 
 func (s *Store) ListInstances() ([]InstanceRecord, error) {
-	rows, err := s.db.Query(`
-		SELECT number, name, slug, COALESCE(seed,''), loader, source,
-		       COALESCE(pack,''), COALESCE(pack_provider,''), COALESCE(pack_ref,''),
-		       COALESCE(mc_version,''), tier, state, COALESCE(motd,''),
-		       COALESCE(difficulty,'normal'), COALESCE(gamemode,'survival'),
-		       COALESCE(world_type,'default'), COALESCE(max_players,20),
-		       COALESCE(lb_ip,''), COALESCE(created_by,''), created_at, last_used
-		FROM mc_instances ORDER BY number ASC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []InstanceRecord
-	for rows.Next() {
-		var inst InstanceRecord
-		var created, used any
-		if err := rows.Scan(
-			&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Loader, &inst.Source,
-			&inst.Pack, &inst.PackProvider, &inst.PackRef, &inst.MCVersion, &inst.Tier,
-			&inst.State, &inst.MOTD, &inst.Difficulty, &inst.Gamemode, &inst.WorldType,
-			&inst.MaxPlayers, &inst.LBIP, &inst.CreatedBy, &created, &used,
-		); err != nil {
-			return nil, err
-		}
-		inst.CreatedAt = asTime(created)
-		inst.LastUsed = asTime(used)
-		out = append(out, inst)
-	}
-	return out, rows.Err()
+	return s.listInstanceRows(domain.GameMinecraft)
 }
 
 func (s *Store) UpdateInstanceState(number int, state string) error {
-	_, err := s.db.Exec(`UPDATE mc_instances SET state = ?, last_used = CURRENT_TIMESTAMP WHERE number = ?`, state, number)
-	return err
+	return s.updateInstanceRowState(domain.GameMinecraft, number, state)
 }
 
 func (s *Store) DeleteInstance(number int) error {
-	_, err := s.db.Exec(`DELETE FROM mc_instances WHERE number = ?`, number)
-	return err
+	return s.deleteInstanceRow(domain.GameMinecraft, number)
 }
 
 func (s *Store) UpsertValheimInstance(inst InstanceRecord) error {
-	_, err := s.db.Exec(`
-		INSERT INTO valheim_instances (
-			number, name, slug, seed, password, tier, state, motd, max_players, lb_ip, source, created_by, last_used
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(number) DO UPDATE SET
-			name        = excluded.name,
-			slug        = excluded.slug,
-			seed        = excluded.seed,
-			password    = excluded.password,
-			tier        = excluded.tier,
-			state       = excluded.state,
-			motd        = excluded.motd,
-			max_players = excluded.max_players,
-			lb_ip       = excluded.lb_ip,
-			source      = excluded.source,
-			created_by  = CASE WHEN valheim_instances.created_by = '' THEN excluded.created_by ELSE valheim_instances.created_by END,
-			last_used   = CURRENT_TIMESTAMP`,
-		inst.Number, inst.Name, inst.Slug, inst.Seed, inst.Password,
-		inst.Tier, inst.State, inst.MOTD, inst.MaxPlayers, inst.LBIP, inst.Source, inst.CreatedBy,
-	)
-	return err
+	return s.upsertInstanceRow(domain.GameValheim, inst)
 }
 
 func (s *Store) GetValheimInstance(number int) (*InstanceRecord, error) {
-	row := s.db.QueryRow(`
-		SELECT number, name, slug, COALESCE(seed,''), COALESCE(password,''),
-		       tier, state, COALESCE(motd,''), COALESCE(max_players,10),
-		       COALESCE(lb_ip,''), COALESCE(source,''), COALESCE(created_by,''), created_at, last_used
-		FROM valheim_instances WHERE number = ?`, number)
-
-	var inst InstanceRecord
-	var created, used any
-	err := row.Scan(
-		&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Password,
-		&inst.Tier, &inst.State, &inst.MOTD, &inst.MaxPlayers,
-		&inst.LBIP, &inst.Source, &inst.CreatedBy, &created, &used,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	inst.CreatedAt = asTime(created)
-	inst.LastUsed = asTime(used)
-	return &inst, nil
+	return s.getInstanceRow(domain.GameValheim, number)
 }
 
 func (s *Store) ListValheimInstances() ([]InstanceRecord, error) {
-	rows, err := s.db.Query(`
-		SELECT number, name, slug, COALESCE(seed,''), COALESCE(password,''),
-		       tier, state, COALESCE(motd,''), COALESCE(max_players,10),
-		       COALESCE(lb_ip,''), COALESCE(source,''), COALESCE(created_by,''), created_at, last_used
-		FROM valheim_instances ORDER BY number ASC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []InstanceRecord
-	for rows.Next() {
-		var inst InstanceRecord
-		var created, used any
-		if err := rows.Scan(
-			&inst.Number, &inst.Name, &inst.Slug, &inst.Seed, &inst.Password,
-			&inst.Tier, &inst.State, &inst.MOTD, &inst.MaxPlayers,
-			&inst.LBIP, &inst.Source, &inst.CreatedBy, &created, &used,
-		); err != nil {
-			return nil, err
-		}
-		inst.CreatedAt = asTime(created)
-		inst.LastUsed = asTime(used)
-		out = append(out, inst)
-	}
-	return out, rows.Err()
+	return s.listInstanceRows(domain.GameValheim)
 }
 
 func (s *Store) UpdateValheimInstanceState(number int, state string) error {
-	_, err := s.db.Exec(`UPDATE valheim_instances SET state = ?, last_used = CURRENT_TIMESTAMP WHERE number = ?`, state, number)
-	return err
+	return s.updateInstanceRowState(domain.GameValheim, number, state)
 }
 
 func (s *Store) DeleteValheimInstance(number int) error {
-	_, err := s.db.Exec(`DELETE FROM valheim_instances WHERE number = ?`, number)
-	return err
+	return s.deleteInstanceRow(domain.GameValheim, number)
 }
 
 // ValheimInstancesMissingSource lists instance numbers whose Source column was

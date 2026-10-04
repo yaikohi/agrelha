@@ -12,6 +12,106 @@ const (
 	GameMinecraft GameID = "minecraft"
 )
 
+// InstanceID is the composite identity of an Instance: its game and number together.
+type InstanceID struct {
+	Game   GameID
+	Number int
+}
+
+func NewInstanceID(game GameID, number int) InstanceID {
+	return InstanceID{Game: game, Number: number}
+}
+
+func (id InstanceID) String() string {
+	return fmt.Sprintf("%s-%02d", id.Game, id.Number)
+}
+
+func (id InstanceID) IsZero() bool {
+	return id.Game == "" && id.Number == 0
+}
+
+// Capabilities declares what operational features a game supports.
+type Capabilities struct {
+	Mods               bool
+	Configs            bool
+	Backups            bool
+	AdmissionPassword  bool
+	AdmissionAllowlist bool
+	Operators          bool
+	PlayerCount        bool
+}
+
+// GameProfile defines the fixed shape of a game: identity, resource naming prefix, table, and capabilities.
+type GameProfile struct {
+	ID                GameID
+	Prefix            string
+	Table             string
+	Display           Display
+	Capabilities      Capabilities
+	DefaultMaxPlayers int
+}
+
+var (
+	MinecraftProfile = GameProfile{
+		ID:     GameMinecraft,
+		Prefix: "mc",
+		Table:  "mc_instances",
+		Display: Display{
+			Name:   "Minecraft",
+			Icon:   "pickaxe",
+			Accent: "emerald",
+		},
+		Capabilities: Capabilities{
+			Mods:               true,
+			Configs:            true,
+			Backups:            true,
+			AdmissionAllowlist: true,
+			Operators:          true,
+			PlayerCount:        true,
+		},
+		DefaultMaxPlayers: 20,
+	}
+
+	ValheimProfile = GameProfile{
+		ID:     GameValheim,
+		Prefix: "valheim",
+		Table:  "valheim_instances",
+		Display: Display{
+			Name:   "Valheim",
+			Icon:   "axe",
+			Accent: "amber",
+		},
+		Capabilities: Capabilities{
+			Mods:              true,
+			Configs:           true,
+			Backups:           true,
+			AdmissionPassword: true,
+			Operators:         true,
+			PlayerCount:       true,
+		},
+		DefaultMaxPlayers: 10,
+	}
+)
+
+var defaultProfiles = map[GameID]GameProfile{
+	GameMinecraft: MinecraftProfile,
+	GameValheim:   ValheimProfile,
+}
+
+// ProfileFor returns the GameProfile for a known GameID, or false if unregistered.
+func ProfileFor(id GameID) (GameProfile, bool) {
+	p, ok := defaultProfiles[id]
+	return p, ok
+}
+
+// Profiles returns all registered default profiles.
+func Profiles() []GameProfile {
+	return []GameProfile{
+		ValheimProfile,
+		MinecraftProfile,
+	}
+}
+
 type AdmissionModel string
 
 const (

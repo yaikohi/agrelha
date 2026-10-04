@@ -257,7 +257,7 @@ type BudgetUI struct {
 	MaxInstances   int
 }
 
-type MinecraftSummaryUI struct {
+type GameSummaryUI struct {
 	TotalInstances  int
 	RunningCount    int
 	MaxInstances    int
@@ -268,15 +268,13 @@ type MinecraftSummaryUI struct {
 	ActiveInstances []InstanceUI
 }
 
-type ValheimSummaryUI struct {
-	TotalInstances  int
-	RunningCount    int
-	MaxInstances    int
-	MaxRunning      int
-	UsedGiB         int
-	TotalBudgetGiB  int
-	ActiveInstance  *InstanceUI
-	ActiveInstances []InstanceUI
+type MinecraftSummaryUI = GameSummaryUI
+type ValheimSummaryUI = GameSummaryUI
+
+// DashboardGameUI pairs a rendered game card with its admin footer actions.
+type DashboardGameUI struct {
+	Card    GameCardUI
+	Actions CardActionsUI
 }
 
 // ServerRowUI is one connectable server. Valheim renders exactly one; Minecraft
@@ -406,11 +404,11 @@ func iconStyle(accent string) string {
 }
 
 // Primary is the instance the card footer acts on.
-func (v ValheimSummaryUI) Primary() *InstanceUI {
-	if len(v.ActiveInstances) > 0 {
-		return &v.ActiveInstances[0]
+func (g GameSummaryUI) Primary() *InstanceUI {
+	if len(g.ActiveInstances) > 0 {
+		return &g.ActiveInstances[0]
 	}
-	return v.ActiveInstance
+	return g.ActiveInstance
 }
 
 // ValheimCard builds the Valheim card. Its stats are live Datastar signals, so
@@ -566,16 +564,6 @@ func ValheimActions(summary ...ValheimSummaryUI) CardActionsUI {
 	return a
 }
 
-// Primary is the instance the card footer acts on. The summary carries both a
-// slice and a legacy pointer for the same fact; reading them separately let the
-// footer and the rows disagree, so everything goes through here.
-func (m MinecraftSummaryUI) Primary() *InstanceUI {
-	if len(m.ActiveInstances) > 0 {
-		return &m.ActiveInstances[0]
-	}
-	return m.ActiveInstance
-}
-
 // MinecraftActions mirrors ValheimActions. Creating a world is Minecraft-only,
 // so it takes the Special slot when nothing is running.
 // MinecraftActions mirrors ValheimActions: game-scoped links only. Per-World
@@ -591,6 +579,66 @@ func MinecraftActions(summary ...MinecraftSummaryUI) CardActionsUI {
 	return a
 }
 
+// GenericGameCard builds a GameCardUI for any registered game profile.
+func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) GameCardUI {
+	g := GameCardUI{
+		Icon:      p.Display.Icon,
+		Accent:    p.Display.Accent,
+		Title:     p.Display.Name + " Worlds",
+		Subtitle:  "Dedicated multi-world cluster",
+		EmptyText: fmt.Sprintf("All %s worlds are currently offline.", p.Display.Name),
+		EmptyHint: "Ask the server host on Discord to start a world!",
+	}
+
+	for _, inst := range summary.ActiveInstances {
+		row := ServerRowUI{
+			Name:         inst.Name,
+			Address:      inst.LBIP,
+			Online:       true,
+			Players:      inst.Players,
+			PlayersKnown: inst.PlayersKnown,
+			Uptime:       inst.Uptime,
+		}
+		if p.Capabilities.Mods {
+			row = withModpack(row, fmt.Sprintf("/api/%s/%d/mods/export", p.ID, inst.Number), inst.HasMods)
+		}
+		g.Rows = append(g.Rows, row)
+	}
+
+	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", summary.TotalInstances, summary.MaxInstances)}
+	if isAdmin {
+		g.Extras = append(g.Extras,
+			fmt.Sprintf("%d of %d running", summary.RunningCount, summary.MaxRunning),
+			fmt.Sprintf("RAM %dG of %dG", summary.UsedGiB, summary.TotalBudgetGiB),
+		)
+	}
+	return g
+}
+
+// GameActions builds a CardActionsUI for any registered game profile.
+func GameActions(p domain.GameProfile, summary ...GameSummaryUI) CardActionsUI {
+	var links []ActionUI
+	if p.Capabilities.AdmissionPassword || p.Capabilities.AdmissionAllowlist || p.Capabilities.Operators {
+		links = append(links, ActionUI{Label: "Access", Href: fmt.Sprintf("/%s/access", p.ID), Kind: "link"})
+	}
+	a := CardActionsUI{
+		Links:   links,
+		Manager: ActionUI{Label: fmt.Sprintf("Open %s Manager →", p.Display.Name), Href: fmt.Sprintf("/%s", p.ID)},
+	}
+	if len(summary) == 0 || len(summary[0].ActiveInstances) == 0 {
+		a.Special = []ActionUI{{Label: "+ Create World", Href: fmt.Sprintf("/%s/create", p.ID), Kind: "special"}}
+	}
+	return a
+}
+
+// GameNav returns a NavGroupUI for a registered game profile.
+func GameNav(p domain.GameProfile) NavGroupUI {
+	return NavGroupUI{
+		Label: p.Display.Name,
+		Href:  "/" + string(p.ID),
+	}
+}
+
 // NavGroupUI is one game's top navigation entry.
 type NavGroupUI struct {
 	Label string
@@ -599,17 +647,11 @@ type NavGroupUI struct {
 }
 
 func ValheimNav() NavGroupUI {
-	return NavGroupUI{
-		Label: "Valheim",
-		Href:  "/valheim",
-	}
+	return GameNav(domain.ValheimProfile)
 }
 
 func MinecraftNav() NavGroupUI {
-	return NavGroupUI{
-		Label: "Minecraft",
-		Href:  "/minecraft",
-	}
+	return GameNav(domain.MinecraftProfile)
 }
 
 // ConnectAddress renders where players connect. An instance whose LoadBalancer

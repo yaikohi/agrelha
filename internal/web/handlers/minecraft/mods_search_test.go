@@ -92,12 +92,14 @@ func TestModsSearchPassesLoaderAndVersionFromInstance(t *testing.T) {
 
 	repo := store.NewInstanceRepo(st)
 	_ = repo.Upsert(domain.Instance{
-		Number:    3,
-		Slug:      "bob",
-		Name:      "Bob",
-		GameID:    domain.GameMinecraft,
-		Loader:    domain.LoaderFabric,
-		MCVersion: "26.2",
+		Number: 3,
+		Slug:   "bob",
+		Name:   "Bob",
+		GameID: domain.GameMinecraft,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderFabric,
+			MCVersion: "26.2",
+		},
 	})
 	mgr := instances.NewInstanceManager(
 		repo, nil, nil, 32, 8, 4,

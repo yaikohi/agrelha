@@ -19,67 +19,112 @@ const (
 
 const annPrefix = "agrelha.dev/"
 
+type MinecraftConfig struct {
+	Loader      Loader
+	Pack        *Pack
+	MCVersion   string
+	Difficulty  string
+	Gamemode    string
+	WorldType   string
+	Seed        string
+	HeapInitGiB int
+}
+
+type ValheimConfig struct {
+	Password string
+	Seed     string
+}
+
 type Instance struct {
 	GameID     GameID
 	Number     int
 	Name       string
 	Slug       string
-	Seed       string
-	Password   string
-	Loader     Loader
 	Source     Source
-	Pack       *Pack
-	MCVersion  string
 	Tier       ResourceTier
+	Resources  Resources
 	State      InstanceState
 	MOTD       string
-	Difficulty string
-	Gamemode   string
-	WorldType  string
 	MaxPlayers int
 	LBIP       string
 	CreatedBy  string
 	CreatedAt  time.Time
 	LastUsed   time.Time
+
+	Minecraft *MinecraftConfig
+	Valheim   *ValheimConfig
 }
 
-func (inst Instance) MemoryGiB() int {
-	if inst.GameID == GameValheim {
-		switch inst.Tier {
-		case TierSmall:
-			return 4
-		case TierLarge:
-			return 8
-		default:
-			return 6
-		}
-	}
-	return inst.Tier.MemoryGiB()
+func (inst Instance) ID() InstanceID {
+	return InstanceID{Game: inst.GameID, Number: inst.Number}
 }
 
-func (inst Instance) MemoryLimitGiB() int {
-	if inst.GameID == GameValheim {
-		switch inst.Tier {
-		case TierSmall:
-			return 5
-		case TierLarge:
-			return 10
-		default:
-			return 7
-		}
+func (inst Instance) Password() string {
+	if inst.Valheim != nil {
+		return inst.Valheim.Password
 	}
-	return inst.Tier.MemoryLimitGiB()
+	return ""
 }
 
-func (inst Instance) HeapInitMemoryGiB() int {
-	if inst.GameID == GameValheim {
-		return 0
+func (inst Instance) Seed() string {
+	if inst.Valheim != nil && inst.Valheim.Seed != "" {
+		return inst.Valheim.Seed
 	}
-	return inst.Tier.HeapInitMemoryGiB()
+	if inst.Minecraft != nil && inst.Minecraft.Seed != "" {
+		return inst.Minecraft.Seed
+	}
+	return ""
+}
+
+func (inst Instance) EffectiveResources(profile GameProfile) Resources {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
+	}
+	if !inst.Resources.IsZero() {
+		return inst.Resources
+	}
+	r := LegacyResources(profile.ID, inst.Tier)
+	if r.IsZero() {
+		panic(fmt.Sprintf("instance %d of game %q has no resources and no legacy default", inst.Number, profile.ID))
+	}
+	return r
+}
+
+func (inst Instance) MemoryGiB(profile GameProfile) int {
+	return inst.EffectiveResources(profile).MemRequestGiB
+}
+
+func (inst Instance) MemoryLimitGiB(profile GameProfile) int {
+	return inst.EffectiveResources(profile).MemLimitGiB
+}
+
+func (inst Instance) CPURequestMilli(profile GameProfile) int {
+	return inst.EffectiveResources(profile).CPURequestMilli
+}
+
+func (inst Instance) CPULimitMilli(profile GameProfile) int {
+	return inst.EffectiveResources(profile).CPULimitMilli
+}
+
+func (inst Instance) HeapInitMemoryGiB(profile GameProfile) int {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
+	}
+	if inst.Minecraft != nil && inst.Minecraft.HeapInitGiB > 0 {
+		return inst.Minecraft.HeapInitGiB
+	}
+	return LegacyHeapInitGiB(profile.ID, inst.Tier)
+}
+
+func (inst Instance) DriftsFromTier(profile GameProfile) bool {
+	if inst.Resources.IsZero() {
+		return false
+	}
+	return inst.Resources != LegacyResources(profile.ID, inst.Tier)
 }
 
 func (inst Instance) PackDefined() bool {
-	return inst.Source == SourceModpack && inst.Pack != nil
+	return inst.Source == SourceModpack && inst.Minecraft != nil && inst.Minecraft.Pack != nil
 }
 
 // CanSetLoader and CanSetVersion encode the core invariant: when an Instance is
@@ -113,9 +158,9 @@ func (inst Instance) CanSetVersion() bool { return !inst.PackDefined() }
 func (inst Instance) PackOwnedFieldErr(field string) error {
 	provider := ""
 	name := ""
-	if inst.Pack != nil {
-		provider = string(inst.Pack.Provider)
-		name = inst.Pack.Name
+	if inst.Minecraft != nil && inst.Minecraft.Pack != nil {
+		provider = string(inst.Minecraft.Pack.Provider)
+		name = inst.Minecraft.Pack.Name
 	}
 	return fmt.Errorf("%s is defined by the %s pack %q: the pack decides it, so it cannot be changed here — create a new instance to run different content",
 		field, provider, name)
@@ -137,9 +182,34 @@ func AssignLBIP(base string, number int) string {
 	return fmt.Sprintf("%s.%d", base[:i], last+number)
 }
 
-func (inst *Instance) EnsureDefaults(lbBase string) {
-	if inst.GameID == "" {
-		inst.GameID = GameMinecraft
+func (inst *Instance) EnsureDefaults(profile GameProfile, lbBase string) {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
+	}
+	if inst.GameID != "" && inst.GameID != profile.ID {
+		panic(fmt.Sprintf("mismatched game profile %q for instance with game %q", profile.ID, inst.GameID))
+	}
+	inst.GameID = profile.ID
+	switch profile.ID {
+	case GameMinecraft:
+		if inst.Minecraft == nil {
+			inst.Minecraft = &MinecraftConfig{}
+		}
+		if inst.Minecraft.Difficulty == "" {
+			inst.Minecraft.Difficulty = "normal"
+		}
+		if inst.Minecraft.Gamemode == "" {
+			inst.Minecraft.Gamemode = "survival"
+		}
+		if inst.Minecraft.WorldType == "" {
+			inst.Minecraft.WorldType = "default"
+		}
+	case GameValheim:
+		if inst.Valheim == nil {
+			inst.Valheim = &ValheimConfig{}
+		}
+	default:
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
 	if inst.Slug == "" {
 		inst.Slug = Slugify(inst.Name)
@@ -151,21 +221,9 @@ func (inst *Instance) EnsureDefaults(lbBase string) {
 		inst.State = StateStopped
 	}
 	if inst.MaxPlayers <= 0 {
-		if inst.GameID == GameValheim {
-			inst.MaxPlayers = 10
-		} else {
+		inst.MaxPlayers = profile.DefaultMaxPlayers
+		if inst.MaxPlayers <= 0 {
 			inst.MaxPlayers = 20
-		}
-	}
-	if inst.GameID == GameMinecraft {
-		if inst.Difficulty == "" {
-			inst.Difficulty = "normal"
-		}
-		if inst.Gamemode == "" {
-			inst.Gamemode = "survival"
-		}
-		if inst.WorldType == "" {
-			inst.WorldType = "default"
 		}
 	}
 	if inst.LBIP == "" && inst.Number > 0 {
@@ -180,39 +238,39 @@ func (inst *Instance) EnsureDefaults(lbBase string) {
 	}
 }
 
-func (inst Instance) DeploymentName() string {
-	if inst.GameID == GameValheim {
-		return fmt.Sprintf("valheim-%s-%02d", inst.Slug, inst.Number)
+func (inst Instance) DeploymentName(profile GameProfile) string {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
-	return fmt.Sprintf("mc-%s-%02d", inst.Slug, inst.Number)
+	return fmt.Sprintf("%s-%s-%02d", profile.Prefix, inst.Slug, inst.Number)
 }
 
-func (inst Instance) ServiceName() string {
-	if inst.GameID == GameValheim {
-		return fmt.Sprintf("valheim-%s-%02d", inst.Slug, inst.Number)
+func (inst Instance) ServiceName(profile GameProfile) string {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
-	return fmt.Sprintf("mc-%s-%02d", inst.Slug, inst.Number)
+	return fmt.Sprintf("%s-%s-%02d", profile.Prefix, inst.Slug, inst.Number)
 }
 
-func (inst Instance) PVCName() string {
-	if inst.GameID == GameValheim {
-		return fmt.Sprintf("valheim-instance-%02d-data", inst.Number)
+func (inst Instance) PVCName(profile GameProfile) string {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
-	return fmt.Sprintf("mc-instance-%02d-data", inst.Number)
+	return fmt.Sprintf("%s-instance-%02d-data", profile.Prefix, inst.Number)
 }
 
-func (inst Instance) ConfigCMName() string {
-	if inst.GameID == GameValheim {
-		return fmt.Sprintf("valheim-%s-%02d-slot", inst.Slug, inst.Number)
+func (inst Instance) ConfigCMName(profile GameProfile) string {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
-	return fmt.Sprintf("mc-%s-%02d-slot", inst.Slug, inst.Number)
+	return fmt.Sprintf("%s-%s-%02d-slot", profile.Prefix, inst.Slug, inst.Number)
 }
 
-func (inst Instance) ModsCMName() string {
-	if inst.GameID == GameValheim {
-		return fmt.Sprintf("valheim-%s-%02d-mods", inst.Slug, inst.Number)
+func (inst Instance) ModsCMName(profile GameProfile) string {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
-	return fmt.Sprintf("mc-%s-%02d-mods", inst.Slug, inst.Number)
+	return fmt.Sprintf("%s-%s-%02d-mods", profile.Prefix, inst.Slug, inst.Number)
 }
 
 // BackupsSubdir is the Instance's own directory on the shared backups export.
@@ -224,11 +282,11 @@ func (inst Instance) BackupsSubdir() string {
 	return fmt.Sprintf("%s-%02d", inst.Slug, inst.Number)
 }
 
-func (inst Instance) ConfigsCMName() string {
-	if inst.GameID == GameValheim {
-		return fmt.Sprintf("valheim-%s-%02d-configs", inst.Slug, inst.Number)
+func (inst Instance) ConfigsCMName(profile GameProfile) string {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
-	return fmt.Sprintf("mc-%s-%02d-configs", inst.Slug, inst.Number)
+	return fmt.Sprintf("%s-%s-%02d-configs", profile.Prefix, inst.Slug, inst.Number)
 }
 
 // ModList is an Instance's mods as the server will receive them: one body per
@@ -255,115 +313,143 @@ func (m ModList) HasCurseForge() bool {
 
 // Env is the environment for an Instance whose mods are not yet known - the
 // common case for callers that only need identity and sizing.
-func (inst Instance) Env() map[string]string {
-	return inst.EnvWith(ModList{})
+func (inst Instance) Env(profile GameProfile) map[string]string {
+	return inst.EnvWith(profile, ModList{})
 }
 
 // EnvWith is Env for a caller that knows what the Instance runs. Only the
 // CurseForge list changes the answer: a Mod list with no CurseForge entries must
 // not point the server at a CurseForge file, or it would read one that is not
 // there.
-func (inst Instance) EnvWith(mods ModList) map[string]string {
-	if inst.GameID == GameValheim {
+func (inst Instance) EnvWith(profile GameProfile, mods ModList) map[string]string {
+	switch profile.ID {
+	case GameValheim:
+		pass := ""
+		seed := ""
+		if inst.Valheim != nil {
+			pass = inst.Valheim.Password
+			seed = inst.Valheim.Seed
+		}
 		env := map[string]string{
 			"SERVER_NAME":   inst.Name,
 			"WORLD_NAME":    inst.Slug,
-			"SERVER_PASS":   inst.Password,
+			"SERVER_PASS":   pass,
 			"SERVER_PUBLIC": "true",
 			"BEPINEX":       boolText(!inst.IsVanilla()),
 			"STATUS_HTTP":   "true",
 			"SERVER_ARGS":   "-savedir /config/worlds_local",
 			"TZ":            "Europe/Amsterdam",
 		}
-		if inst.Seed != "" {
-			env["WORLD_SEED"] = inst.Seed
+		if seed != "" {
+			env["WORLD_SEED"] = seed
 		}
 		return env
-	}
 
-	env := map[string]string{
-		"LEVEL": inst.Slug,
-	}
-	if inst.MOTD != "" {
-		env["MOTD"] = inst.MOTD
-	}
-	if inst.Difficulty != "" {
-		env["DIFFICULTY"] = inst.Difficulty
-	}
-	if inst.Gamemode != "" {
-		env["MODE"] = inst.Gamemode
-	}
-	if inst.WorldType != "" && inst.WorldType != "default" {
-		env["LEVEL_TYPE"] = inst.WorldType
-	}
-	if inst.Seed != "" {
-		env["SEED"] = inst.Seed
-	}
-	if inst.MaxPlayers > 0 {
-		env["MAX_PLAYERS"] = fmt.Sprintf("%d", inst.MaxPlayers)
-	}
+	case GameMinecraft:
+		mc := inst.Minecraft
+		if mc == nil {
+			mc = &MinecraftConfig{}
+		}
+		env := map[string]string{
+			"LEVEL": inst.Slug,
+		}
+		if inst.MOTD != "" {
+			env["MOTD"] = inst.MOTD
+		}
+		if mc.Difficulty != "" {
+			env["DIFFICULTY"] = mc.Difficulty
+		}
+		if mc.Gamemode != "" {
+			env["MODE"] = mc.Gamemode
+		}
+		if mc.WorldType != "" && mc.WorldType != "default" {
+			env["LEVEL_TYPE"] = mc.WorldType
+		}
+		if mc.Seed != "" {
+			env["SEED"] = mc.Seed
+		}
+		if inst.MaxPlayers > 0 {
+			env["MAX_PLAYERS"] = fmt.Sprintf("%d", inst.MaxPlayers)
+		}
 
-	switch {
-	case inst.PackDefined() && inst.Pack.Provider == ProviderCurseForge:
-		env["TYPE"] = "AUTO_CURSEFORGE"
-		env["CF_PAGE_URL"] = inst.Pack.Ref
+		switch {
+		case inst.PackDefined() && mc.Pack != nil && mc.Pack.Provider == ProviderCurseForge:
+			env["TYPE"] = "AUTO_CURSEFORGE"
+			env["CF_PAGE_URL"] = mc.Pack.Ref
 
-	case inst.PackDefined() && inst.Pack.Provider == ProviderModrinth:
-		env["TYPE"] = "MODRINTH"
-		env["MODRINTH_MODPACK"] = inst.Pack.Ref
+		case inst.PackDefined() && mc.Pack != nil && mc.Pack.Provider == ProviderModrinth:
+			env["TYPE"] = "MODRINTH"
+			env["MODRINTH_MODPACK"] = mc.Pack.Ref
 
-	case inst.Source == SourceVanilla:
-		env["TYPE"] = "VANILLA"
-		env["VERSION"] = inst.MCVersion
+		case inst.Source == SourceVanilla:
+			env["TYPE"] = "VANILLA"
+			env["VERSION"] = mc.MCVersion
+
+		default:
+			env["VERSION"] = mc.MCVersion
+			env["MODRINTH_PROJECTS"] = "@/config-mods/mods.txt"
+			if mods.HasCurseForge() {
+				env["CURSEFORGE_FILES"] = "@/config-mods/curseforge.txt"
+			}
+			env["MODRINTH_DOWNLOAD_DEPENDENCIES"] = "required"
+			env["REMOVE_OLD_MODS"] = "TRUE"
+			env["MODRINTH_PROJECTS_DEFAULT_VERSION_TYPE"] = "beta"
+			if NormalizeLoader(string(mc.Loader)) == LoaderFabric {
+				env["TYPE"] = "FABRIC"
+				env["FABRIC_LOADER_VERSION"] = "latest"
+			} else {
+				env["TYPE"] = "NEOFORGE"
+				env["NEOFORGE_VERSION"] = "latest"
+			}
+		}
+		return env
 
 	default:
-		env["VERSION"] = inst.MCVersion
-		env["MODRINTH_PROJECTS"] = "@/config-mods/mods.txt"
-		if mods.HasCurseForge() {
-			env["CURSEFORGE_FILES"] = "@/config-mods/curseforge.txt"
-		}
-		env["MODRINTH_DOWNLOAD_DEPENDENCIES"] = "required"
-		env["REMOVE_OLD_MODS"] = "TRUE"
-		env["MODRINTH_PROJECTS_DEFAULT_VERSION_TYPE"] = "beta"
-		if NormalizeLoader(string(inst.Loader)) == LoaderFabric {
-			env["TYPE"] = "FABRIC"
-			env["FABRIC_LOADER_VERSION"] = "latest"
-		} else {
-			env["TYPE"] = "NEOFORGE"
-			env["NEOFORGE_VERSION"] = "latest"
-		}
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
-	return env
 }
 
-func (inst Instance) Annotations() map[string]string {
+func (inst Instance) Annotations(profile GameProfile) map[string]string {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
+	}
 	gameID := inst.GameID
 	if gameID == "" {
-		gameID = GameMinecraft
+		gameID = profile.ID
 	}
 	ann := map[string]string{
 		annPrefix + "instance-number": fmt.Sprintf("%d", inst.Number),
 		annPrefix + "tier":            string(inst.Tier),
+		annPrefix + "game":            string(gameID),
 	}
-	if inst.GameID != "" {
-		ann[annPrefix+"game"] = string(inst.GameID)
-	}
-	if gameID == GameMinecraft {
-		ann[annPrefix+"source"] = string(NormalizeSource(string(inst.Source)))
-		ann[annPrefix+"loader"] = string(NormalizeLoader(string(inst.Loader)))
-		if inst.MCVersion != "" {
-			ann[annPrefix+"mc-version"] = inst.MCVersion
-		}
-		if inst.PackDefined() {
-			ann[annPrefix+"pack-provider"] = string(inst.Pack.Provider)
-			ann[annPrefix+"pack-ref"] = inst.Pack.Ref
-			if inst.Pack.Name != "" {
-				ann[annPrefix+"pack-name"] = inst.Pack.Name
+
+	switch profile.ID {
+	case GameMinecraft:
+		if inst.Minecraft != nil {
+			ann[annPrefix+"source"] = string(NormalizeSource(string(inst.Source)))
+			ann[annPrefix+"loader"] = string(NormalizeLoader(string(inst.Minecraft.Loader)))
+			if inst.Minecraft.MCVersion != "" {
+				ann[annPrefix+"mc-version"] = inst.Minecraft.MCVersion
+			}
+			if inst.PackDefined() && inst.Minecraft.Pack != nil {
+				ann[annPrefix+"pack-provider"] = string(inst.Minecraft.Pack.Provider)
+				ann[annPrefix+"pack-ref"] = inst.Minecraft.Pack.Ref
+				if inst.Minecraft.Pack.Name != "" {
+					ann[annPrefix+"pack-name"] = inst.Minecraft.Pack.Name
+				}
+			}
+			if inst.Minecraft.Seed != "" {
+				ann[annPrefix+"seed"] = inst.Minecraft.Seed
 			}
 		}
-	}
-	if inst.Seed != "" {
-		ann[annPrefix+"seed"] = inst.Seed
+	case GameValheim:
+		if inst.Valheim != nil {
+			if inst.Valheim.Seed != "" {
+				ann[annPrefix+"seed"] = inst.Valheim.Seed
+			}
+		}
+	default:
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
 	return ann
 }
@@ -376,21 +462,20 @@ type BackupFile struct {
 }
 
 // FormatGameBackupFileName generates a standard archive name for instance backups for a specific game.
-func FormatGameBackupFileName(gameID GameID, slug string, num int, tag string) string {
-	prefix := "mc"
-	if gameID == GameValheim {
-		prefix = "valheim"
+func FormatGameBackupFileName(profile GameProfile, slug string, num int, tag string) string {
+	if _, ok := ProfileFor(profile.ID); !ok {
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
 	ts := time.Now().UTC().Format("20060102-150405")
 	if tag != "" {
-		return fmt.Sprintf("%s-%s-%02d-%s-%s.tar.gz", prefix, slug, num, tag, ts)
+		return fmt.Sprintf("%s-%s-%02d-%s-%s.tar.gz", profile.Prefix, slug, num, tag, ts)
 	}
-	return fmt.Sprintf("%s-%s-%02d-%s.tar.gz", prefix, slug, num, ts)
+	return fmt.Sprintf("%s-%s-%02d-%s.tar.gz", profile.Prefix, slug, num, ts)
 }
 
 // FormatBackupFileName generates a standard archive name for instance backups.
 func FormatBackupFileName(slug string, num int, tag string) string {
-	return FormatGameBackupFileName(GameMinecraft, slug, num, tag)
+	return FormatGameBackupFileName(MinecraftProfile, slug, num, tag)
 }
 
 // BackupSummary aggregates metadata for storage and backup health reporting.
@@ -402,11 +487,24 @@ type BackupSummary struct {
 	LatestAt   time.Time
 }
 
-var safeBackupName = regexp.MustCompile(`^(mc|valheim)-[a-z0-9-]+-\d{2}-[a-zA-Z0-9_-]+\.tar\.gz$`)
+var safeBackupName = regexp.MustCompile(`^[a-z0-9]+-[a-z0-9-]+-\d{2}-[a-zA-Z0-9_-]+\.tar\.gz$`)
 
 // IsSafeBackupFileName checks whether an archive name matches the standard instance backup pattern.
 func IsSafeBackupFileName(name string) bool {
-	return safeBackupName.MatchString(name)
+	if !safeBackupName.MatchString(name) {
+		return false
+	}
+	idx := strings.Index(name, "-")
+	if idx <= 0 {
+		return false
+	}
+	prefix := name[:idx]
+	for _, p := range defaultProfiles {
+		if p.Prefix == prefix {
+			return true
+		}
+	}
+	return false
 }
 
 // ServerBuild is what the game's own store says about the binaries an Instance

@@ -73,8 +73,12 @@ func TestManagerDrivesAnyRuntime(t *testing.T) {
 	ctx := context.Background()
 
 	inst, err := mgr.CreateInstance(ctx, domain.Instance{
-		Name: "portcheck", Loader: domain.LoaderNeoForge, Source: domain.SourceModlist,
-		MCVersion: "1.21.1", Tier: domain.TierSmall,
+		Name: "portcheck", Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
+		Tier: domain.TierSmall,
 	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -83,7 +87,7 @@ func TestManagerDrivesAnyRuntime(t *testing.T) {
 	if err := mgr.StartInstance(ctx, inst.Number); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	if len(rt.started) != 1 || rt.started[0] != inst.DeploymentName() {
+	if len(rt.started) != 1 || rt.started[0] != inst.DeploymentName(domain.MinecraftProfile) {
 		t.Fatalf("runtime was not asked to start the instance: %v", rt.started)
 	}
 

@@ -293,20 +293,20 @@ func TestAccessValheimPasswords(t *testing.T) {
 
 	repo := store.NewValheimInstanceRepo(st)
 	_ = repo.Upsert(domain.Instance{
-		GameID:   domain.GameValheim,
-		Number:   1,
-		Name:     "Viking World",
-		Password: "supersecretpass",
-		State:    domain.StateRunning,
-		LBIP:     "192.168.20.224",
+		GameID:  domain.GameValheim,
+		Number:  1,
+		Name:    "Viking World",
+		State:   domain.StateRunning,
+		LBIP:    "192.168.20.224",
+		Valheim: &domain.ValheimConfig{Password: "supersecretpass"},
 	})
 	_ = repo.Upsert(domain.Instance{
-		GameID:   domain.GameValheim,
-		Number:   2,
-		Name:     "Public World",
-		Password: "",
-		State:    domain.StateStopped,
-		LBIP:     "192.168.20.225",
+		GameID:  domain.GameValheim,
+		Number:  2,
+		Name:    "Public World",
+		State:   domain.StateStopped,
+		LBIP:    "192.168.20.225",
+		Valheim: &domain.ValheimConfig{Password: ""},
 	})
 
 	mgr := instances.NewInstanceManager(
@@ -576,7 +576,8 @@ func TestAccessRemainingEdges(t *testing.T) {
 
 	vhRepo := store.NewValheimInstanceRepo(st)
 	_ = vhRepo.Upsert(domain.Instance{
-		Number: 1, Name: "Midgard", State: domain.StateRunning, GameID: domain.GameValheim, Password: "secret", LBIP: "",
+		Number: 1, Name: "Midgard", State: domain.StateRunning, GameID: domain.GameValheim, LBIP: "",
+		Valheim: &domain.ValheimConfig{Password: "secret"},
 	})
 	vhMgr := instances.NewInstanceManager(vhRepo, nil, nil, 16, 4, 2, "manifests/valheim", "192.168.20.224", nil, "valheim", instances.WithGameID(domain.GameValheim))
 

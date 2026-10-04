@@ -367,8 +367,10 @@ func TestManagerBackupAndRestore(t *testing.T) {
 		Name:      "Vault Hunters",
 		State:     domain.StateRunning,
 		Tier:      domain.TierLarge,
-		MCVersion: "1.20.1",
-		Loader:    domain.LoaderNeoForge,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.20.1",
+			Loader:    domain.LoaderNeoForge,
+		},
 	}
 	if err := mgr.SaveInstance(inst); err != nil {
 		t.Fatalf("save instance failed: %v", err)

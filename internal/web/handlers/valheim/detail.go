@@ -37,16 +37,23 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Valheim instance not found")
 	}
 
+	pass := ""
+	seed := ""
+	if inst.Valheim != nil {
+		pass = inst.Valheim.Password
+		seed = inst.Valheim.Seed
+	}
+
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
 			GameID:    string(inst.GameID),
 			Number:    inst.Number,
 			Name:      inst.Name,
 			Slug:      inst.Slug,
-			Password:  inst.Password,
-			Seed:      inst.Seed,
+			Password:  pass,
+			Seed:      seed,
 			Tier:      string(inst.Tier),
-			MemoryGiB: inst.MemoryGiB(),
+			MemoryGiB: inst.MemoryGiB(domain.ValheimProfile),
 			State:     string(inst.State),
 			MOTD:      inst.MOTD,
 			LBIP:      inst.LBIP,

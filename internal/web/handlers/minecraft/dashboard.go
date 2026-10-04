@@ -35,19 +35,27 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 		} else if budget.RunningCount >= budget.MaxRunning {
 			canStart = false
 			blockedReason = fmt.Sprintf("Max %d running instances reached", budget.MaxRunning)
-		} else if budget.UsedGiB+inst.MemoryGiB() > budget.TotalBudgetGiB {
+		} else if budget.UsedGiB+inst.MemoryGiB(domain.MinecraftProfile) > budget.TotalBudgetGiB {
 			canStart = false
 			blockedReason = fmt.Sprintf("Exceeds %d GiB RAM budget (%d used + %d required)",
-				budget.TotalBudgetGiB, budget.UsedGiB, inst.MemoryGiB())
+				budget.TotalBudgetGiB, budget.UsedGiB, inst.MemoryGiB(domain.MinecraftProfile))
 		}
 
 		packName := ""
 		packRef := ""
 		packProvider := ""
-		if inst.Pack != nil {
-			packName = inst.Pack.Name
-			packRef = inst.Pack.Ref
-			packProvider = string(inst.Pack.Provider)
+		seed := ""
+		loader := ""
+		mcVer := ""
+		if inst.Minecraft != nil {
+			seed = inst.Minecraft.Seed
+			loader = string(inst.Minecraft.Loader)
+			mcVer = inst.Minecraft.MCVersion
+			if inst.Minecraft.Pack != nil {
+				packName = inst.Minecraft.Pack.Name
+				packRef = inst.Minecraft.Pack.Ref
+				packProvider = string(inst.Minecraft.Pack.Provider)
+			}
 		}
 
 		updateCount := 0
@@ -60,15 +68,15 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 			Number:             inst.Number,
 			Name:               inst.Name,
 			Slug:               inst.Slug,
-			Seed:               inst.Seed,
-			Loader:             string(inst.Loader),
+			Seed:               seed,
+			Loader:             loader,
 			Source:             string(inst.Source),
 			Pack:               packName,
 			PackRef:            packRef,
 			PackProvider:       packProvider,
-			MCVersion:          inst.MCVersion,
+			MCVersion:          mcVer,
 			Tier:               string(inst.Tier),
-			MemoryGiB:          inst.MemoryGiB(),
+			MemoryGiB:          inst.MemoryGiB(domain.MinecraftProfile),
 			State:              string(inst.State),
 			MOTD:               inst.MOTD,
 			LBIP:               inst.LBIP,
@@ -110,20 +118,25 @@ func (h *Handler) MCInstanceCreate(c *fiber.Ctx) error {
 	seed := strings.TrimSpace(c.FormValue("seed"))
 	mods := c.FormValue("mods")
 
-	inst := domain.Instance{
-		Name:      name,
+	mc := &domain.MinecraftConfig{
 		Seed:      seed,
 		MCVersion: mcVersion,
+	}
+
+	inst := domain.Instance{
+		GameID:    domain.GameMinecraft,
+		Name:      name,
 		Tier:      tier,
 		State:     domain.StateRunning,
+		Minecraft: mc,
 	}
 
 	if loaderStr == "vanilla" {
 		inst.Source = domain.SourceVanilla
-		inst.Loader = ""
+		mc.Loader = ""
 	} else {
 		inst.Source = domain.SourceModlist
-		inst.Loader = domain.NormalizeLoader(loaderStr)
+		mc.Loader = domain.NormalizeLoader(loaderStr)
 	}
 
 	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, domain.ModList{Primary: mods}, h.cfg.Actor(c))

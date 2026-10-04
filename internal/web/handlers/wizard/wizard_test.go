@@ -348,7 +348,7 @@ func TestMCWizardCreateValidationAndCreation(t *testing.T) {
 	}
 
 	inst2, err := instMgr.GetInstance(context.Background(), 2)
-	if err != nil || inst2 == nil || inst2.Loader != "fabric" {
+	if err != nil || inst2 == nil || inst2.Minecraft == nil || inst2.Minecraft.Loader != "fabric" {
 		t.Errorf("expected loader verified to fabric, got: %+v", inst2)
 	}
 }
@@ -612,11 +612,11 @@ func TestMCWizardCreateFormAndVariants(t *testing.T) {
 	if err != nil || inst == nil {
 		t.Fatalf("instance 1 not found: %v", err)
 	}
-	if inst.Pack == nil || inst.Pack.Provider != domain.ProviderModrinth {
-		t.Errorf("expected ProviderModrinth, got: %+v", inst.Pack)
+	if inst.Minecraft == nil || inst.Minecraft.Pack == nil || inst.Minecraft.Pack.Provider != domain.ProviderModrinth {
+		t.Errorf("expected ProviderModrinth, got: %+v", inst.Minecraft)
 	}
-	if inst.MCVersion != "1.21.1" {
-		t.Errorf("expected default 1.21.1, got: %s", inst.MCVersion)
+	if inst.Minecraft.MCVersion != "1.21.1" {
+		t.Errorf("expected default 1.21.1, got: %s", inst.Minecraft.MCVersion)
 	}
 
 	// 3. Assemble source with missing loader via FormValue

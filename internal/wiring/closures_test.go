@@ -402,13 +402,15 @@ func TestWiring_InstanceManagerClosures(t *testing.T) {
 
 	// Seed instances
 	_ = deps.MCInstances.SaveInstance(domain.Instance{
-		Number:    1,
-		Slug:      "inst-01",
-		Name:      "Inst 1",
-		GameID:    domain.GameMinecraft,
-		State:     domain.StateRunning,
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
+		Number: 1,
+		Slug:   "inst-01",
+		Name:   "Inst 1",
+		GameID: domain.GameMinecraft,
+		State:  domain.StateRunning,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
 	})
 	_ = deps.ValheimInstances.SaveInstance(domain.Instance{
 		Number: 1,

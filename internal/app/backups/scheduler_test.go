@@ -65,18 +65,22 @@ func TestRunDailyBacksUpRunningInstances(t *testing.T) {
 	lister := &fakeInstanceLister{
 		instances: []domain.Instance{
 			{
-				Name:      "ActiveWorld",
-				Slug:      "active-world",
-				Number:    1,
-				MCVersion: "1.21.1",
-				Loader:    domain.LoaderNeoForge,
-				Tier:      domain.TierMedium,
-				State:     domain.StateRunning,
+				Name:   "ActiveWorld",
+				Slug:   "active-world",
+				Number: 1,
+				GameID: domain.GameMinecraft,
+				Tier:   domain.TierMedium,
+				State:  domain.StateRunning,
+				Minecraft: &domain.MinecraftConfig{
+					MCVersion: "1.21.1",
+					Loader:    domain.LoaderNeoForge,
+				},
 			},
 			{
 				Name:   "StoppedWorld",
 				Slug:   "stopped-world",
 				Number: 2,
+				GameID: domain.GameMinecraft,
 				State:  domain.StateStopped,
 			},
 		},

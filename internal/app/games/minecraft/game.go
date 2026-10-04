@@ -16,26 +16,17 @@ const (
 
 // Game implements ports.Game for Minecraft.
 type Game struct {
-	providers        []ports.ContentProvider
 	image            string
 	runtime          ports.Runtime
 	serverRef        ports.ServerRef
 	playerCountFn    func(context.Context) (int, error)
 	activeInstanceFn func(context.Context) (domain.Loader, string)
 	statusProvider   func(context.Context) (domain.GameTelemetry, error)
-	contentResolver  func(context.Context, domain.Instance) (domain.ContentSet, error)
 	bundleBuilder    func(context.Context, domain.Instance) (domain.Bundle, error)
 }
 
 // Option configures a Minecraft Game instance.
 type Option func(*Game)
-
-// WithProvider registers a content provider (e.g. Modrinth, CurseForge).
-func WithProvider(p ports.ContentProvider) Option {
-	return func(g *Game) {
-		g.providers = append(g.providers, p)
-	}
-}
 
 // WithImage overrides the container image.
 func WithImage(img string) Option {
@@ -75,13 +66,6 @@ func WithStatusProvider(fn func(context.Context) (domain.GameTelemetry, error)) 
 	}
 }
 
-// WithContentResolver sets the content resolution strategy.
-func WithContentResolver(fn func(context.Context, domain.Instance) (domain.ContentSet, error)) Option {
-	return func(g *Game) {
-		g.contentResolver = fn
-	}
-}
-
 // WithBundleBuilder sets a custom client bundle builder.
 func WithBundleBuilder(fn func(context.Context, domain.Instance) (domain.Bundle, error)) Option {
 	return func(g *Game) {
@@ -102,30 +86,6 @@ func New(opts ...Option) *Game {
 
 var _ ports.Game = (*Game)(nil)
 
-func (g *Game) ID() domain.GameID {
-	return domain.GameMinecraft
-}
-
-func (g *Game) Display() domain.Display {
-	return domain.Display{
-		Name:   "Minecraft",
-		Icon:   "pickaxe",
-		Accent: "emerald",
-	}
-}
-
-func (g *Game) AdmissionModel() domain.AdmissionModel {
-	return domain.AdmissionAllowlist
-}
-
-func (g *Game) OperatorIDKind() domain.OperatorIDKind {
-	return domain.IDKindUsername
-}
-
-func (g *Game) Providers() []ports.ContentProvider {
-	return g.providers
-}
-
 // RuntimeSpec defines the execution shape of a Minecraft server container.
 func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 	inst.GameID = domain.GameMinecraft
@@ -138,7 +98,7 @@ func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 		Volumes: []domain.VolumeSpec{
 			{Name: "data", MountPath: "/data", ReadOnly: false},
 		},
-		Env:         inst.Env(),
+		Env:         inst.Env(domain.MinecraftProfile),
 		HealthProbe: "mc-health",
 	}
 }
@@ -202,13 +162,6 @@ func (g *Game) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
 	return tele, nil
 }
 
-func (g *Game) ResolveContent(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
-	if g.contentResolver != nil {
-		return g.contentResolver(ctx, inst)
-	}
-	return domain.ContentSet{}, nil
-}
-
 var buildMrpack = modpack.BuildMrpack
 
 // ExportClientBundle creates an .mrpack Modrinth bundle for the instance.
@@ -217,11 +170,15 @@ func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (do
 		return g.bundleBuilder(ctx, inst)
 	}
 
-	loader := string(inst.Loader)
+	loader := ""
+	mcVer := ""
+	if inst.Minecraft != nil {
+		loader = string(inst.Minecraft.Loader)
+		mcVer = inst.Minecraft.MCVersion
+	}
 	if loader == "" {
 		loader = string(domain.LoaderNeoForge)
 	}
-	mcVer := inst.MCVersion
 	if mcVer == "" {
 		mcVer = "1.21.1"
 	}

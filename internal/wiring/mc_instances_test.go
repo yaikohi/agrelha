@@ -343,9 +343,11 @@ func TestMCSettingsSave(t *testing.T) {
 	defer st.Close()
 
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "OldName",
-		MCVersion: "1.21.1",
-		Tier:      domain.TierSmall,
+		Name: "OldName",
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+		},
+		Tier: domain.TierSmall,
 	}, domain.ModList{})
 	if err != nil {
 		t.Fatal(err)
@@ -424,8 +426,8 @@ func TestMCWizardAssembleLoaderSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get instance 1: %v", err)
 	}
-	if inst1.Loader != domain.LoaderFabric {
-		t.Errorf("expected LoaderFabric, got %s", inst1.Loader)
+	if inst1.Minecraft == nil || inst1.Minecraft.Loader != domain.LoaderFabric {
+		t.Errorf("expected LoaderFabric, got %+v", inst1.Minecraft)
 	}
 
 	// 3. Assemble create with explicit NeoForge loader
@@ -449,8 +451,8 @@ func TestMCWizardAssembleLoaderSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get instance 2: %v", err)
 	}
-	if inst2.Loader != domain.LoaderNeoForge {
-		t.Errorf("expected LoaderNeoForge, got %s", inst2.Loader)
+	if inst2.Minecraft == nil || inst2.Minecraft.Loader != domain.LoaderNeoForge {
+		t.Errorf("expected LoaderNeoForge, got %+v", inst2.Minecraft)
 	}
 
 	// 4. Test cart check endpoint

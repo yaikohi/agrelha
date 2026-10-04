@@ -61,10 +61,12 @@ func TestLegacyRedirectsToActiveInstance(t *testing.T) {
 
 	// Seed instance #01
 	_, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "Ducktopia",
-		MCVersion: "1.21.1",
-		Loader:    "neoforge",
-		Source:    "modlist",
+		Name: "Ducktopia",
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    "neoforge",
+		},
+		Source: "modlist",
 	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)

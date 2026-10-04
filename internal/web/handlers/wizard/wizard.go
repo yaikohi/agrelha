@@ -416,31 +416,36 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		modsTxt = sb.String()
 	}
 
-	inst := domain.Instance{
-		Name:       name,
+	mc := &domain.MinecraftConfig{
 		Seed:       seed,
 		MCVersion:  mcVersion,
-		Tier:       tier,
-		MOTD:       motd,
 		Difficulty: difficulty,
 		Gamemode:   gamemode,
 		WorldType:  worldType,
-		State:      domain.StateRunning,
+	}
+
+	inst := domain.Instance{
+		GameID:    domain.GameMinecraft,
+		Name:      name,
+		Tier:      tier,
+		MOTD:      motd,
+		State:     domain.StateRunning,
+		Minecraft: mc,
 	}
 
 	switch source {
 	case "vanilla":
 		inst.Source = domain.SourceVanilla
-		inst.Loader = ""
+		mc.Loader = ""
 	case "modpack":
 		inst.Source = domain.SourceModpack
-		inst.Loader = domain.NormalizeLoader(loader)
+		mc.Loader = domain.NormalizeLoader(loader)
 		if packName != "" || packRef != "" {
 			provider := domain.ProviderCurseForge
 			if packProvider == "modrinth" {
 				provider = domain.ProviderModrinth
 			}
-			inst.Pack = &domain.Pack{
+			mc.Pack = &domain.Pack{
 				Name:     packName,
 				Ref:      packRef,
 				Provider: provider,
@@ -448,7 +453,7 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		}
 	default:
 		inst.Source = domain.SourceModlist
-		inst.Loader = domain.NormalizeLoader(loader)
+		mc.Loader = domain.NormalizeLoader(loader)
 	}
 
 	p := shared.PrincipalOf(c)
@@ -506,16 +511,25 @@ func (h *Handler) MCProvisioningPage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Instance not found")
 	}
 
+	seed := ""
+	loader := ""
+	mcVersion := ""
+	if inst.Minecraft != nil {
+		seed = inst.Minecraft.Seed
+		loader = string(inst.Minecraft.Loader)
+		mcVersion = inst.Minecraft.MCVersion
+	}
+
 	instUI := pages.InstanceUI{
 		Number:    inst.Number,
 		Name:      inst.Name,
 		Slug:      inst.Slug,
-		Seed:      inst.Seed,
-		Loader:    string(inst.Loader),
+		Seed:      seed,
+		Loader:    loader,
 		Source:    string(inst.Source),
-		MCVersion: inst.MCVersion,
+		MCVersion: mcVersion,
 		Tier:      string(inst.Tier),
-		MemoryGiB: inst.MemoryGiB(),
+		MemoryGiB: inst.MemoryGiB(domain.MinecraftProfile),
 		State:     string(inst.State),
 		MOTD:      inst.MOTD,
 		LBIP:      inst.LBIP,

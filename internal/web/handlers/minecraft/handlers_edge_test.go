@@ -31,14 +31,6 @@ type mockExportGame struct {
 	bundle    domain.Bundle
 }
 
-func (m *mockExportGame) ID() domain.GameID { return domain.GameMinecraft }
-func (m *mockExportGame) Display() domain.Display {
-	return domain.Display{Name: "Minecraft"}
-}
-func (m *mockExportGame) Providers() []ports.ContentProvider { return nil }
-func (m *mockExportGame) ResolveContent(_ context.Context, _ domain.Instance) (domain.ContentSet, error) {
-	return domain.ContentSet{}, nil
-}
 func (m *mockExportGame) ExportClientBundle(_ context.Context, _ domain.Instance) (domain.Bundle, error) {
 	if m.exportErr != nil {
 		return domain.Bundle{}, m.exportErr
@@ -51,8 +43,6 @@ func (m *mockExportGame) RuntimeSpec(_ domain.Instance) domain.RuntimeSpec {
 func (m *mockExportGame) Telemetry(_ context.Context) (domain.GameTelemetry, error) {
 	return domain.GameTelemetry{}, nil
 }
-func (m *mockExportGame) AdmissionModel() domain.AdmissionModel { return "" }
-func (m *mockExportGame) OperatorIDKind() domain.OperatorIDKind { return "" }
 
 func TestHandlerActorAndStatsEdges(t *testing.T) {
 	app := fiber.New()
@@ -134,7 +124,7 @@ func TestHandlerActorAndStatsEdges(t *testing.T) {
 		Number:    1,
 		Name:      "World1",
 		State:     domain.StateRunning,
-		MCVersion: "1.21.1",
+		Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
 	}, domain.ModList{})
 
 	respCfgInst, _ := appFull.Test(httptest.NewRequest("GET", "/minecraft/configs", nil))
@@ -162,21 +152,23 @@ func TestMCDashboardAllBranches(t *testing.T) {
 		Name:      "RunningWorld",
 		State:     domain.StateRunning,
 		Tier:      domain.TierMedium,
-		MCVersion: "1.21.1",
+		Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
 	}, domain.ModList{})
 
 	// 2. Modpack instance
 	_, _ = mgr.CreateInstance(context.Background(), domain.Instance{
-		Number:    2,
-		Name:      "ModpackWorld",
-		State:     domain.StateStopped,
-		Tier:      domain.TierSmall,
-		MCVersion: "1.21.1",
-		Source:    domain.SourceModpack,
-		Pack: &domain.Pack{
-			Name:     "AllTheMods",
-			Ref:      "atm-9",
-			Provider: domain.ProviderModrinth,
+		Number: 2,
+		Name:   "ModpackWorld",
+		State:  domain.StateStopped,
+		Tier:   domain.TierSmall,
+		Source: domain.SourceModpack,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Pack: &domain.Pack{
+				Name:     "AllTheMods",
+				Ref:      "atm-9",
+				Provider: domain.ProviderModrinth,
+			},
 		},
 	}, domain.ModList{})
 
@@ -186,7 +178,7 @@ func TestMCDashboardAllBranches(t *testing.T) {
 		Name:      "LargeWorld",
 		State:     domain.StateStopped,
 		Tier:      domain.TierLarge,
-		MCVersion: "1.21.1",
+		Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
 	}, domain.ModList{})
 
 	cat := &mockModUpdatesCatalog{
@@ -305,16 +297,18 @@ func TestMCInstanceDetailAllBranches(t *testing.T) {
 
 	// Seed instance with Pack
 	inst, _ := mgr.CreateInstance(context.Background(), domain.Instance{
-		Number:    1,
-		Name:      "DetailWorld",
-		State:     domain.StateRunning,
-		Tier:      domain.TierSmall,
-		MCVersion: "1.21.1",
-		Source:    domain.SourceModpack,
-		Pack: &domain.Pack{
-			Name:     "CobblemonPack",
-			Ref:      "cobblemon",
-			Provider: domain.ProviderCurseForge,
+		Number: 1,
+		Name:   "DetailWorld",
+		State:  domain.StateRunning,
+		Tier:   domain.TierSmall,
+		Source: domain.SourceModpack,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Pack: &domain.Pack{
+				Name:     "CobblemonPack",
+				Ref:      "cobblemon",
+				Provider: domain.ProviderCurseForge,
+			},
 		},
 	}, domain.ModList{})
 
@@ -575,7 +569,7 @@ func TestMCConfigsAllBranches(t *testing.T) {
 		Name:      "ConfigWorld",
 		State:     domain.StateStopped,
 		Tier:      domain.TierSmall,
-		MCVersion: "1.21.1",
+		Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
 	}, domain.ModList{})
 
 	app := fiber.New()
@@ -773,7 +767,7 @@ func TestMCModsSearchAllBranches(t *testing.T) {
 		Name:      "Ducktopia",
 		State:     domain.StateStopped,
 		Tier:      domain.TierSmall,
-		MCVersion: "1.21.1",
+		Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
 	}, domain.ModList{Primary: "jei\n"})
 
 	app := fiber.New()
@@ -870,38 +864,44 @@ func TestMCModUpdatesAllBranches(t *testing.T) {
 
 	// 1. Seed modlist instance with slug "ducktopia" matching fake k8s ConfigMap
 	_ = repo.Upsert(domain.Instance{
-		Number:    1,
-		Name:      "Ducktopia",
-		Slug:      "ducktopia",
-		State:     domain.StateRunning,
-		Tier:      domain.TierSmall,
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderFabric,
-		Source:    domain.SourceModlist,
+		Number: 1,
+		Name:   "Ducktopia",
+		Slug:   "ducktopia",
+		State:  domain.StateRunning,
+		Tier:   domain.TierSmall,
+		Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderFabric,
+		},
 	})
 
 	// 2. Seed modpack instance
 	_ = repo.Upsert(domain.Instance{
-		Number:    2,
-		Name:      "PackWorld",
-		State:     domain.StateStopped,
-		Tier:      domain.TierSmall,
-		MCVersion: "1.21.1",
-		Source:    domain.SourceModpack,
-		Pack: &domain.Pack{
-			Name: "ATM9",
-			Ref:  "atm-9",
+		Number: 2,
+		Name:   "PackWorld",
+		State:  domain.StateStopped,
+		Tier:   domain.TierSmall,
+		Source: domain.SourceModpack,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Pack: &domain.Pack{
+				Name: "ATM9",
+				Ref:  "atm-9",
+			},
 		},
 	})
 
 	// 3. Seed vanilla instance
 	_ = repo.Upsert(domain.Instance{
-		Number:    3,
-		Name:      "VanillaWorld",
-		State:     domain.StateStopped,
-		Tier:      domain.TierSmall,
-		MCVersion: "1.21.1",
-		Source:    domain.SourceVanilla,
+		Number: 3,
+		Name:   "VanillaWorld",
+		State:  domain.StateStopped,
+		Tier:   domain.TierSmall,
+		Source: domain.SourceVanilla,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+		},
 	})
 
 	app := fiber.New()
@@ -1073,12 +1073,14 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 	defer st.Close()
 
 	_, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Number:    1,
-		Name:      "Ducktopia",
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
-		Tier:      domain.TierMedium,
-		State:     domain.StateRunning,
+		Number: 1,
+		Name:   "Ducktopia",
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
+		Tier:  domain.TierMedium,
+		State: domain.StateRunning,
 	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
@@ -1153,10 +1155,10 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 		store.NewInstanceRepo(stA), mockState, nil, 24, 4, 1, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded",
 	)
 	_, _ = mgrA.CreateInstance(context.Background(), domain.Instance{
-		Number: 1, Name: "Running1", State: domain.StateRunning, Tier: domain.TierSmall, MCVersion: "1.21.1",
+		Number: 1, Name: "Running1", State: domain.StateRunning, Tier: domain.TierSmall, Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
 	}, domain.ModList{})
 	_, _ = mgrA.CreateInstance(context.Background(), domain.Instance{
-		Number: 2, Name: "Stopped2", State: domain.StateStopped, Tier: domain.TierSmall, MCVersion: "1.21.1",
+		Number: 2, Name: "Stopped2", State: domain.StateStopped, Tier: domain.TierSmall, Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
 	}, domain.ModList{})
 	hA := New(Config{MCInstances: mgrA})
 	appA := fiber.New()
@@ -1179,10 +1181,10 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 		store.NewInstanceRepo(stB), mockState, nil, 6, 4, 5, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded",
 	)
 	_, _ = mgrB.CreateInstance(context.Background(), domain.Instance{
-		Number: 1, Name: "RunningB1", State: domain.StateRunning, Tier: domain.TierMedium, MCVersion: "1.21.1",
+		Number: 1, Name: "RunningB1", State: domain.StateRunning, Tier: domain.TierMedium, Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
 	}, domain.ModList{})
 	_, _ = mgrB.CreateInstance(context.Background(), domain.Instance{
-		Number: 2, Name: "StoppedB2", State: domain.StateStopped, Tier: domain.TierLarge, MCVersion: "1.21.1",
+		Number: 2, Name: "StoppedB2", State: domain.StateStopped, Tier: domain.TierLarge, Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
 	}, domain.ModList{})
 	hB := New(Config{MCInstances: mgrB})
 	appB := fiber.New()
@@ -1227,11 +1229,13 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 
 	// Setup an instance with mod-unreachable and mod-update
 	_, err = mgr.CreateInstance(context.Background(), domain.Instance{
-		Number:    2,
-		Name:      "ModdedWorld2",
-		State:     domain.StateRunning,
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
+		Number: 2,
+		Name:   "ModdedWorld2",
+		State:  domain.StateRunning,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
 	}, domain.ModList{Primary: "mod-unreachable\nmod-update:1.0.0\n"})
 	if err != nil {
 		t.Fatal(err)
@@ -1273,11 +1277,13 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 	// 8. updates.go: MCModUpdatesCheck RefreshOne error
 	// Create instance 3 whose mods CM does not exist, so GetInstalledMods errors
 	_, err = mgr.CreateInstance(context.Background(), domain.Instance{
-		Number:    3,
-		Name:      "WorldNoCM",
-		State:     domain.StateRunning,
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
+		Number: 3,
+		Name:   "WorldNoCM",
+		State:  domain.StateRunning,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
 	}, domain.ModList{Primary: "some-mod\n"})
 	if err != nil {
 		t.Fatal(err)
@@ -1300,11 +1306,13 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 	// 10. updates.go: ModUpdateState lines 39-42 (RestoreAvailable != nil) and MCModUpdatesUndo lines 140-142 (Undo success)
 	// Create instance 4 with mods that match a restore point
 	_, err = mgr.CreateInstance(context.Background(), domain.Instance{
-		Number:    4,
-		Name:      "WorldRestore",
-		State:     domain.StateRunning,
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
+		Number: 4,
+		Name:   "WorldRestore",
+		State:  domain.StateRunning,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
 	}, domain.ModList{Primary: "restored-mod:2.0.0\n"})
 	if err != nil {
 		t.Fatal(err)

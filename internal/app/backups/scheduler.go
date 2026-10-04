@@ -208,21 +208,24 @@ func (s *BackupScheduler) RunDaily(ctx context.Context) {
 func (s *BackupScheduler) backupOne(ctx context.Context, inst domain.Instance) {
 	slog.Info("scheduler: starting daily backup", "instance", inst.Name, "num", inst.Number, "game", inst.GameID)
 
-	if s.cmdExec != nil && (inst.GameID == "" || inst.GameID == domain.GameMinecraft) {
+	profile, ok := domain.ProfileFor(inst.GameID)
+	if !ok {
+		slog.Error("scheduler: unknown game profile", "gameID", inst.GameID)
+		return
+	}
+
+	if s.cmdExec != nil && inst.GameID == domain.GameMinecraft {
 		_ = s.cmdExec(ctx, inst, "/save-off")
 		_ = s.cmdExec(ctx, inst, "/save-all flush")
 		defer func() { _ = s.cmdExec(ctx, inst, "/save-on") }()
 	}
 
-	prefix := "mc"
-	if inst.GameID == domain.GameValheim {
-		prefix = "valheim"
-	}
+	prefix := profile.Prefix
 
 	jobName := fmt.Sprintf("%s-backup-%s-%02d-daily-%d", prefix, inst.Slug, inst.Number, time.Now().Unix())
-	archiveName := domain.FormatGameBackupFileName(inst.GameID, inst.Slug, inst.Number, "daily")
+	archiveName := domain.FormatGameBackupFileName(profile, inst.Slug, inst.Number, "daily")
 
-	if err := s.jobRunner.CreateBackupJob(ctx, jobName, archiveName, inst.PVCName(), s.backupsPVC); err != nil {
+	if err := s.jobRunner.CreateBackupJob(ctx, jobName, archiveName, inst.PVCName(profile), s.backupsPVC); err != nil {
 		slog.Error("scheduler: failed to create daily backup job", "instance", inst.Name, "err", err)
 		return
 	}

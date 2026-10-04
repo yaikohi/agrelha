@@ -13,6 +13,8 @@ import (
 	"agrelha/internal/app/admins"
 	"agrelha/internal/app/authz"
 	appbepinex "agrelha/internal/app/bepinex"
+	"agrelha/internal/app/capacity"
+	"agrelha/internal/app/games"
 	"agrelha/internal/app/games/minecraft"
 	"agrelha/internal/app/games/valheim"
 	"agrelha/internal/app/health"
@@ -61,7 +63,9 @@ type Deps struct {
 	MCK8s            *k8s.Client
 	Auth             ports.Auth
 	Authz            *authz.Service
+	Capacity         *capacity.Service
 	Requests         *requests.Service
+	Games            *games.Registry
 	ValheimGame      ports.Game
 	MinecraftGame    ports.Game
 	ValheimRuntime   ports.Runtime
@@ -164,7 +168,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 	if d.MCRconPool != nil {
 		rconExec := func(inst domain.Instance, cmd string) (string, error) {
-			addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(), cfg.MinecraftNamespace)
+			addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(domain.MinecraftProfile), cfg.MinecraftNamespace)
 			res, err := d.MCRconPool.ClientFor(addr).Execute(cmd)
 			if err != nil && inst.LBIP != "" {
 				target := inst.LBIP
@@ -205,7 +209,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 					}
 					return nil, err
 				}
-				return d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName())
+				return d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName(domain.MinecraftProfile))
 			}),
 			instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
 				inst, err := d.MCInstances.GetInstance(ctx, num)
@@ -215,7 +219,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 					}
 					return nil, err
 				}
-				cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName())
+				cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName(domain.MinecraftProfile))
 				if err != nil {
 					return nil, err
 				}
@@ -239,7 +243,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 					}
 					return nil, err
 				}
-				cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName())
+				cm, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName(domain.MinecraftProfile))
 				if err != nil {
 					return nil, err
 				}
@@ -253,6 +257,20 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				return d.MCK8s.ConfigMapData(ctx, "minecraft-modded-configs")
 			}),
 		)
+	}
+
+	d.Capacity = capacity.New(st, st, capacity.WithAudit(st), capacity.WithGlobals(st))
+	for _, profile := range domain.Profiles() {
+		err := d.Capacity.Seed(ctx, profile.ID, defaultGameSettings(cfg, profile.ID))
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// Shutting down mid-startup is not a seeding failure. Seed is
+			// idempotent, so the next boot finishes the job.
+			slog.Info("capacity seeding interrupted by shutdown", "game", profile.ID)
+			break
+		}
+		if err != nil {
+			return d, fmt.Errorf("seed capacity for %s: %w", profile.ID, err)
+		}
 	}
 
 	azOpts := []authz.Option{authz.WithAudit(st)}
@@ -340,7 +358,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 					}
 					return nil, err
 				}
-				return d.K8s.ConfigMapData(ctx, inst.ConfigsCMName())
+				return d.K8s.ConfigMapData(ctx, inst.ConfigsCMName(domain.ValheimProfile))
 			}),
 			instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
 				inst, err := d.ValheimInstances.GetInstance(ctx, num)
@@ -350,7 +368,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 					}
 					return nil, err
 				}
-				cm, err := d.K8s.ConfigMapData(ctx, inst.ModsCMName())
+				cm, err := d.K8s.ConfigMapData(ctx, inst.ModsCMName(domain.ValheimProfile))
 				if err != nil {
 					return nil, err
 				}
@@ -368,7 +386,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				if inst == nil || d.K8s == nil {
 					return false, nil
 				}
-				depName := inst.DeploymentName()
+				depName := inst.DeploymentName(domain.ValheimProfile)
 				v, found, err := d.K8s.DeploymentEnv(ctx, depName, "BEPINEX")
 				if err != nil && inst.Number == 1 && cfg.ValheimDeployment != "" {
 					v, found, err = d.K8s.DeploymentEnv(ctx, cfg.ValheimDeployment, "BEPINEX")
@@ -390,7 +408,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 	valheimInstOpts = append(valheimInstOpts,
 		instances.WithServerRefResolver(func(inst domain.Instance) ports.ServerRef {
-			depName := inst.DeploymentName()
+			depName := inst.DeploymentName(domain.ValheimProfile)
 			if inst.Number == 1 && cfg.ValheimDeployment != "" && d.K8s != nil {
 				if _, _, err := d.K8s.DeploymentReplicas(context.Background(), depName); err != nil {
 					return ports.ServerRef{Name: cfg.ValheimDeployment, Scope: cfg.ValheimNamespace}
@@ -445,7 +463,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			modsCM, configsCM := "valheim-mods", "valheim-mod-configs"
 			if inst.Number > 0 && inst.Slug != "" {
 				inst.GameID = domain.GameValheim
-				modsCM, configsCM = inst.ModsCMName(), inst.ConfigsCMName()
+				modsCM, configsCM = inst.ModsCMName(domain.ValheimProfile), inst.ConfigsCMName(domain.ValheimProfile)
 			}
 
 			if data, err := d.K8s.ConfigMapData(ctx, modsCM); err == nil {
@@ -490,10 +508,14 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				if insts, err := d.MCInstances.ListInstances(ctx); err == nil && len(insts) > 0 {
 					inst := insts[0]
 					pack := ""
-					if inst.PackDefined() && inst.Pack != nil {
-						pack = inst.Pack.Name
+					loader := domain.LoaderNeoForge
+					if inst.Minecraft != nil {
+						loader = inst.Minecraft.Loader
+						if inst.Minecraft.Pack != nil {
+							pack = inst.Minecraft.Pack.Name
+						}
 					}
-					return inst.Loader, pack
+					return loader, pack
 				}
 			}
 			return domain.LoaderNeoForge, ""
@@ -502,7 +524,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			var slugs []string
 			cfgFiles := make(map[string]string)
 			if d.MCK8s != nil {
-				if data, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName()); err == nil {
+				if data, err := d.MCK8s.ConfigMapData(ctx, inst.ModsCMName(domain.MinecraftProfile)); err == nil {
 					if modsTxt, ok := data["mods.txt"]; ok {
 						for line := range strings.SplitSeq(modsTxt, "\n") {
 							line = strings.TrimSpace(line)
@@ -512,12 +534,12 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 						}
 					}
 				} else {
-					slog.Warn("minecraft export: cannot read mods configmap from k8s", "configmap", inst.ModsCMName(), "err", err)
+					slog.Warn("minecraft export: cannot read mods configmap from k8s", "configmap", inst.ModsCMName(domain.MinecraftProfile), "err", err)
 				}
-				if cfgData, err := d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName()); err == nil {
+				if cfgData, err := d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName(domain.MinecraftProfile)); err == nil {
 					cfgFiles = cfgData
 				} else {
-					slog.Warn("minecraft export: cannot read configs configmap from k8s", "configmap", inst.ConfigsCMName(), "err", err)
+					slog.Warn("minecraft export: cannot read configs configmap from k8s", "configmap", inst.ConfigsCMName(domain.MinecraftProfile), "err", err)
 				}
 			}
 
@@ -538,13 +560,15 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				}
 			}
 
-			loader := string(inst.Loader)
-			if loader == "" {
-				loader = string(domain.LoaderNeoForge)
-			}
-			mcVer := inst.MCVersion
-			if mcVer == "" {
-				mcVer = "1.21.1"
+			loader := string(domain.LoaderNeoForge)
+			mcVer := "1.21.1"
+			if inst.Minecraft != nil {
+				if inst.Minecraft.Loader != "" {
+					loader = string(inst.Minecraft.Loader)
+				}
+				if inst.Minecraft.MCVersion != "" {
+					mcVer = inst.Minecraft.MCVersion
+				}
 			}
 
 			// CurseForge mods are embedded rather than merely listed, so the
@@ -576,6 +600,16 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			}, nil
 		}),
 	)
+
+	d.Games = games.NewRegistry()
+	d.Games.Register(games.Entry{
+		Profile: domain.MinecraftProfile,
+		Engine:  d.MinecraftGame,
+	})
+	d.Games.Register(games.Entry{
+		Profile: domain.ValheimProfile,
+		Engine:  d.ValheimGame,
+	})
 
 	backfillValheimSource(ctx, &d, cfg)
 
@@ -617,12 +651,12 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				if n, ok := d.ValheimOccupancy.Players(inst.Number); ok {
 					return n, true
 				}
-				return d.ValheimStatus.Players(ctx, inst.ServiceName())
+				return d.ValheimStatus.Players(ctx, inst.ServiceName(domain.ValheimProfile))
 			}),
 		}
 		if d.ValheimRuntime != nil {
 			ref := func(inst domain.Instance) ports.ServerRef {
-				return ports.ServerRef{Name: inst.DeploymentName(), Scope: cfg.ValheimNamespace}
+				return ports.ServerRef{Name: inst.DeploymentName(domain.ValheimProfile), Scope: cfg.ValheimNamespace}
 			}
 			opts = append(opts,
 				restarts.WithRestarter(func(ctx context.Context, inst domain.Instance) error {
@@ -660,6 +694,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 
 	d.Requests = requests.New(st,
 		requests.WithAudit(st),
+		requests.WithCreationLimit(d.Capacity.FreeCreations),
 		requests.WithList(func(ctx context.Context) ([]domain.Instance, error) {
 			var out []domain.Instance
 			for _, m := range []*instances.InstanceManager{d.ValheimInstances, d.MCInstances} {
@@ -675,9 +710,14 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			return out, nil
 		}),
 		requests.WithCreate(func(ctx context.Context, game domain.GameID, inst domain.Instance, mods domain.ModList, actor string) (*domain.Instance, error) {
-			m := d.MCInstances
-			if game == domain.GameValheim {
+			var m *instances.InstanceManager
+			switch game {
+			case domain.GameMinecraft:
+				m = d.MCInstances
+			case domain.GameValheim:
 				m = d.ValheimInstances
+			default:
+				return nil, fmt.Errorf("no instance manager for %s", game)
 			}
 			if m == nil {
 				return nil, fmt.Errorf("no instance manager for %s", game)
@@ -772,6 +812,30 @@ func buildRuntime(cfg *config.Config, d *Deps) ports.Runtime {
 	return k8sruntime.New(d.MCK8s)
 }
 
+// defaultGameSettings supplies the starting budget and ceiling for a game the
+// first time agrelha sees it. They come from the environment so an existing
+// deployment keeps the limits it already had; afterwards the stored values win
+// and these are never consulted again.
+func defaultGameSettings(cfg *config.Config, gameID domain.GameID) domain.GameSettings {
+	g := domain.GameSettings{GameID: gameID}
+	switch gameID {
+	case domain.GameValheim:
+		g.TotalBudgetGiB = cfg.ValheimTotalBudgetGiB
+		g.MaxInstances = cfg.ValheimMaxInstances
+		g.MaxRunning = cfg.ValheimMaxRunning
+	case domain.GameMinecraft:
+		g.TotalBudgetGiB = cfg.MCTotalBudgetGiB
+		g.MaxInstances = cfg.MCMaxInstances
+		g.MaxRunning = cfg.MCMaxRunning
+	}
+	for _, t := range domain.DefaultTiersFor(gameID) {
+		if t.Resources.MemLimitGiB > g.Ceiling.MemLimitGiB {
+			g.Ceiling.MemLimitGiB = t.Resources.MemLimitGiB
+		}
+	}
+	return g
+}
+
 func buildRoleRegistry(cfg *config.Config) ports.RoleRegistry {
 	if cfg.ZitadelProjectID == "" || cfg.ZitadelServiceKey == "" {
 		slog.Info("zitadel role registry disabled: ZITADEL_PROJECT_ID or ZITADEL_SERVICE_KEY unset")
@@ -855,7 +919,7 @@ func backfillValheimSource(ctx context.Context, d *Deps, cfgs ...*config.Config)
 			continue
 		}
 		expectedSource := inst.Source
-		depName := inst.DeploymentName()
+		depName := inst.DeploymentName(domain.ValheimProfile)
 		v, found, err := d.K8s.DeploymentEnv(ctx, depName, "BEPINEX")
 		if err != nil && rec.Number == 1 && cfg != nil && cfg.ValheimDeployment != "" {
 			v, found, err = d.K8s.DeploymentEnv(ctx, cfg.ValheimDeployment, "BEPINEX")
@@ -893,7 +957,7 @@ func watchValheimLogs(ctx context.Context, cfg *config.Config, d *Deps) {
 		return
 	}
 	for _, inst := range insts {
-		c, err := newK8sClient(cfg.ValheimNamespace, inst.DeploymentName())
+		c, err := newK8sClient(cfg.ValheimNamespace, inst.DeploymentName(domain.ValheimProfile))
 		if err != nil {
 			slog.Warn("occupancy: no log stream for instance", "instance", inst.Number, "err", err)
 			continue

@@ -93,4 +93,3 @@ func TestRestorePoint_EmptyLists(t *testing.T) {
 		t.Errorf("expected empty slices converted to nil, got %+v", rp)
 	}
 }
-

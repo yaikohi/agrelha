@@ -42,21 +42,23 @@ func TestInstanceRepo_Minecraft_CRUD(t *testing.T) {
 
 	// 2. Upsert instance with modpack
 	inst := domain.Instance{
-		GameID:    domain.GameMinecraft,
-		Number:    1,
-		Name:      "Valhelsia 6",
-		Slug:      "valhelsia-6",
-		Loader:    domain.LoaderNeoForge,
-		Source:    domain.SourceModpack,
-		MCVersion: "1.20.1",
-		Tier:      domain.TierLarge,
-		State:     domain.StateStopped,
-		MOTD:      "Welcome to Valhelsia",
-		Pack: &domain.Pack{
-			Provider: domain.ProviderCurseForge,
-			Ref:      "curseforge:12345",
-			Name:     "Valhelsia 6 Pack",
+		GameID: domain.GameMinecraft,
+		Number: 1,
+		Name:   "Valhelsia 6",
+		Slug:   "valhelsia-6",
+		Source: domain.SourceModpack,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.20.1",
+			Pack: &domain.Pack{
+				Provider: domain.ProviderCurseForge,
+				Ref:      "curseforge:12345",
+				Name:     "Valhelsia 6 Pack",
+			},
 		},
+		Tier:  domain.TierLarge,
+		State: domain.StateStopped,
+		MOTD:  "Welcome to Valhelsia",
 	}
 	if err := repo.Upsert(inst); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
@@ -67,7 +69,7 @@ func TestInstanceRepo_Minecraft_CRUD(t *testing.T) {
 	if err != nil || got == nil {
 		t.Fatalf("Get failed: %v, %v", got, err)
 	}
-	if got.Name != "Valhelsia 6" || got.Pack == nil || got.Pack.Ref != "curseforge:12345" {
+	if got.Name != "Valhelsia 6" || got.Minecraft == nil || got.Minecraft.Pack == nil || got.Minecraft.Pack.Ref != "curseforge:12345" {
 		t.Errorf("Get unexpected result: %+v", got)
 	}
 
@@ -113,14 +115,14 @@ func TestInstanceRepo_Valheim_CRUD(t *testing.T) {
 
 	// 2. Upsert Valheim instance
 	inst := domain.Instance{
-		GameID:   domain.GameValheim,
-		Number:   2,
-		Name:     "Lareira",
-		Slug:     "lareira",
-		Password: "secretpassword",
-		Source:   domain.SourceVanilla,
-		Tier:     domain.TierMedium,
-		State:    domain.StateStopped,
+		GameID:  domain.GameValheim,
+		Number:  2,
+		Name:    "Lareira",
+		Slug:    "lareira",
+		Valheim: &domain.ValheimConfig{Password: "secretpassword"},
+		Source:  domain.SourceVanilla,
+		Tier:    domain.TierMedium,
+		State:   domain.StateStopped,
 	}
 	if err := repo.Upsert(inst); err != nil {
 		t.Fatalf("Upsert Valheim failed: %v", err)
@@ -131,7 +133,7 @@ func TestInstanceRepo_Valheim_CRUD(t *testing.T) {
 	if err != nil || got == nil {
 		t.Fatalf("Get Valheim failed: %v, %v", got, err)
 	}
-	if got.Name != "Lareira" || got.Password != "secretpassword" || got.Source != domain.SourceVanilla {
+	if got.Name != "Lareira" || got.Password() != "secretpassword" || got.Source != domain.SourceVanilla {
 		t.Errorf("Get unexpected result: %+v", got)
 	}
 
@@ -170,7 +172,7 @@ func TestInstanceRepo_FromRecord_DefaultPackProvider(t *testing.T) {
 		PackRef:      "curseforge:99999",
 	}
 	inst := fromRecord(rec, domain.GameMinecraft)
-	if inst.Pack == nil || inst.Pack.Provider != domain.ProviderCurseForge {
-		t.Errorf("expected ProviderCurseForge default, got %+v", inst.Pack)
+	if inst.Minecraft == nil || inst.Minecraft.Pack == nil || inst.Minecraft.Pack.Provider != domain.ProviderCurseForge {
+		t.Errorf("expected ProviderCurseForge default, got %+v", inst.Minecraft)
 	}
 }

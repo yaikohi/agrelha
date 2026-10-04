@@ -1,5 +1,7 @@
 package pages
 
+import "agrelha/internal/domain"
+
 func isNavAdmin(admin []bool) bool {
 	if len(admin) > 0 {
 		return admin[0]
@@ -28,31 +30,22 @@ templ nav(admin ...bool) {
 				</a>
 
 				if isAdmin {
-					<a
-						href="/valheim"
-						class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
-					>
-						Valheim
-						<span
-							data-show="$valheim_updates > 0"
-							class="rounded-full border border-amber-800/60 bg-amber-950/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
-							title="Mod updates available"
-							data-text="'↻ ' + $valheim_updates"
-						></span>
-					</a>
-
-					<a
-						href="/minecraft"
-						class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
-					>
-						Minecraft
-						<span
-							data-show="$mc_updates > 0"
-							class="rounded-full border border-amber-800/60 bg-amber-950/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
-							title="Mod updates available"
-							data-text="'↻ ' + $mc_updates"
-						></span>
-					</a>
+					for _, p := range domain.Profiles() {
+						<a
+							href={ templ.SafeURL("/" + string(p.ID)) }
+							class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
+						>
+							{ p.Display.Name }
+							if p.Capabilities.Mods {
+								<span
+									data-show={ "$" + p.Prefix + "_updates > 0" }
+									class="rounded-full border border-amber-800/60 bg-amber-950/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
+									title="Mod updates available"
+									data-text={ "'↻ ' + $" + p.Prefix + "_updates" }
+								></span>
+							}
+						</a>
+					}
 
 					<!-- History -->
 					<a
@@ -60,6 +53,14 @@ templ nav(admin ...bool) {
 						class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
 					>
 						History
+					</a>
+
+					<!-- Overview -->
+					<a
+						href="/overview"
+						class="rounded-lg px-2.5 py-1 font-medium text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100 transition"
+					>
+						Overview
 					</a>
 
 					<!-- Accounts -->

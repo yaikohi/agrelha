@@ -198,3 +198,27 @@ func TestDenyRecordsTheReason(t *testing.T) {
 		t.Errorf("denying twice must be refused, got %v", err)
 	}
 }
+
+func TestCreationLimitIsConfigurable(t *testing.T) {
+	owned := listing(domain.Instance{GameID: domain.GameValheim, Number: 1, CreatedBy: "friend"})
+
+	// Default allowance of one: a second world needs approval.
+	one := New(newFakeStore(), WithList(owned))
+	if ok, err := one.MayCreateDirectly(context.Background(), "friend"); err != nil || ok {
+		t.Errorf("with an allowance of 1, a second world must need approval (ok=%v, err=%v)", ok, err)
+	}
+
+	// Raised to two: the same account may create directly.
+	two := New(newFakeStore(), WithList(owned),
+		WithCreationLimit(func(context.Context) int { return 2 }))
+	if ok, err := two.MayCreateDirectly(context.Background(), "friend"); err != nil || !ok {
+		t.Errorf("with an allowance of 2, a second world must be allowed (ok=%v, err=%v)", ok, err)
+	}
+
+	// Zero: even a first world needs approval.
+	zero := New(newFakeStore(), WithList(listing()),
+		WithCreationLimit(func(context.Context) int { return 0 }))
+	if ok, err := zero.MayCreateDirectly(context.Background(), "newcomer"); err != nil || ok {
+		t.Errorf("with an allowance of 0, every world must need approval (ok=%v, err=%v)", ok, err)
+	}
+}

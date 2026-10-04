@@ -121,14 +121,14 @@ func setupTestInstancesHandlerWithState(t *testing.T) (*Handler, *store.Store, *
 			if err != nil {
 				return nil, err
 			}
-			return mck8s.ConfigMapData(ctx, inst.ConfigsCMName())
+			return mck8s.ConfigMapData(ctx, inst.ConfigsCMName(domain.MinecraftProfile))
 		}),
 		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
 			inst, err := mgr.GetInstance(ctx, num)
 			if err != nil {
 				return nil, err
 			}
-			cm, err := mck8s.ConfigMapData(ctx, inst.ModsCMName())
+			cm, err := mck8s.ConfigMapData(ctx, inst.ModsCMName(domain.MinecraftProfile))
 			if err != nil {
 				return nil, err
 			}
@@ -154,11 +154,13 @@ func TestMCDashboardEndpoint(t *testing.T) {
 
 	// Seed instance
 	_, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "Ducktopia",
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
-		Tier:      domain.TierMedium,
-		State:     domain.StateStopped,
+		Name: "Ducktopia",
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
+		Tier:  domain.TierMedium,
+		State: domain.StateStopped,
 	}, domain.ModList{})
 	if err != nil {
 		t.Fatal(err)
@@ -181,11 +183,13 @@ func TestMCInstanceLifecycleEndpoints(t *testing.T) {
 	defer st.Close()
 
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "Ducktopia",
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
-		Tier:      domain.TierMedium,
-		State:     domain.StateStopped,
+		Name: "Ducktopia",
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
+		Tier:  domain.TierMedium,
+		State: domain.StateStopped,
 	}, domain.ModList{})
 	if err != nil {
 		t.Fatal(err)
@@ -267,12 +271,6 @@ type fakeMCGame struct {
 	bundle domain.Bundle
 }
 
-func (f *fakeMCGame) ID() domain.GameID                  { return domain.GameMinecraft }
-func (f *fakeMCGame) Display() domain.Display            { return domain.Display{Name: "Minecraft"} }
-func (f *fakeMCGame) Providers() []ports.ContentProvider { return nil }
-func (f *fakeMCGame) ResolveContent(ctx context.Context, inst domain.Instance) (domain.ContentSet, error) {
-	return domain.ContentSet{}, nil
-}
 func (f *fakeMCGame) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
 	return f.bundle, nil
 }
@@ -282,8 +280,6 @@ func (f *fakeMCGame) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 func (f *fakeMCGame) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
 	return domain.GameTelemetry{}, nil
 }
-func (f *fakeMCGame) AdmissionModel() domain.AdmissionModel { return domain.AdmissionAllowlist }
-func (f *fakeMCGame) OperatorIDKind() domain.OperatorIDKind { return domain.IDKindUsername }
 
 func TestMCInstanceExportWithGameEngine(t *testing.T) {
 	h, st, _, mgr := setupTestInstancesHandler(t)
@@ -335,7 +331,11 @@ func (m *mockModUpdatesCatalog) ResolveTree(ctx context.Context, ns, name string
 	return nil, nil
 }
 func (m *mockModUpdatesCatalog) LatestVersionForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error) {
-	key := fmt.Sprintf("%s|%s", ref.Name, inst.Loader)
+	loader := ""
+	if inst.Minecraft != nil {
+		loader = string(inst.Minecraft.Loader)
+	}
+	key := fmt.Sprintf("%s|%s", ref.Name, loader)
 	return m.versions[key], nil, nil
 }
 func (m *mockModUpdatesCatalog) ResolveTreeForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) ([]string, error) {
@@ -349,7 +349,12 @@ func TestMCModUpdatesEndpoints(t *testing.T) {
 	repo := store.NewInstanceRepo(st)
 	_ = repo.Upsert(domain.Instance{
 		Number: 1, Name: "Ducktopia", Slug: "ducktopia",
-		GameID: domain.GameMinecraft, Loader: domain.LoaderFabric, MCVersion: "1.21.1", Source: domain.SourceModlist,
+		GameID: domain.GameMinecraft,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderFabric,
+			MCVersion: "1.21.1",
+		},
+		Source: domain.SourceModlist,
 	})
 
 	cat := &mockModUpdatesCatalog{
@@ -402,11 +407,13 @@ func TestMCInstancePageTabsAndRedirects(t *testing.T) {
 	defer st.Close()
 
 	_, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "Ducktopia",
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
-		Tier:      domain.TierMedium,
-		State:     domain.StateStopped,
+		Name: "Ducktopia",
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
+		Tier:  domain.TierMedium,
+		State: domain.StateStopped,
 	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
@@ -458,11 +465,13 @@ func TestMCInstanceSettingsAndModInstallRemove(t *testing.T) {
 	defer st.Close()
 
 	_, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "Ducktopia",
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
-		Tier:      domain.TierMedium,
-		State:     domain.StateStopped,
+		Name: "Ducktopia",
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
+		Tier:  domain.TierMedium,
+		State: domain.StateStopped,
 	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
@@ -501,11 +510,13 @@ func TestMCConfigAndInstanceConfigEndpoints(t *testing.T) {
 	defer st.Close()
 
 	_, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "Ducktopia",
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
-		Tier:      domain.TierMedium,
-		State:     domain.StateStopped,
+		Name: "Ducktopia",
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
+		Tier:  domain.TierMedium,
+		State: domain.StateStopped,
 	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
@@ -703,11 +714,13 @@ func TestMCDashboardInstanceActions(t *testing.T) {
 	defer st.Close()
 
 	_, err := mgr.CreateInstance(context.Background(), domain.Instance{
-		Name:      "Ducktopia",
-		MCVersion: "1.21.1",
-		Loader:    domain.LoaderNeoForge,
-		Tier:      domain.TierMedium,
-		State:     domain.StateStopped,
+		Name: "Ducktopia",
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.1",
+			Loader:    domain.LoaderNeoForge,
+		},
+		Tier:  domain.TierMedium,
+		State: domain.StateStopped,
 	}, domain.ModList{Primary: "jei\n"})
 	if err != nil {
 		t.Fatal(err)
