@@ -105,7 +105,7 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 		MaxInstances:   budget.MaxInstances,
 	}
 
-	return shared.Render(c, pages.ValheimDashboard(uiInstances, budgetUI))
+	return shared.Render(c, pages.ValheimDashboard(uiInstances, budgetUI, shared.IsAdmin(c)))
 }
 
 // ValheimInstanceStart starts a Valheim instance.

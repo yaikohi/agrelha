@@ -37,7 +37,7 @@ func New(cfg Config) *Handler {
 func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Get("/gmod", h.Dashboard)
 	router.Get("/gmod/access", func(c *fiber.Ctx) error {
-		return c.Redirect("/admins", fiber.StatusTemporaryRedirect)
+		return c.Redirect("/admins?game=gmod", fiber.StatusTemporaryRedirect)
 	})
 	router.Get("/gmod/create", h.WizardPage)
 	router.Post("/api/gmod/wizard/create", h.WizardCreate)
@@ -128,7 +128,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		MaxInstances:   budget.MaxInstances,
 	}
 
-	return shared.Render(c, pages.GModDashboard(uiInstances, budgetUI))
+	return shared.Render(c, pages.GModDashboard(uiInstances, budgetUI, shared.IsAdmin(c)))
 }
 
 func (h *Handler) WizardPage(c *fiber.Ctx) error {
@@ -310,6 +310,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
+			IsAdmin:      shared.IsAdmin(c),
 			GameID:       string(inst.GameID),
 			Number:       inst.Number,
 			Name:         inst.Name,

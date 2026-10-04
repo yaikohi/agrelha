@@ -307,3 +307,39 @@ func TestIncidentViewAndDetailUI(t *testing.T) {
 		t.Errorf("checkSummary partial = %s", s)
 	}
 }
+
+func TestGModWorldPasswordUI(t *testing.T) {
+	ui := GModWorldPasswordUI{
+		Number:   1,
+		Name:     "haloween",
+		State:    "running",
+		Password: "secret",
+		Address:  "192.168.20.231:27015",
+		LBIP:     "192.168.20.231",
+	}
+
+	if s := ui.CopyPasswordScript(); !strings.Contains(s, "secret") {
+		t.Errorf("CopyPasswordScript missing secret: %s", s)
+	}
+	if s := ui.CopyCommandScript(); !strings.Contains(s, "connect 192.168.20.231:27015; password secret") {
+		t.Errorf("CopyCommandScript wrong command: %s", s)
+	}
+	if s := ui.SteamURL(); s != "steam://connect/192.168.20.231:27015/secret" {
+		t.Errorf("SteamURL = %s, want steam://connect/192.168.20.231:27015/secret", s)
+	}
+
+	noPass := GModWorldPasswordUI{
+		LBIP: "192.168.20.231",
+	}
+	if s := noPass.CopyCommandScript(); !strings.Contains(s, "connect 192.168.20.231:27015") || strings.Contains(s, "password") {
+		t.Errorf("CopyCommandScript with no pass wrong: %s", s)
+	}
+	if s := noPass.SteamURL(); s != "steam://connect/192.168.20.231:27015" {
+		t.Errorf("SteamURL = %s, want steam://connect/192.168.20.231:27015", s)
+	}
+
+	emptyLB := GModWorldPasswordUI{}
+	if s := emptyLB.SteamURL(); s != "" {
+		t.Errorf("SteamURL with empty LBIP = %s, want empty", s)
+	}
+}

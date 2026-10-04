@@ -5,9 +5,9 @@ import (
 	"agrelha/internal/web/components"
 )
 
-templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
+templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI, admin ...bool) {
 	@Layout("Minecraft") {
-		@nav()
+		@nav(isNavAdmin(admin))
 		<div class="space-y-6">
 			<!-- Header & Budget bar -->
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -22,7 +22,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI) {
 					MaxRunning:     budget.MaxRunning,
 					TotalInstances: budget.TotalInstances,
 					MaxInstances:   budget.MaxInstances,
-					ActionHref:     "/minecraft/access",
+					ActionHref:     "/admins?game=minecraft",
 					ActionText:     "Access (Whitelist / Ops)",
 				})
 			</div>

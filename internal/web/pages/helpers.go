@@ -150,6 +150,7 @@ func HistoryBadge(source, kind string) string {
 }
 
 type InstanceUI struct {
+	IsAdmin      bool
 	GameID       string
 	HasMods      bool
 	Number       int
@@ -290,6 +291,7 @@ type DashboardGameUI struct {
 // Minecraft's are server-rendered per instance. When a *Signal field is set the
 // row binds to it; otherwise it prints the static value.
 type ServerRowUI struct {
+	OverviewURL   string
 	Name          string
 	Address       string
 	VersionBadge  string
@@ -334,6 +336,45 @@ func (p ValheimWorldPasswordUI) CopyScript() string {
 		"navigator.clipboard.writeText('%s'); $toast = 'Copied world %s password!'; $toastkind = 'ok'",
 		EscapeJS(p.Password), EscapeJS(p.Name),
 	)
+}
+
+type GModWorldPasswordUI struct {
+	Number   int
+	Name     string
+	State    string
+	Password string
+	Address  string
+	LBIP     string
+}
+
+func (p GModWorldPasswordUI) CopyPasswordScript() string {
+	return fmt.Sprintf(
+		"navigator.clipboard.writeText('%s'); $toast = 'Copied world %s password!'; $toastkind = 'ok'",
+		EscapeJS(p.Password), EscapeJS(p.Name),
+	)
+}
+
+func (p GModWorldPasswordUI) CopyCommandScript() string {
+	if p.Password != "" {
+		return fmt.Sprintf(
+			"navigator.clipboard.writeText('connect %s:27015; password %s'); $toast = 'Copied console command!'; $toastkind = 'ok'",
+			EscapeJS(p.LBIP), EscapeJS(p.Password),
+		)
+	}
+	return fmt.Sprintf(
+		"navigator.clipboard.writeText('connect %s:27015'); $toast = 'Copied console command!'; $toastkind = 'ok'",
+		EscapeJS(p.LBIP),
+	)
+}
+
+func (p GModWorldPasswordUI) SteamURL() string {
+	if p.LBIP == "" {
+		return ""
+	}
+	if p.Password != "" {
+		return fmt.Sprintf("steam://connect/%s:27015/%s", p.LBIP, p.Password)
+	}
+	return fmt.Sprintf("steam://connect/%s:27015", p.LBIP)
 }
 
 // EscapeJS escapes backslashes and quotes for safe embedding in JS inline strings.
@@ -466,6 +507,9 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
 		}
+		if isAdmin && inst.Number > 0 {
+			row.OverviewURL = fmt.Sprintf("/valheim/%d/overview", inst.Number)
+		}
 		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number), inst.HasMods))
 	}
 
@@ -506,6 +550,9 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
+		}
+		if isAdmin && inst.Number > 0 {
+			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
 		}
 		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), inst.HasMods))
 	}
@@ -560,7 +607,7 @@ func actionStyle(kind string) string {
 // no unambiguous target, and the buttons used to act on ActiveInstances[0].
 func ValheimActions(summary ...ValheimSummaryUI) CardActionsUI {
 	a := CardActionsUI{
-		Links:   []ActionUI{{Label: "Access", Href: "/valheim/access", Kind: "link"}},
+		Links:   []ActionUI{{Label: "Access", Href: "/admins?game=valheim", Kind: "link"}},
 		Manager: ActionUI{Label: "Open Valheim Manager →", Href: "/valheim"},
 	}
 	if len(summary) == 0 || len(summary[0].ActiveInstances) == 0 {
@@ -569,13 +616,11 @@ func ValheimActions(summary ...ValheimSummaryUI) CardActionsUI {
 	return a
 }
 
-// MinecraftActions mirrors ValheimActions. Creating a world is Minecraft-only,
-// so it takes the Special slot when nothing is running.
 // MinecraftActions mirrors ValheimActions: game-scoped links only. Per-World
 // lifecycle belongs on the Manager, where the target is named.
 func MinecraftActions(summary ...MinecraftSummaryUI) CardActionsUI {
 	a := CardActionsUI{
-		Links:   []ActionUI{{Label: "Access", Href: "/minecraft/access", Kind: "link"}},
+		Links:   []ActionUI{{Label: "Access", Href: "/admins?game=minecraft", Kind: "link"}},
 		Manager: ActionUI{Label: "Open Minecraft Manager →", Href: "/minecraft"},
 	}
 	if len(summary) == 0 || len(summary[0].ActiveInstances) == 0 {
@@ -604,6 +649,9 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
 		}
+		if isAdmin && inst.Number > 0 {
+			row.OverviewURL = fmt.Sprintf("/%s/%d/overview", p.ID, inst.Number)
+		}
 		if p.Capabilities.Mods {
 			row = withModpack(row, fmt.Sprintf("/api/%s/%d/mods/export", p.ID, inst.Number), inst.HasMods)
 		}
@@ -624,7 +672,7 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 func GameActions(p domain.GameProfile, summary ...GameSummaryUI) CardActionsUI {
 	var links []ActionUI
 	if p.Capabilities.AdmissionPassword || p.Capabilities.AdmissionAllowlist || p.Capabilities.Operators {
-		links = append(links, ActionUI{Label: "Access", Href: fmt.Sprintf("/%s/access", p.ID), Kind: "link"})
+		links = append(links, ActionUI{Label: "Access", Href: fmt.Sprintf("/admins?game=%s", p.ID), Kind: "link"})
 	}
 	a := CardActionsUI{
 		Links:   links,

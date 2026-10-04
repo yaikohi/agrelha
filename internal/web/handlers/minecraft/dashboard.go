@@ -95,7 +95,7 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 		MaxInstances:   budget.MaxInstances,
 	}
 
-	return shared.Render(c, pages.MinecraftDashboard(uiInstances, budgetUI))
+	return shared.Render(c, pages.MinecraftDashboard(uiInstances, budgetUI, shared.IsAdmin(c)))
 }
 
 // MCInstanceCreate creates a new world directly without the wizard.

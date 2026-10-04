@@ -46,6 +46,7 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
+			IsAdmin:   shared.IsAdmin(c),
 			GameID:    string(inst.GameID),
 			Number:    inst.Number,
 			Name:      inst.Name,

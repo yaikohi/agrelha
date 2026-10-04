@@ -188,6 +188,12 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 	if !strings.Contains(string(body), "192.168.20.225:25565") {
 		t.Errorf("overview missing connection string")
 	}
+	if !strings.Contains(string(body), "Sign out") {
+		t.Errorf("overview nav missing 'Sign out' for authenticated admin")
+	}
+	if strings.Contains(string(body), "/auth/login") {
+		t.Errorf("overview nav should NOT have '/auth/login' for authenticated admin")
+	}
 
 	// 4. Test Detail Mods Tab
 	req = httptest.NewRequest(fiber.MethodGet, "/minecraft/1/mods", nil)

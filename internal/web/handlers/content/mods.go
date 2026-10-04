@@ -59,7 +59,7 @@ func (h *Handler) ModDetail(c *fiber.Ctx) error {
 		tsURL = fmt.Sprintf("https://thunderstore.io/c/valheim/p/%s/%s/", ns, name)
 	}
 
-	return shared.Render(c, pages.ModDetail(ns, name, entry, version, prettyDeps(depRaw), readmeHTML, tsURL))
+	return shared.Render(c, pages.ModDetail(ns, name, entry, version, prettyDeps(depRaw), readmeHTML, tsURL, shared.IsAdmin(c)))
 }
 
 func prettyDeps(raw []string) []string {

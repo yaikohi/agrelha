@@ -137,14 +137,17 @@ func TestAccessMinecraftUnconfigured(t *testing.T) {
 	app := fiber.New()
 	h.Register(app)
 
-	// 1. Minecraft access page renders 200
+	// 1. Minecraft access page redirects to /admins?game=minecraft
 	reqPage := httptest.NewRequest(http.MethodGet, "/minecraft/access", nil)
 	respPage, err := app.Test(reqPage)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if respPage.StatusCode != http.StatusOK {
-		t.Errorf("GET /minecraft/access status = %d, want 200", respPage.StatusCode)
+	if respPage.StatusCode != http.StatusTemporaryRedirect {
+		t.Errorf("GET /minecraft/access status = %d, want 307", respPage.StatusCode)
+	}
+	if loc := respPage.Header.Get("Location"); loc != "/admins?game=minecraft" {
+		t.Errorf("GET /minecraft/access location = %q, want /admins?game=minecraft", loc)
 	}
 
 	// 2. JSON API returns 503 when MCAccess is nil
@@ -396,7 +399,7 @@ func TestMCAccessHTMLFormsAndErrors(t *testing.T) {
 	h.Register(app)
 
 	// Page load
-	reqPage := httptest.NewRequest(http.MethodGet, "/minecraft/access", nil)
+	reqPage := httptest.NewRequest(http.MethodGet, "/admins?game=minecraft", nil)
 	respPage, err := app.Test(reqPage)
 	if err != nil || respPage.StatusCode != fiber.StatusOK {
 		t.Fatalf("access page failed: %v, status: %d", err, respPage.StatusCode)
@@ -818,5 +821,53 @@ func TestAccessRemainingEdges(t *testing.T) {
 	respSetErrJSON, _ := appToggleSetErr.Test(reqSetErrJSON)
 	if respSetErrJSON.StatusCode != fiber.StatusInternalServerError {
 		t.Errorf("set err JSON status = %d, want 500", respSetErrJSON.StatusCode)
+	}
+}
+
+func TestAccessMultiGameTabs(t *testing.T) {
+	h := New(Config{})
+	app := fiber.New()
+	h.Register(app)
+
+	reqValheim := httptest.NewRequest(http.MethodGet, "/admins?game=valheim", nil)
+	respValheim, err := app.Test(reqValheim)
+	if err != nil || respValheim.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /admins?game=valheim failed: %v", err)
+	}
+	bodyValheim, _ := io.ReadAll(respValheim.Body)
+	if !strings.Contains(string(bodyValheim), "Valheim Access &amp; Admins") && !strings.Contains(string(bodyValheim), "Valheim Access & Admins") {
+		t.Errorf("valheim tab missing title")
+	}
+
+	reqMC := httptest.NewRequest(http.MethodGet, "/admins?game=minecraft", nil)
+	respMC, err := app.Test(reqMC)
+	if err != nil || respMC.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /admins?game=minecraft failed: %v", err)
+	}
+	bodyMC, _ := io.ReadAll(respMC.Body)
+	if !strings.Contains(string(bodyMC), "Minecraft Access Management") {
+		t.Errorf("minecraft tab missing title")
+	}
+
+	reqGMod := httptest.NewRequest(http.MethodGet, "/admins?game=gmod", nil)
+	respGMod, err := app.Test(reqGMod)
+	if err != nil || respGMod.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /admins?game=gmod failed: %v", err)
+	}
+	bodyGMod, _ := io.ReadAll(respGMod.Body)
+	if !strings.Contains(string(bodyGMod), "Garry&#39;s Mod Access") && !strings.Contains(string(bodyGMod), "Garry's Mod Access") {
+		t.Errorf("gmod tab missing title")
+	}
+
+	reqReferer := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/op", strings.NewReader("username=test"))
+	reqReferer.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqReferer.Header.Set("Accept", "text/html")
+	reqReferer.Header.Set("Referer", "http://localhost/admins?game=minecraft")
+	respReferer, _ := app.Test(reqReferer)
+	if respReferer.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("referer redirect status = %d, want 303", respReferer.StatusCode)
+	}
+	if loc := respReferer.Header.Get("Location"); loc != "/admins?game=minecraft" {
+		t.Errorf("referer redirect location = %q, want /admins?game=minecraft", loc)
 	}
 }

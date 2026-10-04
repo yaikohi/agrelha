@@ -10,7 +10,16 @@ templ serverRow(r ServerRowUI) {
 		<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 			<div class="min-w-0">
 				<div class="flex flex-wrap items-center gap-2">
-					<span class="font-semibold text-zinc-100">{ r.Name }</span>
+					if r.OverviewURL != "" {
+						<a
+							href={ templ.SafeURL(r.OverviewURL) }
+							class="font-semibold text-zinc-100 hover:text-white hover:underline transition"
+						>
+							{ r.Name }
+						</a>
+					} else {
+						<span class="font-semibold text-zinc-100">{ r.Name }</span>
+					}
 					if r.OnlineSignal != "" {
 						<span
 							class="rounded px-1.5 py-0.5 text-[10px] font-medium"

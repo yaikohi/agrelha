@@ -7,7 +7,7 @@ import (
 
 templ GModInstanceDetail(d InstanceDetailUI) {
 	@Layout(d.Name + " · Garry's Mod") {
-		@nav()
+		@nav(d.IsAdmin)
 		<div class="space-y-6">
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div>

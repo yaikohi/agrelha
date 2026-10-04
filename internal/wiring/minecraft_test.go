@@ -79,8 +79,8 @@ func TestMinecraftEndpoints(t *testing.T) {
 			name:       "minecraft access page",
 			method:     fiber.MethodGet,
 			path:       "/minecraft/access",
-			wantStatus: fiber.StatusOK,
-			wantBody:   "Minecraft Access Management",
+			wantStatus: fiber.StatusTemporaryRedirect,
+			wantBody:   "",
 		},
 		{
 			name:       "minecraft configs page",
@@ -120,7 +120,7 @@ func TestMinecraftEndpoints(t *testing.T) {
 		{
 			name:       "minecraft access page whitelist enforcement",
 			method:     fiber.MethodGet,
-			path:       "/minecraft/access",
+			path:       "/admins?game=minecraft",
 			wantStatus: fiber.StatusOK,
 			wantBody:   "Whitelist Enforcement",
 		},
@@ -175,7 +175,7 @@ func TestMinecraftWhitelistToggle(t *testing.T) {
 	if resp.StatusCode != fiber.StatusSeeOther {
 		t.Fatalf("status = %d, want 303 redirect", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/minecraft/access" {
-		t.Fatalf("location = %q, want /minecraft/access", loc)
+	if loc := resp.Header.Get("Location"); loc != "/admins?game=minecraft" {
+		t.Fatalf("location = %q, want /admins?game=minecraft", loc)
 	}
 }

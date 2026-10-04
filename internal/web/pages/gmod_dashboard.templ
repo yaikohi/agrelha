@@ -5,9 +5,9 @@ import (
 	"agrelha/internal/web/components"
 )
 
-templ GModDashboard(instances []InstanceUI, budget BudgetUI) {
+templ GModDashboard(instances []InstanceUI, budget BudgetUI, admin ...bool) {
 	@Layout("Garry's Mod") {
-		@nav()
+		@nav(isNavAdmin(admin))
 		<div class="space-y-6">
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div>
@@ -21,7 +21,7 @@ templ GModDashboard(instances []InstanceUI, budget BudgetUI) {
 					MaxRunning:     budget.MaxRunning,
 					TotalInstances: budget.TotalInstances,
 					MaxInstances:   budget.MaxInstances,
-					ActionHref:     "/admins",
+					ActionHref:     "/admins?game=gmod",
 					ActionText:     "Access (Admins)",
 				})
 			</div>
