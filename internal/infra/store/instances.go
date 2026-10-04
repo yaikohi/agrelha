@@ -24,6 +24,8 @@ type InstanceRecord struct {
 	Difficulty      string
 	Gamemode        string
 	WorldType       string
+	Map             string
+	CollectionID    string
 	MaxPlayers      int
 	LBIP            string
 	MemRequestGiB   int

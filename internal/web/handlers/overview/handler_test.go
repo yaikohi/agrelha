@@ -212,10 +212,10 @@ func TestSaveAllowancePersists(t *testing.T) {
 
 func TestUnknownGameIsRejected(t *testing.T) {
 	r := newRig(t)
-	r.post(t, "/overview/settings", url.Values{"game": {"garrysmod"}, "budget": {"8"}})
+	r.post(t, "/overview/settings", url.Values{"game": {"pinball"}, "budget": {"8"}})
 	// Redirects with a flash rather than 500ing; nothing is stored for a game
 	// that is not registered.
-	if s, err := r.cap.Settings(context.Background(), domain.GameID("garrysmod")); err != nil || s.TotalBudgetGiB != 0 {
+	if s, err := r.cap.Settings(context.Background(), domain.GameID("pinball")); err != nil || s.TotalBudgetGiB != 0 {
 		t.Errorf("settings were stored for an unregistered game: %+v", s)
 	}
 }

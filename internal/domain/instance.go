@@ -35,6 +35,25 @@ type ValheimConfig struct {
 	Seed     string
 }
 
+// GModConfig is what a Garry's Mod world is: one Steam Workshop collection the
+// server resolves itself, plus the gamemode and map it boots into.
+type GModConfig struct {
+	Pack     *Pack
+	Gamemode string
+	Map      string
+	Password string
+}
+
+// CollectionID is the Steam Workshop collection the server loads. It is stored
+// as a Pack because that is exactly what it is: an upstream-owned collection
+// resolved by the server, the same shape as a Minecraft modpack.
+func (g GModConfig) CollectionID() string {
+	if g.Pack == nil {
+		return ""
+	}
+	return g.Pack.Ref
+}
+
 type Instance struct {
 	GameID     GameID
 	Number     int
@@ -53,6 +72,7 @@ type Instance struct {
 
 	Minecraft *MinecraftConfig
 	Valheim   *ValheimConfig
+	GMod      *GModConfig
 }
 
 func (inst Instance) ID() InstanceID {
@@ -83,7 +103,7 @@ func (inst Instance) EffectiveResources(profile GameProfile) Resources {
 	if !inst.Resources.IsZero() {
 		return inst.Resources
 	}
-	r := LegacyResources(profile.ID, inst.Tier)
+	r := BuiltinResources(profile.ID, inst.Tier)
 	if r.IsZero() {
 		panic(fmt.Sprintf("instance %d of game %q has no resources and no legacy default", inst.Number, profile.ID))
 	}
@@ -120,7 +140,7 @@ func (inst Instance) DriftsFromTier(profile GameProfile) bool {
 	if inst.Resources.IsZero() {
 		return false
 	}
-	return inst.Resources != LegacyResources(profile.ID, inst.Tier)
+	return inst.Resources != BuiltinResources(profile.ID, inst.Tier)
 }
 
 func (inst Instance) PackDefined() bool {
@@ -208,8 +228,16 @@ func (inst *Instance) EnsureDefaults(profile GameProfile, lbBase string) {
 		if inst.Valheim == nil {
 			inst.Valheim = &ValheimConfig{}
 		}
-	default:
-		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
+	case GameGMod:
+		if inst.GMod == nil {
+			inst.GMod = &GModConfig{}
+		}
+		if inst.GMod.Gamemode == "" {
+			inst.GMod.Gamemode = "sandbox"
+		}
+		if inst.GMod.Map == "" {
+			inst.GMod.Map = "gm_construct"
+		}
 	}
 	if inst.Slug == "" {
 		inst.Slug = Slugify(inst.Name)
@@ -404,6 +432,32 @@ func (inst Instance) EnvWith(profile GameProfile, mods ModList) map[string]strin
 		}
 		return env
 
+	case GameGMod:
+		cfg := inst.GMod
+		if cfg == nil {
+			cfg = &GModConfig{}
+		}
+		env := map[string]string{
+			"NAME":       inst.Name,
+			"GAMEMODE":   cfg.Gamemode,
+			"MAP":        cfg.Map,
+			"PRODUCTION": "1",
+		}
+		if inst.MaxPlayers > 0 {
+			env["MAXPLAYERS"] = fmt.Sprintf("%d", inst.MaxPlayers)
+		}
+		var args []string
+		if id := cfg.CollectionID(); id != "" {
+			args = append(args, "+host_workshop_collection "+id)
+		}
+		if cfg.Password != "" {
+			args = append(args, "+sv_password "+cfg.Password)
+		}
+		if len(args) > 0 {
+			env["ARGS"] = strings.Join(args, " ")
+		}
+		return env
+
 	default:
 		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
@@ -448,8 +502,22 @@ func (inst Instance) Annotations(profile GameProfile) map[string]string {
 				ann[annPrefix+"seed"] = inst.Valheim.Seed
 			}
 		}
-	default:
-		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
+	case GameGMod:
+		if inst.GMod != nil {
+			if inst.GMod.Gamemode != "" {
+				ann[annPrefix+"gamemode"] = inst.GMod.Gamemode
+			}
+			if inst.GMod.Map != "" {
+				ann[annPrefix+"map"] = inst.GMod.Map
+			}
+			if inst.PackDefined() && inst.GMod.Pack != nil {
+				ann[annPrefix+"pack-provider"] = string(inst.GMod.Pack.Provider)
+				ann[annPrefix+"pack-ref"] = inst.GMod.Pack.Ref
+				if inst.GMod.Pack.Name != "" {
+					ann[annPrefix+"pack-name"] = inst.GMod.Pack.Name
+				}
+			}
+		}
 	}
 	return ann
 }

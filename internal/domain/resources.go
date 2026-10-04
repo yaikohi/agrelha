@@ -79,6 +79,29 @@ func LegacyResources(gameID GameID, tier ResourceTier) Resources {
 	}
 }
 
+// gmodTierResources are built-in defaults, not history: Garry's Mod has no
+// existing worlds to preserve. Source servers are far lighter than modded
+// Minecraft, so the whole catalogue sits below Valheim's smallest tier.
+var gmodTierResources = map[ResourceTier]Resources{
+	TierSmall:  {MemRequestGiB: 2, MemLimitGiB: 3, CPURequestMilli: legacyCPURequestMilli},
+	TierMedium: {MemRequestGiB: 4, MemLimitGiB: 6, CPURequestMilli: legacyCPURequestMilli},
+	TierLarge:  {MemRequestGiB: 8, MemLimitGiB: 10, CPURequestMilli: legacyCPURequestMilli},
+}
+
+// BuiltinResources is what a game+tier means when an Instance carries no
+// resources of its own. For Minecraft and Valheim that is strictly the
+// historical table, which must never change; for newer games it is simply the
+// shipped default.
+func BuiltinResources(gameID GameID, tier ResourceTier) Resources {
+	if gameID == GameGMod {
+		if r, ok := gmodTierResources[tier]; ok {
+			return r
+		}
+		return gmodTierResources[TierMedium]
+	}
+	return LegacyResources(gameID, tier)
+}
+
 func LegacyHeapInitGiB(gameID GameID, tier ResourceTier) int {
 	if gameID != GameMinecraft {
 		return 0
@@ -105,7 +128,7 @@ func (g GameSettings) Allows(r Resources) error {
 func DefaultTiersFor(gameID GameID) []Tier {
 	var out []Tier
 	for i, key := range []ResourceTier{TierSmall, TierMedium, TierLarge} {
-		r := LegacyResources(gameID, key)
+		r := BuiltinResources(gameID, key)
 		if r.IsZero() {
 			continue
 		}

@@ -55,7 +55,7 @@ func TestJoinModLinesEmptyStaysEmpty(t *testing.T) {
 func TestEnvOnlyPointsAtCurseForgeWhenThereAreCurseForgeMods(t *testing.T) {
 	inst := Instance{
 		GameID: GameMinecraft, Number: 3, Name: "bob", Slug: "bob",
-		Source: SourceModlist,
+		Source:    SourceModlist,
 		Minecraft: &MinecraftConfig{Loader: LoaderFabric, MCVersion: "1.21.1"},
 	}
 
@@ -80,7 +80,7 @@ func TestEnvOnlyPointsAtCurseForgeWhenThereAreCurseForgeMods(t *testing.T) {
 func TestEnvWithoutModsKnownNeverWiresCurseForge(t *testing.T) {
 	inst := Instance{
 		GameID: GameMinecraft, Number: 3, Slug: "bob",
-		Source: SourceModlist,
+		Source:    SourceModlist,
 		Minecraft: &MinecraftConfig{Loader: LoaderFabric, MCVersion: "1.21.1"},
 	}
 	if _, ok := inst.Env(MinecraftProfile)["CURSEFORGE_FILES"]; ok {

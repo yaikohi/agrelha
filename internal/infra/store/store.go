@@ -197,6 +197,31 @@ func (s *Store) migrate() error {
 		sort_order        INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (game_id, key)
 	);
+	CREATE TABLE IF NOT EXISTS gmod_instances (
+		number            INTEGER PRIMARY KEY,
+		name              TEXT NOT NULL,
+		slug              TEXT NOT NULL,
+		seed              TEXT,
+		source            TEXT NOT NULL DEFAULT '',
+		tier              TEXT NOT NULL DEFAULT 'medium',
+		state             TEXT NOT NULL DEFAULT 'stopped',
+		motd              TEXT,
+		max_players       INTEGER DEFAULT 16,
+		lb_ip             TEXT,
+		created_by        TEXT NOT NULL DEFAULT '',
+		mem_request_gib   INTEGER NOT NULL DEFAULT 0,
+		mem_limit_gib     INTEGER NOT NULL DEFAULT 0,
+		cpu_request_milli INTEGER NOT NULL DEFAULT 0,
+		cpu_limit_milli   INTEGER NOT NULL DEFAULT 0,
+		pack              TEXT,
+		pack_provider     TEXT,
+		pack_ref          TEXT,
+		gamemode          TEXT,
+		map               TEXT,
+		password          TEXT,
+		created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		last_used         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	CREATE TABLE IF NOT EXISTS game_settings (
 		game_id           TEXT PRIMARY KEY,
 		total_budget_gib  INTEGER NOT NULL DEFAULT 0,

@@ -18,6 +18,10 @@ const (
 	ProviderModrinth     Provider = "modrinth"
 	ProviderThunderstore Provider = "thunderstore"
 
+	// ProviderSteamWorkshop is a collection the server resolves itself from a
+	// single id, not a set of individually pinned packages.
+	ProviderSteamWorkshop Provider = "steam-workshop"
+
 	LoaderFabric   Loader = "fabric"
 	LoaderNeoForge Loader = "neoforge"
 	LoaderVanilla  Loader = "vanilla"
