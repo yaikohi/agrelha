@@ -336,6 +336,45 @@ func (p ValheimWorldPasswordUI) CopyScript() string {
 	)
 }
 
+type GModWorldPasswordUI struct {
+	Number   int
+	Name     string
+	State    string
+	Password string
+	Address  string
+	LBIP     string
+}
+
+func (p GModWorldPasswordUI) CopyPasswordScript() string {
+	return fmt.Sprintf(
+		"navigator.clipboard.writeText('%s'); $toast = 'Copied world %s password!'; $toastkind = 'ok'",
+		EscapeJS(p.Password), EscapeJS(p.Name),
+	)
+}
+
+func (p GModWorldPasswordUI) CopyCommandScript() string {
+	if p.Password != "" {
+		return fmt.Sprintf(
+			"navigator.clipboard.writeText('connect %s:27015; password %s'); $toast = 'Copied console command!'; $toastkind = 'ok'",
+			EscapeJS(p.LBIP), EscapeJS(p.Password),
+		)
+	}
+	return fmt.Sprintf(
+		"navigator.clipboard.writeText('connect %s:27015'); $toast = 'Copied console command!'; $toastkind = 'ok'",
+		EscapeJS(p.LBIP),
+	)
+}
+
+func (p GModWorldPasswordUI) SteamURL() string {
+	if p.LBIP == "" {
+		return ""
+	}
+	if p.Password != "" {
+		return fmt.Sprintf("steam://connect/%s:27015/%s", p.LBIP, p.Password)
+	}
+	return fmt.Sprintf("steam://connect/%s:27015", p.LBIP)
+}
+
 // EscapeJS escapes backslashes and quotes for safe embedding in JS inline strings.
 func EscapeJS(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)

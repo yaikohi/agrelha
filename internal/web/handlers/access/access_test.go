@@ -820,3 +820,51 @@ func TestAccessRemainingEdges(t *testing.T) {
 		t.Errorf("set err JSON status = %d, want 500", respSetErrJSON.StatusCode)
 	}
 }
+
+func TestAccessMultiGameTabs(t *testing.T) {
+	h := New(Config{})
+	app := fiber.New()
+	h.Register(app)
+
+	reqValheim := httptest.NewRequest(http.MethodGet, "/admins?game=valheim", nil)
+	respValheim, err := app.Test(reqValheim)
+	if err != nil || respValheim.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /admins?game=valheim failed: %v", err)
+	}
+	bodyValheim, _ := io.ReadAll(respValheim.Body)
+	if !strings.Contains(string(bodyValheim), "Valheim Access &amp; Admins") && !strings.Contains(string(bodyValheim), "Valheim Access & Admins") {
+		t.Errorf("valheim tab missing title")
+	}
+
+	reqMC := httptest.NewRequest(http.MethodGet, "/admins?game=minecraft", nil)
+	respMC, err := app.Test(reqMC)
+	if err != nil || respMC.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /admins?game=minecraft failed: %v", err)
+	}
+	bodyMC, _ := io.ReadAll(respMC.Body)
+	if !strings.Contains(string(bodyMC), "Minecraft Access Management") {
+		t.Errorf("minecraft tab missing title")
+	}
+
+	reqGMod := httptest.NewRequest(http.MethodGet, "/admins?game=gmod", nil)
+	respGMod, err := app.Test(reqGMod)
+	if err != nil || respGMod.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /admins?game=gmod failed: %v", err)
+	}
+	bodyGMod, _ := io.ReadAll(respGMod.Body)
+	if !strings.Contains(string(bodyGMod), "Garry&#39;s Mod Access") && !strings.Contains(string(bodyGMod), "Garry's Mod Access") {
+		t.Errorf("gmod tab missing title")
+	}
+
+	reqReferer := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/op", strings.NewReader("username=test"))
+	reqReferer.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqReferer.Header.Set("Accept", "text/html")
+	reqReferer.Header.Set("Referer", "http://localhost/admins?game=minecraft")
+	respReferer, _ := app.Test(reqReferer)
+	if respReferer.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("referer redirect status = %d, want 303", respReferer.StatusCode)
+	}
+	if loc := respReferer.Header.Get("Location"); loc != "/admins?game=minecraft" {
+		t.Errorf("referer redirect location = %q, want /admins?game=minecraft", loc)
+	}
+}

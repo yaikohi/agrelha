@@ -14,6 +14,8 @@ type Config struct {
 	Admins           *admins.Manager
 	MCAccess         *mcaccess.AccessManager
 	ValheimInstances *instances.InstanceManager
+	MCInstances      *instances.InstanceManager
+	GModInstances    *instances.InstanceManager
 	History          ports.HistoryReader
 	Players          ports.PlayerReader
 	StateStore       ports.StateStore

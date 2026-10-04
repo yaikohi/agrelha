@@ -37,7 +37,7 @@ func New(cfg Config) *Handler {
 func (h *Handler) RegisterProtected(router fiber.Router) {
 	router.Get("/gmod", h.Dashboard)
 	router.Get("/gmod/access", func(c *fiber.Ctx) error {
-		return c.Redirect("/admins", fiber.StatusTemporaryRedirect)
+		return c.Redirect("/admins?game=gmod", fiber.StatusTemporaryRedirect)
 	})
 	router.Get("/gmod/create", h.WizardPage)
 	router.Post("/api/gmod/wizard/create", h.WizardCreate)

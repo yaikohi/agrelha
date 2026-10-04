@@ -337,6 +337,8 @@ func buildAccessHandler(d Deps, applyAfterSync func(string, string, func(string)
 		Admins:           d.Admins,
 		MCAccess:         d.MCAccess,
 		ValheimInstances: d.ValheimInstances,
+		MCInstances:      d.MCInstances,
+		GModInstances:    d.GModInstances,
 		History:          d.Store,
 		Players:          d.Store,
 		StateStore:       d.StateStore,
