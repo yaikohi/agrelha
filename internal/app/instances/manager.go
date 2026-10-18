@@ -29,6 +29,7 @@ type InstanceManager struct {
 	repo              ports.InstanceRepository
 	stateStore        ports.StateStore
 	reconciler        ports.Reconciler
+	preConverge       func(ctx context.Context, inst domain.Instance) error
 	runtime           ports.Runtime
 	totalBudgetGiB    int
 	maxInstances      int
@@ -186,6 +187,10 @@ func WithSourceReconciler(fn func(ctx context.Context, inst *domain.Instance) (b
 // the state store is the whole of convergence, which is how GitOps behaves.
 func WithReconciler(r ports.Reconciler) Option {
 	return func(m *InstanceManager) { m.reconciler = r }
+}
+
+func WithPreConverge(fn func(ctx context.Context, inst domain.Instance) error) Option {
+	return func(m *InstanceManager) { m.preConverge = fn }
 }
 
 func actorOrHyphen(actor []string) string {
@@ -567,6 +572,11 @@ func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instan
 		if mat, ok := m.reconciler.(ports.Materializer); ok {
 			if err := mat.Materialize(ctx, ref, files); err != nil {
 				return fmt.Errorf("materialize %s: %w", inst.EffectiveHost(), err)
+			}
+		}
+		if m.preConverge != nil {
+			if err := m.preConverge(ctx, inst); err != nil {
+				return fmt.Errorf("pre-converge %s: %w", inst.EffectiveHost(), err)
 			}
 		}
 		if err := m.reconciler.Converge(ctx, ref); err != nil {

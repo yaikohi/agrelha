@@ -62,7 +62,8 @@ backed by a declared volume.
 | 5 | The `Capabilities.Mods` guard | **correct as-is** — refusing Minecraft is the right end state |
 | 6a | Materialise rendered files to local disk before converging | **done** |
 | 6b | Wire the three routers in `wiring.go` | **done** |
-| 7 | Absorb `config-merge` and `config-publish` into agrelha | see ADR 0007 |
+| 7a | Absorb `config-publish` — read generated configs off disk | **done** |
+| 7b | Absorb `config-merge` — run `bepinex merge` before converging | **done** |
 
 ### What 1–3 actually changed
 
@@ -123,6 +124,29 @@ would turn it into an error on every call.
 Minecraft registers **no** Compose renderer, so a Minecraft world on `fogo` is
 refused by the router. That is the intended end state while no Minecraft worlds
 exist.
+
+**7a reads generated configs with a fallback, not a Host switch.** The published
+snapshot is tried first; when genuinely absent, the same data is read straight
+from `<DATA_DIR>/valheim/instance-NN/config/bepinex`. Real read errors
+propagate — only absence falls through. The two locations are disjoint and a
+cluster world has no local path, so no Host plumbing was needed through
+`app/bepinex` and its handlers.
+
+**7b runs the merge in-process, via a pre-converge hook.** The merge loop moved
+out of the CLI into `infra/bepinex`, and both callers now share it: the
+Kubernetes init container still shells out to `agrelha bepinex merge`, while on a
+Docker Host the manager calls `MergeDir` directly between materialising the files
+and converging. The merge *semantics* were already single-sourced in `domain`;
+this puts the loop around them in one place too, so the two Hosts cannot apply
+overrides differently. The existing CLI tests passing unchanged is what confirms
+the refactor preserved behaviour.
+
+Making it another Compose service was rejected: that image comes from **Zot,
+which lives in the cluster**, so a world restart during a nas shutdown could not
+pull it — reintroducing the dependency this whole move exists to shed.
+
+A failed merge stops the converge. Starting a world with unmerged configs would
+silently discard the operator's Override sets.
 
 **Deferred from 3: the `build-watch` sidecar.** It answers "is a Valheim server
 update available". A world runs correctly without it; update detection is simply

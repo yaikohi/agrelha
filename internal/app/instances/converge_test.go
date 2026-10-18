@@ -128,3 +128,45 @@ func TestFilesAreMaterializedBeforeConverging(t *testing.T) {
 		t.Errorf("order = %v; converging before the files are on disk would run compose against an empty directory", spy.order)
 	}
 }
+
+func TestPreConvergeRunsBetweenMaterializeAndConverge(t *testing.T) {
+	spy := &recordingReconciler{}
+	var order []string
+	mgr, ctx := newConvergeManager(t,
+		WithReconciler(spy),
+		WithPreConverge(func(context.Context, domain.Instance) error {
+			order = append(order, "preconverge")
+			return nil
+		}),
+	)
+
+	if _, err := mgr.CreateInstance(ctx, mcWorld("Fluxweave", "fogo"), domain.ModList{}); err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+
+	if len(spy.order) < 2 || spy.order[0] != "materialize" || spy.order[1] != "converge" {
+		t.Fatalf("reconciler order = %v", spy.order)
+	}
+	if len(order) != 1 {
+		t.Fatalf("pre-converge ran %d times, want 1", len(order))
+	}
+}
+
+func TestAFailingPreConvergeStopsTheConverge(t *testing.T) {
+	spy := &recordingReconciler{}
+	mgr, ctx := newConvergeManager(t,
+		WithReconciler(spy),
+		WithPreConverge(func(context.Context, domain.Instance) error {
+			return errors.New("merge failed")
+		}),
+	)
+
+	if _, err := mgr.CreateInstance(ctx, mcWorld("Fluxweave", "fogo"), domain.ModList{}); err == nil {
+		t.Fatal("a failed pre-converge must surface, not start a world with unmerged configs")
+	}
+	for _, step := range spy.order {
+		if step == "converge" {
+			t.Error("converge ran despite the pre-converge failing")
+		}
+	}
+}

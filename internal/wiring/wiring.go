@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -31,6 +33,7 @@ import (
 	"agrelha/internal/infra/auth/local"
 	"agrelha/internal/infra/auth/oidc"
 	infrabackups "agrelha/internal/infra/backups"
+	bepinexmerge "agrelha/internal/infra/bepinex"
 	"agrelha/internal/infra/content/curseforge"
 	"agrelha/internal/infra/content/mcversions"
 	"agrelha/internal/infra/content/modpackindex"
@@ -440,6 +443,25 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 
 	valheimInstOpts = append(valheimInstOpts, instances.WithReconciler(d.Reconciler))
+	if cfg.DataDir != "" {
+		valheimInstOpts = append(valheimInstOpts, instances.WithPreConverge(func(ctx context.Context, inst domain.Instance) error {
+			if inst.EffectiveHost().IsCluster() || d.ValheimInstances == nil {
+				return nil
+			}
+			overrides, err := d.ValheimInstances.ListConfigData(ctx, inst.Number)
+			if err != nil || len(overrides) == 0 {
+				return err
+			}
+			dir := compose.InstanceDataDir(cfg.DataDir, inst.ID(), "")
+			generated := filepath.Join(dir, "config", "bepinex")
+			for _, res := range bepinexmerge.MergeDir(generated, generated, overrides) {
+				if res.Err != nil {
+					return fmt.Errorf("merge %s: %w", res.Name, res.Err)
+				}
+			}
+			return nil
+		}))
+	}
 	d.ValheimInstances = instances.NewInstanceManager(
 		store.NewValheimInstanceRepo(st), d.StateStore, valheimRuntime,
 		cfg.ValheimTotalBudgetGiB, cfg.ValheimMaxInstances, cfg.ValheimMaxRunning,
@@ -697,13 +719,34 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	// instance manager already owns. Without a backups directory there is
 	// nothing published to read, and the Configs tab says so rather than
 	// pretending the world has no settings.
-	if d.ValheimInstances != nil && cfg.BackupsDir != "" {
+	if d.ValheimInstances != nil && (cfg.BackupsDir != "" || cfg.DataDir != "") {
+		localBepInEx := func(num int) string {
+			if cfg.DataDir == "" {
+				return ""
+			}
+			dir := compose.InstanceDataDir(cfg.DataDir, domain.NewInstanceID(domain.GameValheim, num), "")
+			return filepath.Join(dir, "config", "bepinex")
+		}
 		d.ValheimConfigs = appbepinex.New(
 			appbepinex.WithSnapshot(func(slug string, num int) (*domain.ConfigSnapshot, error) {
-				return infrabackups.ReadConfigSnapshot(cfg.BackupsDir, slug, num)
+				snap, err := infrabackups.ReadConfigSnapshot(cfg.BackupsDir, slug, num)
+				if err != nil {
+					return nil, err
+				}
+				if snap != nil {
+					return snap, nil
+				}
+				return infrabackups.ReadConfigSnapshotFromDir(localBepInEx(num), fmt.Sprintf("%s-%02d", slug, num))
 			}),
 			appbepinex.WithFile(func(slug string, num int, name string) (string, string, error) {
-				return infrabackups.ReadConfigFile(cfg.BackupsDir, slug, num, name)
+				body, sum, err := infrabackups.ReadConfigFile(cfg.BackupsDir, slug, num, name)
+				if err == nil {
+					return body, sum, nil
+				}
+				if !os.IsNotExist(err) {
+					return "", "", err
+				}
+				return infrabackups.ReadConfigFileFromDir(localBepInEx(num), name)
 			}),
 			appbepinex.WithOverrides(func(ctx context.Context, num int) (map[string]string, error) {
 				return d.ValheimInstances.ListConfigData(ctx, num)
