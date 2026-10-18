@@ -97,6 +97,7 @@ func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 		},
 		Volumes: []domain.VolumeSpec{
 			{Name: "data", MountPath: "/data", ReadOnly: false},
+			{Name: "config-mods", MountPath: "/config-mods", ReadOnly: true},
 		},
 		Env:         inst.Env(domain.MinecraftProfile),
 		HealthProbe: "mc-health",

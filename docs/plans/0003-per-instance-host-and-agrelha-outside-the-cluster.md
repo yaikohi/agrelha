@@ -246,6 +246,96 @@ The script carries no shebang on purpose. The image runs it via `sh -c`, and
 adding one would render into the YAML; Nix's `writeShellApplication` supplies
 its own.
 
+## Compose world shapes
+
+Agreed 2026-10-18, after comparing what each game's Kubernetes deployment
+actually contains.
+
+### Per game
+
+| game | shape on `fogo` |
+|---|---|
+| GMod | one service. `RuntimeSpec` describes it completely — **done** |
+| Minecraft | one service plus a bind-mounted `mods.txt` and configs directory |
+| Valheim | one-shot `mod-reconcile`, the main service, and the `build-watch` sidecar |
+
+**Minecraft is structurally closer to GMod than to Valheim.** The itzg image
+installs mods itself from `MODRINTH_PROJECTS=@/config-mods/mods.txt`; its only
+init container copies config overrides. There is no reconciliation step of our
+own to port.
+
+**But its `RuntimeSpec` is incomplete, so it still cannot be rendered.** The
+spec declares exactly one volume — `data` at `/data` — while its own
+environment points at `/config-mods/mods.txt` and a custom-configs directory
+that the spec never mentions. Rendered to compose as it stands, the container
+would start, find no mods file, and bring the world up **with no mods and no
+error**. A silently modless world is worse than a refusal.
+
+So the `Capabilities.Mods` guard in `infra/manifests/compose` stays as written:
+it refuses exactly the two games that are not ready, for two different reasons,
+and admits GMod, whose spec is complete. The work item for Minecraft is to make
+its `RuntimeSpec` declare the mounts its environment already depends on; the
+single-service render is correct the moment it does.
+
+This also suggests a check worth having: a `RuntimeSpec` whose env references a
+path no declared volume provides is a bug in any runtime, not only compose.
+
+### Two Valheim containers are absorbed, not ported
+
+`config-merge` and `config-publish` exist only because agrelha cannot reach a
+pod's filesystem under Kubernetes. On `fogo` it is the same machine, so:
+
+- **`config-merge`** → agrelha runs its own `bepinex merge` before `compose up`.
+  It already has the subcommand. Keeping it as a container would be actively
+  harmful: it pulls `registry.ykhi.xyz/agrelha` from **Zot, which lives in the
+  cluster**, so a world restart during a nas shutdown could not pull its image —
+  reintroducing a cluster dependency into the host whose purpose is surviving
+  cluster outages.
+- **`config-publish`** → agrelha reads the generated `.cfg` files straight off
+  the host directory.
+
+`build-watch` stays a sidecar: it needs steamcmd from the game image, and the
+logic already works.
+
+### Paths
+
+```
+<COMPOSE_DIR>/<game>/instance-NN/docker-compose.yml   mirrors the git path exactly
+<DATA_DIR>/<game>/instance-NN/<volume>/               runtime data, never in git
+```
+
+Compose is invoked with **`-p <deployment-name>`**.
+
+Two traps this avoids:
+
+- **Project-name collision.** Compose derives the project name from the
+  directory, so `compose/valheim/instance-01` and `compose/gmod/instance-01`
+  would both be project `instance-01`. The reconciler runs
+  `up -d --remove-orphans`, so converging one world could tear down the other
+  game's containers. An explicit `-p` removes the ambiguity.
+- **World saves inside a git tree.** `RenderCompose` currently maps volumes as
+  `./<name>`, relative to the compose file. With the compose file materialised
+  from git, a stray `git clean` or `git checkout` would delete world data. The
+  data root must be a separate absolute path.
+
+Mirroring the git path is worth the extra flag: on a box you will debug over SSH
+during an outage, "what is on disk is what is in the repo" is a property worth
+having, and materialisation stays a copy rather than a transformation.
+
+Follows two small code changes: the reconciler resolving the game/instance path
+and passing `-p`, and `RenderCompose` taking a data root instead of `./`.
+
+### Backups
+
+Backups continue to go to the NAS export. Deliberately deferred: somewhere more
+flexible can come later, and the NAS is the only machine with the storage.
+
+**The mount must be `soft`, with a short `timeo`/`retrans`.** A hard NFS mount to
+a powered-off NAS does not fail, it *hangs* — writes block in uninterruptible
+sleep and can wedge the game container rather than merely skipping a backup.
+That would defeat the entire point of the host. The rule for the `fogo` config
+is: a missing NAS makes backups fail, never makes a world hang.
+
 ## Slice 2 — the `fogo` host
 
 `game-01` repurposed: Talos removed, NixOS installed, keeping `192.168.20.31`.
