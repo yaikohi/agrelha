@@ -32,8 +32,12 @@ the nas being powered down overnight.
 | Running against a cluster agrelha is not in | `docs/running-against-an-external-cluster.md` |
 
 **The critical path is code, not hardware.** `fogo` *is* `game-01`, so installing
-NixOS kills the cluster's only gameserver node. All three games must render to
-Compose before the wipe; there is no intermediate state and no pilot.
+NixOS kills the cluster's only gameserver node; there is no intermediate state
+and no pilot.
+
+**Only two games need to render, not three.** There are no Minecraft worlds —
+none in the cluster, no instance directories in git. The cutover moves two
+Valheim worlds and one GMod world, and both of those render today.
 
 ### Done
 
@@ -54,9 +58,10 @@ backed by a declared volume.
 | 1 | `RenderCompose` takes a data root instead of `./` | **done** |
 | 2 | Reconciler: `-p <deployment-name>` and the `<game>/instance-NN` path | **done** |
 | 3 | **Valheim Compose shape** — the one-shot `mod-reconcile` service | **done**, except `build-watch` |
-| 4 | Minecraft `/custom-configs` decision, then its spec is complete | needs a decision |
-| 5 | Replace the `Capabilities.Mods` guard once 4 lands | small |
-| 6 | Wire the three routers; call `WriteAndConverge` | mechanical |
+| 4 | Minecraft Compose shape, incl. the `/custom-configs` decision | **off the critical path** |
+| 5 | The `Capabilities.Mods` guard | **correct as-is** — refusing Minecraft is the right end state |
+| 6a | Materialise rendered files to local disk before converging | **done** |
+| 6b | Wire the three routers in `wiring.go` | mechanical, last code step |
 | 7 | Absorb `config-merge` and `config-publish` into agrelha | see ADR 0007 |
 
 ### What 1–3 actually changed
@@ -89,6 +94,20 @@ used by both the Kubernetes template and the Compose renderer, so the two Hosts
 cannot drift. Both extractions were verified **byte-identical** against a
 pre-change baseline of the modded and vanilla deployments.
 
+**6a used a new optional port rather than `WriteAndConverge`.** `ports.Materializer`
+is an optional Reconciler capability, type-asserted by the manager: Compose
+implements it and writes the rendered files to the directory `Converge` runs in;
+ArgoCD deliberately does **not**, because under GitOps the commit *is* the
+delivery and writing files locally would create a second source of truth beside
+the repo. A test asserts ArgoCD never gains the capability by accident.
+
+This avoids the trap in `WriteAndConverge`, which re-renders from a
+`RuntimeSpec`: that would be a second rendering path, bypassing Valheim's
+Compose renderer and silently producing a different file from the one committed
+to git. The manager now materialises the bytes it already rendered, and a test
+pins that materialise happens **before** converge — the other order runs Compose
+against an empty directory.
+
 **Deferred from 3: the `build-watch` sidecar.** It answers "is a Valheim server
 update available". A world runs correctly without it; update detection is simply
 absent on `fogo` until it is added.
@@ -99,10 +118,11 @@ in `tal`, nine in `yaya-ops`. All listed in plan 0003.
 
 ### Open decisions
 
-**Does Compose Minecraft support config overrides?** Its `RuntimeSpec` declares
-`/config-mods`, which its environment objectively requires, but not
-`/custom-configs`, which nothing in env references. Adding it is a feature
-decision. Left out, overrides silently stop working on `fogo`.
+**Does Compose Minecraft support config overrides?** Deferred, and now low
+stakes: there are no Minecraft worlds, so nothing regresses either way. The
+question becomes real the first time someone wants a Minecraft world on `fogo`.
+Until then the generic renderer refuses it with a clear message, which is better
+than a world that starts and silently runs modless.
 
 ## Other plans
 

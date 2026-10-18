@@ -563,7 +563,13 @@ func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instan
 		return fmt.Errorf("state store write instance manifests: %w", err)
 	}
 	if m.reconciler != nil {
-		if err := m.reconciler.Converge(ctx, m.serverRef(inst)); err != nil {
+		ref := m.serverRef(inst)
+		if mat, ok := m.reconciler.(ports.Materializer); ok {
+			if err := mat.Materialize(ctx, ref, files); err != nil {
+				return fmt.Errorf("materialize %s: %w", inst.EffectiveHost(), err)
+			}
+		}
+		if err := m.reconciler.Converge(ctx, ref); err != nil {
 			return fmt.Errorf("converge %s: %w", inst.EffectiveHost(), err)
 		}
 	}

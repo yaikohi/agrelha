@@ -84,6 +84,21 @@ func (r *Reconciler) Async() bool {
 	return false
 }
 
+func (r *Reconciler) Materialize(ctx context.Context, ref ports.ServerRef, files map[string][]byte) error {
+	dir := r.resolveDir(ref)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", dir, err)
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+var _ ports.Materializer = (*Reconciler)(nil)
+
 // Converge executes `docker compose up -d` in the instance or project directory.
 func (r *Reconciler) Converge(ctx context.Context, ref ports.ServerRef) error {
 	dir := r.resolveDir(ref)

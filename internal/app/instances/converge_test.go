@@ -96,3 +96,35 @@ func TestAFailedConvergeIsReported(t *testing.T) {
 		t.Fatal("a convergence failure must surface, not be swallowed")
 	}
 }
+
+type recordingReconciler struct {
+	order []string
+}
+
+func (r *recordingReconciler) Materialize(_ context.Context, _ ports.ServerRef, files map[string][]byte) error {
+	r.order = append(r.order, "materialize")
+	if len(files) == 0 {
+		return errors.New("materialize received no files to write")
+	}
+	return nil
+}
+
+func (r *recordingReconciler) Converge(_ context.Context, _ ports.ServerRef) error {
+	r.order = append(r.order, "converge")
+	return nil
+}
+
+func (r *recordingReconciler) Async() bool { return false }
+
+func TestFilesAreMaterializedBeforeConverging(t *testing.T) {
+	spy := &recordingReconciler{}
+	mgr, ctx := newConvergeManager(t, WithReconciler(spy))
+
+	if _, err := mgr.CreateInstance(ctx, mcWorld("Fluxweave", "fogo"), domain.ModList{}); err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+
+	if len(spy.order) < 2 || spy.order[0] != "materialize" || spy.order[1] != "converge" {
+		t.Errorf("order = %v; converging before the files are on disk would run compose against an empty directory", spy.order)
+	}
+}
