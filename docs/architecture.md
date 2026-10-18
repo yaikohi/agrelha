@@ -350,7 +350,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/reconcile/compose` | `ports.Reconciler` for Docker Compose. |
 | `infra/runtime/docker` | `ports.Runtime` over the Docker engine API. |
 | `infra/runtime/k8s` | `ports.Runtime` over Kubernetes, via `infra/kube`. |
-| `infra/runtime/hostrouter` | `ports.Runtime` that dispatches to another Runtime by the Host on the ServerRef. |
+| `infra/hostrouter` | Dispatches `ports.Runtime`, `ports.SpecRenderer` and `ports.Reconciler` to a per-Host implementation. Unknown Host is an error, never a fallback. |
 | `infra/state/git` | `ports.StateStore` over `gitops.Committer`. |
 | `infra/state/local` | `ports.StateStore` over local files and SQLite. |
 | `infra/state/unconfigured` | `ports.StateStore` that reads nothing and refuses writes, for installations with no declarative plane. |

@@ -28,6 +28,7 @@ type InstanceStat struct {
 type InstanceManager struct {
 	repo              ports.InstanceRepository
 	stateStore        ports.StateStore
+	reconciler        ports.Reconciler
 	runtime           ports.Runtime
 	totalBudgetGiB    int
 	maxInstances      int
@@ -179,6 +180,12 @@ func WithAfterSyncHook(fn func(cm, dep, key string, want func(string) bool)) Opt
 
 func WithSourceReconciler(fn func(ctx context.Context, inst *domain.Instance) (bool, error)) Option {
 	return func(m *InstanceManager) { m.sourceReconciler = fn }
+}
+
+// WithReconciler supplies the declarative plane's converger. Absent, writing to
+// the state store is the whole of convergence, which is how GitOps behaves.
+func WithReconciler(r ports.Reconciler) Option {
+	return func(m *InstanceManager) { m.reconciler = r }
 }
 
 func actorOrHyphen(actor []string) string {
@@ -529,6 +536,11 @@ func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instan
 	}
 	if err := m.stateStore.PutTree(ctx, dirRel, docs, commitMsg); err != nil {
 		return fmt.Errorf("state store write instance manifests: %w", err)
+	}
+	if m.reconciler != nil {
+		if err := m.reconciler.Converge(ctx, m.serverRef(inst)); err != nil {
+			return fmt.Errorf("converge %s: %w", inst.EffectiveHost(), err)
+		}
 	}
 	return nil
 }

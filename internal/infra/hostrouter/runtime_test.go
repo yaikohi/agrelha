@@ -38,7 +38,7 @@ func (s *spyRuntime) WatchAvailability(context.Context, ports.ServerRef, time.Du
 func TestEmptyHostRoutesToCluster(t *testing.T) {
 	cluster := &spyRuntime{name: "cluster"}
 	box := &spyRuntime{name: "fogo"}
-	r := New(map[domain.Host]ports.Runtime{domain.HostCluster: cluster, "fogo": box})
+	r := NewRuntime(map[domain.Host]ports.Runtime{domain.HostCluster: cluster, "fogo": box})
 
 	if err := r.Start(context.Background(), ports.ServerRef{Name: "valheim-odin-01"}); err != nil {
 		t.Fatalf("start: %v", err)
@@ -54,7 +54,7 @@ func TestEmptyHostRoutesToCluster(t *testing.T) {
 func TestExplicitHostRoutesToItsRuntime(t *testing.T) {
 	cluster := &spyRuntime{name: "cluster"}
 	box := &spyRuntime{name: "fogo"}
-	r := New(map[domain.Host]ports.Runtime{domain.HostCluster: cluster, "fogo": box})
+	r := NewRuntime(map[domain.Host]ports.Runtime{domain.HostCluster: cluster, "fogo": box})
 
 	if err := r.Start(context.Background(), ports.ServerRef{Name: "valheim-fogo-01", Host: "fogo"}); err != nil {
 		t.Fatalf("start: %v", err)
@@ -69,7 +69,7 @@ func TestExplicitHostRoutesToItsRuntime(t *testing.T) {
 
 func TestUnknownHostIsAnErrorNotAFallback(t *testing.T) {
 	cluster := &spyRuntime{name: "cluster"}
-	r := New(map[domain.Host]ports.Runtime{domain.HostCluster: cluster})
+	r := NewRuntime(map[domain.Host]ports.Runtime{domain.HostCluster: cluster})
 
 	err := r.Start(context.Background(), ports.ServerRef{Name: "valheim-ghost-01", Host: "nowhere"})
 	if err == nil {
@@ -84,7 +84,7 @@ func TestUnknownHostIsAnErrorNotAFallback(t *testing.T) {
 }
 
 func TestEveryMethodRefusesAnUnknownHost(t *testing.T) {
-	r := New(map[domain.Host]ports.Runtime{domain.HostCluster: &spyRuntime{}})
+	r := NewRuntime(map[domain.Host]ports.Runtime{domain.HostCluster: &spyRuntime{}})
 	ref := ports.ServerRef{Name: "x", Host: "nowhere"}
 	ctx := context.Background()
 
@@ -117,7 +117,7 @@ func TestEveryMethodRefusesAnUnknownHost(t *testing.T) {
 }
 
 func TestNilRuntimesAreNotRegistered(t *testing.T) {
-	r := New(map[domain.Host]ports.Runtime{domain.HostCluster: &spyRuntime{}, "fogo": nil})
+	r := NewRuntime(map[domain.Host]ports.Runtime{domain.HostCluster: &spyRuntime{}, "fogo": nil})
 
 	if _, err := r.For("fogo"); err == nil {
 		t.Error("a nil runtime must not register as a usable Host")
@@ -129,7 +129,7 @@ func TestNilRuntimesAreNotRegistered(t *testing.T) {
 
 func TestHostIsCaseAndSpaceInsensitive(t *testing.T) {
 	box := &spyRuntime{name: "fogo"}
-	r := New(map[domain.Host]ports.Runtime{"FOGO": box})
+	r := NewRuntime(map[domain.Host]ports.Runtime{"FOGO": box})
 
 	if _, err := r.For("  fogo  "); err != nil {
 		t.Errorf("host lookup should normalize: %v", err)

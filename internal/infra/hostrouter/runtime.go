@@ -12,11 +12,11 @@ import (
 	"agrelha/internal/ports"
 )
 
-type Router struct {
+type RuntimeRouter struct {
 	routes map[domain.Host]ports.Runtime
 }
 
-func New(routes map[domain.Host]ports.Runtime) *Router {
+func NewRuntime(routes map[domain.Host]ports.Runtime) *RuntimeRouter {
 	normalized := make(map[domain.Host]ports.Runtime, len(routes))
 	for h, rt := range routes {
 		if rt == nil {
@@ -24,12 +24,12 @@ func New(routes map[domain.Host]ports.Runtime) *Router {
 		}
 		normalized[domain.NormalizeHost(string(h))] = rt
 	}
-	return &Router{routes: normalized}
+	return &RuntimeRouter{routes: normalized}
 }
 
-var _ ports.Runtime = (*Router)(nil)
+var _ ports.Runtime = (*RuntimeRouter)(nil)
 
-func (r *Router) Hosts() []string {
+func (r *RuntimeRouter) Hosts() []string {
 	out := make([]string, 0, len(r.routes))
 	for h := range r.routes {
 		out = append(out, string(h))
@@ -38,7 +38,7 @@ func (r *Router) Hosts() []string {
 	return out
 }
 
-func (r *Router) For(host domain.Host) (ports.Runtime, error) {
+func (r *RuntimeRouter) For(host domain.Host) (ports.Runtime, error) {
 	h := domain.NormalizeHost(string(host))
 	rt, ok := r.routes[h]
 	if !ok {
@@ -47,7 +47,7 @@ func (r *Router) For(host domain.Host) (ports.Runtime, error) {
 	return rt, nil
 }
 
-func (r *Router) Start(ctx context.Context, ref ports.ServerRef) error {
+func (r *RuntimeRouter) Start(ctx context.Context, ref ports.ServerRef) error {
 	rt, err := r.For(ref.Host)
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func (r *Router) Start(ctx context.Context, ref ports.ServerRef) error {
 	return rt.Start(ctx, ref)
 }
 
-func (r *Router) Stop(ctx context.Context, ref ports.ServerRef) error {
+func (r *RuntimeRouter) Stop(ctx context.Context, ref ports.ServerRef) error {
 	rt, err := r.For(ref.Host)
 	if err != nil {
 		return err
@@ -63,7 +63,7 @@ func (r *Router) Stop(ctx context.Context, ref ports.ServerRef) error {
 	return rt.Stop(ctx, ref)
 }
 
-func (r *Router) Restart(ctx context.Context, ref ports.ServerRef) error {
+func (r *RuntimeRouter) Restart(ctx context.Context, ref ports.ServerRef) error {
 	rt, err := r.For(ref.Host)
 	if err != nil {
 		return err
@@ -71,7 +71,7 @@ func (r *Router) Restart(ctx context.Context, ref ports.ServerRef) error {
 	return rt.Restart(ctx, ref)
 }
 
-func (r *Router) Status(ctx context.Context, ref ports.ServerRef) (ports.Status, error) {
+func (r *RuntimeRouter) Status(ctx context.Context, ref ports.ServerRef) (ports.Status, error) {
 	rt, err := r.For(ref.Host)
 	if err != nil {
 		return ports.Status{}, err
@@ -79,7 +79,7 @@ func (r *Router) Status(ctx context.Context, ref ports.ServerRef) (ports.Status,
 	return rt.Status(ctx, ref)
 }
 
-func (r *Router) Metrics(ctx context.Context, ref ports.ServerRef) (ports.Metrics, error) {
+func (r *RuntimeRouter) Metrics(ctx context.Context, ref ports.ServerRef) (ports.Metrics, error) {
 	rt, err := r.For(ref.Host)
 	if err != nil {
 		return ports.Metrics{}, err
@@ -87,7 +87,7 @@ func (r *Router) Metrics(ctx context.Context, ref ports.ServerRef) (ports.Metric
 	return rt.Metrics(ctx, ref)
 }
 
-func (r *Router) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogOptions) (io.ReadCloser, error) {
+func (r *RuntimeRouter) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogOptions) (io.ReadCloser, error) {
 	rt, err := r.For(ref.Host)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (r *Router) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogOp
 	return rt.Logs(ctx, ref, opts)
 }
 
-func (r *Router) WatchAvailability(ctx context.Context, ref ports.ServerRef, timeout time.Duration) error {
+func (r *RuntimeRouter) WatchAvailability(ctx context.Context, ref ports.ServerRef, timeout time.Duration) error {
 	rt, err := r.For(ref.Host)
 	if err != nil {
 		return err
