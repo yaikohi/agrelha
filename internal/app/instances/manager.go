@@ -315,10 +315,12 @@ func (m *InstanceManager) effectiveBackupsPVC() string {
 
 // serverRef addresses one Instance in whatever runtime is configured.
 func (m *InstanceManager) serverRef(inst domain.Instance) ports.ServerRef {
+	ref := ports.ServerRef{Name: inst.DeploymentName(m.profileFor(inst)), Scope: m.namespace}
 	if m.serverRefResolver != nil {
-		return m.serverRefResolver(inst)
+		ref = m.serverRefResolver(inst)
 	}
-	return ports.ServerRef{Name: inst.DeploymentName(m.profileFor(inst)), Scope: m.namespace}
+	ref.Host = inst.EffectiveHost()
+	return ref
 }
 
 // stateFromStatus maps the runtime's Lifecycle/Available pair onto the

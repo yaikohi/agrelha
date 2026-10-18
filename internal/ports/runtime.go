@@ -27,6 +27,8 @@ type ServerRef struct {
 	Name string
 	// Scope is the namespace (Kubernetes) or project (Compose). May be empty.
 	Scope string
+	// Host is where the server runs. Empty means the cluster.
+	Host domain.Host
 }
 
 // Lifecycle is what the operator has asked the server to be. It says nothing
