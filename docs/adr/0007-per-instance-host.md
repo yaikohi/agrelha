@@ -120,10 +120,12 @@ exactly when the host matters. They are seeded into sops-nix from OpenBao at
 truth and sops is a derived cache, which introduces a **drift risk** of the same
 class already documented for ExternalSecrets.
 
-Sharing the mod script means a fix made for the Docker host lands on running
-cluster worlds. Extracting and shellchecking 141 lines of incrementally-grown
-shell will likely surface real findings; those changes need testing against the
-cluster, not only the box.
+Sharing the mod script means a fix made for the Docker host would land on
+running cluster worlds. In the event this cost nothing: the extracted 129 lines
+are shellcheck-clean (verified against a control file, so the empty result is
+trustworthy), and the rendered manifests are byte-identical to before. No
+behaviour changed, so nothing had to be re-tested against the cluster. The
+coupling remains for future edits.
 
 A Docker Host has no `JobRunner`, so its worlds have no agrelha-driven backups
 until one is written.

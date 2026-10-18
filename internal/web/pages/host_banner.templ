@@ -1,0 +1,18 @@
+package pages
+
+templ HostUnreachableBanner(host string) {
+	<div class="flex items-start gap-2.5 rounded-xl border border-rose-800/60 bg-rose-950/40 p-4">
+		<span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-rose-900/60 text-sm font-bold text-rose-300">!</span>
+		<div class="min-w-0">
+			<h2 class="text-sm font-semibold text-rose-200">Host unreachable</h2>
+			<p class="mt-0.5 text-xs text-rose-300/80">
+				agrelha cannot reach the Host
+				if host != "" {
+					{ host }
+				}
+				. Everything below is the last known state, not the current one, and
+				lifecycle controls are disabled until the Host responds.
+			</p>
+		</div>
+	</div>
+}

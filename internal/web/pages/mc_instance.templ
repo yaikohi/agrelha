@@ -9,6 +9,9 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 	@Layout(d.Name + " · Minecraft") {
 		@nav(d.IsAdmin)
 		<div class="space-y-6">
+			if d.HostUnreachable {
+				@HostUnreachableBanner(d.Host)
+			}
 			<!-- Breadcrumb & Top Bar -->
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div>
@@ -27,7 +30,9 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 
 				<!-- Header quick controls -->
 				<div class="flex items-center gap-2">
-					if d.State == "running" {
+					if d.HostUnreachable {
+						<span class="text-xs text-rose-300/80">Lifecycle controls unavailable</span>
+					} else if d.State == "running" {
 						@components.Button(components.ButtonProps{
 							Variant: components.VariantWarning,
 							Size:    components.SizeSm,

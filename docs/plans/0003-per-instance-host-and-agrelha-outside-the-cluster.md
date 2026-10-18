@@ -214,8 +214,13 @@ Behaviour-preserving for cluster worlds: every existing Instance defaults to
 | 2 | Resolve the `(Runtime, Renderer, Reconciler)` triple **per Instance** instead of once in `buildRuntime`. The StateStore stays single and shared |
 | 3 | Out-of-cluster kubeconfig support — `infra/kube/client.go:63` is `rest.InClusterConfig()` only; add a `KUBECONFIG` fallback |
 | 4 | Host-unreachable degradation: `Unknown` status, banner, lifecycle buttons disabled |
-| 5 | Host drift check: declared vs observed, surfaced like tier drift |
+| 5 | Host drift check: declared vs observed, surfaced like tier drift — **deferred**, see below |
 | 6 | Extract the mod-reconciler script (141 lines, inline in the Valheim deployment template) to one file; template embeds it at render time |
+
+**Step 5 is deferred.** It was specified for permanent mixed operation. With
+`game-01` becoming the single Host, every world ends up on `fogo` and there is
+nothing to drift against until one is deliberately moved back. Still correct,
+just not yet worth building.
 
 **Step 2 is the one that must not go wrong.** Any Instance whose Host is
 `cluster` must resolve the identical triple it gets today, or worlds start being
@@ -228,9 +233,18 @@ Step 2 splits in two. The **Runtime half** is done: `ports.ServerRef` carries a
 an empty Host routes to the cluster. The **Renderer and Reconciler half** is
 next, and is much smaller now that the StateStore is shared.
 
-**Step 6 changes a working path.** Shellcheck will likely find real issues in
-that script; every fix lands on running cluster worlds, so test against the
-cluster and not only against the new host.
+**Step 6 is done.** The 129-line script now lives in
+`internal/infra/manifests/valheim/scripts/mod-reconcile.sh`, embedded and
+re-indented into the template at render time. Verified byte-identical against a
+pre-change baseline of both the modded and vanilla deployments, and
+shellcheck-clean — the predicted findings did not materialise, so no change
+reached running cluster worlds. Three tests pin it, including that blank lines
+inside the block stay truly empty: padding them with indentation would rewrite
+every Valheim manifest.
+
+The script carries no shebang on purpose. The image runs it via `sh -c`, and
+adding one would render into the YAML; Nix's `writeShellApplication` supplies
+its own.
 
 ## Slice 2 — the `fogo` host
 

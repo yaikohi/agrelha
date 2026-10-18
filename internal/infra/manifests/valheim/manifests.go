@@ -14,6 +14,11 @@ import (
 //go:embed templates/*
 var templateFS embed.FS
 
+//go:embed scripts/mod-reconcile.sh
+var modReconcileScript string
+
+const modReconcileIndent = "              "
+
 type Data struct {
 	domain.Instance
 	Profile           domain.GameProfile
@@ -36,6 +41,18 @@ func (rd Data) MemoryLimitGiB() int    { return rd.Instance.MemoryLimitGiB(rd.Pr
 func (rd Data) HeapInitMemoryGiB() int { return rd.Instance.HeapInitMemoryGiB(rd.Profile) }
 func (rd Data) CPURequestMilli() int   { return rd.Instance.CPURequestMilli(rd.Profile) }
 func (rd Data) CPULimitMilli() int     { return rd.Instance.CPULimitMilli(rd.Profile) }
+
+func (rd Data) ModReconcileScript() string {
+	lines := strings.Split(strings.TrimRight(modReconcileScript, "\n"), "\n")
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		if l == "" {
+			continue
+		}
+		out[i] = modReconcileIndent + l
+	}
+	return strings.Join(out, "\n")
+}
 
 func (rd Data) IndentModsTxt() string {
 	lines := strings.Split(strings.TrimRight(rd.ModsTxt, "\n"), "\n")

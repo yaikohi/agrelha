@@ -521,18 +521,20 @@ func (h *Handler) MCProvisioningPage(c *fiber.Ctx) error {
 	}
 
 	instUI := pages.InstanceUI{
-		Number:    inst.Number,
-		Name:      inst.Name,
-		Slug:      inst.Slug,
-		Seed:      seed,
-		Loader:    loader,
-		Source:    string(inst.Source),
-		MCVersion: mcVersion,
-		Tier:      string(inst.Tier),
-		MemoryGiB: inst.MemoryGiB(domain.MinecraftProfile),
-		State:     string(inst.State),
-		MOTD:      inst.MOTD,
-		LBIP:      inst.LBIP,
+		Host:            string(inst.EffectiveHost()),
+		HostUnreachable: inst.HostUnreachable,
+		Number:          inst.Number,
+		Name:            inst.Name,
+		Slug:            inst.Slug,
+		Seed:            seed,
+		Loader:          loader,
+		Source:          string(inst.Source),
+		MCVersion:       mcVersion,
+		Tier:            string(inst.Tier),
+		MemoryGiB:       inst.MemoryGiB(domain.MinecraftProfile),
+		State:           string(inst.State),
+		MOTD:            inst.MOTD,
+		LBIP:            inst.LBIP,
 	}
 
 	return shared.Render(c, pages.MinecraftProvisioning(instUI))

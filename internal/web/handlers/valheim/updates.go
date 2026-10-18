@@ -163,9 +163,11 @@ func (h *Handler) updatableInstance(c *fiber.Ctx) (*domain.Instance, error) {
 func (h *Handler) pushUpdatePanel(c *fiber.Ctx, inst domain.Instance, msg, kind string) error {
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
-			Number: inst.Number,
-			Name:   inst.Name,
-			State:  string(inst.State),
+			Host:            string(inst.EffectiveHost()),
+			HostUnreachable: inst.HostUnreachable,
+			Number:          inst.Number,
+			Name:            inst.Name,
+			State:           string(inst.State),
 		},
 	}
 	h.ModUpdateState(c.UserContext(), &d, inst)

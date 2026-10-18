@@ -345,6 +345,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/manifests` | Renders the Minecraft manifest set for an Instance from templates. |
 | `infra/manifests/valheim` | Renders the Valheim manifest set, including the mod-reconciler init container. |
 | `infra/manifests/gmod` | Renders the Garry's Mod manifest set: one container, a Workshop collection passed as srcds arguments. |
+| `infra/manifests/compose` | `ports.SpecRenderer` producing a Compose file from a game's RuntimeSpec. Refuses games whose worlds need more than one container. |
 | `infra/rcon` | Minecraft RCON client and connection pool. |
 | `infra/reconcile/argocd` | `ports.Reconciler` for ArgoCD: converge and report sync status. |
 | `infra/reconcile/compose` | `ports.Reconciler` for Docker Compose. |

@@ -184,6 +184,8 @@ type InstanceUI struct {
 	CollectionItems    int
 	CanStart           bool
 	StartBlockedReason string
+	Host               string
+	HostUnreachable    bool
 }
 
 type InstanceDetailUI struct {
