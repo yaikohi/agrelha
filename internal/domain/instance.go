@@ -68,8 +68,10 @@ type Instance struct {
 	LBIP       string
 	Host       Host
 	CreatedBy  string
-	CreatedAt  time.Time
-	LastUsed   time.Time
+
+	HostUnreachable bool
+	CreatedAt       time.Time
+	LastUsed        time.Time
 
 	Minecraft *MinecraftConfig
 	Valheim   *ValheimConfig

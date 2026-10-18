@@ -379,7 +379,11 @@ func (m *InstanceManager) ListInstances(ctx context.Context) ([]domain.Instance,
 			}
 		}
 		if m.runtime != nil {
-			if st, err := m.runtime.Status(ctx, m.serverRef(inst)); err == nil {
+			st, err := m.runtime.Status(ctx, m.serverRef(inst))
+			switch {
+			case err != nil:
+				inst.HostUnreachable = true
+			default:
 				if newState := stateFromStatus(st); inst.State != newState {
 					inst.State = newState
 					_ = m.repo.UpdateState(inst.Number, newState)
