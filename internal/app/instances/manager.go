@@ -261,9 +261,29 @@ func (m *InstanceManager) ApplyOptions(opts ...Option) {
 	}
 }
 
-func (m *InstanceManager) TotalBudgetGiB() int         { return m.totalBudgetGiB }
-func (m *InstanceManager) MaxInstances() int           { return m.maxInstances }
-func (m *InstanceManager) MaxRunning() int             { return m.maxRunning }
+func (m *InstanceManager) TotalBudgetGiB() int { return m.totalBudgetGiB }
+func (m *InstanceManager) MaxInstances() int   { return m.maxInstances }
+func (m *InstanceManager) MaxRunning() int     { return m.maxRunning }
+func (m *InstanceManager) instanceRoot(host domain.Host) string {
+	if host.IsCluster() {
+		return m.instancesRelPath
+	}
+	return fmt.Sprintf("compose/%s", m.gameID)
+}
+
+func (m *InstanceManager) instanceDirFor(inst domain.Instance) string {
+	return fmt.Sprintf("%s/instance-%02d", m.instanceRoot(inst.EffectiveHost()), inst.Number)
+}
+
+func (m *InstanceManager) instanceDir(num int) string {
+	if m.repo != nil {
+		if inst, err := m.repo.Get(num); err == nil && inst != nil {
+			return m.instanceDirFor(*inst)
+		}
+	}
+	return fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, num)
+}
+
 func (m *InstanceManager) GameID() domain.GameID       { return m.gameID }
 func (m *InstanceManager) Profile() domain.GameProfile { return m.profile }
 
@@ -479,7 +499,7 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 		return nil, err
 	}
 
-	if err := m.checkInstanceDirFree(ctx, inst.Number); err != nil {
+	if err := m.checkInstanceDirFree(ctx, inst); err != nil {
 		return nil, err
 	}
 
@@ -529,7 +549,7 @@ func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instan
 	if m.stateStore == nil {
 		return nil
 	}
-	dirRel := fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, inst.Number)
+	dirRel := m.instanceDirFor(inst)
 	docs := make(map[string]ports.Document, len(files))
 	for fname, content := range files {
 		docs[fname] = ports.Document{Raw: content}
@@ -709,7 +729,7 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int, actor ...
 		}
 	}
 
-	dirRel := fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, num)
+	dirRel := m.instanceDirFor(*inst)
 	commitMsg := fmt.Sprintf("%s: delete instance %02d (%s)", m.gamePrefix(), num, inst.Name)
 
 	if m.stateStore != nil {
@@ -846,7 +866,7 @@ func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]stri
 	if m.stateStore == nil {
 		return nil, nil
 	}
-	path := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	path := m.instanceDir(num) + "/mods.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
 		return nil, err
@@ -872,7 +892,7 @@ func (m *InstanceManager) GetCurseForgeMods(ctx context.Context, num int) ([]str
 	if m.stateStore == nil {
 		return nil, nil
 	}
-	path := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	path := m.instanceDir(num) + "/mods.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
 		return nil, err
@@ -947,7 +967,7 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 	if m.stateStore == nil {
 		return 0, ports.ErrNotImplemented
 	}
-	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	modsPath := m.instanceDir(num) + "/mods.yaml"
 	msg := fmt.Sprintf("%s: install %s into instance #%02d", m.gamePrefix(), slug, num)
 	addedCount := 0
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
@@ -1050,7 +1070,7 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 	}
 	next := body.String()
 
-	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	modsPath := m.instanceDir(num) + "/mods.yaml"
 	msg := fmt.Sprintf("%s: update mods on instance #%02d", m.gamePrefix(), num)
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
@@ -1143,7 +1163,7 @@ func (m *InstanceManager) InstallCurseForgeMod(ctx context.Context, num int, slu
 		return 0, fmt.Errorf("no CurseForge mod named %s exists for %s/%s", slug, mcVer, loader)
 	}
 
-	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	modsPath := m.instanceDir(num) + "/mods.yaml"
 	msg := fmt.Sprintf("%s: install curseforge %s into instance #%02d", m.gamePrefix(), slug, num)
 	added := 0
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
@@ -1207,7 +1227,7 @@ func (m *InstanceManager) RemoveCurseForgeMod(ctx context.Context, num int, slug
 		return fmt.Errorf("mod slug required")
 	}
 
-	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	modsPath := m.instanceDir(num) + "/mods.yaml"
 	msg := fmt.Sprintf("%s: remove curseforge %s from instance #%02d", m.gamePrefix(), target.Slug, num)
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
@@ -1247,7 +1267,7 @@ func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, a
 	if m.stateStore == nil {
 		return ports.ErrNotImplemented
 	}
-	modsPath := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num)
+	modsPath := m.instanceDir(num) + "/mods.yaml"
 	msg := fmt.Sprintf("%s: remove %s from instance #%02d", m.gamePrefix(), slug, num)
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
@@ -1297,7 +1317,7 @@ func (m *InstanceManager) ListConfigs(ctx context.Context, num int) ([]string, e
 	if m.stateStore == nil {
 		return nil, nil
 	}
-	path := fmt.Sprintf("%s/instance-%02d/configs.yaml", m.instancesRelPath, num)
+	path := m.instanceDir(num) + "/configs.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
 		return nil, err
@@ -1321,7 +1341,7 @@ func (m *InstanceManager) ListConfigData(ctx context.Context, num int) (map[stri
 	if m.stateStore == nil {
 		return nil, nil
 	}
-	path := fmt.Sprintf("%s/instance-%02d/configs.yaml", m.instancesRelPath, num)
+	path := m.instanceDir(num) + "/configs.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
 		return nil, err
@@ -1340,7 +1360,7 @@ func (m *InstanceManager) GetConfig(ctx context.Context, num int, filename strin
 	if m.stateStore == nil {
 		return "", ports.ErrNotImplemented
 	}
-	path := fmt.Sprintf("%s/instance-%02d/configs.yaml", m.instancesRelPath, num)
+	path := m.instanceDir(num) + "/configs.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
 		return "", err
@@ -1355,7 +1375,7 @@ func (m *InstanceManager) SaveConfig(ctx context.Context, num int, filename, con
 	if m.stateStore == nil {
 		return false, ports.ErrNotImplemented
 	}
-	path := fmt.Sprintf("%s/instance-%02d/configs.yaml", m.instancesRelPath, num)
+	path := m.instanceDir(num) + "/configs.yaml"
 	msg := fmt.Sprintf("agrelha: edit config %s for instance #%02d", filename, num)
 	changed, err := m.stateStore.Patch(ctx, path, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
@@ -1380,7 +1400,7 @@ func (m *InstanceManager) DeleteConfig(ctx context.Context, num int, filename st
 	if m.stateStore == nil {
 		return false, ports.ErrNotImplemented
 	}
-	path := fmt.Sprintf("%s/instance-%02d/configs.yaml", m.instancesRelPath, num)
+	path := m.instanceDir(num) + "/configs.yaml"
 	msg := fmt.Sprintf("agrelha: delete config %s for instance #%02d", filename, num)
 	changed, err := m.stateStore.Patch(ctx, path, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
@@ -1631,11 +1651,11 @@ func (m *InstanceManager) checkLBIPFree(inst domain.Instance) error {
 // number 1 as free, and renders over a live World. That is not hypothetical - a
 // dev instance did exactly this to instance 01 and only the number-keyed PVC
 // naming saved the world data.
-func (m *InstanceManager) checkInstanceDirFree(ctx context.Context, num int) error {
+func (m *InstanceManager) checkInstanceDirFree(ctx context.Context, inst domain.Instance) error {
 	if m.stateStore == nil {
 		return nil
 	}
-	path := fmt.Sprintf("%s/instance-%02d/slot.yaml", m.instancesRelPath, num)
+	path := m.instanceDirFor(inst) + "/slot.yaml"
 
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
@@ -1646,7 +1666,7 @@ func (m *InstanceManager) checkInstanceDirFree(ctx context.Context, num int) err
 	}
 
 	return fmt.Errorf("instance %02d already exists in %s as %q, but this agrelha's database does not know it: refusing to overwrite. Point at a different branch or repository, or reconcile the database first",
-		num, m.instancesRelPath, existingWorldName(doc))
+		inst.Number, m.instanceRoot(inst.EffectiveHost()), existingWorldName(doc))
 }
 
 // existingWorldName digs a human name out of a slot document so the refusal can

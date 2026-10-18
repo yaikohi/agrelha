@@ -606,7 +606,7 @@ func TestRefusesToRenderOverAForeignInstance(t *testing.T) {
 		"manifests/valheim/instance-01/slot.yaml": {Data: map[string]string{"SERVER_NAME": "lareira-V2"}},
 	})
 
-	err := m.checkInstanceDirFree(context.Background(), 1)
+	err := m.checkInstanceDirFree(context.Background(), domain.Instance{Number: 1})
 	if err == nil {
 		t.Fatal("must refuse: a second agrelha with an empty database would overwrite a live world")
 	}
@@ -619,7 +619,7 @@ func TestAllowsAFreeInstanceNumber(t *testing.T) {
 	m := dirGuardManager(map[string]ports.Document{
 		"manifests/valheim/instance-01/slot.yaml": {Data: map[string]string{"SERVER_NAME": "lareira-V2"}},
 	})
-	if err := m.checkInstanceDirFree(context.Background(), 2); err != nil {
+	if err := m.checkInstanceDirFree(context.Background(), domain.Instance{Number: 2}); err != nil {
 		t.Errorf("instance 02 is free: %v", err)
 	}
 }
@@ -630,7 +630,7 @@ func TestEmptyDocumentIsNotAnInstance(t *testing.T) {
 	m := dirGuardManager(map[string]ports.Document{
 		"manifests/valheim/instance-01/slot.yaml": {Data: map[string]string{}},
 	})
-	if err := m.checkInstanceDirFree(context.Background(), 1); err != nil {
+	if err := m.checkInstanceDirFree(context.Background(), domain.Instance{Number: 1}); err != nil {
 		t.Errorf("an empty document must not block creation: %v", err)
 	}
 }

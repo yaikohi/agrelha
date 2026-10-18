@@ -442,7 +442,7 @@ func TestManagerCreateInstanceEdges(t *testing.T) {
 
 	// 6. checkInstanceDirFree
 	store.docs["manifests/instance-02/slot.yaml"] = ports.Document{Data: map[string]string{"SERVER_NAME": "Protected"}}
-	if err := mgr.checkInstanceDirFree(ctx, 2); err == nil {
+	if err := mgr.checkInstanceDirFree(ctx, domain.Instance{Number: 2}); err == nil {
 		t.Errorf("expected refusing to overwrite error")
 	}
 	// Test existingWorldName variations
