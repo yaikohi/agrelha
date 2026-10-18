@@ -22,6 +22,7 @@ type Executor func(ctx context.Context, workDir string, args ...string) error
 // Reconciler converges desired state to reality synchronously using Docker Compose.
 type Reconciler struct {
 	workDir  string
+	dataRoot string
 	executor Executor
 }
 
@@ -32,6 +33,15 @@ type Option func(*Reconciler)
 func WithWorkDir(dir string) Option {
 	return func(r *Reconciler) {
 		r.workDir = dir
+	}
+}
+
+// WithDataRoot sets where a world's runtime data lives. It must sit outside
+// workDir: workDir is materialised from git, so data under it would be deleted
+// by a checkout or clean.
+func WithDataRoot(dir string) Option {
+	return func(r *Reconciler) {
+		r.dataRoot = dir
 	}
 }
 
@@ -77,10 +87,20 @@ func (r *Reconciler) Async() bool {
 // Converge executes `docker compose up -d` in the instance or project directory.
 func (r *Reconciler) Converge(ctx context.Context, ref ports.ServerRef) error {
 	dir := r.resolveDir(ref)
-	return r.executor(ctx, dir, "up", "-d", "--remove-orphans")
+	return r.executor(ctx, dir, append(r.projectArgs(ref), "up", "-d", "--remove-orphans")...)
+}
+
+func (r *Reconciler) projectArgs(ref ports.ServerRef) []string {
+	if ref.Name == "" {
+		return nil
+	}
+	return []string{"-p", ref.Name}
 }
 
 func (r *Reconciler) resolveDir(ref ports.ServerRef) string {
+	if ref.ID.Game != "" && ref.ID.Number > 0 {
+		return filepath.Join(r.workDir, string(ref.ID.Game), fmt.Sprintf("instance-%02d", ref.ID.Number))
+	}
 	if ref.Name == "" {
 		return r.workDir
 	}
@@ -128,9 +148,12 @@ type ComposeFile struct {
 }
 
 // RenderCompose converts a domain.RuntimeSpec into a valid docker-compose YAML document.
-func RenderCompose(serviceName string, spec domain.RuntimeSpec) ([]byte, error) {
+func RenderCompose(serviceName, dataRoot string, spec domain.RuntimeSpec) ([]byte, error) {
 	if serviceName == "" {
 		serviceName = "game-server"
+	}
+	if strings.TrimSpace(dataRoot) == "" && len(spec.Volumes) > 0 {
+		return nil, fmt.Errorf("compose render for %q: no data root, so volumes would resolve beside the compose file and put world data inside the materialised git tree", serviceName)
 	}
 
 	var portsList []string
@@ -144,7 +167,7 @@ func RenderCompose(serviceName string, spec domain.RuntimeSpec) ([]byte, error) 
 
 	var volList []string
 	for _, v := range spec.Volumes {
-		hostPath := "./" + v.Name
+		hostPath := filepath.Join(dataRoot, v.Name)
 		ro := ""
 		if v.ReadOnly {
 			ro = ":ro"
@@ -186,7 +209,7 @@ func (r *Reconciler) WriteAndConverge(ctx context.Context, ref ports.ServerRef, 
 		return fmt.Errorf("create dir %s: %w", dir, err)
 	}
 
-	composeBytes, err := RenderCompose(ref.Name, spec)
+	composeBytes, err := RenderCompose(ref.Name, r.instanceDataDir(ref), spec)
 	if err != nil {
 		return err
 	}
@@ -197,6 +220,23 @@ func (r *Reconciler) WriteAndConverge(ctx context.Context, ref ports.ServerRef, 
 	}
 
 	return r.Converge(ctx, ref)
+}
+
+// InstanceDataDir is where one Instance's runtime data lives under dataRoot.
+// Shared so the renderer that writes the compose file and the reconciler that
+// runs it cannot disagree about where the volumes point.
+func InstanceDataDir(dataRoot string, id domain.InstanceID, fallbackName string) string {
+	if dataRoot == "" {
+		return ""
+	}
+	if id.Game != "" && id.Number > 0 {
+		return filepath.Join(dataRoot, string(id.Game), fmt.Sprintf("instance-%02d", id.Number))
+	}
+	return filepath.Join(dataRoot, fallbackName)
+}
+
+func (r *Reconciler) instanceDataDir(ref ports.ServerRef) string {
+	return InstanceDataDir(r.dataRoot, ref.ID, ref.Name)
 }
 
 // healthcheckFor turns a game's declared probe command into a compose

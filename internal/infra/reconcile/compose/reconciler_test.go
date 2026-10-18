@@ -44,7 +44,7 @@ func TestComposeReconciler_Converge(t *testing.T) {
 		t.Errorf("executedDir = %q, want %q", executedDir, expectedDir)
 	}
 
-	expectedArgs := []string{"up", "-d", "--remove-orphans"}
+	expectedArgs := []string{"-p", "mc-survival", "up", "-d", "--remove-orphans"}
 	if len(executedArgs) != len(expectedArgs) {
 		t.Fatalf("executedArgs = %v, want %v", executedArgs, expectedArgs)
 	}
@@ -84,7 +84,7 @@ func TestRenderCompose(t *testing.T) {
 		},
 	}
 
-	out, err := RenderCompose("mc-test", spec)
+	out, err := RenderCompose("mc-test", "/srv/gamedata/minecraft/instance-01", spec)
 	if err != nil {
 		t.Fatalf("RenderCompose failed: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestRenderCompose(t *testing.T) {
 	if len(svc.Ports) != 2 || svc.Ports[0] != "25565:25565/tcp" {
 		t.Errorf("Ports mismatch: %+v", svc.Ports)
 	}
-	if len(svc.Volumes) != 1 || svc.Volumes[0] != "./data:/data" {
+	if len(svc.Volumes) != 1 || svc.Volumes[0] != "/srv/gamedata/minecraft/instance-01/data:/data" {
 		t.Errorf("Volumes mismatch: %+v", svc.Volumes)
 	}
 }
@@ -136,7 +136,7 @@ func TestComposeReconciler_WriteAndConverge(t *testing.T) {
 		return nil
 	}
 
-	r := New(WithWorkDir(tempDir), WithExecutor(mockExec))
+	r := New(WithWorkDir(tempDir), WithDataRoot(t.TempDir()), WithExecutor(mockExec))
 	ref := ports.ServerRef{Name: "valheim-01"}
 	spec := domain.RuntimeSpec{
 		Image: "lloesche/valheim-server:latest",
@@ -169,7 +169,7 @@ func TestComposeReconciler_WriteAndConverge(t *testing.T) {
 }
 
 func TestRenderComposeEmitsAHealthcheck(t *testing.T) {
-	out, err := RenderCompose("valheim-boppo-02", domain.RuntimeSpec{
+	out, err := RenderCompose("valheim-boppo-02", "/srv/gamedata/valheim/instance-02", domain.RuntimeSpec{
 		Image:       "lloesche/valheim-server:latest",
 		Ports:       []domain.PortSpec{{Name: "game", Port: 2456, Protocol: "UDP"}},
 		Env:         map[string]string{"SERVER_NAME": "boppo"},
@@ -188,7 +188,7 @@ func TestRenderComposeEmitsAHealthcheck(t *testing.T) {
 }
 
 func TestRenderComposeOmitsHealthcheckWhenNoProbe(t *testing.T) {
-	out, err := RenderCompose("x", domain.RuntimeSpec{Image: "busybox"})
+	out, err := RenderCompose("x", "", domain.RuntimeSpec{Image: "busybox"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestComposeReconciler_ResolveDir_And_WriteAndConverge(t *testing.T) {
 		return nil
 	}
 
-	r := New(WithWorkDir(tempDir), WithExecutor(mockExec))
+	r := New(WithWorkDir(tempDir), WithDataRoot(t.TempDir()), WithExecutor(mockExec))
 
 	// 1. resolveDir with empty ref.Name returns workDir
 	if dir := r.resolveDir(ports.ServerRef{Name: ""}); dir != tempDir {
@@ -260,7 +260,7 @@ func TestDefaultExecutor_Invocation(t *testing.T) {
 
 func TestRenderCompose_DefaultsAndErrors(t *testing.T) {
 	// 1. Default serviceName
-	out, err := RenderCompose("", domain.RuntimeSpec{Image: "alpine"})
+	out, err := RenderCompose("", "", domain.RuntimeSpec{Image: "alpine"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestRenderCompose_DefaultsAndErrors(t *testing.T) {
 	}
 
 	// 2. Default protocol
-	out, err = RenderCompose("app", domain.RuntimeSpec{
+	out, err = RenderCompose("app", "", domain.RuntimeSpec{
 		Image: "alpine",
 		Ports: []domain.PortSpec{{Port: 8080}},
 	})
@@ -305,4 +305,3 @@ func TestComposeReconciler_WriteAndConverge_Errors(t *testing.T) {
 		t.Error("expected WriteAndConverge to fail when WriteFile fails")
 	}
 }
-

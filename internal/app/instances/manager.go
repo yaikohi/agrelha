@@ -347,6 +347,7 @@ func (m *InstanceManager) serverRef(inst domain.Instance) ports.ServerRef {
 		ref = m.serverRefResolver(inst)
 	}
 	ref.Host = inst.EffectiveHost()
+	ref.ID = domain.NewInstanceID(m.profileFor(inst).ID, inst.Number)
 	return ref
 }
 

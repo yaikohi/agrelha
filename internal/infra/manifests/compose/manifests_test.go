@@ -29,7 +29,7 @@ func gmodWorld() domain.Instance {
 }
 
 func TestGModRendersAComposeFile(t *testing.T) {
-	files, err := New(domain.GModProfile, gmodSpec).Render(gmodWorld(), domain.ModList{})
+	files, err := New(domain.GModProfile, "/srv/gamedata", gmodSpec).Render(gmodWorld(), domain.ModList{})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestGModRendersAComposeFile(t *testing.T) {
 func TestGamesNeedingModReconciliationAreRefused(t *testing.T) {
 	for _, p := range []domain.GameProfile{domain.ValheimProfile, domain.MinecraftProfile} {
 		inst := domain.Instance{GameID: p.ID, Number: 1, Name: "X", Slug: "x", Host: "fogo"}
-		_, err := New(p, func(domain.Instance) domain.RuntimeSpec { return domain.RuntimeSpec{Image: "x"} }).
+		_, err := New(p, "/srv/gamedata", func(domain.Instance) domain.RuntimeSpec { return domain.RuntimeSpec{Image: "x"} }).
 			Render(inst, domain.ModList{})
 		if err == nil {
 			t.Errorf("%s has per-mod installs and must be refused until its compose shape is designed, not rendered as a bare single container", p.ID)
@@ -66,7 +66,7 @@ func TestGamesNeedingModReconciliationAreRefused(t *testing.T) {
 }
 
 func TestMissingSpecSourceIsRefused(t *testing.T) {
-	if _, err := New(domain.GModProfile, nil).Render(gmodWorld(), domain.ModList{}); err == nil {
+	if _, err := New(domain.GModProfile, "/srv/gamedata", nil).Render(gmodWorld(), domain.ModList{}); err == nil {
 		t.Error("a renderer with no RuntimeSpec source must fail loudly, not emit an empty compose file")
 	}
 }

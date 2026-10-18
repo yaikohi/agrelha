@@ -11,12 +11,13 @@ import (
 const ComposeFileName = "docker-compose.yml"
 
 type Renderer struct {
-	profile domain.GameProfile
-	spec    func(domain.Instance) domain.RuntimeSpec
+	profile  domain.GameProfile
+	dataRoot string
+	spec     func(domain.Instance) domain.RuntimeSpec
 }
 
-func New(profile domain.GameProfile, spec func(domain.Instance) domain.RuntimeSpec) *Renderer {
-	return &Renderer{profile: profile, spec: spec}
+func New(profile domain.GameProfile, dataRoot string, spec func(domain.Instance) domain.RuntimeSpec) *Renderer {
+	return &Renderer{profile: profile, dataRoot: dataRoot, spec: spec}
 }
 
 var _ ports.SpecRenderer = (*Renderer)(nil)
@@ -30,7 +31,8 @@ func (r *Renderer) Render(inst domain.Instance, _ domain.ModList) (map[string][]
 	}
 
 	inst.EnsureDefaults(r.profile, "")
-	body, err := composereconcile.RenderCompose(inst.DeploymentName(r.profile), r.spec(inst))
+	dataDir := composereconcile.InstanceDataDir(r.dataRoot, domain.NewInstanceID(r.profile.ID, inst.Number), inst.DeploymentName(r.profile))
+	body, err := composereconcile.RenderCompose(inst.DeploymentName(r.profile), dataDir, r.spec(inst))
 	if err != nil {
 		return nil, fmt.Errorf("render compose for %s: %w", inst.DeploymentName(r.profile), err)
 	}
