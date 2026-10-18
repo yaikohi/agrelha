@@ -61,7 +61,7 @@ backed by a declared volume.
 | 4 | Minecraft Compose shape, incl. the `/custom-configs` decision | **off the critical path** |
 | 5 | The `Capabilities.Mods` guard | **correct as-is** — refusing Minecraft is the right end state |
 | 6a | Materialise rendered files to local disk before converging | **done** |
-| 6b | Wire the three routers in `wiring.go` | mechanical, last code step |
+| 6b | Wire the three routers in `wiring.go` | **done** |
 | 7 | Absorb `config-merge` and `config-publish` into agrelha | see ADR 0007 |
 
 ### What 1–3 actually changed
@@ -107,6 +107,22 @@ Compose renderer and silently producing a different file from the one committed
 to git. The manager now materialises the bytes it already rendered, and a test
 pins that materialise happens **before** converge — the other order runs Compose
 against an empty directory.
+
+**6b is config-gated by `DOCKER_HOST_NAME`.** Unset — as in the cluster today —
+each router holds only a `cluster` route, so rendering, lifecycle and
+convergence behave exactly as before. Set it (plus `DATA_DIR`, `COMPOSE_DIR`,
+`DOCKER_SOCKET`) and the same routers gain a second Host. The cutover is then a
+configuration change rather than a code change.
+
+Routing is applied even when no Docker Host is configured, deliberately: a world
+declaring an unknown Host now fails loudly instead of silently rendering
+Kubernetes YAML into a Compose path. The one exception is a nil runtime, which
+stays nil — that is the supported "no cluster client" dev state, and wrapping it
+would turn it into an error on every call.
+
+Minecraft registers **no** Compose renderer, so a Minecraft world on `fogo` is
+refused by the router. That is the intended end state while no Minecraft worlds
+exist.
 
 **Deferred from 3: the `build-watch` sidecar.** It answers "is a Valheim server
 update available". A world runs correctly without it; update detection is simply
