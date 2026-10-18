@@ -209,6 +209,7 @@ func (s *Store) migrate() error {
 		max_players       INTEGER DEFAULT 16,
 		lb_ip             TEXT,
 		created_by        TEXT NOT NULL DEFAULT '',
+		host              TEXT NOT NULL DEFAULT 'cluster',
 		mem_request_gib   INTEGER NOT NULL DEFAULT 0,
 		mem_limit_gib     INTEGER NOT NULL DEFAULT 0,
 		cpu_request_milli INTEGER NOT NULL DEFAULT 0,
@@ -250,6 +251,9 @@ func (s *Store) migrate() error {
 		`ALTER TABLE mc_instances ADD COLUMN cpu_request_milli INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE mc_instances ADD COLUMN cpu_limit_milli INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE mc_instances ADD COLUMN heap_init_gib INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE valheim_instances ADD COLUMN host TEXT NOT NULL DEFAULT 'cluster'`,
+		`ALTER TABLE mc_instances ADD COLUMN host TEXT NOT NULL DEFAULT 'cluster'`,
+		`ALTER TABLE gmod_instances ADD COLUMN host TEXT NOT NULL DEFAULT 'cluster'`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err

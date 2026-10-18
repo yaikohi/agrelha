@@ -13,9 +13,19 @@ Adapter, Plane — is defined in [docs/architecture.md](docs/architecture.md).
 ### Servers
 
 **Instance**:
-One Minecraft server, with its own Deployment, PVC, Service and config. Identified
-by a stable Number and a human Name.
-_Avoid_: Slot, world, server (when you mean the Minecraft one specifically)
+One game server, with its own storage, network identity and config. Identified by
+a stable Number within its game, and carrying a human Name. Runs on exactly one
+Host. Nothing about an Instance presumes Kubernetes.
+_Avoid_: Slot, world, server (when you mean one game's specifically), pod, container
+
+**Host**:
+The machine and container engine an Instance runs on: either the cluster, or a
+standalone Docker host. An Instance's Host decides how it is started, where its
+desired state is written, and what converges it. Declared per Instance, never
+inferred — an Instance found running somewhere other than its declared Host has
+drifted, and is reported, not silently adopted.
+_Avoid_: node, environment, site, runtime (Runtime is the port that starts and
+stops an Instance, not the place it runs)
 
 **Slot**:
 Retired, and now removed from the code. It meant "which world is active" back

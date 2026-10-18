@@ -66,6 +66,7 @@ type Instance struct {
 	MOTD       string
 	MaxPlayers int
 	LBIP       string
+	Host       Host
 	CreatedBy  string
 	CreatedAt  time.Time
 	LastUsed   time.Time
@@ -74,6 +75,8 @@ type Instance struct {
 	Valheim   *ValheimConfig
 	GMod      *GModConfig
 }
+
+func (inst Instance) EffectiveHost() Host { return NormalizeHost(string(inst.Host)) }
 
 func (inst Instance) ID() InstanceID {
 	return InstanceID{Game: inst.GameID, Number: inst.Number}
