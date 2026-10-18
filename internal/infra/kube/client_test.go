@@ -352,6 +352,7 @@ func TestIsBlockedAndJobNodeSelector(t *testing.T) {
 }
 
 func TestKube_New_OutsideCluster(t *testing.T) {
+	t.Setenv("KUBECONFIG", "")
 	_, err := New("default", "valheim")
 	if err == nil {
 		t.Error("expected error when calling New outside cluster")
@@ -555,6 +556,7 @@ func TestClient_EdgeCases(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. New fails outside cluster
+	t.Setenv("KUBECONFIG", "")
 	_, err := New("default", "valheim")
 	if err == nil {
 		t.Error("expected error from New when running outside cluster")
@@ -649,5 +651,3 @@ func TestClient_EdgeCases(t *testing.T) {
 		t.Errorf("podName pending fallback want 'pending-valheim', got %q, err=%v", pName, err)
 	}
 }
-
-

@@ -131,7 +131,12 @@ kubectl auth can-i --list -n valheim   # review the grant surface
 The negative tests matter as much as the positive ones. This token does not
 expire, so an over-broad grant here is a standing risk.
 
-### P2 — A static address outside the Cilium pool
+### P2 — A static address outside the Cilium pool (satisfied)
+
+`game-01` already sits at `192.168.20.31`, which is outside the pool. It keeps
+that address as `fogo`. The reasoning below is retained for any future Host.
+
+#### Why the constraint exists
 
 The `external` CiliumLoadBalancerIPPool spans **192.168.20.220–192.168.20.250**.
 An address for the host inside that range can also be handed to a Service, giving
@@ -173,13 +178,23 @@ Two gotchas:
   LoadBalancer address), so nothing new — but it does mean the record is
   world-readable.
 
-### P4 — Hardware
+### P4 — Hardware (satisfied)
 
-**x86_64 is mandatory.** Valheim's dedicated server has no ARM build, so a Pi or
-an ARM mini PC cannot run it at all.
+**`fogo` is `game-01` repurposed**, not a new machine. Decided 2026-10-18:
+Talos comes off, NixOS goes on. It is 16 CPU, ~60 GiB RAM, ~475 GB disk and
+x86_64 — comfortably more than a box bought for the purpose.
 
-16 GB RAM is comfortable for one Valheim world plus agrelha. Disk is undemanding:
-the game files are a few GB and a world archive is ~32 MB.
+x86_64 matters because Valheim's dedicated server has no ARM build.
+
+### P5 — Evacuate `game-01` before the wipe
+
+**This is the irreversible one.** Every local-path volume on `game-01` is game
+data, and wiping Talos destroys all of it. Before touching the node, confirm a
+current archive exists on the NFS export for each of the three live worlds and
+copy them somewhere that is not `game-01`.
+
+There is no second gameserver node to fall back to, and no rollback short of
+re-provisioning Talos through `tal`.
 
 ### Not a prerequisite
 
@@ -219,9 +234,10 @@ cluster and not only against the new host.
 
 ## Slice 2 — the `fogo` host
 
-A new always-on box, static IP on VLAN 20, NixOS, in a new repo `fogo`.
-Not scaffolded yet: the hardware does not exist, and writing NixOS config
-against imagined hardware would be fiction. Intended shape:
+`game-01` repurposed: Talos removed, NixOS installed, keeping `192.168.20.31`.
+Config lives in a new repo, `fogo`. Not scaffolded yet — the machine is still a
+Talos node, so its disk layout and interface names are not yet known. Intended
+shape:
 
 | # | What |
 |---|---|
@@ -244,16 +260,47 @@ Step 12 removes a real fragility rather than only a cosmetic one — the current
 initContainer runs `apk add --no-cache curl unzip jq` on **every pod start**, so
 mod reconciliation depends on Alpine's package repos being reachable at restart.
 
-## Slice 3 — the pilot
+## Slice 3 — the cutover
+
+**There is no pilot.** `game-01` is the only node carrying
+`ykhi.xyz/gameserver=true`, so once Talos is wiped the cluster has nowhere to run
+any game. All three worlds move at once. Agreed 2026-10-18 on the grounds that
+nobody is playing right now, which makes this the cheapest window it will ever
+have.
 
 | # | What |
 |---|---|
-| 13 | Repoint `agrelha.ykhi.xyz` at the host; confirm OIDC still completes (hostname unchanged, so Zitadel needs no edit) |
-| 14 | Move **one** Valheim world — restore from a backup archive on the NFS export |
-| 15 | Leave the other in-cluster as a live A/B of both Hosts |
+| 13 | Evacuate: confirm a current archive on the NFS export for every world, and copy them somewhere off `game-01` |
+| 14 | Wipe Talos from `game-01`, install NixOS, apply the `fogo` config |
+| 15 | Restore all three worlds from their archives: Valheim ×2, GMod ×1 |
+| 16 | Repoint `agrelha.ykhi.xyz` at the host; confirm OIDC still completes (hostname unchanged, so Zitadel needs no edit) |
+| 17 | Decommission the node cluster-side (see below) |
 
-Today's worlds: `valheim-lareira-v2-01` (`192.168.20.224`) and
-`valheim-boppo-02` (`192.168.20.225`), each on a 20Gi node-local PVC.
+Today's worlds: `valheim-lareira-v2-01` (`192.168.20.224`),
+`valheim-boppo-02` (`192.168.20.225`) and `gmod-lareira-01`, on 20Gi, 20Gi and
+5Gi node-local PVCs.
+
+**Player-visible change:** the worlds answer on `192.168.20.31` afterwards, not
+on `.224`/`.225`. Saved server entries break. Tell people before, not after.
+
+### Decommissioning checklist
+
+`game-01` is referenced in both other repos; leaving the references behind gives
+pods a nodeSelector nothing satisfies.
+
+`tal`: `00-infra/talconfig.yaml`, `00-infra/main.tf`,
+`01-apps/modules/cilium/main.tf`.
+
+`yaya-ops`: `manifests/agrelha-app.yaml` (`GAME_NODE_SELECTOR`,
+`GAME_NODE_NAME`), `manifests/valheim/storage.yaml`,
+`manifests/valheim/instance-0{1,2}/deployment.yaml`,
+`manifests/gmod/instance-01/deployment.yaml`,
+`manifests/observability-node-exporter.yaml`,
+`manifests/observability-dashboard-{valheim,nodes}.yaml`,
+`charts/alloy/values.yaml`.
+
+Unaffected: Jellyfin, Shoko, Loki and agrelha's own database are all on
+`w-01`/`w-02`. Every local-path volume on `game-01` is game data.
 
 ## Verification
 
@@ -276,15 +323,18 @@ Today's worlds: `valheim-lareira-v2-01` (`192.168.20.224`) and
 8. agrelha reaches the cluster with the ServiceAccount kubeconfig and **cannot**
    exceed its three namespace Roles.
 
-**Slice 3 — the pilot world**
+**Slice 3 — the cutover**
 
-9. The migrated world keeps its save data, and players reconnect with the same
-   password.
-10. Installing a mod on the host world works, and produces the same resolved
-    plugin set as the same mod list on a cluster world.
-11. The cluster world is unaffected throughout.
-12. Changing a host world's Host back to `cluster` is possible without data loss
-    (rollback rehearsal).
+9. Every world keeps its save data and players reconnect with the same password.
+10. Installing a mod on a host world works and resolves the same plugin set the
+    cluster produced for the same mod list.
+11. All three worlds survive a full nas shutdown, joinable throughout.
+12. The cluster is healthy with `game-01` gone: no pod is left Pending on a
+    nodeSelector nothing satisfies, and media and observability are untouched.
+
+Note what is **not** verifiable here: there is no cluster world left to A/B
+against, and no rollback rehearsal — re-provisioning `game-01` as a Talos node
+means going back through `tal`. That is the accepted cost of the big-bang.
 
 ## Out of scope
 

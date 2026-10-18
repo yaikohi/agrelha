@@ -22,9 +22,15 @@ cluster's: a `CiliumL2AnnouncementPolicy` publishing an address from the
 `external` pool, then the pod. A machine with its own address on VLAN 20 is
 reachable over the same tunnel with the cluster entirely out of the path.
 
-**No current node can run Docker.** All four nodes run Talos, an immutable
-API-driven OS with no Docker and no shell. A Docker Host is necessarily a
-different machine with a conventional OS.
+**No Talos node can run Docker.** All four nodes run Talos, an immutable
+API-driven OS with no Docker and no shell. A Docker Host therefore needs a
+conventional OS — either a new machine, or an existing node taken out of the
+cluster and re-provisioned.
+
+**The Docker Host is `game-01`, repurposed** (decided 2026-10-18). It is the
+bare-metal minipc: 16 CPU, ~60 GiB RAM, ~475 GB disk, already x86_64 and already
+at `192.168.20.31` — outside the Cilium pool, so it keeps that address. Talos
+comes off, NixOS goes on.
 
 **Most of the Docker support already exists, but is a whole-process mode.**
 `infra/runtime/docker` implements `ports.Runtime` over the Docker Engine API,
@@ -122,6 +128,23 @@ cluster, not only the box.
 A Docker Host has no `JobRunner`, so its worlds have no agrelha-driven backups
 until one is written.
 
+**The cluster loses its only gameserver node.** `game-01` is the sole holder of
+`ykhi.xyz/gameserver=true`, so once it leaves, no game can run in the cluster at
+all. Every world moves in one cutover — there is no pilot, no live A/B between
+Hosts, and no rollback short of re-provisioning Talos through `tal`. Accepted
+because nobody is playing right now, which is the cheapest window this will ever
+have.
+
+That also shifts what per-instance Host is *for*. With no game world left in the
+cluster, mixed operation is not needed in steady state — `RUNTIME=docker` alone
+would serve. The Host work keeps its value as the thing that makes the migration
+incremental and reversible per world, and as the option to put a world back in
+the cluster later, but the original premise of permanent mixed operation did not
+survive this decision.
+
+**Player-visible:** worlds answer on `192.168.20.31` afterwards rather than the
+`.224`/`.225` LoadBalancer addresses. Saved server entries break.
+
 ## Alternatives rejected
 
 **An agent on the Docker host, with agrelha staying in the cluster.** This was the
@@ -137,9 +160,14 @@ requirement that motivated the work.
 Root-equivalent access to the host over the network, and still no answer for file
 placement.
 
-**Making the Docker host a cluster node.** Impossible without re-provisioning off
-Talos, and pointless regardless: a worker whose control plane is on the nas
-provides no availability when the nas is off.
+**Keeping the Docker Host in the cluster as a node.** A worker whose control
+plane lives on the nas provides no availability when the nas is off, so the node
+has to leave the cluster entirely — which is what repurposing `game-01` does.
+
+**Buying a new machine and leaving `game-01` in the cluster.** Rejected on
+2026-10-18. It would have preserved a pilot migration and a rollback target, but
+`game-01` is better hardware than a purpose-bought box and costs nothing. The
+trade is accepted below.
 
 **A VM or container on the nas Proxmox host.** Fails the single requirement — the
 nas is the thing that powers off.
