@@ -42,6 +42,25 @@ func (rd Data) HeapInitMemoryGiB() int { return rd.Instance.HeapInitMemoryGiB(rd
 func (rd Data) CPURequestMilli() int   { return rd.Instance.CPURequestMilli(rd.Profile) }
 func (rd Data) CPULimitMilli() int     { return rd.Instance.CPULimitMilli(rd.Profile) }
 
+const ServerImage = "lloesche/valheim-server@sha256:bbda47cbbc9fd7b0385803ba0a70ba2084df4cb87ec6170a145aec5df06be07e"
+
+func (rd Data) ServerImage() string { return ServerImage }
+
+const valheimSeedWorldDir = `mkdir -p /config/worlds_local && cp -f /config/adminlist.txt /config/bannedlist.txt /config/permittedlist.txt /config/worlds_local/ 2>/dev/null || true`
+
+const valheimPublishPlugins = `mkdir -p /config/worlds_local /opt/valheim/bepinex/BepInEx/plugins && cp -f /config/adminlist.txt /config/bannedlist.txt /config/permittedlist.txt /config/worlds_local/ 2>/dev/null || true; [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/ || true`
+
+func (rd Data) PostBootstrapHook() string { return valheimSeedWorldDir }
+
+func (rd Data) PreBepInExConfigHook() string { return `mkdir -p "$plugins_path"` }
+
+func (rd Data) PreServerRunHook() string {
+	if rd.Instance.IsVanilla() {
+		return valheimSeedWorldDir
+	}
+	return valheimPublishPlugins
+}
+
 func (rd Data) ModReconcileScript() string {
 	lines := strings.Split(strings.TrimRight(modReconcileScript, "\n"), "\n")
 	out := make([]string, len(lines))

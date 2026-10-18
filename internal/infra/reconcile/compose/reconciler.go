@@ -121,14 +121,19 @@ func (r *Reconciler) resolveDir(ref ports.ServerRef) string {
 
 // ComposeService defines a single container in a Compose file.
 type ComposeService struct {
-	ContainerName string            `yaml:"container_name,omitempty"`
-	Image         string            `yaml:"image"`
-	Restart       string            `yaml:"restart,omitempty"`
-	Command       []string          `yaml:"command,omitempty"`
-	Ports         []string          `yaml:"ports,omitempty"`
-	Environment   map[string]string `yaml:"environment,omitempty"`
-	Volumes       []string          `yaml:"volumes,omitempty"`
-	Healthcheck   *ComposeHealth    `yaml:"healthcheck,omitempty"`
+	ContainerName string             `yaml:"container_name,omitempty"`
+	Image         string             `yaml:"image"`
+	Restart       string             `yaml:"restart,omitempty"`
+	Command       []string           `yaml:"command,omitempty"`
+	Ports         []string           `yaml:"ports,omitempty"`
+	Environment   map[string]string  `yaml:"environment,omitempty"`
+	Volumes       []string           `yaml:"volumes,omitempty"`
+	Healthcheck   *ComposeHealth     `yaml:"healthcheck,omitempty"`
+	DependsOn     map[string]Depends `yaml:"depends_on,omitempty"`
+}
+
+type Depends struct {
+	Condition string `yaml:"condition"`
 }
 
 // ComposeHealth is a service healthcheck. The Docker runtime already reads

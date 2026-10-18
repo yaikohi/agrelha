@@ -14,7 +14,7 @@ import (
 func envPaths(env map[string]string) []string {
 	var out []string
 	for _, v := range env {
-		for _, tok := range strings.Fields(v) {
+		for tok := range strings.FieldsSeq(v) {
 			tok = strings.TrimPrefix(tok, "@")
 			if strings.HasPrefix(tok, "/") {
 				out = append(out, tok)

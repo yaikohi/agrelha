@@ -49,19 +49,49 @@ backed by a declared volume.
 
 ### Left to do, in dependency order
 
-| # | What | Size |
+| # | What | State |
 |---|---|---|
-| 1 | `RenderCompose` takes a data root instead of `./` | small, specified |
-| 2 | Reconciler: `-p <deployment-name>` and the `<game>/instance-NN` path | small, specified |
-| 3 | **Valheim Compose shape** — the one-shot `mod-reconcile` service | the big one |
-| 4 | Minecraft `/custom-configs` decision, then its spec is complete | one decision |
-| 5 | Replace the `Capabilities.Mods` guard once 3 and 4 land | small |
+| 1 | `RenderCompose` takes a data root instead of `./` | **done** |
+| 2 | Reconciler: `-p <deployment-name>` and the `<game>/instance-NN` path | **done** |
+| 3 | **Valheim Compose shape** — the one-shot `mod-reconcile` service | **done**, except `build-watch` |
+| 4 | Minecraft `/custom-configs` decision, then its spec is complete | needs a decision |
+| 5 | Replace the `Capabilities.Mods` guard once 4 lands | small |
 | 6 | Wire the three routers; call `WriteAndConverge` | mechanical |
 | 7 | Absorb `config-merge` and `config-publish` into agrelha | see ADR 0007 |
 
-**1 must land before 3.** The data root changes volume paths *inside* every
-rendered Compose file, so building Valheim's shape on the current `./` convention
-means reworking it.
+### What 1–3 actually changed
+
+`ports.ServerRef` carries `ID domain.InstanceID`, set centrally in
+`InstanceManager.serverRef` after any resolver closure so none can forget it.
+Compose volumes resolve under a data root and **refuse to render without one** —
+beside the compose file they would sit inside the tree materialised from git,
+where a `git clean` deletes the world. The reconciler resolves
+`<workDir>/<game>/instance-NN` and passes `-p <deployment-name>`, so two games'
+`instance-01` cannot share a Compose project and tear down each other's
+containers under `--remove-orphans`. One shared `InstanceDataDir` helper keeps the
+renderer and the reconciler from disagreeing about where volumes point.
+
+Valheim has its own Compose renderer (`infra/manifests/valheim/compose.go`)
+rather than using the generic one, built from the Compose structs so
+`yaml.Marshal` escapes the inlined shell script correctly.
+
+**Why it needed its own renderer.** Rendering Valheim from `RuntimeSpec` alone
+produces a world that starts, reports healthy, and runs **completely vanilla**.
+`PRE_SERVER_RUN_HOOK` is what publishes downloaded plugins into
+`/opt/valheim/bepinex/BepInEx/plugins`, and it lived only in the Kubernetes
+template — `inst.Env(ValheimProfile)` has never carried it. That is the same
+silent-failure class as Minecraft's missing `/config-mods` mount, and it points
+at a pattern: **`RuntimeSpec` has never been complete, because until now nothing
+consumed it.**
+
+The lifecycle hooks and the pinned server image are now single Go definitions
+used by both the Kubernetes template and the Compose renderer, so the two Hosts
+cannot drift. Both extractions were verified **byte-identical** against a
+pre-change baseline of the modded and vanilla deployments.
+
+**Deferred from 3: the `build-watch` sidecar.** It answers "is a Valheim server
+update available". A world runs correctly without it; update detection is simply
+absent on `fogo` until it is added.
 
 Outside this repo: prerequisite P3 (Cloudflare token) and P5 (evacuate
 `game-01`), the `fogo` NixOS repo, the cutover, and decommissioning — three files

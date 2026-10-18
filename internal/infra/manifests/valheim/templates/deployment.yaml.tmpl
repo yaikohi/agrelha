@@ -72,7 +72,7 @@ spec:
           # Pinned: the game self-updates from Steam regardless, so the tag only
           # controls the wrapper. Unpinned, a bad wrapper release lands on every
           # world at once on the next restart.
-          image: lloesche/valheim-server@sha256:bbda47cbbc9fd7b0385803ba0a70ba2084df4cb87ec6170a145aec5df06be07e
+          image: {{ .ServerImage }}
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
@@ -113,16 +113,13 @@ spec:
             - name: TZ
               value: "Europe/Amsterdam"
             - name: POST_BOOTSTRAP_HOOK
-              value: "mkdir -p /config/worlds_local && cp -f /config/adminlist.txt /config/bannedlist.txt /config/permittedlist.txt /config/worlds_local/ 2>/dev/null || true"
+              value: {{ quote .PostBootstrapHook }}
 {{- if not .IsVanilla }}
             - name: PRE_BEPINEX_CONFIG_HOOK
-              value: "mkdir -p \"$plugins_path\""
-            - name: PRE_SERVER_RUN_HOOK
-              value: "mkdir -p /config/worlds_local /opt/valheim/bepinex/BepInEx/plugins && cp -f /config/adminlist.txt /config/bannedlist.txt /config/permittedlist.txt /config/worlds_local/ 2>/dev/null || true; [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/ || true"
-{{- else }}
-            - name: PRE_SERVER_RUN_HOOK
-              value: "mkdir -p /config/worlds_local && cp -f /config/adminlist.txt /config/bannedlist.txt /config/permittedlist.txt /config/worlds_local/ 2>/dev/null || true"
+              value: {{ quote .PreBepInExConfigHook }}
 {{- end }}
+            - name: PRE_SERVER_RUN_HOOK
+              value: {{ quote .PreServerRunHook }}
           ports:
             - containerPort: 2456
               name: game
@@ -183,7 +180,7 @@ spec:
         # Same image as the server (already on the node, already has steamcmd),
         # so this adds no new image, no RBAC and no third-party service.
         - name: build-watch
-          image: lloesche/valheim-server@sha256:bbda47cbbc9fd7b0385803ba0a70ba2084df4cb87ec6170a145aec5df06be07e
+          image: {{ .ServerImage }}
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "-c"]
           args:
