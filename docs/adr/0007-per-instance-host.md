@@ -39,10 +39,26 @@ Host. Cluster worlds and a Docker world cannot coexist under one agrelha today.
 **Host becomes a per-Instance attribute**, stored as a `host` column defaulting
 to `cluster`. It selects a *triple*, not just a runtime:
 
-| Host | Runtime | StateStore | Reconciler |
+| Host | Runtime | Renderer | Reconciler |
 |---|---|---|---|
-| `cluster` | k8s (client-go) | git | ArgoCD (async) |
-| a Docker host | docker | local filesystem | compose (sync) |
+| `cluster` | k8s (client-go) | Kubernetes YAML | ArgoCD (async) |
+| a Docker host | docker | compose YAML | compose (sync) |
+
+**The StateStore is not part of the triple. Git is the desired state for every
+Host.** An earlier version of this decision gave a Docker Host a local
+filesystem StateStore, to keep it independent of the cluster. That reasoning was
+wrong: the git remote is Codeberg, which is *external to the cluster*, so a nas
+shutdown does not affect it. A local store bought no availability and cost the
+Docker Host its history and its disaster recovery.
+
+So one store, one source of truth, for all Hosts. What differs is how desired
+state reaches reality: ArgoCD applies it for cluster worlds, while agrelha
+applies it itself for Docker worlds. `ports.Reconciler.Async()` already draws
+exactly that line.
+
+A Docker Host also keeps a **local materialisation** of its rendered files,
+because `docker compose up` needs them on disk. That copy is a cache, not a
+source: if it diverges from git, git wins and re-converging fixes it.
 
 **Host is declared, never inferred.** Probing both runtimes to discover where a
 world lives has to guess when it finds the world in both places or neither, and
@@ -66,6 +82,20 @@ template embeds it at render time, and the Nix host wraps the same file with
 pinned dependencies.
 
 ## Consequences
+
+**Rendered compose files must live outside every ArgoCD-watched path.** The
+per-game Applications watch `manifests/<game>` recursively with `prune: true`.
+A `docker-compose.yml` under there would be applied as a Kubernetes manifest,
+failing the sync and taking the *cluster* worlds down with it. Docker-Host
+worlds therefore render to a separate tree, e.g. `compose/<game>/instance-NN/`.
+
+**Mutating a Docker-Host world requires the git remote to be reachable.** Reads
+and lifecycle — start, stop, restart, logs, status — never touch git. But
+installing a mod or resizing a world is a commit. Codeberg being external means
+a nas outage does not affect this; a home-internet outage would, leaving agrelha
+reachable on the LAN but unable to accept changes. Accepted rather than solved:
+a write-behind cache would add a second source of truth to avoid a narrow
+window.
 
 `agrelha.ykhi.xyz` repoints to the Docker host, which terminates TLS itself via
 Cloudflare DNS-01. The hostname is unchanged, so the Zitadel redirect URI and
@@ -113,6 +143,14 @@ provides no availability when the nas is off.
 
 **A VM or container on the nas Proxmox host.** Fails the single requirement — the
 nas is the thing that powers off.
+
+**A local filesystem StateStore for the Docker Host.** Agreed initially, then
+dropped once it was clear the git remote is external to the cluster and so
+unaffected by the outage the Host exists for. It would have split the source of
+truth in two, left Docker-Host worlds with no history and no off-box copy of
+their desired state, and required Host-aware routing across nineteen call sites
+— four of which (the global config operations) have no Instance and therefore no
+Host at all. That last point had no answer under the old model.
 
 **Deriving Host from the game** ("all Valheim is on the box"). Wrong the moment
 one Valheim world stays in the cluster, which is exactly the pilot arrangement

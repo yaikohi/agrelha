@@ -16,8 +16,10 @@ in-cluster DNS clients depend on. A machine with its own address on VLAN 20 is
 reachable over the existing tunnel with the cluster out of the path entirely.
 
 Most of the Docker support is already written and tested — `infra/runtime/docker`,
-`infra/reconcile/compose` (including `RenderCompose`), `infra/state/local`, and a
-`ports.Reconciler` abstraction over sync-vs-async convergence. The gap is that
+`infra/reconcile/compose` (including `RenderCompose`), and a `ports.Reconciler`
+abstraction over sync-vs-async convergence. (`infra/state/local` also exists but
+is **not** used by this plan: see ADR 0007 on why git is the store for every
+Host.) The gap is that
 `buildRuntime` and `buildStateStore` resolve **once at startup** from
 `cfg.Runtime`, so one process serves one Host.
 
@@ -25,19 +27,37 @@ Most of the Docker support is already written and tested — `infra/runtime/dock
 
 A **Host** selects a triple, and an Instance declares its Host.
 
-| Host | Runtime | StateStore | Reconciler |
+| Host | Runtime | Renderer | Reconciler |
 |---|---|---|---|
-| `cluster` | k8s | git | ArgoCD (async) |
-| `fogo` | docker | local filesystem | compose (sync) |
+| `cluster` | k8s | Kubernetes YAML | ArgoCD (async) |
+| `fogo` | docker | compose YAML | compose (sync) |
 
 Declared, never inferred. Observed-vs-declared mismatch is drift, reported the
 way tier drift already is.
+
+**Git is the StateStore for every Host** — see ADR 0007. The remote is Codeberg,
+which is external to the cluster, so it stays reachable during a nas shutdown
+and a local store would have bought nothing. `fogo` additionally keeps a local
+materialisation of its rendered files, because `docker compose up` needs them on
+disk; that copy is a cache, and git wins on divergence.
+
+Two constraints follow:
+
+- **Compose files must render outside every ArgoCD-watched path.** The per-game
+  Applications watch `manifests/<game>` recursively with `prune: true`, so a
+  compose file there would be applied as a Kubernetes manifest and fail the
+  sync, taking cluster worlds with it. Use a separate tree, e.g.
+  `compose/<game>/instance-NN/`.
+- **Changing a `fogo` world needs the git remote reachable.** Lifecycle and
+  reads do not; commits do.
 
 ### Decisions
 
 | | |
 |---|---|
 | Host storage | `host` column per game table, default `cluster` |
+| Desired state | **Git for every Host**; `fogo` also materialises locally for compose |
+| Compose path | Outside `manifests/`, so ArgoCD never tries to apply it |
 | Host resolution | Declared; drift reported, never auto-adopted |
 | agrelha placement | On the Docker host, built natively with Nix |
 | Cluster access | Long-lived token for the existing `agrelha` ServiceAccount |
@@ -176,7 +196,7 @@ Behaviour-preserving for cluster worlds: every existing Instance defaults to
 | # | What |
 |---|---|
 | 1 | `host` column on each per-game instance table, default `cluster`; `Host` on `domain.Instance`; repo mappers carry it |
-| 2 | Resolve the `(Runtime, StateStore, Reconciler)` triple **per Instance** instead of once in `buildRuntime`/`buildStateStore` |
+| 2 | Resolve the `(Runtime, Renderer, Reconciler)` triple **per Instance** instead of once in `buildRuntime`. The StateStore stays single and shared |
 | 3 | Out-of-cluster kubeconfig support — `infra/kube/client.go:63` is `rest.InClusterConfig()` only; add a `KUBECONFIG` fallback |
 | 4 | Host-unreachable degradation: `Unknown` status, banner, lifecycle buttons disabled |
 | 5 | Host drift check: declared vs observed, surfaced like tier drift |
@@ -185,6 +205,13 @@ Behaviour-preserving for cluster worlds: every existing Instance defaults to
 **Step 2 is the one that must not go wrong.** Any Instance whose Host is
 `cluster` must resolve the identical triple it gets today, or worlds start being
 reconciled by the wrong plane.
+
+Step 2 splits in two. The **Runtime half** is done: `ports.ServerRef` carries a
+`Host`, set centrally in `InstanceManager.serverRef` *after* any
+`WithServerRefResolver` closure runs so none can forget it, and
+`infra/runtime/hostrouter` dispatches on it — unknown Host is a hard error, and
+an empty Host routes to the cluster. The **Renderer and Reconciler half** is
+next, and is much smaller now that the StateStore is shared.
 
 **Step 6 changes a working path.** Shellcheck will likely find real issues in
 that script; every fix lands on running cluster worlds, so test against the
