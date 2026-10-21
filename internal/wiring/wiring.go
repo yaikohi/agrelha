@@ -951,7 +951,7 @@ func routeRuntime(cfg *config.Config, cluster ports.Runtime) ports.Runtime {
 		routes[domain.HostCluster] = cluster
 	}
 	if hasDocker {
-		routes[host] = dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket)))
+		routes[host] = dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket)), dockerruntime.WithHostAddress(cfg.DockerHostAddress))
 	}
 	return hostrouter.NewRuntime(routes)
 }
@@ -966,7 +966,7 @@ func routeReconciler(cfg *config.Config, cluster ports.Reconciler) ports.Reconci
 
 func buildRuntime(cfg *config.Config, d *Deps) ports.Runtime {
 	if cfg.Runtime == "docker" {
-		return dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket)))
+		return dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket)), dockerruntime.WithHostAddress(cfg.DockerHostAddress))
 	}
 
 	if mcK8s, err := newK8sClient(cfg.MinecraftNamespace, cfg.MinecraftDeployment); err != nil {

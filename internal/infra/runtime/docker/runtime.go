@@ -13,7 +13,8 @@ import (
 
 // Runtime is the Docker engine implementation of ports.Runtime.
 type Runtime struct {
-	client Client
+	client      Client
+	hostAddress string
 }
 
 // Option configures Runtime.
@@ -23,6 +24,12 @@ type Option func(*Runtime)
 func WithClient(c Client) Option {
 	return func(r *Runtime) {
 		r.client = c
+	}
+}
+
+func WithHostAddress(addr string) Option {
+	return func(r *Runtime) {
+		r.hostAddress = addr
 	}
 }
 
@@ -69,7 +76,7 @@ func (r *Runtime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status
 	inspect, err := r.client.ContainerInspect(ctx, ref.Name)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return ports.Status{Lifecycle: ports.LifecycleStopped, Available: false}, nil
+			return ports.Status{Lifecycle: ports.LifecycleStopped, Available: false, Address: r.hostAddress}, nil
 		}
 		return ports.Status{Lifecycle: ports.LifecycleUnknown}, err
 	}
@@ -77,6 +84,7 @@ func (r *Runtime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status
 	st := ports.Status{
 		Lifecycle: ports.LifecycleStopped,
 		Available: false,
+		Address:   r.hostAddress,
 	}
 
 	if inspect.State.Running {

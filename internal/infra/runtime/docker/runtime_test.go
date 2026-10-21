@@ -514,3 +514,36 @@ func TestDockerRuntime_WatchAvailability(t *testing.T) {
 	}
 }
 
+func TestStatusReportsTheHostAddress(t *testing.T) {
+	ctx := context.Background()
+	running := ContainerInspect{State: ContainerState{Running: true}}
+
+	r := New(WithClient(&mockClient{inspect: running}), WithHostAddress("192.168.20.31"))
+	st, err := r.Status(ctx, ports.ServerRef{Name: "test"})
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.Address != "192.168.20.31" {
+		t.Errorf("Address = %q, want the Host address; without it a migrated world keeps advertising its old cluster LoadBalancer IP and nobody can connect", st.Address)
+	}
+
+	missing := New(WithClient(&mockClient{err: os.ErrNotExist}), WithHostAddress("192.168.20.31"))
+	st, err = missing.Status(ctx, ports.ServerRef{Name: "test"})
+	if err != nil {
+		t.Fatalf("Status for a missing container: %v", err)
+	}
+	if st.Address != "192.168.20.31" {
+		t.Errorf("a stopped world still has an address: got %q", st.Address)
+	}
+}
+
+func TestNoHostAddressReportsNone(t *testing.T) {
+	r := New(WithClient(&mockClient{inspect: ContainerInspect{State: ContainerState{Running: true}}}))
+	st, err := r.Status(context.Background(), ports.ServerRef{Name: "test"})
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.Address != "" {
+		t.Errorf("Address = %q, want empty; an unconfigured Host must not overwrite the address an Instance already carries", st.Address)
+	}
+}

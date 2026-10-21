@@ -39,12 +39,19 @@ Name the Host, point at the socket, and say where files live. Without
 is **refused** rather than silently rendered as Kubernetes YAML.
 
 ```sh
-DOCKER_HOST_NAME=fogo     # the Host name worlds record
-DEFAULT_HOST=fogo         # new worlds land here instead of the cluster
-DATA_DIR=/srv/gamedata    # world data; MUST be outside COMPOSE_DIR
-COMPOSE_DIR=/srv/compose  # rendered Compose files, mirrors the git layout
+DOCKER_HOST_NAME=fogo             # the Host name worlds record
+DOCKER_HOST_ADDRESS=192.168.20.31 # what players connect to
+DEFAULT_HOST=fogo                 # new worlds land here instead of the cluster
+DATA_DIR=/srv/gamedata            # world data; MUST be outside COMPOSE_DIR
+COMPOSE_DIR=/srv/compose          # rendered Compose files, mirrors the git layout
 DOCKER_SOCKET=/var/run/docker.sock
 ```
+
+Set `DOCKER_HOST_ADDRESS` whenever worlds migrate onto a Docker Host. A world
+records the address it was reachable at, and in the cluster that was a
+LoadBalancer IP the Docker Host does not own. Without this key a migrated world
+keeps advertising its old address to players, on a page that otherwise looks
+correct.
 
 `DATA_DIR` must not sit inside `COMPOSE_DIR`. The Compose directory is
 materialised from git, so world data underneath it would be destroyed by a
@@ -72,6 +79,7 @@ Compose. Per-game renderers are selected the same way.
 | Key | Default | |
 |---|---|---|
 | `DOCKER_HOST_NAME` | — | Registers a Docker Host under this name. Unset means cluster-only |
+| `DOCKER_HOST_ADDRESS` | — | The address players connect to for worlds on this Host. Unset, a world keeps whatever address it already carries |
 | `DEFAULT_HOST` | — | Host recorded on newly created worlds. Empty means `cluster` |
 | `DATA_DIR` | `/srv/gamedata` | World data root on a Docker Host |
 | `COMPOSE_DIR` | `compose` | Where rendered Compose files are materialised |
