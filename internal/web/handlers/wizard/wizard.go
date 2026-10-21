@@ -521,6 +521,7 @@ func (h *Handler) MCProvisioningPage(c *fiber.Ctx) error {
 	}
 
 	instUI := pages.InstanceUI{
+		GameID:          string(inst.GameID),
 		Host:            string(inst.EffectiveHost()),
 		HostUnreachable: inst.HostUnreachable,
 		Number:          inst.Number,

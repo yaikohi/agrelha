@@ -163,6 +163,7 @@ func (h *Handler) updatableInstance(c *fiber.Ctx) (*domain.Instance, error) {
 func (h *Handler) pushUpdatePanel(c *fiber.Ctx, inst domain.Instance, msg, kind string) error {
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
+			GameID:          string(inst.GameID),
 			Host:            string(inst.EffectiveHost()),
 			HostUnreachable: inst.HostUnreachable,
 			Number:          inst.Number,
