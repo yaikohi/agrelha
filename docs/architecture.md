@@ -333,6 +333,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/auth/local` | Password authentication with Argon2 hashing and session cookies. |
 | `infra/auth/oidc` | OIDC authentication against Zitadel, plus a dev-mode bypass. |
 | `infra/roles/zitadel` | Zitadel client: mints and retires one project Role per Instance, and grants them to Accounts, as a project-scoped service user. |
+| `infra/bepinex` | Applies Override sets to generated BepInEx configs on disk, shared by the init container and the Docker Host path. |
 | `infra/backups` | Backup archive naming, stat and pruning on the local or NFS filesystem. |
 | `infra/content/mcversions` | Minecraft version list and version comparison. |
 | `infra/content/modpackindex` | Modpack Index REST client. |
@@ -345,11 +346,13 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/manifests` | Renders the Minecraft manifest set for an Instance from templates. |
 | `infra/manifests/valheim` | Renders the Valheim manifest set, including the mod-reconciler init container. |
 | `infra/manifests/gmod` | Renders the Garry's Mod manifest set: one container, a Workshop collection passed as srcds arguments. |
+| `infra/manifests/compose` | `ports.SpecRenderer` producing a Compose file from a game's RuntimeSpec. Refuses games whose worlds need more than one container. |
 | `infra/rcon` | Minecraft RCON client and connection pool. |
 | `infra/reconcile/argocd` | `ports.Reconciler` for ArgoCD: converge and report sync status. |
 | `infra/reconcile/compose` | `ports.Reconciler` for Docker Compose. |
 | `infra/runtime/docker` | `ports.Runtime` over the Docker engine API. |
 | `infra/runtime/k8s` | `ports.Runtime` over Kubernetes, via `infra/kube`. |
+| `infra/hostrouter` | Dispatches `ports.Runtime`, `ports.SpecRenderer` and `ports.Reconciler` to a per-Host implementation. Unknown Host is an error, never a fallback. |
 | `infra/state/git` | `ports.StateStore` over `gitops.Committer`. |
 | `infra/state/local` | `ports.StateStore` over local files and SQLite. |
 | `infra/state/unconfigured` | `ports.StateStore` that reads nothing and refuses writes, for installations with no declarative plane. |

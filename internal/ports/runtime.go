@@ -27,6 +27,11 @@ type ServerRef struct {
 	Name string
 	// Scope is the namespace (Kubernetes) or project (Compose). May be empty.
 	Scope string
+	// Host is where the server runs. Empty means the cluster.
+	Host domain.Host
+	// ID is the Instance this addresses. Zero for refs that name a whole
+	// deployment rather than one Instance.
+	ID domain.InstanceID
 }
 
 // Lifecycle is what the operator has asked the server to be. It says nothing

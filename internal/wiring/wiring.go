@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -31,6 +33,7 @@ import (
 	"agrelha/internal/infra/auth/local"
 	"agrelha/internal/infra/auth/oidc"
 	infrabackups "agrelha/internal/infra/backups"
+	bepinexmerge "agrelha/internal/infra/bepinex"
 	"agrelha/internal/infra/content/curseforge"
 	"agrelha/internal/infra/content/mcversions"
 	"agrelha/internal/infra/content/modpackindex"
@@ -38,8 +41,10 @@ import (
 	"agrelha/internal/infra/content/steam"
 	"agrelha/internal/infra/content/thunderstore"
 	"agrelha/internal/infra/gitops"
+	hostrouter "agrelha/internal/infra/hostrouter"
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/manifests"
+	composemanifests "agrelha/internal/infra/manifests/compose"
 	gmodmanifests "agrelha/internal/infra/manifests/gmod"
 	valheimmanifests "agrelha/internal/infra/manifests/valheim"
 	"agrelha/internal/infra/rcon"
@@ -130,6 +135,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 
 	d.StateStore, d.Reconciler, d.Git = buildDeclarativePlane(cfg, st)
+	d.Reconciler = routeReconciler(cfg, d.Reconciler)
 
 	if d.StateStore != nil {
 		d.Mods = mods.New(d.StateStore, cfg.ModsPath)
@@ -147,7 +153,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 	}
 
-	rt := buildRuntime(cfg, &d)
+	rt := routeRuntime(cfg, buildRuntime(cfg, &d))
 
 	if c, err := newK8sClient(cfg.ValheimNamespace, cfg.ValheimDeployment); err != nil {
 		slog.Warn("k8s client unavailable (dev?)", "err", err)
@@ -295,12 +301,13 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 	}
 
+	instOpts = append(instOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(domain.Host(cfg.DefaultHost)))
 	d.MCInstances = instances.NewInstanceManager(
 		store.NewInstanceRepo(st), d.StateStore, rt,
 		cfg.MCTotalBudgetGiB, cfg.MCMaxInstances, cfg.MCMaxRunning,
 		cfg.MCInstancesPath,
 		cfg.MCLBBaseIP,
-		manifests.New(cfg.GameNodeSelector, cfg.MinecraftNamespace),
+		routeRenderer(cfg, manifests.New(cfg.GameNodeSelector, cfg.MinecraftNamespace), nil),
 		cfg.MinecraftNamespace,
 		instOpts...,
 	)
@@ -317,6 +324,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	} else if d.K8s != nil {
 		valheimRuntime = k8sruntime.New(d.K8s)
 	}
+	valheimRuntime = routeRuntime(cfg, valheimRuntime)
 	d.ValheimRuntime = valheimRuntime
 	d.ValheimRef = ports.ServerRef{Name: cfg.ValheimDeployment, Scope: cfg.ValheimNamespace}
 
@@ -434,12 +442,32 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 	}
 
+	valheimInstOpts = append(valheimInstOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(domain.Host(cfg.DefaultHost)))
+	if cfg.DataDir != "" {
+		valheimInstOpts = append(valheimInstOpts, instances.WithPreConverge(func(ctx context.Context, inst domain.Instance) error {
+			if inst.EffectiveHost().IsCluster() || d.ValheimInstances == nil {
+				return nil
+			}
+			overrides, err := d.ValheimInstances.ListConfigDataFor(ctx, inst)
+			if err != nil || len(overrides) == 0 {
+				return err
+			}
+			dir := compose.InstanceDataDir(cfg.DataDir, inst.ID(), "")
+			generated := filepath.Join(dir, "config", "bepinex")
+			for _, res := range bepinexmerge.MergeDir(generated, generated, overrides) {
+				if res.Err != nil {
+					return fmt.Errorf("merge %s: %w", res.Name, res.Err)
+				}
+			}
+			return nil
+		}))
+	}
 	d.ValheimInstances = instances.NewInstanceManager(
 		store.NewValheimInstanceRepo(st), d.StateStore, valheimRuntime,
 		cfg.ValheimTotalBudgetGiB, cfg.ValheimMaxInstances, cfg.ValheimMaxRunning,
 		cfg.ValheimInstancesPath,
 		cfg.ValheimLBBaseIP,
-		valheimmanifests.New(cfg.GameNodeSelector, cfg.ValheimNamespace),
+		routeRenderer(cfg, valheimmanifests.New(cfg.GameNodeSelector, cfg.ValheimNamespace), valheimmanifests.NewComposeRenderer("", cfg.DataDir)),
 		cfg.ValheimNamespace,
 		valheimInstOpts...,
 	)
@@ -626,6 +654,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			gmodRuntime = k8sruntime.New(d.K8s)
 		}
 	}
+	gmodRuntime = routeRuntime(cfg, gmodRuntime)
 	d.GModRuntime = gmodRuntime
 	d.GModRef = ports.ServerRef{Name: "gmod", Scope: cfg.GModNamespace}
 
@@ -653,6 +682,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 	}
 
+	gmodInstOpts = append(gmodInstOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(domain.Host(cfg.DefaultHost)))
 	d.GModInstances = instances.NewInstanceManager(
 		store.NewGameInstanceRepo(st, domain.GModProfile),
 		d.StateStore,
@@ -662,7 +692,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		cfg.GModMaxRunning,
 		cfg.GModInstancesPath,
 		cfg.GModLBBaseIP,
-		gmodmanifests.New(cfg.GameNodeSelector, cfg.GModNamespace),
+		routeRenderer(cfg, gmodmanifests.New(cfg.GameNodeSelector, cfg.GModNamespace), composemanifests.New(domain.GModProfile, cfg.DataDir, d.GModGame.RuntimeSpec)),
 		cfg.GModNamespace,
 		gmodInstOpts...,
 	)
@@ -689,13 +719,34 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	// instance manager already owns. Without a backups directory there is
 	// nothing published to read, and the Configs tab says so rather than
 	// pretending the world has no settings.
-	if d.ValheimInstances != nil && cfg.BackupsDir != "" {
+	if d.ValheimInstances != nil && (cfg.BackupsDir != "" || cfg.DataDir != "") {
+		localBepInEx := func(num int) string {
+			if cfg.DataDir == "" {
+				return ""
+			}
+			dir := compose.InstanceDataDir(cfg.DataDir, domain.NewInstanceID(domain.GameValheim, num), "")
+			return filepath.Join(dir, "config", "bepinex")
+		}
 		d.ValheimConfigs = appbepinex.New(
 			appbepinex.WithSnapshot(func(slug string, num int) (*domain.ConfigSnapshot, error) {
-				return infrabackups.ReadConfigSnapshot(cfg.BackupsDir, slug, num)
+				snap, err := infrabackups.ReadConfigSnapshot(cfg.BackupsDir, slug, num)
+				if err != nil {
+					return nil, err
+				}
+				if snap != nil {
+					return snap, nil
+				}
+				return infrabackups.ReadConfigSnapshotFromDir(localBepInEx(num), fmt.Sprintf("%s-%02d", slug, num))
 			}),
 			appbepinex.WithFile(func(slug string, num int, name string) (string, string, error) {
-				return infrabackups.ReadConfigFile(cfg.BackupsDir, slug, num, name)
+				body, sum, err := infrabackups.ReadConfigFile(cfg.BackupsDir, slug, num, name)
+				if err == nil {
+					return body, sum, nil
+				}
+				if !os.IsNotExist(err) {
+					return "", "", err
+				}
+				return infrabackups.ReadConfigFileFromDir(localBepInEx(num), name)
 			}),
 			appbepinex.WithOverrides(func(ctx context.Context, num int) (map[string]string, error) {
 				return d.ValheimInstances.ListConfigData(ctx, num)
@@ -868,6 +919,49 @@ func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStor
 
 	slog.Warn("GIT_REPO_URL/GIT_TOKEN unset: declarative plane is read-only")
 	return unconfigured.New(), argocd.New(), nil
+}
+
+func dockerHost(cfg *config.Config) (domain.Host, bool) {
+	name := strings.TrimSpace(cfg.DockerHostName)
+	if name == "" {
+		return "", false
+	}
+	return domain.NormalizeHost(name), true
+}
+
+func composeReconciler(cfg *config.Config) *compose.Reconciler {
+	return compose.New(compose.WithWorkDir(cfg.ComposeDir), compose.WithDataRoot(cfg.DataDir))
+}
+
+func routeRenderer(cfg *config.Config, cluster, onDocker ports.SpecRenderer) ports.SpecRenderer {
+	routes := map[domain.Host]ports.SpecRenderer{domain.HostCluster: cluster}
+	if host, ok := dockerHost(cfg); ok && onDocker != nil {
+		routes[host] = onDocker
+	}
+	return hostrouter.NewRenderer(routes)
+}
+
+func routeRuntime(cfg *config.Config, cluster ports.Runtime) ports.Runtime {
+	host, hasDocker := dockerHost(cfg)
+	if cluster == nil && !hasDocker {
+		return nil
+	}
+	routes := map[domain.Host]ports.Runtime{}
+	if cluster != nil {
+		routes[domain.HostCluster] = cluster
+	}
+	if hasDocker {
+		routes[host] = dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket)))
+	}
+	return hostrouter.NewRuntime(routes)
+}
+
+func routeReconciler(cfg *config.Config, cluster ports.Reconciler) ports.Reconciler {
+	routes := map[domain.Host]ports.Reconciler{domain.HostCluster: cluster}
+	if host, ok := dockerHost(cfg); ok {
+		routes[host] = composeReconciler(cfg)
+	}
+	return hostrouter.NewReconciler(routes)
 }
 
 func buildRuntime(cfg *config.Config, d *Deps) ports.Runtime {

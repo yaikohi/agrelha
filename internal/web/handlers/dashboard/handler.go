@@ -201,16 +201,18 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 		}
 
 		uinst := pages.InstanceUI{
-			GameID:    string(inst.GameID),
-			Number:    inst.Number,
-			Name:      inst.Name,
-			Slug:      inst.Slug,
-			Source:    string(inst.Source),
-			HasMods:   hasMods(ctx, mgr, inst.Number),
-			Tier:      string(inst.Tier),
-			MemoryGiB: inst.MemoryGiB(p),
-			State:     string(inst.State),
-			LBIP:      inst.LBIP,
+			Host:            string(inst.EffectiveHost()),
+			HostUnreachable: inst.HostUnreachable,
+			GameID:          string(inst.GameID),
+			Number:          inst.Number,
+			Name:            inst.Name,
+			Slug:            inst.Slug,
+			Source:          string(inst.Source),
+			HasMods:         hasMods(ctx, mgr, inst.Number),
+			Tier:            string(inst.Tier),
+			MemoryGiB:       inst.MemoryGiB(p),
+			State:           string(inst.State),
+			LBIP:            inst.LBIP,
 		}
 
 		if inst.Minecraft != nil {

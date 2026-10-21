@@ -152,6 +152,49 @@ func TestNoPrivateRegistryPullSecret(t *testing.T) {
 	}
 }
 
+func TestWorkshopCacheIsPersistedSeparatelyFromData(t *testing.T) {
+	files := render(t, world())
+	dep := string(files["deployment.yaml"])
+	pvc := string(files["pvc.yaml"])
+
+	if !strings.Contains(pvc, "name: gmod-instance-02-cache") {
+		t.Error("no cache PVC rendered")
+	}
+	if !strings.Contains(pvc, "name: gmod-instance-02-data") {
+		t.Error("the data PVC must still be rendered")
+	}
+
+	for _, want := range []string{
+		"mountPath: " + AddonCacheMountPath,
+		"mountPath: " + SteamCacheMountPath,
+		"subPath: addons",
+		"subPath: steam",
+		"claimName: gmod-instance-02-cache",
+	} {
+		if !strings.Contains(dep, want) {
+			t.Errorf("deployment missing %q", want)
+		}
+	}
+}
+
+func TestCacheIsNotTheBackedUpVolume(t *testing.T) {
+	inst := world()
+	data := inst.PVCName(domain.GModProfile)
+
+	files := render(t, inst)
+	if !strings.Contains(string(files["deployment.yaml"]), "claimName: "+data) {
+		t.Fatalf("data PVC %q not mounted", data)
+	}
+
+	cache := "gmod-instance-02-cache"
+	if cache == data {
+		t.Fatal("the cache PVC must be a separate claim from the data PVC, or backups would capture Workshop addons")
+	}
+	if strings.Contains(AddonCacheMountPath, DataMountPath) || strings.Contains(SteamCacheMountPath, DataMountPath) {
+		t.Error("a cache path nested inside the data mount would land Workshop addons in every backup")
+	}
+}
+
 func TestStoppedWorldScalesToZero(t *testing.T) {
 	inst := world()
 	inst.State = domain.StateStopped

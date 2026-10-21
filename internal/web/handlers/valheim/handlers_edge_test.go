@@ -1413,7 +1413,7 @@ func TestValheimWizardAllEdges(t *testing.T) {
 	}
 
 	// Vanilla creation (source == "vanilla" and no mods)
-	reqVanilla := httptest.NewRequest("POST", "/api/valheim/wizard/create", strings.NewReader(`{"name":"VanillaWorld","source":"vanilla"}`))
+	reqVanilla := httptest.NewRequest("POST", "/api/valheim/wizard/create", strings.NewReader(`{"name":"VanillaWorld","password":"testpw123","source":"vanilla"}`))
 	reqVanilla.Header.Set("Content-Type", "application/json")
 	respVanilla, _ := app.Test(reqVanilla)
 	bVanilla, _ := io.ReadAll(respVanilla.Body)
@@ -1439,7 +1439,7 @@ func TestValheimWizardAllEdges(t *testing.T) {
 	}
 
 	// Creation with JSON mods array
-	reqModsJSON := httptest.NewRequest("POST", "/api/valheim/wizard/create", strings.NewReader(`{"name":"ModsJsonWorld","source":"scratch","mods":["ModA","ModB"]}`))
+	reqModsJSON := httptest.NewRequest("POST", "/api/valheim/wizard/create", strings.NewReader(`{"name":"ModsJsonWorld","password":"testpw123","source":"scratch","mods":["ModA","ModB"]}`))
 	reqModsJSON.Header.Set("Content-Type", "application/json")
 	respModsJSON, _ := app.Test(reqModsJSON)
 	bModsJSON, _ := io.ReadAll(respModsJSON.Body)
@@ -1468,7 +1468,7 @@ func TestValheimWizardAllEdges(t *testing.T) {
 	appLimit := fiber.New()
 	appLimit.Post("/api/valheim/wizard/create", hLimit.ValheimWizardCreate)
 
-	reqOverLimit := httptest.NewRequest("POST", "/api/valheim/wizard/create", strings.NewReader(`{"name":"OverLimit"}`))
+	reqOverLimit := httptest.NewRequest("POST", "/api/valheim/wizard/create", strings.NewReader(`{"name":"OverLimit","password":"testpw123"}`))
 	reqOverLimit.Header.Set("Content-Type", "application/json")
 	respOverLimit, _ := appLimit.Test(reqOverLimit)
 	bOverLimit, _ := io.ReadAll(respOverLimit.Body)

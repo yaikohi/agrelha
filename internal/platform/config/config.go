@@ -84,10 +84,13 @@ type Config struct {
 	GModInstancesPath  string
 
 	// Runtime & Engine (k8s vs docker)
-	Runtime       string
-	DockerSocket  string
-	LocalStateDir string
-	ComposeDir    string
+	Runtime        string
+	DockerHostName string
+	DefaultHost    string
+	DataDir        string
+	DockerSocket   string
+	LocalStateDir  string
+	ComposeDir     string
 
 	// Provenance (AGPL section 13: operators of a modified agrelha must offer
 	// their users the corresponding source).
@@ -204,10 +207,13 @@ func Load() *Config {
 		GModLBBaseIP:       env("GMOD_LB_BASE_IP", "192.168.20.230"),
 		GModInstancesPath:  env("GMOD_INSTANCES_PATH", "manifests/gmod"),
 
-		Runtime:       env("RUNTIME", "k8s"),
-		DockerSocket:  env("DOCKER_SOCKET", "/var/run/docker.sock"),
-		LocalStateDir: env("LOCAL_STATE_DIR", ""),
-		ComposeDir:    env("COMPOSE_DIR", "compose"),
+		Runtime:        env("RUNTIME", "k8s"),
+		DockerHostName: env("DOCKER_HOST_NAME", ""),
+		DefaultHost:    env("DEFAULT_HOST", ""),
+		DataDir:        env("DATA_DIR", "/srv/gamedata"),
+		DockerSocket:   env("DOCKER_SOCKET", "/var/run/docker.sock"),
+		LocalStateDir:  env("LOCAL_STATE_DIR", ""),
+		ComposeDir:     env("COMPOSE_DIR", "compose"),
 
 		SourceURL: env("SOURCE_URL", "https://codeberg.org/ykhi/agrelha"),
 

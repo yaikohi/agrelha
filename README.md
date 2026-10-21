@@ -214,11 +214,31 @@ task watch            # air live-reload
 go test ./...         # unit tests (server package)
 ```
 
-Key env vars (see `.env.example`): `OIDC_*` + `ALLOWED_EMAIL` (auth),
-`GIT_REPO_URL` / `CODEBERG_USERNAME` / `CODEBERG_TOKEN` (declarative plane),
-`MODS_PATH` / `ADMINS_PATH` / `MOD_CONFIGS_PATH` (target files in the repo),
-`VALHEIM_NAMESPACE` / `VALHEIM_DEPLOYMENT` (imperative plane),
-`BACKUPS_DIR`, `INFLUXDB_URL`, `GRAFANA_DASHBOARD_URL`, `LOG_LEVEL` / `LOG_FORMAT`.
+Every key has a default and the full reference is
+[docs/configuration.md](docs/configuration.md). The ones you are most likely to
+set: `OIDC_*` (auth), `GIT_REPO_URL` / `GIT_USERNAME` / `GIT_TOKEN` (the
+declarative plane — unset, agrelha is read-only), `*_NAMESPACE` and
+`*_INSTANCES_PATH` (where each game lives), and `LOG_LEVEL` / `LOG_FORMAT`.
+
+### Kubernetes or a Docker Host
+
+A world records the **Host** it runs on, and one agrelha can serve both.
+
+- **In the cluster** — the default; nothing is required.
+- **Against a cluster from outside** — set `KUBECONFIG`. agrelha prefers it over
+  in-cluster credentials, so running outside is deliberate rather than a
+  fallback that engages by accident.
+- **On a Docker Host** — set `RUNTIME=docker`, `DOCKER_HOST_NAME` (the Host name
+  worlds record), `DEFAULT_HOST` so new worlds land there, and `DATA_DIR` plus
+  `COMPOSE_DIR`. **`DATA_DIR` must sit outside `COMPOSE_DIR`**: the Compose
+  directory is materialised from git, so world data underneath it would be
+  destroyed by a checkout.
+
+Git holds the desired state for both Hosts. What differs is how it reaches
+reality — ArgoCD applies it for cluster worlds, agrelha runs `docker compose up`
+itself for Docker worlds. Without `DOCKER_HOST_NAME` no Docker Host exists, and
+a world declaring one is refused rather than silently rendered as Kubernetes
+YAML.
 
 ## Install
 

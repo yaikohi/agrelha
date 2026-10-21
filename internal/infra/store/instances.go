@@ -34,6 +34,7 @@ type InstanceRecord struct {
 	CPULimitMilli   int
 	HeapInitGiB     int
 	CreatedBy       string
+	Host            string
 	CreatedAt       time.Time
 	LastUsed        time.Time
 }

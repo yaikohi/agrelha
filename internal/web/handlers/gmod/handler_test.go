@@ -159,3 +159,31 @@ func TestGModDashboardAndWizardFlow(t *testing.T) {
 		}
 	}
 }
+
+func TestGModRejectsUnknownTab(t *testing.T) {
+	app, _, st := setupTestApp(t)
+	defer st.Close()
+
+	payload := `{"name":"Lareira","gamemode":"sandbox","map":"gm_construct","collectionID":"104604903","tier":"small"}`
+	req := httptest.NewRequest("POST", "/api/gmod/wizard/create", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	if _, err := app.Test(req); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/gmod/1/overview", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("GET /gmod/1/overview = %d, want 200", resp.StatusCode)
+	}
+
+	resp, err = app.Test(httptest.NewRequest("GET", "/gmod/1/backups", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("GET /gmod/1/backups = %d, want 404; an unserved tab must not silently render overview", resp.StatusCode)
+	}
+}

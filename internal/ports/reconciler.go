@@ -9,6 +9,10 @@ import (
 // In GitOps, reality matches desired state asynchronously: agrelha commits to git,
 // and an external controller (ArgoCD) converges the cluster.
 // In Docker/Compose, convergence is synchronous and immediate (`compose up`).
+type Materializer interface {
+	Materialize(ctx context.Context, ref ServerRef, files map[string][]byte) error
+}
+
 type Reconciler interface {
 	// Converge reconciles the server's reality with its desired state.
 	Converge(ctx context.Context, ref ServerRef) error

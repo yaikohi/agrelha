@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agrelha/internal/domain"
+	"agrelha/internal/infra/bepinex"
 )
 
 func runBepInEx(stdout, stderr io.Writer, args []string) int {
@@ -31,12 +31,12 @@ func runBepInExMerge(stdout, stderr io.Writer, args []string) int {
 	fs := flag.NewFlagSet("bepinex merge", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	generated := fs.String("generated", "", "directory holding the mod-generated .cfg files")
-	overrides := fs.String("overrides", "", "directory holding the operator's override sets")
+	overrides_ := fs.String("overrides", "", "directory holding the operator's override sets")
 	out := fs.String("out", "", "directory to write the merged files to (defaults to -generated)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *generated == "" || *overrides == "" {
+	if *generated == "" || *overrides_ == "" {
 		fmt.Fprintln(stderr, "both -generated and -overrides are required")
 		return 2
 	}
@@ -44,13 +44,13 @@ func runBepInExMerge(stdout, stderr io.Writer, args []string) int {
 		*out = *generated
 	}
 
-	names, err := overrideFileNames(*overrides)
+	names, err := overrideFileNames(*overrides_)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintf(stdout, ">> bepinex merge: no overrides at %s, nothing to do\n", *overrides)
+			fmt.Fprintf(stdout, ">> bepinex merge: no overrides at %s, nothing to do\n", *overrides_)
 			return 0
 		}
-		fmt.Fprintf(stderr, ">> bepinex merge: cannot read %s: %v\n", *overrides, err)
+		fmt.Fprintf(stderr, ">> bepinex merge: cannot read %s: %v\n", *overrides_, err)
 		return 1
 	}
 	if len(names) == 0 {
@@ -58,42 +58,33 @@ func runBepInExMerge(stdout, stderr io.Writer, args []string) int {
 		return 0
 	}
 
+	overrides := make(map[string]string, len(names))
 	failed := false
 	for _, name := range names {
-		body, err := os.ReadFile(filepath.Join(*overrides, name))
+		body, err := os.ReadFile(filepath.Join(*overrides_, name))
 		if err != nil {
 			fmt.Fprintf(stderr, ">> bepinex merge: %s: cannot read override: %v\n", name, err)
 			failed = true
 			continue
 		}
-		set := domain.ParseOverrideSet(string(body))
-		if set.Len() == 0 {
-			fmt.Fprintf(stdout, ">> bepinex merge: %s: override set is empty, leaving the file alone\n", name)
-			continue
-		}
+		overrides[name] = string(body)
+	}
 
-		target := filepath.Join(*out, name)
-		current, err := os.ReadFile(filepath.Join(*generated, name))
-		if err != nil && !os.IsNotExist(err) {
-			fmt.Fprintf(stderr, ">> bepinex merge: %s: cannot read generated config: %v\n", name, err)
+	for _, res := range bepinex.MergeDir(*generated, *out, overrides) {
+		switch {
+		case res.Err != nil:
+			fmt.Fprintf(stderr, ">> bepinex merge: %s: %v\n", res.Name, res.Err)
 			failed = true
-			continue
-		}
-
-		merged, report := domain.Merge(domain.ParseConfigFile(name, string(current)), set)
-		if merged == string(current) {
-			fmt.Fprintf(stdout, ">> bepinex merge: %s: already up to date (%d overrides)\n", name, set.Len())
-			continue
-		}
-		if err := writeFileAtomic(target, []byte(merged)); err != nil {
-			fmt.Fprintf(stderr, ">> bepinex merge: %s: cannot write: %v\n", name, err)
-			failed = true
-			continue
-		}
-		fmt.Fprintf(stdout, ">> bepinex merge: %s: %d applied, %d appended, %d unmatched, %d already set\n",
-			name, len(report.Applied), len(report.Appended), len(report.Stale), len(report.NoOp))
-		for _, ov := range report.Stale {
-			fmt.Fprintf(stdout, ">> bepinex merge: %s: %s is not declared by the mod; written anyway\n", name, ov.Key())
+		case res.Skipped:
+			fmt.Fprintf(stdout, ">> bepinex merge: %s: override set is empty, leaving the file alone\n", res.Name)
+		case !res.Changed:
+			fmt.Fprintf(stdout, ">> bepinex merge: %s: already up to date\n", res.Name)
+		default:
+			fmt.Fprintf(stdout, ">> bepinex merge: %s: %d applied, %d appended, %d unmatched, %d already set\n",
+				res.Name, len(res.Report.Applied), len(res.Report.Appended), len(res.Report.Stale), len(res.Report.NoOp))
+			for _, ov := range res.Report.Stale {
+				fmt.Fprintf(stdout, ">> bepinex merge: %s: %s is not declared by the mod; written anyway\n", res.Name, ov.Key())
+			}
 		}
 	}
 	if failed {

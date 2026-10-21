@@ -44,7 +44,7 @@ func TestComposeReconciler_Converge(t *testing.T) {
 		t.Errorf("executedDir = %q, want %q", executedDir, expectedDir)
 	}
 
-	expectedArgs := []string{"up", "-d", "--remove-orphans"}
+	expectedArgs := []string{"-p", "mc-survival", "up", "-d", "--remove-orphans"}
 	if len(executedArgs) != len(expectedArgs) {
 		t.Fatalf("executedArgs = %v, want %v", executedArgs, expectedArgs)
 	}
@@ -84,7 +84,7 @@ func TestRenderCompose(t *testing.T) {
 		},
 	}
 
-	out, err := RenderCompose("mc-test", spec)
+	out, err := RenderCompose("mc-test", "/srv/gamedata/minecraft/instance-01", spec)
 	if err != nil {
 		t.Fatalf("RenderCompose failed: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestRenderCompose(t *testing.T) {
 	if len(svc.Ports) != 2 || svc.Ports[0] != "25565:25565/tcp" {
 		t.Errorf("Ports mismatch: %+v", svc.Ports)
 	}
-	if len(svc.Volumes) != 1 || svc.Volumes[0] != "./data:/data" {
+	if len(svc.Volumes) != 1 || svc.Volumes[0] != "/srv/gamedata/minecraft/instance-01/data:/data" {
 		t.Errorf("Volumes mismatch: %+v", svc.Volumes)
 	}
 }
@@ -136,7 +136,7 @@ func TestComposeReconciler_WriteAndConverge(t *testing.T) {
 		return nil
 	}
 
-	r := New(WithWorkDir(tempDir), WithExecutor(mockExec))
+	r := New(WithWorkDir(tempDir), WithDataRoot(t.TempDir()), WithExecutor(mockExec))
 	ref := ports.ServerRef{Name: "valheim-01"}
 	spec := domain.RuntimeSpec{
 		Image: "lloesche/valheim-server:latest",
@@ -169,7 +169,7 @@ func TestComposeReconciler_WriteAndConverge(t *testing.T) {
 }
 
 func TestRenderComposeEmitsAHealthcheck(t *testing.T) {
-	out, err := RenderCompose("valheim-boppo-02", domain.RuntimeSpec{
+	out, err := RenderCompose("valheim-boppo-02", "/srv/gamedata/valheim/instance-02", domain.RuntimeSpec{
 		Image:       "lloesche/valheim-server:latest",
 		Ports:       []domain.PortSpec{{Name: "game", Port: 2456, Protocol: "UDP"}},
 		Env:         map[string]string{"SERVER_NAME": "boppo"},
@@ -188,7 +188,7 @@ func TestRenderComposeEmitsAHealthcheck(t *testing.T) {
 }
 
 func TestRenderComposeOmitsHealthcheckWhenNoProbe(t *testing.T) {
-	out, err := RenderCompose("x", domain.RuntimeSpec{Image: "busybox"})
+	out, err := RenderCompose("x", "", domain.RuntimeSpec{Image: "busybox"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestComposeReconciler_ResolveDir_And_WriteAndConverge(t *testing.T) {
 		return nil
 	}
 
-	r := New(WithWorkDir(tempDir), WithExecutor(mockExec))
+	r := New(WithWorkDir(tempDir), WithDataRoot(t.TempDir()), WithExecutor(mockExec))
 
 	// 1. resolveDir with empty ref.Name returns workDir
 	if dir := r.resolveDir(ports.ServerRef{Name: ""}); dir != tempDir {
@@ -260,7 +260,7 @@ func TestDefaultExecutor_Invocation(t *testing.T) {
 
 func TestRenderCompose_DefaultsAndErrors(t *testing.T) {
 	// 1. Default serviceName
-	out, err := RenderCompose("", domain.RuntimeSpec{Image: "alpine"})
+	out, err := RenderCompose("", "", domain.RuntimeSpec{Image: "alpine"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestRenderCompose_DefaultsAndErrors(t *testing.T) {
 	}
 
 	// 2. Default protocol
-	out, err = RenderCompose("app", domain.RuntimeSpec{
+	out, err = RenderCompose("app", "", domain.RuntimeSpec{
 		Image: "alpine",
 		Ports: []domain.PortSpec{{Port: 8080}},
 	})
@@ -306,3 +306,31 @@ func TestComposeReconciler_WriteAndConverge_Errors(t *testing.T) {
 	}
 }
 
+func TestShellVariablesSurviveComposeInterpolation(t *testing.T) {
+	spec := domain.RuntimeSpec{
+		Image:   "alpine:3.20",
+		Env:     map[string]string{"HOOK": `echo "$HOME" && test -n "${PLUGINS:-}"`},
+		Command: []string{"sh", "-c", EscapeVars(`for f in "$DIR"/*; do echo "$f"; done`)},
+	}
+
+	body, err := RenderCompose("srv", "/srv/gamedata", spec)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	for _, line := range strings.Split(string(body), "\n") {
+		stripped := strings.ReplaceAll(line, "$$", "")
+		if strings.Contains(stripped, "$") {
+			t.Errorf("bare $ survives into the rendered file, so compose interpolates it away\nand the container receives an empty string: %q", line)
+		}
+	}
+}
+
+func TestEscapeVarsIsIdempotentlyWrong(t *testing.T) {
+	if got := EscapeVars("$A"); got != "$$A" {
+		t.Fatalf("EscapeVars(%q) = %q", "$A", got)
+	}
+	if got := EscapeVars(EscapeVars("$A")); got != "$$$$A" {
+		t.Errorf("double-escaping must be visible rather than silently absorbed, got %q", got)
+	}
+}

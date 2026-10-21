@@ -18,27 +18,37 @@ const Image = "ceifa/garrysmod@sha256:51ca6117b29e9b9b4312d880da3bf16a058ab518ec
 
 const DataMountPath = "/home/gmod/server/garrysmod/data"
 
+const (
+	AddonCacheMountPath = "/home/gmod/server/garrysmod/cache"
+	SteamCacheMountPath = "/home/gmod/server/steam_cache"
+)
+
 type Data struct {
 	domain.Instance
-	Profile           domain.GameProfile
-	Annotations       map[string]string
-	Env               map[string]string
-	NodeSelectorKey   string
-	NodeSelectorValue string
-	Namespace         string
-	Image             string
-	DataMountPath     string
-	SteamKeySecret    string
+	Profile             domain.GameProfile
+	Annotations         map[string]string
+	Env                 map[string]string
+	NodeSelectorKey     string
+	NodeSelectorValue   string
+	Namespace           string
+	Image               string
+	DataMountPath       string
+	AddonCacheMountPath string
+	SteamCacheMountPath string
+	SteamKeySecret      string
 }
 
 func (rd Data) DeploymentName() string { return rd.Instance.DeploymentName(rd.Profile) }
 func (rd Data) ServiceName() string    { return rd.Instance.ServiceName(rd.Profile) }
 func (rd Data) PVCName() string        { return rd.Instance.PVCName(rd.Profile) }
-func (rd Data) ConfigCMName() string   { return rd.Instance.ConfigCMName(rd.Profile) }
-func (rd Data) MemoryGiB() int         { return rd.Instance.MemoryGiB(rd.Profile) }
-func (rd Data) MemoryLimitGiB() int    { return rd.Instance.MemoryLimitGiB(rd.Profile) }
-func (rd Data) CPURequestMilli() int   { return rd.Instance.CPURequestMilli(rd.Profile) }
-func (rd Data) CPULimitMilli() int     { return rd.Instance.CPULimitMilli(rd.Profile) }
+func (rd Data) CachePVCName() string {
+	return fmt.Sprintf("%s-instance-%02d-cache", rd.Profile.Prefix, rd.Instance.Number)
+}
+func (rd Data) ConfigCMName() string { return rd.Instance.ConfigCMName(rd.Profile) }
+func (rd Data) MemoryGiB() int       { return rd.Instance.MemoryGiB(rd.Profile) }
+func (rd Data) MemoryLimitGiB() int  { return rd.Instance.MemoryLimitGiB(rd.Profile) }
+func (rd Data) CPURequestMilli() int { return rd.Instance.CPURequestMilli(rd.Profile) }
+func (rd Data) CPULimitMilli() int   { return rd.Instance.CPULimitMilli(rd.Profile) }
 
 type Renderer struct {
 	nodeSelector string
@@ -59,14 +69,16 @@ func Render(inst domain.Instance, nodeSelector, namespace string) (map[string][]
 	inst.EnsureDefaults(domain.GModProfile, "")
 
 	data := Data{
-		Instance:       inst,
-		Profile:        domain.GModProfile,
-		Annotations:    inst.Annotations(domain.GModProfile),
-		Env:            inst.Env(domain.GModProfile),
-		Namespace:      namespace,
-		Image:          Image,
-		DataMountPath:  DataMountPath,
-		SteamKeySecret: "gmod-secret",
+		Instance:            inst,
+		Profile:             domain.GModProfile,
+		Annotations:         inst.Annotations(domain.GModProfile),
+		Env:                 inst.Env(domain.GModProfile),
+		Namespace:           namespace,
+		Image:               Image,
+		DataMountPath:       DataMountPath,
+		AddonCacheMountPath: AddonCacheMountPath,
+		SteamCacheMountPath: SteamCacheMountPath,
+		SteamKeySecret:      "gmod-secret",
 	}
 	if data.Namespace == "" {
 		data.Namespace = "gmod"

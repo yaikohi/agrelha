@@ -508,8 +508,8 @@ func (h *Handler) ValheimWizardCreate(c *fiber.Ctx) error {
 	if password == "" {
 		password = strings.TrimSpace(c.FormValue("password"))
 	}
-	if password != "" && len(password) < 5 {
-		return shared.SSEToast(c, "err", "Valheim server password must be at least 5 characters.", nil)
+	if err := (&domain.ValheimConfig{Password: password}).ValidatePassword(name, ""); err != nil {
+		return shared.SSEToast(c, "err", "Valheim server password must be at least 5 characters: Valheim refuses to start without one, so the world would never come up.", nil)
 	}
 
 	seed := strings.TrimSpace(req.Seed)

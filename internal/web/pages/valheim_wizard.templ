@@ -39,7 +39,7 @@ templ ValheimWizard(budget BudgetUI) {
 						Label:       "Server Password (Optional)",
 						Placeholder: "e.g. secret123 (minimum 5 characters if set)",
 						Bind:        "password",
-						HelperText:  "Valheim requires passwords to be at least 5 characters long. Leave empty for public.",
+						HelperText:  "Required: at least 5 characters. Valheim will not start a server without a password.",
 					})
 
 					@components.Input(components.InputProps{
@@ -248,7 +248,7 @@ templ ValheimWizard(budget BudgetUI) {
 						</div>
 						<div class="flex justify-between">
 							<span class="text-zinc-500">Password:</span>
-							<span class="font-mono text-zinc-200" data-text="$password ? $password : 'None (Public)'"></span>
+							<span class="font-mono text-zinc-200" data-text="$password ? $password : 'Required — Valheim will not start without one'"></span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-zinc-500">Seed:</span>

@@ -100,6 +100,8 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		}
 
 		uiInstances = append(uiInstances, pages.InstanceUI{
+			Host:               string(inst.EffectiveHost()),
+			HostUnreachable:    inst.HostUnreachable,
 			GameID:             string(inst.GameID),
 			Number:             inst.Number,
 			Name:               inst.Name,
@@ -285,6 +287,11 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
 
+	tab := strings.ToLower(strings.TrimSpace(c.Params("tab", "overview")))
+	if tab != "overview" {
+		return c.Status(fiber.StatusNotFound).SendString("Unknown tab for a Garry's Mod world: " + tab)
+	}
+
 	inst, err := h.cfg.Instances.GetInstance(c.UserContext(), num)
 	if err != nil || inst == nil {
 		return c.Status(fiber.StatusNotFound).SendString("Garry's Mod instance not found")
@@ -310,22 +317,24 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
-			IsAdmin:      shared.IsAdmin(c),
-			GameID:       string(inst.GameID),
-			Number:       inst.Number,
-			Name:         inst.Name,
-			Slug:         inst.Slug,
-			Password:     pass,
-			Gamemode:     gamemode,
-			Map:          mapName,
-			CollectionID: collectionID,
-			Tier:         string(inst.Tier),
-			MemoryGiB:    inst.MemoryGiB(domain.GModProfile),
-			State:        string(inst.State),
-			MOTD:         inst.MOTD,
-			LBIP:         lbIP,
+			Host:            string(inst.EffectiveHost()),
+			HostUnreachable: inst.HostUnreachable,
+			IsAdmin:         shared.IsAdmin(c),
+			GameID:          string(inst.GameID),
+			Number:          inst.Number,
+			Name:            inst.Name,
+			Slug:            inst.Slug,
+			Password:        pass,
+			Gamemode:        gamemode,
+			Map:             mapName,
+			CollectionID:    collectionID,
+			Tier:            string(inst.Tier),
+			MemoryGiB:       inst.MemoryGiB(domain.GModProfile),
+			State:           string(inst.State),
+			MOTD:            inst.MOTD,
+			LBIP:            lbIP,
 		},
-		ActiveTab: "overview",
+		ActiveTab: tab,
 	}
 
 	if collectionID != "" && h.cfg.Workshop != nil {

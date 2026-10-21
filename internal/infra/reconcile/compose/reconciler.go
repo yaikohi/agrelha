@@ -22,6 +22,7 @@ type Executor func(ctx context.Context, workDir string, args ...string) error
 // Reconciler converges desired state to reality synchronously using Docker Compose.
 type Reconciler struct {
 	workDir  string
+	dataRoot string
 	executor Executor
 }
 
@@ -32,6 +33,15 @@ type Option func(*Reconciler)
 func WithWorkDir(dir string) Option {
 	return func(r *Reconciler) {
 		r.workDir = dir
+	}
+}
+
+// WithDataRoot sets where a world's runtime data lives. It must sit outside
+// workDir: workDir is materialised from git, so data under it would be deleted
+// by a checkout or clean.
+func WithDataRoot(dir string) Option {
+	return func(r *Reconciler) {
+		r.dataRoot = dir
 	}
 }
 
@@ -66,6 +76,12 @@ func defaultExecutor(ctx context.Context, workDir string, args ...string) error 
 	return nil
 }
 
+func EscapeVars(s string) string {
+	return strings.ReplaceAll(s, "$", "$$")
+}
+
+const DefaultStartPeriod = "15m"
+
 var _ ports.Reconciler = (*Reconciler)(nil)
 
 // Async reports whether convergence is external/asynchronous.
@@ -74,13 +90,38 @@ func (r *Reconciler) Async() bool {
 	return false
 }
 
+func (r *Reconciler) Materialize(ctx context.Context, ref ports.ServerRef, files map[string][]byte) error {
+	dir := r.resolveDir(ref)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", dir, err)
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+var _ ports.Materializer = (*Reconciler)(nil)
+
 // Converge executes `docker compose up -d` in the instance or project directory.
 func (r *Reconciler) Converge(ctx context.Context, ref ports.ServerRef) error {
 	dir := r.resolveDir(ref)
-	return r.executor(ctx, dir, "up", "-d", "--remove-orphans")
+	return r.executor(ctx, dir, append(r.projectArgs(ref), "up", "-d", "--remove-orphans")...)
+}
+
+func (r *Reconciler) projectArgs(ref ports.ServerRef) []string {
+	if ref.Name == "" {
+		return nil
+	}
+	return []string{"-p", ref.Name}
 }
 
 func (r *Reconciler) resolveDir(ref ports.ServerRef) string {
+	if ref.ID.Game != "" && ref.ID.Number > 0 {
+		return filepath.Join(r.workDir, string(ref.ID.Game), fmt.Sprintf("instance-%02d", ref.ID.Number))
+	}
 	if ref.Name == "" {
 		return r.workDir
 	}
@@ -101,14 +142,19 @@ func (r *Reconciler) resolveDir(ref ports.ServerRef) string {
 
 // ComposeService defines a single container in a Compose file.
 type ComposeService struct {
-	ContainerName string            `yaml:"container_name,omitempty"`
-	Image         string            `yaml:"image"`
-	Restart       string            `yaml:"restart,omitempty"`
-	Command       []string          `yaml:"command,omitempty"`
-	Ports         []string          `yaml:"ports,omitempty"`
-	Environment   map[string]string `yaml:"environment,omitempty"`
-	Volumes       []string          `yaml:"volumes,omitempty"`
-	Healthcheck   *ComposeHealth    `yaml:"healthcheck,omitempty"`
+	ContainerName string             `yaml:"container_name,omitempty"`
+	Image         string             `yaml:"image"`
+	Restart       string             `yaml:"restart,omitempty"`
+	Command       []string           `yaml:"command,omitempty"`
+	Ports         []string           `yaml:"ports,omitempty"`
+	Environment   map[string]string  `yaml:"environment,omitempty"`
+	Volumes       []string           `yaml:"volumes,omitempty"`
+	Healthcheck   *ComposeHealth     `yaml:"healthcheck,omitempty"`
+	DependsOn     map[string]Depends `yaml:"depends_on,omitempty"`
+}
+
+type Depends struct {
+	Condition string `yaml:"condition"`
 }
 
 // ComposeHealth is a service healthcheck. The Docker runtime already reads
@@ -116,10 +162,11 @@ type ComposeService struct {
 // to "the process is running" - which is exactly the misreport the Kubernetes
 // probes were changed to avoid.
 type ComposeHealth struct {
-	Test     []string `yaml:"test"`
-	Interval string   `yaml:"interval,omitempty"`
-	Timeout  string   `yaml:"timeout,omitempty"`
-	Retries  int      `yaml:"retries,omitempty"`
+	Test        []string `yaml:"test"`
+	Interval    string   `yaml:"interval,omitempty"`
+	Timeout     string   `yaml:"timeout,omitempty"`
+	Retries     int      `yaml:"retries,omitempty"`
+	StartPeriod string   `yaml:"start_period,omitempty"`
 }
 
 // ComposeFile defines the top-level docker-compose structure.
@@ -128,9 +175,12 @@ type ComposeFile struct {
 }
 
 // RenderCompose converts a domain.RuntimeSpec into a valid docker-compose YAML document.
-func RenderCompose(serviceName string, spec domain.RuntimeSpec) ([]byte, error) {
+func RenderCompose(serviceName, dataRoot string, spec domain.RuntimeSpec) ([]byte, error) {
 	if serviceName == "" {
 		serviceName = "game-server"
+	}
+	if strings.TrimSpace(dataRoot) == "" && len(spec.Volumes) > 0 {
+		return nil, fmt.Errorf("compose render for %q: no data root, so volumes would resolve beside the compose file and put world data inside the materialised git tree", serviceName)
 	}
 
 	var portsList []string
@@ -144,7 +194,7 @@ func RenderCompose(serviceName string, spec domain.RuntimeSpec) ([]byte, error) 
 
 	var volList []string
 	for _, v := range spec.Volumes {
-		hostPath := "./" + v.Name
+		hostPath := filepath.Join(dataRoot, v.Name)
 		ro := ""
 		if v.ReadOnly {
 			ro = ":ro"
@@ -152,13 +202,22 @@ func RenderCompose(serviceName string, spec domain.RuntimeSpec) ([]byte, error) 
 		volList = append(volList, fmt.Sprintf("%s:%s%s", hostPath, v.MountPath, ro))
 	}
 
+	env := make(map[string]string, len(spec.Env))
+	for k, v := range spec.Env {
+		env[k] = EscapeVars(v)
+	}
+	command := make([]string, 0, len(spec.Command))
+	for _, c := range spec.Command {
+		command = append(command, EscapeVars(c))
+	}
+
 	svc := ComposeService{
 		ContainerName: serviceName,
 		Image:         spec.Image,
 		Restart:       "unless-stopped",
-		Command:       spec.Command,
+		Command:       command,
 		Ports:         portsList,
-		Environment:   spec.Env,
+		Environment:   env,
 		Volumes:       volList,
 		Healthcheck:   healthcheckFor(spec.HealthProbe),
 	}
@@ -186,7 +245,7 @@ func (r *Reconciler) WriteAndConverge(ctx context.Context, ref ports.ServerRef, 
 		return fmt.Errorf("create dir %s: %w", dir, err)
 	}
 
-	composeBytes, err := RenderCompose(ref.Name, spec)
+	composeBytes, err := RenderCompose(ref.Name, r.instanceDataDir(ref), spec)
 	if err != nil {
 		return err
 	}
@@ -199,6 +258,23 @@ func (r *Reconciler) WriteAndConverge(ctx context.Context, ref ports.ServerRef, 
 	return r.Converge(ctx, ref)
 }
 
+// InstanceDataDir is where one Instance's runtime data lives under dataRoot.
+// Shared so the renderer that writes the compose file and the reconciler that
+// runs it cannot disagree about where the volumes point.
+func InstanceDataDir(dataRoot string, id domain.InstanceID, fallbackName string) string {
+	if dataRoot == "" {
+		return ""
+	}
+	if id.Game != "" && id.Number > 0 {
+		return filepath.Join(dataRoot, string(id.Game), fmt.Sprintf("instance-%02d", id.Number))
+	}
+	return filepath.Join(dataRoot, fallbackName)
+}
+
+func (r *Reconciler) instanceDataDir(ref ports.ServerRef) string {
+	return InstanceDataDir(r.dataRoot, ref.ID, ref.Name)
+}
+
 // healthcheckFor turns a game's declared probe command into a compose
 // healthcheck. The same string drives the Kubernetes probe, so both runtimes
 // agree on what "serving" means.
@@ -208,9 +284,10 @@ func healthcheckFor(probe string) *ComposeHealth {
 		return nil
 	}
 	return &ComposeHealth{
-		Test:     []string{"CMD-SHELL", probe},
-		Interval: "30s",
-		Timeout:  "5s",
-		Retries:  3,
+		Test:        []string{"CMD-SHELL", probe},
+		Interval:    "30s",
+		Timeout:     "5s",
+		Retries:     3,
+		StartPeriod: DefaultStartPeriod,
 	}
 }

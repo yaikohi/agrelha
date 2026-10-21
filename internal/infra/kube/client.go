@@ -7,6 +7,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 type Client struct {
@@ -59,10 +61,25 @@ func (c *Client) jobNodeSelector() map[string]string {
 	return map[string]string{c.nodeSelectorKey: c.nodeSelectorValue}
 }
 
-func New(namespace, deployment string) (*Client, error) {
+func restConfig() (*rest.Config, error) {
+	if path := strings.TrimSpace(os.Getenv("KUBECONFIG")); path != "" {
+		cfg, err := clientcmd.BuildConfigFromFlags("", path)
+		if err != nil {
+			return nil, fmt.Errorf("kubeconfig %q: %w", path, err)
+		}
+		return cfg, nil
+	}
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
-		return nil, fmt.Errorf("in-cluster config: %w", err)
+		return nil, fmt.Errorf("no KUBECONFIG set and no in-cluster credentials: %w", err)
+	}
+	return cfg, nil
+}
+
+func New(namespace, deployment string) (*Client, error) {
+	cfg, err := restConfig()
+	if err != nil {
+		return nil, err
 	}
 	// client-go defaults to 5 QPS / 10 burst, which this app exceeds whenever a
 	// dashboard with several instances refreshes its tiles.

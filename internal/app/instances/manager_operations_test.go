@@ -361,12 +361,12 @@ func TestManagerBackupAndRestore(t *testing.T) {
 
 	// Seed instance
 	inst := domain.Instance{
-		GameID:    domain.GameMinecraft,
-		Number:    1,
-		Slug:      "vault-hunters",
-		Name:      "Vault Hunters",
-		State:     domain.StateRunning,
-		Tier:      domain.TierLarge,
+		GameID: domain.GameMinecraft,
+		Number: 1,
+		Slug:   "vault-hunters",
+		Name:   "Vault Hunters",
+		State:  domain.StateRunning,
+		Tier:   domain.TierLarge,
 		Minecraft: &domain.MinecraftConfig{
 			MCVersion: "1.20.1",
 			Loader:    domain.LoaderNeoForge,

@@ -623,7 +623,7 @@ func TestValheimWizardCreateWithCart(t *testing.T) {
 	app := fiber.New()
 	h.Register(app)
 
-	createBody := `{"name":"Cart Realm","source":"scratch","tier":"medium","cart":["Smoothbrain-Mining"]}`
+	createBody := `{"name":"Cart Realm","password":"testpw123","source":"scratch","tier":"medium","cart":["Smoothbrain-Mining"]}`
 	req := httptest.NewRequest("POST", "/api/valheim/wizard/create", strings.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)

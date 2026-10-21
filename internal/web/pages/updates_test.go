@@ -17,7 +17,7 @@ func renderPanel(t *testing.T, d InstanceDetailUI) string {
 
 func TestPanelShowsEachPinTransition(t *testing.T) {
 	got := renderPanel(t, InstanceDetailUI{
-		InstanceUI: InstanceUI{Number: 2, Name: "boppo"},
+		InstanceUI: InstanceUI{GameID: "valheim", Number: 2, Name: "boppo"},
 		ModUpdates: []ModUpdate{{Key: "smoothbrain-mining", FullName: "Smoothbrain-Mining", Current: "1.3.4", Latest: "1.3.9", Token: "smoothbrain_mining"}},
 	})
 	for _, want := range []string{
@@ -71,10 +71,10 @@ func TestConfirmOnlyWhenPlayersWouldBeDropped(t *testing.T) {
 		ui      InstanceUI
 		confirm bool
 	}{
-		{"stopped", InstanceUI{Number: 1, State: "stopped", Players: 3, PlayersKnown: true}, false},
-		{"running and empty", InstanceUI{Number: 1, State: "running", Players: 0, PlayersKnown: true}, false},
-		{"running, count unknown", InstanceUI{Number: 1, State: "running", Players: 2}, false},
-		{"running with players", InstanceUI{Number: 1, State: "running", Players: 2, PlayersKnown: true}, true},
+		{"stopped", InstanceUI{GameID: "valheim", Number: 1, State: "stopped", Players: 3, PlayersKnown: true}, false},
+		{"running and empty", InstanceUI{GameID: "valheim", Number: 1, State: "running", Players: 0, PlayersKnown: true}, false},
+		{"running, count unknown", InstanceUI{GameID: "valheim", Number: 1, State: "running", Players: 2}, false},
+		{"running with players", InstanceUI{GameID: "valheim", Number: 1, State: "running", Players: 2, PlayersKnown: true}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -88,7 +88,7 @@ func TestConfirmOnlyWhenPlayersWouldBeDropped(t *testing.T) {
 
 func TestConfirmNamesThePlayerCount(t *testing.T) {
 	got := renderPanel(t, InstanceDetailUI{
-		InstanceUI: InstanceUI{Number: 1, Name: "lareira-v2", State: "running", Players: 1, PlayersKnown: true},
+		InstanceUI: InstanceUI{GameID: "valheim", Number: 1, Name: "lareira-v2", State: "running", Players: 1, PlayersKnown: true},
 		ModUpdates: []ModUpdate{{Key: "a-b", FullName: "A-B", Current: "1.0.0", Latest: "1.1.0", Token: "a_b"}},
 	})
 	if !strings.Contains(got, "1 player is connected to lareira-v2") {
@@ -98,7 +98,7 @@ func TestConfirmNamesThePlayerCount(t *testing.T) {
 
 func TestPanelSaysUpToDateWithoutButtons(t *testing.T) {
 	got := renderPanel(t, InstanceDetailUI{
-		InstanceUI:     InstanceUI{Number: 3},
+		InstanceUI:     InstanceUI{GameID: "valheim", Number: 3},
 		UpdatesChecked: "4m",
 		ModsChecked:    16,
 		ModsTotal:      16,
@@ -116,7 +116,7 @@ func TestPanelSaysUpToDateWithoutButtons(t *testing.T) {
 
 func TestPanelShowsPendingRollout(t *testing.T) {
 	got := renderPanel(t, InstanceDetailUI{
-		InstanceUI:     InstanceUI{Number: 1},
+		InstanceUI:     InstanceUI{GameID: "valheim", Number: 1},
 		ModUpdates:     []ModUpdate{{Key: "a-b", FullName: "A-B", Current: "1.0.0", Latest: "1.1.0", Token: "a_b"}},
 		UpdatesPending: true,
 	})
@@ -132,7 +132,7 @@ func TestPanelShowsPendingRollout(t *testing.T) {
 // same. A stale index once reported the third as the first.
 func TestPanelSeparatesUpToDateFromUnanswered(t *testing.T) {
 	got := renderPanel(t, InstanceDetailUI{
-		InstanceUI:      InstanceUI{Number: 2},
+		InstanceUI:      InstanceUI{GameID: "valheim", Number: 2},
 		ModsUnreachable: []string{"Flaky-Thing"},
 		ModsChecked:     15,
 		ModsTotal:       16,
@@ -151,7 +151,7 @@ func TestPanelSeparatesUpToDateFromUnanswered(t *testing.T) {
 
 func TestPanelWarnsAboutModsGoneFromThunderstore(t *testing.T) {
 	got := renderPanel(t, InstanceDetailUI{
-		InstanceUI:     InstanceUI{Number: 2},
+		InstanceUI:     InstanceUI{GameID: "valheim", Number: 2},
 		ModsMissing:    []string{"Deleted-Package", "Gone-Thing"},
 		ModsChecked:    14,
 		ModsTotal:      16,
@@ -170,7 +170,7 @@ func TestPanelWarnsAboutModsGoneFromThunderstore(t *testing.T) {
 
 func TestPanelSurfacesACheckThatFailedOutright(t *testing.T) {
 	got := renderPanel(t, InstanceDetailUI{
-		InstanceUI:   InstanceUI{Number: 2},
+		InstanceUI:   InstanceUI{GameID: "valheim", Number: 2},
 		UpdatesError: "Last check failed: connection refused",
 	})
 	if !strings.Contains(got, "Last check failed: connection refused") {
@@ -179,13 +179,13 @@ func TestPanelSurfacesACheckThatFailedOutright(t *testing.T) {
 }
 
 func TestUndoOnlyOfferedWhenThereIsAWayBack(t *testing.T) {
-	without := renderPanel(t, InstanceDetailUI{InstanceUI: InstanceUI{Number: 2}})
+	without := renderPanel(t, InstanceDetailUI{InstanceUI: InstanceUI{GameID: "valheim", Number: 2}})
 	if strings.Contains(without, "Undo last update") {
 		t.Error("no restore point, so no undo button")
 	}
 
 	with := renderPanel(t, InstanceDetailUI{
-		InstanceUI: InstanceUI{Number: 2},
+		InstanceUI: InstanceUI{GameID: "valheim", Number: 2},
 		CanUndo:    true,
 		UndoWhen:   "8m ago",
 	})
@@ -202,7 +202,7 @@ func TestUndoOnlyOfferedWhenThereIsAWayBack(t *testing.T) {
 
 func TestUndoConfirmsWhenPlayersWouldBeDropped(t *testing.T) {
 	got := renderPanel(t, InstanceDetailUI{
-		InstanceUI: InstanceUI{Number: 2, Name: "boppo", State: "running", Players: 2, PlayersKnown: true},
+		InstanceUI: InstanceUI{GameID: "valheim", Number: 2, Name: "boppo", State: "running", Players: 2, PlayersKnown: true},
 		CanUndo:    true,
 		UndoWhen:   "8m ago",
 	})
