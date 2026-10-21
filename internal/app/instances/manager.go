@@ -1142,6 +1142,13 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 	if err != nil {
 		return false, err
 	}
+
+	if m.reconciler != nil && !inst.EffectiveHost().IsCluster() {
+		if werr := m.writeManifests(ctx, *inst, domain.ModList{Primary: next}, msg); werr != nil {
+			return false, fmt.Errorf("converge mods on instance %d: %w", num, werr)
+		}
+	}
+
 	if !changed {
 		return false, nil
 	}
@@ -1151,6 +1158,10 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 			detail = fmt.Sprintf("Updated mods on #%02d", num)
 		}
 		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-update", m.gamePrefix()), fmt.Sprintf("#%02d: %s", num, detail))
+	}
+
+	if m.reconciler != nil && !inst.EffectiveHost().IsCluster() {
+		return true, nil
 	}
 	if m.afterSyncHook != nil {
 		want := make(map[string]bool, len(entries))

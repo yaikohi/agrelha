@@ -24,6 +24,8 @@ const (
 	defaultInterval = 15 * time.Minute
 	pendingTTL      = 6 * time.Minute
 	maxConcurrent   = 6
+	retryDelay      = 250 * time.Millisecond
+	indexFreshFor   = time.Minute
 )
 
 // Catalog resolves the current version of one package upstream.
@@ -33,6 +35,11 @@ type Catalog interface {
 }
 
 // InstanceCatalog resolves versions and dependencies using world context (MC version, loader).
+type IndexedCatalog interface {
+	RefreshIndexIfStale(ctx context.Context, maxAge time.Duration)
+	LatestVersionFromIndex(ns, name string) (string, bool)
+}
+
 type InstanceCatalog interface {
 	LatestVersionForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error)
 	ResolveTreeForInstance(ctx context.Context, ref domain.ModRef, inst domain.Instance) ([]string, error)
@@ -254,6 +261,11 @@ func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
 		return rep, nil
 	}
 
+	idx, indexed := c.cat.(IndexedCatalog)
+	if indexed {
+		idx.RefreshIndexIfStale(ctx, indexFreshFor)
+	}
+
 	type result struct {
 		ref    domain.ModRef
 		latest string
@@ -267,7 +279,17 @@ func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
 		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			if indexed {
+				if v, ok := idx.LatestVersionFromIndex(ref.Namespace, ref.Name); ok {
+					results[i] = result{ref: ref, latest: v}
+					return
+				}
+			}
 			v, _, err := c.latestVersionForRef(ctx, ref, inst)
+			if err != nil && !errors.Is(err, ports.ErrPackageNotFound) && !errors.Is(err, ports.ErrRateLimited) && ctx.Err() == nil {
+				time.Sleep(retryDelay)
+				v, _, err = c.latestVersionForRef(ctx, ref, inst)
+			}
 			results[i] = result{ref: ref, latest: v, err: err}
 		})
 	}
@@ -278,6 +300,8 @@ func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
 		case errors.Is(r.err, ports.ErrPackageNotFound):
 			rep.Missing = append(rep.Missing, r.ref)
 		case r.err != nil:
+			slog.Warn("modupdates: upstream lookup failed",
+				"mod", r.ref.FullName(), "err", r.err)
 			rep.Unreachable = append(rep.Unreachable, r.ref)
 		default:
 			rep.Checked++

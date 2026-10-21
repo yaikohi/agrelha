@@ -327,3 +327,66 @@ func TestGetInstanceReportsAnUnreachableHost(t *testing.T) {
 		t.Error("ListInstances and GetInstance must agree about reachability")
 	}
 }
+
+func TestChangingModsConvergesOnADockerHost(t *testing.T) {
+	spy := &recordingReconciler{}
+	mgr, ctx := newConvergeManager(t, WithReconciler(spy))
+
+	created, err := mgr.CreateInstance(ctx, mcWorld("Fogueira", "fogo"), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	spy.order = nil
+
+	changed, err := mgr.ReplaceMods(ctx, created.Number, []string{"some/mod/1.2.3"}, "update", "tester")
+	if err != nil {
+		t.Fatalf("ReplaceMods: %v", err)
+	}
+	if !changed {
+		t.Fatal("ReplaceMods reported no change")
+	}
+	if len(spy.order) == 0 {
+		t.Error("changing mods committed to git but never materialised or converged;\non a Docker Host nothing pulls from the repo, so mods.txt on disk stays stale\nwhile the UI reports the world is restarting")
+	}
+}
+
+func TestChangingModsOnTheClusterDoesNotConverge(t *testing.T) {
+	spy := &recordingReconciler{}
+	mgr, ctx := newConvergeManager(t, WithReconciler(spy))
+
+	created, err := mgr.CreateInstance(ctx, mcWorld("Fluxweave", ""), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	spy.order = nil
+
+	if _, err := mgr.ReplaceMods(ctx, created.Number, []string{"some/mod/1.2.3"}, "update", "tester"); err != nil {
+		t.Fatalf("ReplaceMods: %v", err)
+	}
+	if len(spy.order) != 0 {
+		t.Errorf("a cluster world must keep going through git and ArgoCD, got %v", spy.order)
+	}
+}
+
+func TestAnUnchangedModListStillConvergesADockerHost(t *testing.T) {
+	spy := &recordingReconciler{}
+	mgr, ctx := newConvergeManager(t, WithReconciler(spy))
+
+	created, err := mgr.CreateInstance(ctx, mcWorld("Fogueira", "fogo"), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+
+	mods := []string{"some/mod/1.2.3"}
+	if _, err := mgr.ReplaceMods(ctx, created.Number, mods, "update", "tester"); err != nil {
+		t.Fatalf("first ReplaceMods: %v", err)
+	}
+	spy.order = nil
+
+	if _, err := mgr.ReplaceMods(ctx, created.Number, mods, "update", "tester"); err != nil {
+		t.Fatalf("second ReplaceMods: %v", err)
+	}
+	if len(spy.order) == 0 {
+		t.Error("converge was skipped because the desired state was unchanged;\nthe disk can drift from git independently, and gating convergence on a\ndesired-state edge means nothing ever repairs it - the world keeps running\nold mods and every retry is a no-op")
+	}
+}

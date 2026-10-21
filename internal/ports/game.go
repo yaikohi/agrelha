@@ -12,6 +12,8 @@ import (
 // this is already broken: the next boot cannot fetch it (see ADR 0003).
 var ErrPackageNotFound = errors.New("package not found")
 
+var ErrRateLimited = errors.New("upstream rate limited")
+
 // Game defines a game engine supported by agrelha.
 type Game interface {
 	// Runtime shape — consumed by whichever adapter is active

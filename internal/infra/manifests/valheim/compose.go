@@ -1,6 +1,8 @@
 package valheim
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -11,7 +13,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func modsFileBody(inst domain.Instance, mods domain.ModList) string {
+	list := mods.Primary
+	if strings.TrimSpace(list) == "" {
+		list = fmt.Sprintf("# Mod list for %s\n", inst.Name)
+	}
+	return list
+}
+
 const (
+	modsDigestLabel     = "agrelha.mods-digest"
 	ModReconcileService = "mod-reconcile"
 	ReconcilerImage     = "alpine:3.20"
 	ComposeFileName     = "docker-compose.yml"
@@ -81,6 +92,13 @@ func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map
 
 	services := map[string]composereconcile.ComposeService{}
 
+	modsDigest := ""
+	if !inst.IsVanilla() {
+		sum := sha256.Sum256([]byte(modsFileBody(inst, mods)))
+		modsDigest = hex.EncodeToString(sum[:8])
+		server.Labels = map[string]string{modsDigestLabel: modsDigest}
+	}
+
 	if !inst.IsVanilla() {
 		services[ModReconcileService] = composereconcile.ComposeService{
 			ContainerName: name + "-" + ModReconcileService,
@@ -91,6 +109,7 @@ func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map
 				filepath.Join(dir, "config") + ":/config",
 				"./" + ModsFileName + ":/config-mods/" + ModsFileName + ":ro",
 			},
+			Labels: map[string]string{modsDigestLabel: modsDigest},
 		}
 		server.DependsOn = map[string]composereconcile.Depends{
 			ModReconcileService: {Condition: "service_completed_successfully"},
@@ -106,11 +125,16 @@ func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map
 
 	files := map[string][]byte{ComposeFileName: body}
 	if !inst.IsVanilla() {
-		list := mods.Primary
-		if strings.TrimSpace(list) == "" {
-			list = fmt.Sprintf("# Mod list for %s\n", inst.Name)
-		}
-		files[ModsFileName] = []byte(list)
+		files[ModsFileName] = []byte(modsFileBody(inst, mods))
 	}
+
+	state, err := RenderStateFiles(inst, mods.Primary)
+	if err != nil {
+		return nil, err
+	}
+	for name, content := range state {
+		files[name] = content
+	}
+
 	return files, nil
 }

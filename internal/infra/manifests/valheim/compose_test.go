@@ -166,3 +166,66 @@ func TestASecondWorldDoesNotClaimTheFirstWorldsPorts(t *testing.T) {
 		}
 	}
 }
+
+func TestChangingTheModListChangesTheComposeFile(t *testing.T) {
+	r := NewComposeRenderer("", "/srv/gamedata")
+	inst := composeWorld(false)
+
+	before, err := r.Render(inst, domain.ModList{Primary: "Smoothbrain-Mining-1.0.0\n"})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	after, err := r.Render(inst, domain.ModList{Primary: "Smoothbrain-Mining-1.1.0\n"})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	if string(before[ComposeFileName]) == string(after[ComposeFileName]) {
+		t.Fatal("the compose file is byte-identical after a mod version change;\ncompose up -d then sees no change, the one-shot reconciler never re-runs,\nand the world keeps serving the old mods while the UI reports success")
+	}
+	if !strings.Contains(string(after[ComposeFileName]), modsDigestLabel) {
+		t.Errorf("no %s label in the rendered file", modsDigestLabel)
+	}
+}
+
+func TestAnUnchangedModListRendersIdentically(t *testing.T) {
+	r := NewComposeRenderer("", "/srv/gamedata")
+	inst := composeWorld(false)
+	mods := domain.ModList{Primary: "Smoothbrain-Mining-1.0.0\n"}
+
+	a, _ := r.Render(inst, mods)
+	b, _ := r.Render(inst, mods)
+	if string(a[ComposeFileName]) != string(b[ComposeFileName]) {
+		t.Error("rendering is not deterministic; every converge would recreate the world for no reason")
+	}
+}
+
+func TestComposeRenderCarriesTheDesiredState(t *testing.T) {
+	files := renderCompose(t, false)
+
+	for _, want := range []string{"mods.yaml", "configs.yaml"} {
+		if _, ok := files[want]; !ok {
+			t.Errorf("the Compose render omits %s.\nwriteManifests commits the rendered set with PutTree, which deletes every\nsibling it was not given - so omitting it deletes the world's desired state\nfrom git, and the next render has no mods at all", want)
+		}
+	}
+}
+
+func TestBothHostsRenderTheSameDesiredState(t *testing.T) {
+	inst := composeWorld(false)
+	mods := domain.ModList{Primary: "denikson-BepInExPack_Valheim-5.4.2202\n"}
+
+	compose, err := NewComposeRenderer("", "/srv/gamedata").Render(inst, mods)
+	if err != nil {
+		t.Fatalf("compose render: %v", err)
+	}
+	k8s, err := Render(inst, mods.Primary, "", "valheim")
+	if err != nil {
+		t.Fatalf("k8s render: %v", err)
+	}
+
+	for _, name := range []string{"mods.yaml", "configs.yaml"} {
+		if string(compose[name]) != string(k8s[name]) {
+			t.Errorf("%s differs between Hosts; the desired state must not depend on where a world runs\ncompose:\n%s\nk8s:\n%s", name, compose[name], k8s[name])
+		}
+	}
+}

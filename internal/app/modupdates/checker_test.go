@@ -2,6 +2,7 @@ package modupdates
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -539,7 +540,7 @@ func TestRefreshFiltersByInstanceLoader(t *testing.T) {
 	}
 	cat := &fakeInstanceCatalog{
 		instanceVersions: map[string]string{
-			"sodium|1.21.1|fabric":   "0.5.11+mc1.21", // no newer version for fabric
+			"sodium|1.21.1|fabric":   "0.5.11+mc1.21",  // no newer version for fabric
 			"sodium|1.21.1|neoforge": "0.6.0+mc1.21.1", // newer version available for neoforge
 		},
 	}
@@ -1001,3 +1002,132 @@ func TestCheckerAllEdgeCases(t *testing.T) {
 	}
 }
 
+type flakyOnceCatalog struct {
+	*fakeCatalog
+	mu     sync.Mutex
+	failed map[string]bool
+	calls  int
+}
+
+func (f *flakyOnceCatalog) LatestVersion(ctx context.Context, ns, name string) (string, []string, error) {
+	f.mu.Lock()
+	f.calls++
+	key := ns + "/" + name
+	first := !f.failed[key]
+	f.failed[key] = true
+	f.mu.Unlock()
+	if first {
+		return "", nil, errors.New("EOF")
+	}
+	return f.fakeCatalog.LatestVersion(ctx, ns, name)
+}
+
+func TestATransientUpstreamFailureIsRetried(t *testing.T) {
+	insts := &fakeInstances{entries: map[int][]string{1: {"Smoothbrain/Mining/1.0.0"}}}
+	cat := &flakyOnceCatalog{
+		fakeCatalog: &fakeCatalog{latest: map[string]string{"Smoothbrain/Mining": "1.3.4"}},
+		failed:      map[string]bool{},
+	}
+
+	rep, err := New(insts, cat).RefreshOne(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("RefreshOne: %v", err)
+	}
+	if len(rep.Unreachable) != 0 {
+		t.Errorf("a single transient failure was reported as unreachable: %v\none dropped keep-alive connection must not make a mod look unavailable", rep.Unreachable)
+	}
+	if rep.Checked != 1 {
+		t.Errorf("Checked = %d, want 1", rep.Checked)
+	}
+	if cat.calls != 2 {
+		t.Errorf("catalog called %d times, want 2 (one failure, one retry)", cat.calls)
+	}
+}
+
+func TestAPersistentFailureIsStillReported(t *testing.T) {
+	insts := &fakeInstances{entries: map[int][]string{1: {"Flaky/Thing/1.0.0"}}}
+	cat := &fakeCatalog{
+		latest: map[string]string{"Flaky/Thing": "2.0.0"},
+		down:   map[string]bool{"Flaky/Thing": true},
+	}
+
+	rep, _ := New(insts, cat).RefreshOne(context.Background(), 1)
+	if len(rep.Unreachable) != 1 {
+		t.Errorf("a genuinely unreachable mod must still be reported, got %v", rep.Unreachable)
+	}
+}
+
+type indexedCatalog struct {
+	*fakeCatalog
+	mu        sync.Mutex
+	index     map[string]string
+	refreshes int
+	perMod    int
+}
+
+func (i *indexedCatalog) RefreshIndexIfStale(_ context.Context, _ time.Duration) {
+	i.mu.Lock()
+	i.refreshes++
+	i.mu.Unlock()
+}
+
+func (i *indexedCatalog) LatestVersionFromIndex(ns, name string) (string, bool) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	v, ok := i.index[ns+"/"+name]
+	return v, ok
+}
+
+func (i *indexedCatalog) LatestVersion(ctx context.Context, ns, name string) (string, []string, error) {
+	i.mu.Lock()
+	i.perMod++
+	i.mu.Unlock()
+	return i.fakeCatalog.LatestVersion(ctx, ns, name)
+}
+
+func TestTheIndexAnswersWithoutPerModRequests(t *testing.T) {
+	insts := &fakeInstances{entries: map[int][]string{1: {
+		"Smoothbrain/Mining/1.0.0", "Therzie/Warfare/1.0.0", "ValheimModding/Jotunn/2.0.0",
+	}}}
+	cat := &indexedCatalog{
+		fakeCatalog: &fakeCatalog{latest: map[string]string{}},
+		index: map[string]string{
+			"Smoothbrain/Mining":    "1.3.4",
+			"Therzie/Warfare":       "1.9.5",
+			"ValheimModding/Jotunn": "2.30.2",
+		},
+	}
+
+	rep, err := New(insts, cat).RefreshOne(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("RefreshOne: %v", err)
+	}
+	if cat.perMod != 0 {
+		t.Errorf("%d per-mod requests were made; the index already holds every version,\nand asking again per mod is what triggers upstream rate limiting", cat.perMod)
+	}
+	if cat.refreshes != 1 {
+		t.Errorf("index refreshed %d times, want exactly 1 for the whole check", cat.refreshes)
+	}
+	if rep.Checked != 3 || len(rep.Updates) != 3 {
+		t.Errorf("Checked=%d Updates=%d, want 3 and 3", rep.Checked, len(rep.Updates))
+	}
+}
+
+func TestAModMissingFromTheIndexStillFallsBack(t *testing.T) {
+	insts := &fakeInstances{entries: map[int][]string{1: {"Obscure/Mod/1.0.0"}}}
+	cat := &indexedCatalog{
+		fakeCatalog: &fakeCatalog{latest: map[string]string{"Obscure/Mod": "2.0.0"}},
+		index:       map[string]string{},
+	}
+
+	rep, err := New(insts, cat).RefreshOne(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("RefreshOne: %v", err)
+	}
+	if cat.perMod != 1 {
+		t.Errorf("per-mod requests = %d, want 1; a mod absent from the index must still be\nlooked up directly, or a delisted mod would silently report as up to date", cat.perMod)
+	}
+	if len(rep.Updates) != 1 {
+		t.Errorf("Updates = %d, want 1", len(rep.Updates))
+	}
+}

@@ -119,12 +119,6 @@ func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[
 		data.NodeSelectorValue = strings.TrimSpace(v)
 	}
 
-	funcMap := template.FuncMap{
-		"quote": func(s string) string {
-			return fmt.Sprintf("%q", s)
-		},
-	}
-
 	tmpl, err := template.New("manifests").Funcs(funcMap).ParseFS(templateFS, "templates/*.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("parse valheim templates: %w", err)
@@ -163,14 +157,39 @@ func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[
 	// manifests. So the file has to exist before anyone needs it, and a world
 	// converted from Vanilla to Modded has no later chance to render one.
 	// It costs an empty object; the deployment only mounts it when Modded.
+	state, err := RenderStateFiles(inst, data.ModsTxt)
+	if err != nil {
+		return nil, err
+	}
+	for name, content := range state {
+		files[name] = content
+	}
+
+	return files, nil
+}
+
+var funcMap = template.FuncMap{
+	"quote": func(s string) string {
+		return fmt.Sprintf("%q", s)
+	},
+}
+
+func RenderStateFiles(inst domain.Instance, modsTxt string) (map[string][]byte, error) {
+	data := Data{Instance: inst, Profile: domain.ValheimProfile, ModsTxt: modsTxt}
+
+	tmpl, err := template.New("state").Funcs(funcMap).ParseFS(templateFS, "templates/*.tmpl")
+	if err != nil {
+		return nil, fmt.Errorf("parse templates: %w", err)
+	}
+
+	files := map[string][]byte{}
+
 	var cfgBuf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&cfgBuf, "configs.yaml.tmpl", data); err != nil {
 		return nil, fmt.Errorf("render configs: %w", err)
 	}
 	files["configs.yaml"] = cfgBuf.Bytes()
 
-	// A Vanilla world has no Loader, so a mod list would be an object that
-	// exists only to stay empty.
 	if inst.IsVanilla() {
 		return files, nil
 	}

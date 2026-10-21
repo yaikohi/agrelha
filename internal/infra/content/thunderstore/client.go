@@ -57,6 +57,8 @@ type expVersion struct {
 // being unreachable. The two need different responses from an operator.
 var ErrNotFound = ports.ErrPackageNotFound
 
+var ErrRateLimited = ports.ErrRateLimited
+
 func (c *Client) getJSON(ctx context.Context, url string, v any) error {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	resp, err := c.http.Do(req)
@@ -66,6 +68,9 @@ func (c *Client) getJSON(ctx context.Context, url string, v any) error {
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
 		return fmt.Errorf("%s: %w", url, ErrNotFound)
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return fmt.Errorf("%s -> %s: %w", url, resp.Status, ErrRateLimited)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%s -> %s", url, resp.Status)
@@ -129,6 +134,33 @@ func (c *Client) ResolveTree(ctx context.Context, ns, name string) ([]string, er
 		}
 	}
 	return out, nil
+}
+
+func (c *Client) RefreshIndexIfStale(ctx context.Context, maxAge time.Duration) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	have := c.index != nil
+	age := time.Since(c.indexedAt)
+	c.mu.Unlock()
+	if have && age < maxAge {
+		return
+	}
+	if err := c.warm(ctx); err != nil {
+		slog.Warn("thunderstore: on-demand index refresh failed, falling back to per-package lookups", "err", err)
+	}
+}
+
+func (c *Client) LatestVersionFromIndex(ns, name string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	e, ok := c.Get(ns + "/" + name)
+	if !ok || e.Version == "" {
+		return "", false
+	}
+	return e.Version, true
 }
 
 func (c *Client) LatestVersion(ctx context.Context, ns, name string) (version string, deps []string, err error) {

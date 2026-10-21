@@ -151,6 +151,7 @@ type ComposeService struct {
 	Volumes       []string           `yaml:"volumes,omitempty"`
 	Healthcheck   *ComposeHealth     `yaml:"healthcheck,omitempty"`
 	DependsOn     map[string]Depends `yaml:"depends_on,omitempty"`
+	Labels        map[string]string  `yaml:"labels,omitempty"`
 }
 
 type Depends struct {

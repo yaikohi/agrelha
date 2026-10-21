@@ -387,3 +387,20 @@ func TestThunderstore_Errors(t *testing.T) {
 	}
 }
 
+
+func TestRateLimitingIsDistinguishable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.expURL = srv.URL
+	_, _, err := c.LatestVersion(context.Background(), "Smoothbrain", "Mining")
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("429 produced %v; without a distinguishable error the checker retries immediately into the rate limit and makes it worse", err)
+	}
+	if errors.Is(err, ErrNotFound) {
+		t.Error("a rate-limited lookup must not be reported as a missing package")
+	}
+}
