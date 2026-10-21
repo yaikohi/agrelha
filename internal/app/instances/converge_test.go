@@ -10,6 +10,7 @@ import (
 	"agrelha/internal/infra/manifests"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
+	"os"
 )
 
 type spyConverger struct {
@@ -207,3 +208,35 @@ func TestWithNoDefaultHostWorldsStayOnTheCluster(t *testing.T) {
 		t.Errorf("Host = %q, want cluster when DEFAULT_HOST is unset", created.Host)
 	}
 }
+
+func TestStartInstanceConvergesWhenContainerMissing(t *testing.T) {
+	spy := &recordingReconciler{}
+	rt := &mockRuntimePort{err: os.ErrNotExist}
+	st, err := store.Open(filepath.Join(t.TempDir(), "converge.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	mgr := NewInstanceManager(
+		store.NewInstanceRepo(st), newMockStateStore(), rt, 64, 4, 4,
+		"manifests/minecraft-modded", "192.168.20.224",
+		manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded",
+		WithReconciler(spy),
+	)
+	ctx := context.Background()
+
+	created, err := mgr.CreateInstance(ctx, mcWorld("Fogueira", "fogo"), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	spy.order = nil
+
+	if err := mgr.StartInstance(ctx, created.Number); err != nil {
+		t.Fatalf("StartInstance: %v", err)
+	}
+	if len(spy.order) == 0 || spy.order[len(spy.order)-1] != "converge" {
+		t.Errorf("expected converge, got order %v", spy.order)
+	}
+}
+

@@ -686,9 +686,21 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...s
 
 	if m.runtime != nil {
 		if err := m.runtime.Start(ctx, m.serverRef(*inst)); err != nil {
+			if m.reconciler != nil && !inst.EffectiveHost().IsCluster() && (errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "No such container") || strings.Contains(err.Error(), "status 404")) {
+				mods, modsErr := m.GetModList(ctx, num)
+				if modsErr == nil {
+					commitMsg := fmt.Sprintf("%s: start instance %02d (converge missing container)", m.gamePrefix(), inst.Number)
+					if werr := m.writeManifests(ctx, *inst, mods, commitMsg); werr == nil {
+						goto started
+					} else {
+						return fmt.Errorf("start instance %d: converge: %w", inst.Number, werr)
+					}
+				}
+			}
 			return fmt.Errorf("start instance %d: %w", inst.Number, err)
 		}
 	}
+started:
 
 	inst.State = domain.StateRunning
 	if err := m.repo.UpdateState(num, domain.StateRunning); err != nil {
@@ -898,6 +910,14 @@ func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]stri
 	}
 	path := m.instanceDir(num) + "/mods.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
+	if err != nil {
+		if fallback := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num); fallback != path {
+			if docFallback, fbErr := m.stateStore.Get(ctx, fallback); fbErr == nil {
+				doc = docFallback
+				err = nil
+			}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1381,7 +1401,16 @@ func (m *InstanceManager) ListConfigDataFor(ctx context.Context, inst domain.Ins
 	if m.stateStore == nil {
 		return nil, nil
 	}
-	return m.configDataAt(ctx, m.instanceDirFor(inst)+"/configs.yaml")
+	data, err := m.configDataAt(ctx, m.instanceDirFor(inst)+"/configs.yaml")
+	if err == nil && len(data) > 0 {
+		return data, nil
+	}
+	if fallback := fmt.Sprintf("%s/instance-%02d/configs.yaml", m.instancesRelPath, inst.Number); fallback != m.instanceDirFor(inst)+"/configs.yaml" {
+		if fbData, fbErr := m.configDataAt(ctx, fallback); fbErr == nil && len(fbData) > 0 {
+			return fbData, nil
+		}
+	}
+	return data, err
 }
 
 func (m *InstanceManager) configDataAt(ctx context.Context, path string) (map[string]string, error) {

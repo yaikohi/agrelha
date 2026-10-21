@@ -142,6 +142,9 @@ func (c *SocketClient) ContainerStart(ctx context.Context, id string) error {
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotModified {
 		return nil
 	}
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("%w: %s", os.ErrNotExist, id)
+	}
 	body, _ := io.ReadAll(resp.Body)
 	return fmt.Errorf("start container %s: status %d: %s", id, resp.StatusCode, strings.TrimSpace(string(body)))
 }
