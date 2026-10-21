@@ -2,6 +2,7 @@ package pages
 
 import "fmt"
 import "strings"
+import "agrelha/internal/web/shared"
 
 templ ModUpdatePanel(d InstanceDetailUI) {
 	<div class="space-y-3">
@@ -64,7 +65,7 @@ templ ModUpdatePanel(d InstanceDetailUI) {
 			if d.UpdatesPending {
 				<div class="flex items-center gap-2 border-b border-amber-800/50 bg-amber-950/40 px-4 py-2.5 text-xs text-amber-200">
 					<span class="h-2 w-2 animate-pulse rounded-full bg-amber-400"></span>
-					Change committed — this world restarts once ArgoCD syncs.
+					{ "Change committed" + shared.ConvergenceClause(d.Host, d.HostUnreachable) }
 				</div>
 			}
 			if len(d.ModUpdates) > 0 {

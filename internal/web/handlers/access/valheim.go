@@ -35,7 +35,8 @@ func (h *Handler) renderAdminsPage(c *fiber.Ctx, activeGame string) error {
 			for _, inst := range insts {
 				addr := ""
 				if inst.LBIP != "" {
-					addr = fmt.Sprintf("%s:2456", inst.LBIP)
+					gamePort, _, _ := domain.ValheimHostPorts(inst)
+					addr = fmt.Sprintf("%s:%d", inst.LBIP, gamePort)
 				}
 				pass := ""
 				if inst.Valheim != nil {

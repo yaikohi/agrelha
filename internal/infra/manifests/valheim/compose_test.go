@@ -145,3 +145,24 @@ func TestSlowFirstBootIsNotReportedUnhealthy(t *testing.T) {
 		t.Fatal("no start_period: a multi-GB SteamCMD download is marked unhealthy ~90s in, and the runtime reads health into Status.Available")
 	}
 }
+
+func TestASecondWorldDoesNotClaimTheFirstWorldsPorts(t *testing.T) {
+	inst := composeWorld(false)
+	inst.Number = 2
+	files, err := NewComposeRenderer("", "/srv/gamedata").Render(inst, domain.ModList{Primary: "x\n"})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := string(files[ComposeFileName])
+
+	for _, taken := range []string{"2456:2456/udp", "2457:2457/udp", "9001:9001/tcp"} {
+		if strings.Contains(body, taken) {
+			t.Errorf("instance 02 publishes %s, already held by instance 01; compose up fails with \"port is already allocated\"", taken)
+		}
+	}
+	for _, want := range []string{"2458:2456/udp", "2459:2457/udp", "9002:9001/tcp"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing host mapping %s\n%s", want, body)
+		}
+	}
+}

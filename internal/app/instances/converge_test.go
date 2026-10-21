@@ -287,3 +287,43 @@ func TestStartConvergesAGameThatHasNoModList(t *testing.T) {
 		t.Errorf("expected converge, got order %v", spy.order)
 	}
 }
+
+func TestGetInstanceReportsAnUnreachableHost(t *testing.T) {
+	rt := &mockRuntimePort{err: errors.New("dial unix /var/run/docker.sock: connect: no such file")}
+	st, err := store.Open(filepath.Join(t.TempDir(), "unreachable.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	mgr := NewInstanceManager(
+		store.NewInstanceRepo(st), newMockStateStore(), nil, 64, 4, 4,
+		"manifests/minecraft-modded", "192.168.20.224",
+		manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded",
+		WithModsReader(func(context.Context, int) ([]string, error) { return nil, nil }),
+	)
+	ctx := context.Background()
+
+	created, err := mgr.CreateInstance(ctx, mcWorld("Fogueira", "fogo"), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+
+	mgr.runtime = rt
+
+	one, err := mgr.GetInstance(ctx, created.Number)
+	if err != nil {
+		t.Fatalf("GetInstance: %v", err)
+	}
+	if !one.HostUnreachable {
+		t.Error("GetInstance left HostUnreachable false while the runtime was unreachable;\nListInstances sets it, so the same field means two different things depending on the read path,\nand every detail page and toast that branches on it silently takes the reachable path")
+	}
+
+	all, err := mgr.ListInstances(ctx)
+	if err != nil {
+		t.Fatalf("ListInstances: %v", err)
+	}
+	if len(all) != 1 || !all[0].HostUnreachable {
+		t.Error("ListInstances and GetInstance must agree about reachability")
+	}
+}

@@ -499,7 +499,7 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 	for _, inst := range vh.ActiveInstances {
 		row := ServerRowUI{
 			Name:         inst.Name,
-			Address:      fmt.Sprintf("%s:2456", inst.LBIP),
+			Address:      valheimAddress(inst),
 			VersionBadge: modBadge(inst.Source, "BepInEx · Modded"),
 			DownloadFmt:  ".r2z",
 			Launchers:    []string{"r2modman", "Thunderstore Mod Manager"},
@@ -846,4 +846,9 @@ func IncidentWorld(in *domain.Incident) string {
 		game = "Minecraft"
 	}
 	return fmt.Sprintf("%s #%02d", game, in.Number)
+}
+
+func valheimAddress(inst InstanceUI) string {
+	gamePort, _, _ := domain.ValheimHostPortsFor(inst.Host, inst.Number)
+	return fmt.Sprintf("%s:%d", inst.LBIP, gamePort)
 }

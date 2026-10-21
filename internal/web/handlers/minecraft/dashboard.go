@@ -146,7 +146,7 @@ func (h *Handler) MCInstanceCreate(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Failed to create world: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("World %q created as instance #%02d. ArgoCD will sync manifests.", created.Name, created.Number), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("World %q created as instance #%02d.", created.Name, created.Number)+shared.CreationSentence(string(created.EffectiveHost()), created.HostUnreachable), nil)
 }
 
 // MCInstanceStart starts a stopped Minecraft instance.

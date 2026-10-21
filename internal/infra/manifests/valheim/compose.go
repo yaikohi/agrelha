@@ -42,6 +42,8 @@ func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map
 	dir := composereconcile.InstanceDataDir(r.dataRoot, inst.ID(), inst.DeploymentName(domain.ValheimProfile))
 	name := inst.DeploymentName(domain.ValheimProfile)
 
+	hostGame, hostQuery, hostStatus := domain.ValheimHostPorts(inst)
+
 	raw := inst.Env(domain.ValheimProfile)
 	raw["STATUS_HTTP_PORT"] = "9001"
 	raw["POST_BOOTSTRAP_HOOK"] = data.PostBootstrapHook()
@@ -60,9 +62,9 @@ func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map
 		Restart:       "unless-stopped",
 		Environment:   env,
 		Ports: []string{
-			"2456:2456/udp",
-			"2457:2457/udp",
-			"9001:9001/tcp",
+			fmt.Sprintf("%d:%d/udp", hostGame, domain.ValheimGamePort),
+			fmt.Sprintf("%d:%d/udp", hostQuery, domain.ValheimQueryPort),
+			fmt.Sprintf("%d:%d/tcp", hostStatus, domain.ValheimStatusPort),
 		},
 		Volumes: []string{
 			filepath.Join(dir, "config") + ":/config",
