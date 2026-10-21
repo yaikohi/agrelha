@@ -687,15 +687,18 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...s
 	if m.runtime != nil {
 		if err := m.runtime.Start(ctx, m.serverRef(*inst)); err != nil {
 			if m.reconciler != nil && !inst.EffectiveHost().IsCluster() && (errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "No such container") || strings.Contains(err.Error(), "status 404")) {
-				mods, modsErr := m.GetModList(ctx, num)
-				if modsErr == nil {
-					commitMsg := fmt.Sprintf("%s: start instance %02d (converge missing container)", m.gamePrefix(), inst.Number)
-					if werr := m.writeManifests(ctx, *inst, mods, commitMsg); werr == nil {
-						goto started
-					} else {
-						return fmt.Errorf("start instance %d: converge: %w", inst.Number, werr)
+				var mods domain.ModList
+				if profile.Capabilities.Mods {
+					var modsErr error
+					if mods, modsErr = m.GetModList(ctx, num); modsErr != nil {
+						return fmt.Errorf("start instance %d: converge: read mod list: %w", inst.Number, modsErr)
 					}
 				}
+				commitMsg := fmt.Sprintf("%s: start instance %02d (converge missing container)", m.gamePrefix(), inst.Number)
+				if werr := m.writeManifests(ctx, *inst, mods, commitMsg); werr != nil {
+					return fmt.Errorf("start instance %d: converge: %w", inst.Number, werr)
+				}
+				goto started
 			}
 			return fmt.Errorf("start instance %d: %w", inst.Number, err)
 		}

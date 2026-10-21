@@ -3,6 +3,7 @@ package instances
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"testing"
 
@@ -240,3 +241,49 @@ func TestStartInstanceConvergesWhenContainerMissing(t *testing.T) {
 	}
 }
 
+type absentIsNotExistStore struct {
+	*mockStateStore
+}
+
+func (s *absentIsNotExistStore) Get(ctx context.Context, path string) (ports.Document, error) {
+	if _, ok := s.docs[path]; !ok {
+		return ports.Document{}, fs.ErrNotExist
+	}
+	return s.mockStateStore.Get(ctx, path)
+}
+
+func TestStartConvergesAGameThatHasNoModList(t *testing.T) {
+	spy := &recordingReconciler{}
+	rt := &mockRuntimePort{err: os.ErrNotExist}
+	st, err := store.Open(filepath.Join(t.TempDir(), "converge.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	mgr := NewInstanceManager(
+		store.NewGameInstanceRepo(st, domain.GModProfile), &absentIsNotExistStore{mockStateStore: newMockStateStore()}, rt, 64, 4, 4,
+		"manifests/gmod", "192.168.20.230",
+		&fullMockRenderer{}, "gmod",
+		WithReconciler(spy),
+		WithGameID(domain.GameGMod),
+		WithGameProfile(domain.GModProfile),
+	)
+	ctx := context.Background()
+
+	created, err := mgr.CreateInstance(ctx, domain.Instance{
+		Name: "Lareira", Tier: domain.TierSmall, Host: "fogo",
+		GMod: &domain.GModConfig{Password: "secret"},
+	}, domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	spy.order = nil
+
+	if err := mgr.StartInstance(ctx, created.Number); err != nil {
+		t.Fatalf("a game whose profile declares no mod list must still converge a missing container;\nit has no mods.yaml by design and asking for one must not fail the start: %v", err)
+	}
+	if len(spy.order) == 0 || spy.order[len(spy.order)-1] != "converge" {
+		t.Errorf("expected converge, got order %v", spy.order)
+	}
+}
