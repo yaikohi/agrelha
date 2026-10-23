@@ -283,7 +283,7 @@ func (m *InstanceManager) instanceRoot(host domain.Host) string {
 }
 
 func (m *InstanceManager) instanceDirFor(inst domain.Instance) string {
-	return fmt.Sprintf("%s/instance-%02d", m.instanceRoot(inst.EffectiveHost()), inst.Number)
+	return fmt.Sprintf("%s/%s", m.instanceRoot(inst.EffectiveHost()), domain.InstanceDirName(inst.Number))
 }
 
 func (m *InstanceManager) readsFromCluster(num int) bool {
@@ -303,7 +303,7 @@ func (m *InstanceManager) instanceDir(num int) string {
 			return m.instanceDirFor(*inst)
 		}
 	}
-	return fmt.Sprintf("%s/instance-%02d", m.instancesRelPath, num)
+	return fmt.Sprintf("%s/%s", m.instancesRelPath, domain.InstanceDirName(num))
 }
 
 func (m *InstanceManager) GameID() domain.GameID       { return m.gameID }
@@ -940,14 +940,6 @@ func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]stri
 	path := m.instanceDir(num) + "/mods.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
-		if fallback := fmt.Sprintf("%s/instance-%02d/mods.yaml", m.instancesRelPath, num); fallback != path {
-			if docFallback, fbErr := m.stateStore.Get(ctx, fallback); fbErr == nil {
-				doc = docFallback
-				err = nil
-			}
-		}
-	}
-	if err != nil {
 		return nil, err
 	}
 	var out []string
@@ -1453,7 +1445,7 @@ func (m *InstanceManager) ListConfigDataFor(ctx context.Context, inst domain.Ins
 	if err == nil && len(data) > 0 {
 		return data, nil
 	}
-	if fallback := fmt.Sprintf("%s/instance-%02d/configs.yaml", m.instancesRelPath, inst.Number); fallback != m.instanceDirFor(inst)+"/configs.yaml" {
+	if fallback := fmt.Sprintf("%s/%s/configs.yaml", m.instancesRelPath, domain.InstanceDirName(inst.Number)); fallback != m.instanceDirFor(inst)+"/configs.yaml" {
 		if fbData, fbErr := m.configDataAt(ctx, fallback); fbErr == nil && len(fbData) > 0 {
 			return fbData, nil
 		}

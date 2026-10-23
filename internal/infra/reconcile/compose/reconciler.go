@@ -157,7 +157,7 @@ func (r *Reconciler) projectArgs(ref ports.ServerRef) []string {
 
 func (r *Reconciler) resolveDir(ref ports.ServerRef) string {
 	if ref.ID.Game != "" && ref.ID.Number > 0 {
-		return filepath.Join(r.workDir, string(ref.ID.Game), fmt.Sprintf("instance-%02d", ref.ID.Number))
+		return filepath.Join(r.workDir, string(ref.ID.Game), domain.InstanceDirName(ref.ID.Number))
 	}
 	if ref.Name == "" {
 		return r.workDir
@@ -324,7 +324,7 @@ func InstanceDataDir(dataRoot string, id domain.InstanceID, fallbackName string)
 		return ""
 	}
 	if id.Game != "" && id.Number > 0 {
-		return filepath.Join(dataRoot, string(id.Game), fmt.Sprintf("instance-%02d", id.Number))
+		return filepath.Join(dataRoot, string(id.Game), domain.InstanceDirName(id.Number))
 	}
 	return filepath.Join(dataRoot, fallbackName)
 }

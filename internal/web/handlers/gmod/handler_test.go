@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,8 +13,6 @@ import (
 
 	"agrelha/internal/app/instances"
 	"agrelha/internal/domain"
-	gmodmanifests "agrelha/internal/infra/manifests/gmod"
-	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
 )
 
@@ -49,15 +46,53 @@ func (m *mockWorkshop) GetCollection(ctx context.Context, id string) (domain.Wor
 	return m.col, nil
 }
 
-func setupTestApp(t *testing.T) (*fiber.App, *Handler, *store.Store) {
-	t.Helper()
-	dir := t.TempDir()
-	st, err := store.Open(filepath.Join(dir, "test.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
+type fakeInstanceRepo struct {
+	items map[int]domain.Instance
+}
 
-	repo := store.NewGameInstanceRepo(st, domain.GModProfile)
+func (r *fakeInstanceRepo) Upsert(inst domain.Instance) error {
+	r.items[inst.Number] = inst
+	return nil
+}
+
+func (r *fakeInstanceRepo) Get(number int) (*domain.Instance, error) {
+	inst, ok := r.items[number]
+	if !ok {
+		return nil, nil
+	}
+	return &inst, nil
+}
+
+func (r *fakeInstanceRepo) List() ([]domain.Instance, error) {
+	out := make([]domain.Instance, 0, len(r.items))
+	for _, inst := range r.items {
+		out = append(out, inst)
+	}
+	return out, nil
+}
+
+func (r *fakeInstanceRepo) UpdateState(number int, state domain.InstanceState) error {
+	if inst, ok := r.items[number]; ok {
+		inst.State = state
+		r.items[number] = inst
+	}
+	return nil
+}
+
+func (r *fakeInstanceRepo) Delete(number int) error {
+	delete(r.items, number)
+	return nil
+}
+
+type fakeRenderer struct{}
+
+func (f *fakeRenderer) Render(inst domain.Instance, mods domain.ModList) (map[string][]byte, error) {
+	return map[string][]byte{"deployment.yaml": []byte("x")}, nil
+}
+
+func setupTestApp(t *testing.T) (*fiber.App, *Handler) {
+	t.Helper()
+	repo := &fakeInstanceRepo{items: make(map[int]domain.Instance)}
 	mgr := instances.NewInstanceManager(
 		repo,
 		nil,
@@ -65,7 +100,7 @@ func setupTestApp(t *testing.T) (*fiber.App, *Handler, *store.Store) {
 		24, 4, 2,
 		"manifests/gmod",
 		"192.168.20.226",
-		gmodmanifests.New("", "gmod"),
+		&fakeRenderer{},
 		"gmod",
 		instances.WithGameID(domain.GameGMod),
 	)
@@ -84,12 +119,11 @@ func setupTestApp(t *testing.T) (*fiber.App, *Handler, *store.Store) {
 
 	app := fiber.New()
 	h.RegisterProtected(app)
-	return app, h, st
+	return app, h
 }
 
 func TestGModDashboardAndWizardFlow(t *testing.T) {
-	app, _, st := setupTestApp(t)
-	defer st.Close()
+	app, _ := setupTestApp(t)
 
 	req := httptest.NewRequest("GET", "/gmod", nil)
 	resp, err := app.Test(req)
@@ -161,8 +195,7 @@ func TestGModDashboardAndWizardFlow(t *testing.T) {
 }
 
 func TestGModRejectsUnknownTab(t *testing.T) {
-	app, _, st := setupTestApp(t)
-	defer st.Close()
+	app, _ := setupTestApp(t)
 
 	payload := `{"name":"Lareira","gamemode":"sandbox","map":"gm_construct","collectionID":"104604903","tier":"small"}`
 	req := httptest.NewRequest("POST", "/api/gmod/wizard/create", strings.NewReader(payload))

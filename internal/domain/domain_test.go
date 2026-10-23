@@ -762,3 +762,18 @@ func TestParseInstanceRoleRegistered(t *testing.T) {
 		t.Errorf("unregistered game role should not parse as valid instance role")
 	}
 }
+
+func TestInstanceDirName(t *testing.T) {
+	if got := InstanceDirName(1); got != "instance-01" {
+		t.Errorf(`InstanceDirName(1) = %q, want "instance-01";
+directory paths in state stores and compose reconciler rely on instance-%%02d zero-padded formatting.`, got)
+	}
+	if got := InstanceDirName(12); got != "instance-12" {
+		t.Errorf(`InstanceDirName(12) = %q, want "instance-12"`, got)
+	}
+	inst := Instance{Number: 3}
+	if got := inst.DirName(); got != "instance-03" {
+		t.Errorf(`Instance.DirName() = %q, want "instance-03"`, got)
+	}
+}
+

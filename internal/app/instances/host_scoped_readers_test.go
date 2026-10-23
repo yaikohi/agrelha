@@ -117,3 +117,45 @@ func TestADockerHostWorldReadsItsConfigsFromTheStateStore(t *testing.T) {
 		t.Errorf("ListConfigs served the cluster reader for a Docker Host world; got %v", files)
 	}
 }
+
+func TestADockerHostWorldDoesNotFallBackToStaleClusterManifestsForMods(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "readers.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	states := newMockStateStore()
+	storeAdapter := &absentIsNotExistStore{mockStateStore: states}
+	mgr := NewInstanceManager(
+		store.NewGameInstanceRepo(st, domain.ValheimProfile), storeAdapter, nil, 64, 4, 4,
+		"manifests/valheim", "192.168.20.224",
+		manifests.New("ykhi.xyz/gameserver=true", "valheim"), "valheim",
+		WithGameID(domain.GameValheim),
+		WithGameProfile(domain.ValheimProfile),
+	)
+
+	inst := domain.Instance{
+		Number: 1,
+		Name:   "Lareira",
+		Slug:   "lareira",
+		Tier:   domain.TierSmall,
+		Host:   "fogo",
+		GameID: domain.GameValheim,
+	}
+	if err := mgr.repo.Upsert(inst); err != nil {
+		t.Fatalf("seed instance: %v", err)
+	}
+
+	_ = states.Put(context.Background(), "manifests/valheim/instance-01/mods.yaml", ports.Document{
+		Data: map[string]string{"mods.txt": "StaleAuthor/StaleMod/1.0.0\n"},
+	}, "seed stale manifest")
+
+	got, err := mgr.GetInstalledMods(context.Background(), 1)
+	if err == nil {
+		t.Fatalf(`GetInstalledMods succeeded and returned %v from stale manifests;
+a Docker-Host world whose compose/.../mods.yaml is missing must never fall back to manifests/,
+as reading stale cluster manifests can answer questions about a Docker-Host world and resurrect old mods.`, got)
+	}
+}
+

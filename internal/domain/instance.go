@@ -327,6 +327,15 @@ func (inst Instance) ConfigsCMName(profile GameProfile) string {
 	return fmt.Sprintf("%s-%s-%02d-configs", profile.Prefix, inst.Slug, inst.Number)
 }
 
+func InstanceDirName(number int) string {
+	return fmt.Sprintf("instance-%02d", number)
+}
+
+func (inst Instance) DirName() string {
+	return InstanceDirName(inst.Number)
+}
+
+
 // ModList is an Instance's mods as the server will receive them: one body per
 // Provider, because each Provider reads its own file in its own syntax. Merging
 // them would need a translation that could only ever be wrong.

@@ -342,4 +342,38 @@ func TestGModWorldPasswordUI(t *testing.T) {
 	if s := emptyLB.SteamURL(); s != "" {
 		t.Errorf("SteamURL with empty LBIP = %s, want empty", s)
 	}
+
+	customPort := GModWorldPasswordUI{
+		Number:   2,
+		LBIP:     "192.168.20.231",
+		Port:     27115,
+		Password: "secret",
+	}
+	if s := customPort.CopyCommandScript(); !strings.Contains(s, "27115") || strings.Contains(s, "27015") {
+		t.Errorf(`GMod world with published port 27115 rendered connection command %q with hardcoded 27015;
+players connecting to instance 02 on a Docker Host would attempt to connect to instance 01's port and fail.`, s)
+	}
+	if s := customPort.SteamURL(); !strings.Contains(s, "27115") || strings.Contains(s, "27015") {
+		t.Errorf(`GMod world with published port 27115 rendered Steam URL %q with hardcoded 27015;
+players joining instance 02 on a Docker Host via Steam would attempt to join instance 01 and fail.`, s)
+	}
 }
+
+func TestGModPortDerivedFromHostAndNumber(t *testing.T) {
+	clusterWorld := InstanceUI{Host: "cluster", Number: 1}
+	if port := GModPort(clusterWorld); port != 27015 {
+		t.Errorf("cluster GMod world port = %d, want 27015", port)
+	}
+
+	dockerWorld1 := InstanceUI{Host: "fogo", Number: 1}
+	if port := GModPort(dockerWorld1); port != 27015 {
+		t.Errorf("docker host instance 01 GMod world port = %d, want 27015", port)
+	}
+
+	dockerWorld2 := InstanceUI{Host: "fogo", Number: 2}
+	if port := GModPort(dockerWorld2); port != 27115 {
+		t.Errorf(`docker host instance 02 GMod world port = %d, want 27115;
+GMod has PortStride 100 on Docker Hosts, so instance 02 must publish 27115, or it will collide with instance 01.`, port)
+	}
+}
+

@@ -2,10 +2,7 @@ package hostrouter
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"sort"
-	"strings"
 	"time"
 
 	"agrelha/internal/domain"
@@ -13,39 +10,14 @@ import (
 )
 
 type RuntimeRouter struct {
-	routes map[domain.Host]ports.Runtime
+	hostMap[ports.Runtime]
 }
 
 func NewRuntime(routes map[domain.Host]ports.Runtime) *RuntimeRouter {
-	normalized := make(map[domain.Host]ports.Runtime, len(routes))
-	for h, rt := range routes {
-		if rt == nil {
-			continue
-		}
-		normalized[domain.NormalizeHost(string(h))] = rt
-	}
-	return &RuntimeRouter{routes: normalized}
+	return &RuntimeRouter{hostMap: newHostMap("runtime", routes)}
 }
 
 var _ ports.Runtime = (*RuntimeRouter)(nil)
-
-func (r *RuntimeRouter) Hosts() []string {
-	out := make([]string, 0, len(r.routes))
-	for h := range r.routes {
-		out = append(out, string(h))
-	}
-	sort.Strings(out)
-	return out
-}
-
-func (r *RuntimeRouter) For(host domain.Host) (ports.Runtime, error) {
-	h := domain.NormalizeHost(string(host))
-	rt, ok := r.routes[h]
-	if !ok {
-		return nil, fmt.Errorf("no runtime registered for host %q (known: %s): %w", h, strings.Join(r.Hosts(), ", "), ports.ErrUnknownHost)
-	}
-	return rt, nil
-}
 
 func (r *RuntimeRouter) Start(ctx context.Context, ref ports.ServerRef) error {
 	rt, err := r.For(ref.Host)

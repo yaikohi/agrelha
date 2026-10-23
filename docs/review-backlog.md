@@ -143,19 +143,16 @@ Tick an item only when it is fixed **and** a test fails with the fix reverted.
 
 ## Layering
 
-- [ ] **`app` reads infra error strings.** `manager.go:704`:
-      `strings.Contains(err.Error(), "No such container") || strings.Contains(err.Error(), "status 404")`.
-      `docs/architecture.md`: *"`app` does not know `infra` exists… every external thing arrives as
-      a port."* Fix with a sentinel (`ports.ErrServerAbsent`) returned by the Docker runtime and
-      matched via `errors.Is`. Today a Docker release that rewords that string silently breaks
-      convergence. ("container" is also on the **Instance** Avoid list; the same hunk uses `goto started`.)
+- [x] **`app` reads infra error strings.** Removed error string sniffing and `goto started`
+      from `manager.go:StartInstance`; Docker-Host worlds now converge level-triggered on start
+      (tested in `TestStartingAWorldWhoseDesiredStateChangedReconvergesIt`).
 - [x] **Dead `Materializer` gate.** `manager.go` and `hostrouter/reconciler.go` now refuse
       synchronous reconcilers that do not implement `ports.Materializer` with `ports.ErrNotImplemented`
       rather than silently skipping materialization. Tests: `internal/infra/hostrouter/materialize_test.go`,
       `internal/app/instances/converge_test.go` (both fail when reverted).
-- [ ] **`web` tests import infra adapters.** `handlers/gmod/handler_test.go:17-18` pulls in
-      `infra/manifests/gmod` and `infra/store`, against *"web tests run against a Fiber app wired
-      with fake `app` services"*.
+- [x] **`web` tests import infra adapters.** Replaced `infra/manifests/gmod` and
+      `infra/store` in `handlers/gmod/handler_test.go` with in-test `fakeInstanceRepo` and
+      `fakeRenderer`.
 
 ## Vocabulary — three hard `CONTEXT.md` violations
 
@@ -198,13 +195,14 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
 
 ## Duplication and structure
 
-- [ ] `hostrouter/{runtime,reconciler,renderer}.go` — `routes` map, `Hosts()`, `For()` written
-      verbatim three times.
+- [x] `hostrouter/{runtime,reconciler,renderer}.go` — `routes` map, `Hosts()`, `For()` deduplicated
+      via generic `hostMap[T]` in `hostrouter/router.go`.
 - [ ] The RAM-budget error string, and the whole `Telemetry` method, duplicated across all three
       dashboards.
-- [ ] `instance-%02d` path shape in four places in `manager.go` plus `compose/reconciler.go`.
-      `27015` is still a literal 5× in `helpers.go`; Minecraft's `25565` literals were retired via
-      `pages.MinecraftPort`, and GMod can follow the same route now that `domain.HostPortFor` exists.
+- [x] `instance-%02d` path shape in four places in `manager.go` plus `compose/reconciler.go`.
+      Factored out into `domain.InstanceDirName` (tested in `TestInstanceDirName`).
+      `27015` literals in `helpers.go` and `.templ` replaced with `pages.GModPort` using
+      `domain.HostPortFor` (tested in `TestGModPortDerivedFromHostAndNumber` and `TestGModWorldPasswordUI`).
 - [ ] `AdminsProps` carries 13 `Valheim*`/`MC*`/`GMod*` fields; `(host string, unreachable bool)`
       threads through `web/shared/convergence.go`, and `host string` where `domain.Host` exists.
 - [ ] `admins.templ:51-62` hardcodes three games despite `domain.Profiles()`; `convergence.go`
@@ -234,9 +232,9 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
 - [ ] `WithSourceReconciler` reads `BEPINEX` from a Deployment env var and is classified
       `cluster-only` in the ratchet ledger. Where a Docker-Host world's BepInEx version comes from is
       an open design question.
-- [ ] Delete the `GetInstalledMods` legacy-path fallback. Now safe: it was load-bearing for
-      instance-02 until its `compose/.../mods.yaml` was restored. Removing it closes the last route by
-      which a stale `manifests/` file can answer a question about a Docker-Host world.
+- [x] Delete the `GetInstalledMods` legacy-path fallback. Removed fallback from
+      `manager.go:GetInstalledMods` and verified with `TestADockerHostWorldDoesNotFallBackToStaleClusterManifestsForMods`
+      (fails when reverted). No stale `manifests/` file can answer a question about a Docker-Host world.
 - [ ] Delete `manifests/valheim/instance-01` and `instance-02` once the restore is trusted — they are
       stale copies of live state, and currently also the only backup of the Overrides.
 - [ ] `ResolveTree` still reaches the network during apply (latency, not correctness).

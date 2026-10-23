@@ -348,6 +348,7 @@ type GModWorldPasswordUI struct {
 	Password string
 	Address  string
 	LBIP     string
+	Port     int
 }
 
 func (p GModWorldPasswordUI) CopyPasswordScript() string {
@@ -357,16 +358,23 @@ func (p GModWorldPasswordUI) CopyPasswordScript() string {
 	)
 }
 
+func (p GModWorldPasswordUI) port() int {
+	if p.Port > 0 {
+		return p.Port
+	}
+	return domain.GModGamePort
+}
+
 func (p GModWorldPasswordUI) CopyCommandScript() string {
 	if p.Password != "" {
 		return fmt.Sprintf(
-			"navigator.clipboard.writeText('connect %s:27015; password %s'); $toast = 'Copied console command!'; $toastkind = 'ok'",
-			EscapeJS(p.LBIP), EscapeJS(p.Password),
+			"navigator.clipboard.writeText('connect %s:%d; password %s'); $toast = 'Copied console command!'; $toastkind = 'ok'",
+			EscapeJS(p.LBIP), p.port(), EscapeJS(p.Password),
 		)
 	}
 	return fmt.Sprintf(
-		"navigator.clipboard.writeText('connect %s:27015'); $toast = 'Copied console command!'; $toastkind = 'ok'",
-		EscapeJS(p.LBIP),
+		"navigator.clipboard.writeText('connect %s:%d'); $toast = 'Copied console command!'; $toastkind = 'ok'",
+		EscapeJS(p.LBIP), p.port(),
 	)
 }
 
@@ -375,10 +383,20 @@ func (p GModWorldPasswordUI) SteamURL() string {
 		return ""
 	}
 	if p.Password != "" {
-		return fmt.Sprintf("steam://connect/%s:27015/%s", p.LBIP, p.Password)
+		return fmt.Sprintf("steam://connect/%s:%d/%s", p.LBIP, p.port(), p.Password)
 	}
-	return fmt.Sprintf("steam://connect/%s:27015", p.LBIP)
+	return fmt.Sprintf("steam://connect/%s:%d", p.LBIP, p.port())
 }
+
+func GModPort(inst InstanceUI) int {
+	port, err := domain.HostPortFor(domain.GModProfile, domain.Host(inst.Host), inst.Number, domain.GModGamePort)
+	if err != nil {
+		return domain.GModGamePort
+	}
+	return port
+}
+
+
 
 // EscapeJS escapes backslashes and quotes for safe embedding in JS inline strings.
 func EscapeJS(s string) string {

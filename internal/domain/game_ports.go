@@ -5,6 +5,7 @@ import "fmt"
 const (
 	MinecraftGamePort = 25565
 	MinecraftRconPort = 25575
+	GModGamePort      = 27015
 )
 
 func HostPortFor(profile GameProfile, host Host, number, containerPort int) (int, error) {

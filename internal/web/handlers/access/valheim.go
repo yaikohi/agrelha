@@ -74,7 +74,11 @@ func (h *Handler) renderAdminsPage(c *fiber.Ctx, activeGame string) error {
 	if h.cfg.GModInstances != nil {
 		if insts, err := h.cfg.GModInstances.ListInstances(c.UserContext()); err == nil {
 			for _, inst := range insts {
-				addr := pages.ConnectAddress(inst.LBIP, 27015)
+				port, err := domain.HostPortFor(domain.GModProfile, inst.EffectiveHost(), inst.Number, domain.GModGamePort)
+				if err != nil {
+					port = domain.GModGamePort
+				}
+				addr := pages.ConnectAddress(inst.LBIP, port)
 				pass := ""
 				if inst.GMod != nil {
 					pass = inst.GMod.Password
@@ -86,6 +90,7 @@ func (h *Handler) renderAdminsPage(c *fiber.Ctx, activeGame string) error {
 					Password: pass,
 					Address:  addr,
 					LBIP:     inst.LBIP,
+					Port:     port,
 				})
 			}
 		}

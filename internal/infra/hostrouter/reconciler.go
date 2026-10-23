@@ -3,47 +3,20 @@ package hostrouter
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
 
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
 
 type ReconcilerRouter struct {
-	routes map[domain.Host]ports.Reconciler
+	hostMap[ports.Reconciler]
 }
 
 func NewReconciler(routes map[domain.Host]ports.Reconciler) *ReconcilerRouter {
-	normalized := make(map[domain.Host]ports.Reconciler, len(routes))
-	for h, rc := range routes {
-		if rc == nil {
-			continue
-		}
-		normalized[domain.NormalizeHost(string(h))] = rc
-	}
-	return &ReconcilerRouter{routes: normalized}
+	return &ReconcilerRouter{hostMap: newHostMap("reconciler", routes)}
 }
 
 var _ ports.Reconciler = (*ReconcilerRouter)(nil)
-
-func (r *ReconcilerRouter) Hosts() []string {
-	out := make([]string, 0, len(r.routes))
-	for h := range r.routes {
-		out = append(out, string(h))
-	}
-	sort.Strings(out)
-	return out
-}
-
-func (r *ReconcilerRouter) For(host domain.Host) (ports.Reconciler, error) {
-	h := domain.NormalizeHost(string(host))
-	rc, ok := r.routes[h]
-	if !ok {
-		return nil, fmt.Errorf("no reconciler registered for host %q (known: %s): %w", h, strings.Join(r.Hosts(), ", "), ports.ErrUnknownHost)
-	}
-	return rc, nil
-}
 
 func (r *ReconcilerRouter) Converge(ctx context.Context, ref ports.ServerRef) error {
 	rc, err := r.For(ref.Host)
