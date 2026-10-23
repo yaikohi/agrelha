@@ -286,6 +286,17 @@ func (m *InstanceManager) instanceDirFor(inst domain.Instance) string {
 	return fmt.Sprintf("%s/instance-%02d", m.instanceRoot(inst.EffectiveHost()), inst.Number)
 }
 
+func (m *InstanceManager) clusterReaders(num int) bool {
+	if m.repo == nil {
+		return true
+	}
+	inst, err := m.repo.Get(num)
+	if err != nil || inst == nil {
+		return true
+	}
+	return inst.EffectiveHost().IsCluster()
+}
+
 func (m *InstanceManager) instanceDir(num int) string {
 	if m.repo != nil {
 		if inst, err := m.repo.Get(num); err == nil && inst != nil {
@@ -909,7 +920,7 @@ func (m *InstanceManager) UpdateValheimSettings(ctx context.Context, num int, na
 }
 
 func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]string, error) {
-	if m.modsReader != nil {
+	if m.modsReader != nil && m.clusterReaders(num) {
 		return m.modsReader(ctx, num)
 	}
 	if m.stateStore == nil {
@@ -943,7 +954,7 @@ func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]stri
 // GetCurseForgeMods reads the CurseForge half of a Mod list. An Instance with no
 // CurseForge entries has no such file, which is not an error.
 func (m *InstanceManager) GetCurseForgeMods(ctx context.Context, num int) ([]string, error) {
-	if m.cfModsReader != nil {
+	if m.cfModsReader != nil && m.clusterReaders(num) {
 		return m.cfModsReader(ctx, num)
 	}
 	if m.stateStore == nil {
@@ -1370,7 +1381,7 @@ func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, a
 }
 
 func (m *InstanceManager) ListConfigs(ctx context.Context, num int) ([]string, error) {
-	if m.configsReader != nil {
+	if m.configsReader != nil && m.clusterReaders(num) {
 		data, err := m.configsReader(ctx, num)
 		if err != nil {
 			return nil, err
@@ -1403,7 +1414,7 @@ func (m *InstanceManager) ListConfigs(ctx context.Context, num int) ([]string, e
 // BepInEx editor needs the bodies too and should not pay for that read once per
 // file.
 func (m *InstanceManager) ListConfigData(ctx context.Context, num int) (map[string]string, error) {
-	if m.configsReader != nil {
+	if m.configsReader != nil && m.clusterReaders(num) {
 		return m.configsReader(ctx, num)
 	}
 	if m.stateStore == nil {
@@ -1413,7 +1424,7 @@ func (m *InstanceManager) ListConfigData(ctx context.Context, num int) (map[stri
 }
 
 func (m *InstanceManager) ListConfigDataFor(ctx context.Context, inst domain.Instance) (map[string]string, error) {
-	if m.configsReader != nil {
+	if m.configsReader != nil && inst.EffectiveHost().IsCluster() {
 		return m.configsReader(ctx, inst.Number)
 	}
 	if m.stateStore == nil {
@@ -1443,7 +1454,7 @@ func (m *InstanceManager) configDataAt(ctx context.Context, path string) (map[st
 }
 
 func (m *InstanceManager) GetConfig(ctx context.Context, num int, filename string) (string, error) {
-	if m.configsReader != nil {
+	if m.configsReader != nil && m.clusterReaders(num) {
 		data, err := m.configsReader(ctx, num)
 		if err != nil {
 			return "", err

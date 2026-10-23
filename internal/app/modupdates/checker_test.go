@@ -56,6 +56,7 @@ type fakeInstances struct {
 	details                   map[int]string
 	err                       error
 	listErr                   error
+	replaceUnchanged          bool
 	replaceErr                error
 	getInstErr                error
 	installedErr              error
@@ -101,6 +102,9 @@ func (f *fakeInstances) ReplaceMods(_ context.Context, num int, entries []string
 	}
 	f.wrote[num] = entries
 	f.details[num] = detail
+	if f.replaceUnchanged {
+		return false, nil
+	}
 	if f.failInstalledAfterReplace {
 		f.installedErr = fmt.Errorf("fail after replace")
 	}
@@ -1129,5 +1133,29 @@ func TestAModMissingFromTheIndexStillFallsBack(t *testing.T) {
 	}
 	if len(rep.Updates) != 1 {
 		t.Errorf("Updates = %d, want 1", len(rep.Updates))
+	}
+}
+
+func TestApplyingAnAlreadyCurrentModReportsNothingApplied(t *testing.T) {
+	insts := &fakeInstances{
+		entries:          map[int][]string{1: {"Smoothbrain/Mining/1.0.0"}},
+		replaceUnchanged: true,
+	}
+	cat := &fakeCatalog{
+		latest: map[string]string{"Smoothbrain/Mining": "2.0.0"},
+		tree:   map[string][]string{"Smoothbrain/Mining": {"Smoothbrain/Mining/2.0.0"}},
+	}
+	c := New(insts, cat)
+
+	if _, err := c.RefreshOne(context.Background(), 1); err != nil {
+		t.Fatalf("RefreshOne: %v", err)
+	}
+
+	applied, err := c.Apply(context.Background(), 1, nil, "tester")
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(applied) != 0 {
+		t.Errorf("Apply reported %d mod(s) applied when the write changed nothing;\nthe UI turns a non-empty list into \"Updating N mod(s) - this world is restarting now\",\nso a no-op apply promises a restart that will never happen", len(applied))
 	}
 }

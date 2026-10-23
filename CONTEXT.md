@@ -27,6 +27,27 @@ drifted, and is reported, not silently adopted.
 _Avoid_: node, environment, site, runtime (Runtime is the port that starts and
 stops an Instance, not the place it runs)
 
+**Desired**:
+What an Instance is supposed to be, as committed to git. The only state a human
+edits, and the one every other state is judged against.
+_Avoid_: intended, target, spec
+
+**Materialised**:
+Desired state written to a Host's own disk, where its container engine can read
+it. **Only a Docker Host has one** — in the cluster ArgoCD materialises and
+agrelha never sees the result. A Materialised state that does not match Desired
+is **stale**, and converging is what repairs it; because nothing else pulls from
+git on a Docker Host, convergence runs whenever Desired is applied rather than
+only when it changes.
+_Avoid_: rendered (that names the act, and the Renderer is a port), local copy,
+cache (git does not win a merge here, it is simply the source)
+
+**Running**:
+What the Instance's process actually loaded, which is neither Desired nor
+Materialised until it has restarted. A world can sit in all three at once: git
+says a mod is at 1.1, the disk says 1.0, and the container is still running 0.9.
+_Avoid_: live, actual, current
+
 **Slot**:
 Retired, and now removed from the code. It meant "which world is active" back
 when all Minecraft worlds shared a single Deployment. Two traces remain on
@@ -112,8 +133,10 @@ _Avoid_: unavailable, broken, missing (it exists; it just cannot be fetched)
 **Mod update**:
 A newer version of an already-installed mod exists upstream. Applying one repins
 the Mod list to that version, re-resolves the mod's dependencies, and restarts
-the World; it never changes the game itself. Only pinned entries can have one:
-an entry with no version recorded has nothing to compare against.
+the World; it never changes the game itself. The restart happens when the
+Instance's Host converges: immediately on a Docker Host, on the cluster's next
+sync. Only pinned entries can have one: an entry with no version recorded has
+nothing to compare against.
 _Avoid_: update (unqualified), upgrade, patch
 
 **Restore point**:

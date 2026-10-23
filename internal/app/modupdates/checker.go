@@ -539,11 +539,12 @@ func (c *Checker) Apply(ctx context.Context, num int, keys []string, actor strin
 	if err != nil {
 		return nil, err
 	}
-	if changed {
-		c.markPending(num, out)
-		c.saveRestorePoint(num, previous, out)
-	}
 	c.forget(num, targets)
+	if !changed {
+		return nil, nil
+	}
+	c.markPending(num, out)
+	c.saveRestorePoint(num, previous, out)
 	return targets, nil
 }
 
