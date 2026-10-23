@@ -33,3 +33,31 @@ func CreationSentence(host string, unreachable bool) string {
 		return " It is starting now."
 	}
 }
+
+func ProvisioningStepCommitted(host string) string {
+	return "Desired state committed to Codeberg repository"
+}
+
+func ProvisioningStepReconciling(host string) string {
+	h := domain.NormalizeHost(host)
+	if h.IsCluster() {
+		return "ArgoCD reconciler syncing cluster state"
+	}
+	return fmt.Sprintf("Compose reconciler applying on %s", h)
+}
+
+func ProvisioningStepStarting(host string) string {
+	h := domain.NormalizeHost(host)
+	if h.IsCluster() {
+		return "Pod scheduled and booting"
+	}
+	return fmt.Sprintf("Container starting on %s", h)
+}
+
+func ProvisioningDetail(host string) string {
+	h := domain.NormalizeHost(host)
+	if h.IsCluster() {
+		return "Waiting for ArgoCD synchronization..."
+	}
+	return fmt.Sprintf("Applying compose on %s...", h)
+}

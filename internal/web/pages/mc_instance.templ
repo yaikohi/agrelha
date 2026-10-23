@@ -70,10 +70,10 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 						<div>
 							<span class="text-xs font-medium text-zinc-400 uppercase tracking-wider">Server Connection</span>
 							<div class="mt-1 flex items-center gap-3">
-								<code class="font-mono text-lg font-bold text-white">{ ConnectAddress(d.LBIP, 25565) }</code>
+								<code class="font-mono text-lg font-bold text-white">{ ConnectAddress(d.LBIP, MinecraftPort(d.InstanceUI)) }</code>
 								<button
 									type="button"
-									data-on:click={ fmt.Sprintf("navigator.clipboard.writeText('%s:25565')", d.LBIP) }
+									data-on:click={ fmt.Sprintf("navigator.clipboard.writeText('%s:%d')", d.LBIP, MinecraftPort(d.InstanceUI)) }
 									class="rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1 text-[11px] text-zinc-300 hover:bg-zinc-700 hover:text-white"
 								>
 									Copy

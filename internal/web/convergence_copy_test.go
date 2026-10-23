@@ -10,8 +10,6 @@ import (
 
 var convergenceCopyExceptions = map[string]string{
 	"shared/convergence.go":          "the helper that owns this wording",
-	"pages/mc_provisioning.templ":    "deferred: an ArgoCD-shaped progress flow whose steps, not just its words, are wrong on a Docker Host",
-	"pages/mc_provisioning_templ.go": "generated from the above",
 }
 
 func TestConvergenceCopyLivesInOnePlace(t *testing.T) {

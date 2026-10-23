@@ -1,13 +1,17 @@
 package pages
 
-import "fmt"
+import (
+	"fmt"
+
+	"agrelha/internal/web/shared"
+)
 
 templ MinecraftProvisioning(inst InstanceUI) {
 	@Layout("Provisioning " + inst.Name) {
 		@nav(true)
 		<div
 			class="mx-auto max-w-2xl space-y-6"
-			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,lb_ip:%q,num:%d,detail:'Waiting for ArgoCD synchronization...'}", inst.LBIP, inst.Number) }
+			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,lb_ip:%q,num:%d,detail:%q}", inst.LBIP, inst.Number, shared.ProvisioningDetail(inst.Host)) }
 			data-effect={ fmt.Sprintf("@get('/api/minecraft/provisioning/%d/stream')", inst.Number) }
 		>
 			<div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm text-center">
@@ -20,25 +24,25 @@ templ MinecraftProvisioning(inst InstanceUI) {
 				<p class="mt-1 font-mono text-xs text-zinc-400">{ fmt.Sprintf("Instance #%02d · %s", inst.Number, inst.LBIP) }</p>
 
 				<div class="mt-8 space-y-3 text-left">
-					<!-- Step 1: GitOps -->
+					<!-- Step 1: desired state -->
 					<div class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-xs">
 						<span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-900/60 text-emerald-300">✓</span>
-						<span class="font-medium text-zinc-200">GitOps manifests committed to Codeberg repository</span>
+						<span class="font-medium text-zinc-200">{ shared.ProvisioningStepCommitted(inst.Host) }</span>
 					</div>
 
-					<!-- Step 2: ArgoCD Sync -->
+					<!-- Step 2: reconcile -->
 					<div class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-xs">
 						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-amber-900/60 text-amber-300 animate-pulse">⏳</span>
 						<span data-show="$phase != 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-900/60 text-emerald-300">✓</span>
-						<span class="font-medium text-zinc-200">ArgoCD reconciler syncing cluster state</span>
+						<span class="font-medium text-zinc-200">{ shared.ProvisioningStepReconciling(inst.Host) }</span>
 					</div>
 
-					<!-- Step 3: Pod Scheduling & Container Startup -->
+					<!-- Step 3: server startup -->
 					<div class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-xs">
 						<span data-show="$phase == 'booting'" class="flex h-5 w-5 items-center justify-center rounded-full bg-amber-900/60 text-amber-300 animate-pulse">⏳</span>
 						<span data-show="$phase == 'ready'" class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-900/60 text-emerald-300">✓</span>
 						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-zinc-500">○</span>
-						<span class="font-medium text-zinc-200">Pod scheduled and booting</span>
+						<span class="font-medium text-zinc-200">{ shared.ProvisioningStepStarting(inst.Host) }</span>
 					</div>
 				</div>
 
@@ -47,7 +51,7 @@ templ MinecraftProvisioning(inst InstanceUI) {
 					<h3 class="text-sm font-semibold text-emerald-300">Server is Online & Ready!</h3>
 					<p class="mt-1 text-xs text-zinc-300">Connect in Minecraft via:</p>
 					<div class="mt-2 font-mono text-sm font-bold text-white bg-zinc-900/80 py-2 rounded-lg border border-emerald-800/40">
-						<span data-text="$lb_ip + ':25565'"></span>
+						<span data-text={ fmt.Sprintf("$lb_ip + ':%d'", MinecraftPort(inst)) }></span>
 					</div>
 				</div>
 

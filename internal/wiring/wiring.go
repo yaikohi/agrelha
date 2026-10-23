@@ -300,13 +300,19 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 	}
 
-	instOpts = append(instOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(domain.Host(cfg.DefaultHost)))
+	instOpts = append(instOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(defaultHostFor(cfg, "minecraft")))
 	d.MCInstances = instances.NewInstanceManager(
 		store.NewInstanceRepo(st), d.StateStore, rt,
 		cfg.MCTotalBudgetGiB, cfg.MCMaxInstances, cfg.MCMaxRunning,
 		cfg.MCInstancesPath,
 		cfg.MCLBBaseIP,
-		routeRenderer(cfg, manifests.New(cfg.GameNodeSelector, cfg.MinecraftNamespace), nil),
+		routeRenderer(cfg, manifests.New(cfg.GameNodeSelector, cfg.MinecraftNamespace),
+			composemanifests.New(domain.MinecraftProfile, cfg.DataDir, func(inst domain.Instance) domain.RuntimeSpec {
+				if d.MinecraftGame == nil {
+					return domain.RuntimeSpec{}
+				}
+				return d.MinecraftGame.RuntimeSpec(inst)
+			})),
 		cfg.MinecraftNamespace,
 		instOpts...,
 	)
@@ -441,7 +447,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 	}
 
-	valheimInstOpts = append(valheimInstOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(domain.Host(cfg.DefaultHost)))
+	valheimInstOpts = append(valheimInstOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(defaultHostFor(cfg, "valheim")))
 	if cfg.DataDir != "" {
 		valheimInstOpts = append(valheimInstOpts, instances.WithPreConverge(func(ctx context.Context, inst domain.Instance) error {
 			if inst.EffectiveHost().IsCluster() || d.ValheimInstances == nil {
@@ -710,7 +716,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 	}
 
-	gmodInstOpts = append(gmodInstOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(domain.Host(cfg.DefaultHost)))
+	gmodInstOpts = append(gmodInstOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(defaultHostFor(cfg, "gmod")))
 	d.GModInstances = instances.NewInstanceManager(
 		store.NewGameInstanceRepo(st, domain.GModProfile),
 		d.StateStore,
@@ -959,6 +965,13 @@ func dockerHost(cfg *config.Config) (domain.Host, bool) {
 
 func composeReconciler(cfg *config.Config) *compose.Reconciler {
 	return compose.New(compose.WithWorkDir(cfg.ComposeDir), compose.WithDataRoot(cfg.DataDir))
+}
+
+func defaultHostFor(cfg *config.Config, game string) domain.Host {
+	if h, ok := cfg.DefaultHostByGame[game]; ok && h != "" {
+		return domain.Host(h)
+	}
+	return domain.Host(cfg.DefaultHost)
 }
 
 func routeRenderer(cfg *config.Config, cluster, onDocker ports.SpecRenderer) ports.SpecRenderer {

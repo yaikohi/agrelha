@@ -544,7 +544,7 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 	for _, inst := range mc.ActiveInstances {
 		row := ServerRowUI{
 			Name:         inst.Name,
-			Address:      fmt.Sprintf("%s:25565", inst.LBIP),
+			Address:      fmt.Sprintf("%s:%d", inst.LBIP, MinecraftPort(inst)),
 			VersionBadge: modBadge(inst.Source, fmt.Sprintf("%s · %s", inst.MCVersion, inst.Loader)),
 			DownloadFmt:  ".mrpack",
 			Launchers:    []string{"Prism Launcher", "Modrinth App"},
@@ -852,4 +852,12 @@ func IncidentWorld(in *domain.Incident) string {
 func valheimAddress(inst InstanceUI) string {
 	gamePort, _, _ := domain.ValheimHostPortsFor(inst.Host, inst.Number)
 	return fmt.Sprintf("%s:%d", inst.LBIP, gamePort)
+}
+
+func MinecraftPort(inst InstanceUI) int {
+	port, err := domain.HostPortFor(domain.MinecraftProfile, domain.Host(inst.Host), inst.Number, domain.MinecraftGamePort)
+	if err != nil {
+		return domain.MinecraftGamePort
+	}
+	return port
 }

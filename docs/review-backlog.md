@@ -57,6 +57,33 @@ Tick an item only when it is fixed **and** a test fails with the fix reverted.
       names this cause when the PEM has no newlines.
       Tests: `internal/platform/config/secret_file_test.go`.
 
+- [x] **Minecraft worlds could not be created at all.** `wiring.go:309` passed `nil` as Minecraft's
+      Docker-Host renderer, and `DEFAULT_HOST = "fogo"` with no Host picker in the wizard meant every
+      new world was forced onto a Host with no renderer. The generic compose renderer refused it on a
+      blanket `Capabilities.Mods` guard whose premise was wrong: Valheim's mods are downloaded by
+      agrelha, but Minecraft's and GMod's are installed by the **server image** from env that
+      `RuntimeSpec.Env` already carries.
+      Named that distinction `domain.ModDelivery` (`agrelha` / `image`) on `GameProfile`; the zero
+      value refuses, so a new game must opt in. Also added `GameProfile.PortStride` and
+      `domain.HostPortFor`, so a second Docker-Host world gets its own host ports instead of failing
+      to bind — and a game with no stride is refused rather than rendered colliding.
+      The renderer now also emits `mods.yaml`/`configs.yaml` (without them `PutTree` deletes the Mod
+      list and Overrides on the next converge) and a `config-sync` one-shot mirroring the cluster's
+      init container. `DEFAULT_HOST_<GAME>` overrides the global default per game.
+      Tests: `internal/infra/manifests/compose/manifests_test.go`,
+      `internal/platform/config/default_host_test.go`.
+
+- [x] **The Minecraft provisioning page narrated a cluster sequence on a Docker Host.** It told the
+      operator "ArgoCD reconciler syncing cluster state" and "Pod scheduled and booting" for a world
+      on fogo, where neither exists — so the page described a sequence that was never going to
+      happen. This was the standing exemption in `convergence_copy_test.go`; the exemption is now
+      **deleted**, so the ratchet covers that page like every other.
+      Copy moved into `shared.ProvisioningStep*`/`ProvisioningDetail`, which name the Host they are
+      waiting on. Cluster wording is unchanged and asserted, since it is accurate there.
+      Also retired the six hardcoded `25565` literals: `pages.MinecraftPort` derives the published
+      port per Instance, so a second Docker-Host world shows the port it actually listens on instead
+      of instance 01's. Tests: `internal/web/shared/provisioning_test.go`.
+
 ---
 
 ## Still actively wrong on the box
@@ -130,9 +157,8 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
 
 ## Spec gaps
 
-- [ ] **`/custom-configs` undeclared** in Minecraft's `RuntimeSpec`. `/config-mods` was added at
-      `minecraft/game.go:100`; its sibling at `manifests/templates/deployment.yaml.tmpl:53` was not.
-      The ratchet misses it because that path lives in the template, not env.
+- [x] **`/custom-configs` declared** in Minecraft's `RuntimeSpec`, alongside the `config-sync`
+      service that stages it into `/data/config` the way the cluster's init container does.
 - [ ] **Data-root separation unenforced.** Spec: *"The data root must be a separate absolute path."*
       `compose/reconciler.go:38` documents it; nothing validates `DATA_DIR` against `COMPOSE_DIR`,
       so pointing them at the same path has the reconciler overwrite its own inputs.
@@ -155,8 +181,9 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
       verbatim three times.
 - [ ] The RAM-budget error string, and the whole `Telemetry` method, duplicated across all three
       dashboards.
-- [ ] `instance-%02d` path shape in four places in `manager.go` plus `compose/reconciler.go`;
-      `27015` as a literal 5× in `helpers.go`, while Valheim's ports got `domain.ValheimHostPortsFor`.
+- [ ] `instance-%02d` path shape in four places in `manager.go` plus `compose/reconciler.go`.
+      `27015` is still a literal 5× in `helpers.go`; Minecraft's `25565` literals were retired via
+      `pages.MinecraftPort`, and GMod can follow the same route now that `domain.HostPortFor` exists.
 - [ ] `AdminsProps` carries 13 `Valheim*`/`MC*`/`GMod*` fields; `(host string, unreachable bool)`
       threads through `web/shared/convergence.go`, and `host string` where `domain.Host` exists.
 - [ ] `admins.templ:51-62` hardcodes three games despite `domain.Profiles()`; `convergence.go`

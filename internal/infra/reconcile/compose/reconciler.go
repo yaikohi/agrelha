@@ -177,6 +177,12 @@ type ComposeFile struct {
 
 // RenderCompose converts a domain.RuntimeSpec into a valid docker-compose YAML document.
 func RenderCompose(serviceName, dataRoot string, spec domain.RuntimeSpec) ([]byte, error) {
+	return RenderComposeWith(serviceName, dataRoot, spec, nil)
+}
+
+// RenderComposeWith renders spec alongside extra services the game server must
+// wait for, such as the step that stages config overrides before it boots.
+func RenderComposeWith(serviceName, dataRoot string, spec domain.RuntimeSpec, extra map[string]ComposeService) ([]byte, error) {
 	if serviceName == "" {
 		serviceName = "game-server"
 	}
@@ -190,7 +196,11 @@ func RenderCompose(serviceName, dataRoot string, spec domain.RuntimeSpec) ([]byt
 		if proto == "" {
 			proto = "tcp"
 		}
-		portsList = append(portsList, fmt.Sprintf("%d:%d/%s", p.Port, p.Port, proto))
+		hostPort := p.HostPort
+		if hostPort == 0 {
+			hostPort = p.Port
+		}
+		portsList = append(portsList, fmt.Sprintf("%d:%d/%s", hostPort, p.Port, proto))
 	}
 
 	var volList []string
@@ -223,10 +233,20 @@ func RenderCompose(serviceName, dataRoot string, spec domain.RuntimeSpec) ([]byt
 		Healthcheck:   healthcheckFor(spec.HealthProbe),
 	}
 
+	if len(extra) > 0 {
+		svc.DependsOn = make(map[string]Depends, len(extra))
+		for name := range extra {
+			svc.DependsOn[name] = Depends{Condition: "service_completed_successfully"}
+		}
+	}
+
 	cf := ComposeFile{
 		Services: map[string]ComposeService{
 			serviceName: svc,
 		},
+	}
+	for name, es := range extra {
+		cf.Services[name] = es
 	}
 
 	var buf bytes.Buffer

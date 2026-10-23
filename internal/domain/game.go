@@ -44,6 +44,13 @@ type Capabilities struct {
 }
 
 // GameProfile defines the fixed shape of a game: identity, resource naming prefix, table, and capabilities.
+type ModDelivery string
+
+const (
+	ModDeliveryAgrelha ModDelivery = "agrelha"
+	ModDeliveryImage   ModDelivery = "image"
+)
+
 type GameProfile struct {
 	ID                GameID
 	Prefix            string
@@ -51,6 +58,8 @@ type GameProfile struct {
 	Display           Display
 	Capabilities      Capabilities
 	DefaultMaxPlayers int
+	ModDelivery       ModDelivery
+	PortStride        int
 }
 
 var (
@@ -73,6 +82,8 @@ var (
 			PlayerCount:        true,
 		},
 		DefaultMaxPlayers: 20,
+		ModDelivery:       ModDeliveryImage,
+		PortStride:        100,
 	}
 
 	ValheimProfile = GameProfile{
@@ -93,6 +104,7 @@ var (
 			PlayerCount:       true,
 		},
 		DefaultMaxPlayers: 10,
+		ModDelivery:       ModDeliveryAgrelha,
 	}
 
 	// Garry's Mod runs whatever a single Steam Workshop collection contains, so
@@ -114,6 +126,8 @@ var (
 			AdmissionPassword: true,
 		},
 		DefaultMaxPlayers: 16,
+		ModDelivery:       ModDeliveryImage,
+		PortStride:        100,
 	}
 )
 
@@ -186,6 +200,7 @@ type PortSpec struct {
 	Name     string
 	Port     int
 	Protocol string // "TCP" or "UDP"
+	HostPort int    // 0 publishes Port unchanged
 }
 
 // VolumeSpec defines persistent storage mounts required by a game server.

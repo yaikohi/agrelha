@@ -90,6 +90,7 @@ type Config struct {
 	DockerHostName    string
 	DockerHostAddress string
 	DefaultHost       string
+	DefaultHostByGame map[string]string
 	DataDir           string
 	DockerSocket      string
 	LocalStateDir     string
@@ -111,6 +112,16 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func defaultHostByGame() map[string]string {
+	out := map[string]string{}
+	for _, game := range []string{"MINECRAFT", "VALHEIM", "GMOD"} {
+		if v := os.Getenv("DEFAULT_HOST_" + game); v != "" {
+			out[strings.ToLower(game)] = v
+		}
+	}
+	return out
 }
 
 func envSecret(key, def string) string {
@@ -227,6 +238,7 @@ func Load() *Config {
 		DockerHostName:    env("DOCKER_HOST_NAME", ""),
 		DockerHostAddress: env("DOCKER_HOST_ADDRESS", ""),
 		DefaultHost:       env("DEFAULT_HOST", ""),
+		DefaultHostByGame: defaultHostByGame(),
 		DataDir:           env("DATA_DIR", "/srv/gamedata"),
 		DockerSocket:      env("DOCKER_SOCKET", "/var/run/docker.sock"),
 		LocalStateDir:     env("LOCAL_STATE_DIR", ""),
