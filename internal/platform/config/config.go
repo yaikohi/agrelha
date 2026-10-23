@@ -172,7 +172,7 @@ func Load() *Config {
 
 		OIDCIssuer:        env("OIDC_ISSUER", ""),
 		OIDCClientID:      env("OIDC_CLIENT_ID", ""),
-		OIDCClientSecret:  env("OIDC_CLIENT_SECRET", ""),
+		OIDCClientSecret:  envSecret("OIDC_CLIENT_SECRET", ""),
 		OIDCRedirectURL:   env("OIDC_REDIRECT_URL", ""),
 		OIDCPostLogoutURL: env("OIDC_POST_LOGOUT_URL", ""),
 		AuthMode:          env("AUTH_MODE", ""),
@@ -183,7 +183,7 @@ func Load() *Config {
 		GitRepoURL:      env("GIT_REPO_URL", ""),
 		GitBranch:       env("GIT_BRANCH", "main"),
 		GitUsername:     env("GIT_USERNAME", env("CODEBERG_USERNAME", "")),
-		GitToken:        env("GIT_TOKEN", env("CODEBERG_TOKEN", "")),
+		GitToken:        envSecret("GIT_TOKEN", envSecret("CODEBERG_TOKEN", "")),
 		GitAuthorName:   env("GIT_AUTHOR_NAME", "agrelha"),
 		GitAuthorEmail:  env("GIT_AUTHOR_EMAIL", "agrelha@localhost"),
 		ModsPath:        env("MODS_PATH", "manifests/valheim/mods.yaml"),
@@ -208,7 +208,7 @@ func Load() *Config {
 		CurseForgeAPI:         env("CURSEFORGE_API", "https://api.curseforge.com/v1"),
 		// Empty is a supported state: CurseForge has no anonymous API, so without
 		// a key it is simply absent and Modrinth carries on alone.
-		CurseForgeAPIKey: env("CURSEFORGE_API_KEY", ""),
+		CurseForgeAPIKey: envSecret("CURSEFORGE_API_KEY", ""),
 
 		TotalBudgetGiB:   totalBudget,
 		MaxInstances:     maxInstances,

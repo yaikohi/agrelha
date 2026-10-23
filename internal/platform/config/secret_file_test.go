@@ -63,3 +63,31 @@ func TestTrailingNewlineIsTrimmedButInnerNewlinesSurvive(t *testing.T) {
 		t.Errorf("want %q, got %q", "a\nb", got)
 	}
 }
+
+func TestSecretFilesPopulateAllCredentials(t *testing.T) {
+	dir := t.TempDir()
+
+	oidcFile := filepath.Join(dir, "oidc_secret")
+	_ = os.WriteFile(oidcFile, []byte("my-oidc-secret\n"), 0o600)
+	t.Setenv("OIDC_CLIENT_SECRET_FILE", oidcFile)
+
+	codebergFile := filepath.Join(dir, "codeberg_token")
+	_ = os.WriteFile(codebergFile, []byte("my-codeberg-token\n"), 0o600)
+	t.Setenv("CODEBERG_TOKEN_FILE", codebergFile)
+
+	cfFile := filepath.Join(dir, "cf_key")
+	_ = os.WriteFile(cfFile, []byte("my-cf-key\n"), 0o600)
+	t.Setenv("CURSEFORGE_API_KEY_FILE", cfFile)
+
+	cfg := Load()
+	if cfg.OIDCClientSecret != "my-oidc-secret" {
+		t.Errorf("OIDCClientSecret = %q, want my-oidc-secret", cfg.OIDCClientSecret)
+	}
+	if cfg.GitToken != "my-codeberg-token" {
+		t.Errorf("GitToken = %q, want my-codeberg-token", cfg.GitToken)
+	}
+	if cfg.CurseForgeAPIKey != "my-cf-key" {
+		t.Errorf("CurseForgeAPIKey = %q, want my-cf-key", cfg.CurseForgeAPIKey)
+	}
+}
+

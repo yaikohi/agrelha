@@ -128,11 +128,11 @@ Tick an item only when it is fixed **and** a test fails with the fix reverted.
       The pill renders those red as "Host not configured", distinct from a sleeping Host.
       A pairing ratchet (`internal/web/host_flag_pairing_test.go`) fails the build if a handler
       forwards one flag and drops the other — it caught four such sites while this was being written.
-- [ ] **Every other secret still rides the same mangling path.** `CODEBERG_TOKEN`,
-      `OIDC_CLIENT_SECRET`, `CURSEFORGE_API_KEY` and `CODEBERG_USERNAME` are still interpolated into
-      the systemd `EnvironmentFile` on fogo. None contains a backslash today, so none is broken — but
-      the next one that does will fail the same way, far from its cause. `config.envSecret` already
-      supports `<VAR>_FILE` for all of them; moving them is a fogo-side change.
+- [x] **Every other secret still rides the same mangling path.** `CODEBERG_TOKEN`,
+      `OIDC_CLIENT_SECRET`, and `CURSEFORGE_API_KEY` now use `config.envSecret` in `agrelha`
+      and are delivered via `<VAR>_FILE` pointing to `/run/secrets/` on `fogo`, completely
+      bypassing the `EnvironmentFile` template. Tests: `internal/platform/config/secret_file_test.go`
+      (`TestSecretFilesPopulateAllCredentials` fails when reverted).
 - [ ] **`TestBuildVariantsAndRoutes` is flaky.** Failed once in `internal/wiring`, then passed 9
       targeted runs and 2 full-suite runs. Not dismissed: with no CI, an intermittent failure is
       exactly how a real bug hides. Needs `-race` and a look at shared state between wiring tests.
