@@ -13,7 +13,7 @@ import (
 func TestTwoGamesInstanceOneDoNotCollide(t *testing.T) {
 	work := t.TempDir()
 	var dirs, projects []string
-	r := New(WithWorkDir(work), WithExecutor(func(_ context.Context, dir string, args ...string) error {
+	r := MustNew(WithWorkDir(work), WithExecutor(func(_ context.Context, dir string, args ...string) error {
 		dirs = append(dirs, dir)
 		for i, a := range args {
 			if a == "-p" && i+1 < len(args) {
@@ -46,7 +46,7 @@ func TestTwoGamesInstanceOneDoNotCollide(t *testing.T) {
 
 func TestInstanceDirMirrorsTheGitPath(t *testing.T) {
 	work := t.TempDir()
-	r := New(WithWorkDir(work))
+	r := MustNew(WithWorkDir(work))
 
 	got := r.resolveDir(ports.ServerRef{Name: "valheim-odin-03", ID: domain.NewInstanceID(domain.GameValheim, 3)})
 	want := filepath.Join(work, "valheim", "instance-03")
@@ -57,7 +57,7 @@ func TestInstanceDirMirrorsTheGitPath(t *testing.T) {
 
 func TestRefWithoutAnIDKeepsTheOldLayout(t *testing.T) {
 	work := t.TempDir()
-	r := New(WithWorkDir(work))
+	r := MustNew(WithWorkDir(work))
 
 	got := r.resolveDir(ports.ServerRef{Name: "legacy-deployment"})
 	if got != filepath.Join(work, "legacy-deployment") {
@@ -91,7 +91,7 @@ func TestRendererAndReconcilerAgreeOnTheDataDir(t *testing.T) {
 	id := domain.NewInstanceID(domain.GameValheim, 2)
 	shared := InstanceDataDir("/srv/gamedata", id, "valheim-boppo-02")
 
-	r := New(WithDataRoot("/srv/gamedata"))
+	r := MustNew(WithDataRoot("/srv/gamedata"))
 	viaReconciler := r.instanceDataDir(ports.ServerRef{Name: "valheim-boppo-02", ID: id})
 
 	if shared != viaReconciler {

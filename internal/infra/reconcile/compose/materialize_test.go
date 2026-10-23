@@ -12,7 +12,7 @@ import (
 
 func TestMaterializeWritesWhereConvergeWillLook(t *testing.T) {
 	work := t.TempDir()
-	r := New(WithWorkDir(work), WithExecutor(func(context.Context, string, ...string) error { return nil }))
+	r := MustNew(WithWorkDir(work), WithExecutor(func(context.Context, string, ...string) error { return nil }))
 	ref := ports.ServerRef{Name: "valheim-odin-01", ID: domain.NewInstanceID(domain.GameValheim, 1)}
 
 	files := map[string][]byte{
@@ -40,7 +40,7 @@ func TestMaterializeWritesWhereConvergeWillLook(t *testing.T) {
 }
 
 func TestMaterializeCreatesTheDirectory(t *testing.T) {
-	r := New(WithWorkDir(filepath.Join(t.TempDir(), "does", "not", "exist")))
+	r := MustNew(WithWorkDir(filepath.Join(t.TempDir(), "does", "not", "exist")))
 	ref := ports.ServerRef{Name: "gmod-lareira-01", ID: domain.NewInstanceID(domain.GameGMod, 1)}
 
 	if err := r.Materialize(context.Background(), ref, map[string][]byte{"docker-compose.yml": []byte("x")}); err != nil {

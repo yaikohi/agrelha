@@ -135,7 +135,11 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 
 	d.StateStore, d.Reconciler, d.Git = buildDeclarativePlane(cfg, st)
-	d.Reconciler = routeReconciler(cfg, d.Reconciler)
+	routedRec, routeErr := routeReconciler(cfg, d.Reconciler)
+	if routeErr != nil {
+		return d, fmt.Errorf("route reconciler: %w", routeErr)
+	}
+	d.Reconciler = routedRec
 
 	if d.StateStore != nil {
 		d.Mods = mods.New(d.StateStore, cfg.ModsPath)
@@ -943,7 +947,11 @@ func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStor
 		if stateDir == "" {
 			stateDir = "/data/state"
 		}
-		reconciler := compose.New(compose.WithWorkDir(cfg.ComposeDir))
+		reconciler, err := compose.New(compose.WithWorkDir(cfg.ComposeDir), compose.WithDataRoot(cfg.DataDir))
+		if err != nil {
+			slog.Warn("compose reconciler init failed", "err", err)
+			return nil, nil, nil
+		}
 		localSS, err := localstate.New(stateDir, localstate.WithDB(st.DB()))
 		if err != nil {
 			slog.Warn("local state store init failed", "err", err)
@@ -964,7 +972,7 @@ func dockerHost(cfg *config.Config) (domain.Host, bool) {
 	return domain.NormalizeHost(name), true
 }
 
-func composeReconciler(cfg *config.Config) *compose.Reconciler {
+func composeReconciler(cfg *config.Config) (*compose.Reconciler, error) {
 	return compose.New(compose.WithWorkDir(cfg.ComposeDir), compose.WithDataRoot(cfg.DataDir))
 }
 
@@ -998,12 +1006,16 @@ func routeRuntime(cfg *config.Config, cluster ports.Runtime) ports.Runtime {
 	return hostrouter.NewRuntime(routes)
 }
 
-func routeReconciler(cfg *config.Config, cluster ports.Reconciler) ports.Reconciler {
+func routeReconciler(cfg *config.Config, cluster ports.Reconciler) (ports.Reconciler, error) {
 	routes := map[domain.Host]ports.Reconciler{domain.HostCluster: cluster}
 	if host, ok := dockerHost(cfg); ok {
-		routes[host] = composeReconciler(cfg)
+		rec, err := composeReconciler(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("host %s reconciler: %w", host, err)
+		}
+		routes[host] = rec
 	}
-	return hostrouter.NewReconciler(routes)
+	return hostrouter.NewReconciler(routes), nil
 }
 
 func buildRuntime(cfg *config.Config, d *Deps) ports.Runtime {

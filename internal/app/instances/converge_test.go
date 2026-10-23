@@ -24,6 +24,10 @@ func (s *spyConverger) Converge(_ context.Context, ref ports.ServerRef) error {
 	return s.err
 }
 
+func (s *spyConverger) Materialize(_ context.Context, _ ports.ServerRef, _ map[string][]byte) error {
+	return nil
+}
+
 func (s *spyConverger) Async() bool { return false }
 
 func newConvergeManager(t *testing.T, opts ...Option) (*InstanceManager, context.Context) {
@@ -128,6 +132,26 @@ func TestFilesAreMaterializedBeforeConverging(t *testing.T) {
 
 	if len(spy.order) < 2 || spy.order[0] != "materialize" || spy.order[1] != "converge" {
 		t.Errorf("order = %v; converging before the files are on disk would run compose against an empty directory", spy.order)
+	}
+}
+
+type unmaterializedSyncReconciler struct{}
+
+func (u *unmaterializedSyncReconciler) Converge(context.Context, ports.ServerRef) error {
+	return nil
+}
+
+func (u *unmaterializedSyncReconciler) Async() bool { return false }
+
+func TestWriteManifestsRefusesSyncReconcilerWithoutMaterializer(t *testing.T) {
+	mgr, ctx := newConvergeManager(t, WithReconciler(&unmaterializedSyncReconciler{}))
+
+	_, err := mgr.CreateInstance(ctx, mcWorld("Fluxweave", "fogo"), domain.ModList{})
+	if err == nil {
+		t.Fatal("creating a world with a synchronous reconciler that cannot materialize must fail, or compose up runs with no files written")
+	}
+	if !errors.Is(err, ports.ErrNotImplemented) {
+		t.Errorf("err = %v, want wrapping ports.ErrNotImplemented so callers understand the missing capability", err)
 	}
 }
 

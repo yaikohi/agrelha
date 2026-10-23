@@ -149,11 +149,10 @@ Tick an item only when it is fixed **and** a test fails with the fix reverted.
       a port."* Fix with a sentinel (`ports.ErrServerAbsent`) returned by the Docker runtime and
       matched via `errors.Is`. Today a Docker release that rewords that string silently breaks
       convergence. ("container" is also on the **Instance** Avoid list; the same hunk uses `goto started`.)
-- [ ] **Dead `Materializer` gate.** `manager.go:596` asserts
-      `if mat, ok := m.reconciler.(ports.Materializer); ok` — always true, because
-      `hostrouter/reconciler.go:68` declares `var _ ports.Materializer`. The real decision happens
-      inside the router, which `return nil`s at line 63 for a non-Materializer, so "nothing was
-      materialised" and "materialised fine" are the same answer.
+- [x] **Dead `Materializer` gate.** `manager.go` and `hostrouter/reconciler.go` now refuse
+      synchronous reconcilers that do not implement `ports.Materializer` with `ports.ErrNotImplemented`
+      rather than silently skipping materialization. Tests: `internal/infra/hostrouter/materialize_test.go`,
+      `internal/app/instances/converge_test.go` (both fail when reverted).
 - [ ] **`web` tests import infra adapters.** `handlers/gmod/handler_test.go:17-18` pulls in
       `infra/manifests/gmod` and `infra/store`, against *"web tests run against a Fiber app wired
       with fake `app` services"*.
@@ -179,9 +178,11 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
 
 - [x] **`/custom-configs` declared** in Minecraft's `RuntimeSpec`, alongside the `config-sync`
       service that stages it into `/data/config` the way the cluster's init container does.
-- [ ] **Data-root separation unenforced.** Spec: *"The data root must be a separate absolute path."*
-      `compose/reconciler.go:38` documents it; nothing validates `DATA_DIR` against `COMPOSE_DIR`,
-      so pointing them at the same path has the reconciler overwrite its own inputs.
+- [x] **Data-root separation unenforced.** Spec: *"The data root must be a separate absolute path."*
+      `compose.New` now validates that `DATA_DIR` is an absolute path and sits strictly outside
+      `COMPOSE_DIR` (and vice versa). `wiring.Build` fails fast at startup if they collide.
+      Tests: `internal/infra/reconcile/compose/reconciler_test.go`, `internal/wiring/wiring_test.go`
+      (both fail when reverted).
 - [ ] **P1 only half-evidenced in-repo** — the `KUBECONFIG` fallback at `kube/client.go:64` exists;
       the token Secret and the spec's *"negative tests [that] matter as much as the positive ones"*
       have no artefact. **P3** (Cloudflare token) and **P5** (evacuation) are out-of-repo.

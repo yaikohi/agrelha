@@ -609,6 +609,8 @@ func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instan
 			if err := mat.Materialize(ctx, ref, files); err != nil {
 				return fmt.Errorf("materialize %s: %w", inst.EffectiveHost(), err)
 			}
+		} else if !m.reconciler.Async() {
+			return fmt.Errorf("reconciler for %s does not implement ports.Materializer: %w", inst.EffectiveHost(), ports.ErrNotImplemented)
 		}
 		if m.preConverge != nil {
 			if err := m.preConverge(ctx, inst); err != nil {

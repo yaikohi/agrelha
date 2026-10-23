@@ -59,10 +59,13 @@ func (r *ReconcilerRouter) Materialize(ctx context.Context, ref ports.ServerRef,
 		return err
 	}
 	mat, ok := rc.(ports.Materializer)
-	if !ok {
+	if ok {
+		return mat.Materialize(ctx, ref, files)
+	}
+	if rc.Async() {
 		return nil
 	}
-	return mat.Materialize(ctx, ref, files)
+	return fmt.Errorf("host %q reconciler does not implement ports.Materializer: %w", ref.Host, ports.ErrNotImplemented)
 }
 
 var _ ports.Materializer = (*ReconcilerRouter)(nil)

@@ -52,14 +52,51 @@ func WithExecutor(e Executor) Option {
 	}
 }
 
+func validatePaths(workDir, dataRoot string) error {
+	if dataRoot == "" {
+		return nil
+	}
+	if !filepath.IsAbs(dataRoot) {
+		return fmt.Errorf("data root %q must be an absolute path: world saves would resolve relative to process cwd", dataRoot)
+	}
+	absWork, err := filepath.Abs(workDir)
+	if err != nil {
+		return fmt.Errorf("resolve compose work dir %q: %w", workDir, err)
+	}
+	cleanData := filepath.Clean(dataRoot)
+	if absWork == cleanData {
+		return fmt.Errorf("data root %q must not match compose work dir %q: materialization would overwrite game saves", dataRoot, workDir)
+	}
+	relData, err := filepath.Rel(absWork, cleanData)
+	if err == nil && !strings.HasPrefix(relData, "..") {
+		return fmt.Errorf("data root %q must not sit inside compose work dir %q: operations in work dir would delete world saves", dataRoot, workDir)
+	}
+	relWork, err := filepath.Rel(cleanData, absWork)
+	if err == nil && !strings.HasPrefix(relWork, "..") {
+		return fmt.Errorf("compose work dir %q must not sit inside data root %q: server mounts would collide with compose manifests", workDir, dataRoot)
+	}
+	return nil
+}
+
 // New creates a new Docker Compose reconciler.
-func New(opts ...Option) *Reconciler {
+func New(opts ...Option) (*Reconciler, error) {
 	r := &Reconciler{
 		workDir:  ".",
 		executor: defaultExecutor,
 	}
 	for _, opt := range opts {
 		opt(r)
+	}
+	if err := validatePaths(r.workDir, r.dataRoot); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func MustNew(opts ...Option) *Reconciler {
+	r, err := New(opts...)
+	if err != nil {
+		panic(err)
 	}
 	return r
 }

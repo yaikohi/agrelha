@@ -219,3 +219,20 @@ func TestBuildVariantsAndRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildRejectsCollidingDataDirAndComposeDir(t *testing.T) {
+	tempDir := t.TempDir()
+	cfg := &config.Config{
+		DBPath:         filepath.Join(tempDir, "collide.db"),
+		AuthMode:       "dev",
+		DockerHostName: "fogo",
+		DataDir:        filepath.Join(tempDir, "shared"),
+		ComposeDir:     filepath.Join(tempDir, "shared"),
+	}
+
+	_, err := wiring.Build(context.Background(), cfg)
+	if err == nil {
+		t.Fatal("wiring.Build must fail when DATA_DIR and COMPOSE_DIR collide, or materialization will overwrite game saves")
+	}
+}
+

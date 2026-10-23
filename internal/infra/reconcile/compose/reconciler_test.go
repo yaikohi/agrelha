@@ -14,7 +14,7 @@ import (
 )
 
 func TestComposeReconciler_Async(t *testing.T) {
-	r := New()
+	r := MustNew()
 	if r.Async() != false {
 		t.Errorf("Async() = true, want false (compose convergence is synchronous)")
 	}
@@ -32,7 +32,7 @@ func TestComposeReconciler_Converge(t *testing.T) {
 	}
 
 	tempDir := t.TempDir()
-	r := New(WithWorkDir(tempDir), WithExecutor(mockExec))
+	r := MustNew(WithWorkDir(tempDir), WithExecutor(mockExec))
 
 	ref := ports.ServerRef{Name: "mc-survival"}
 	if err := r.Converge(ctx, ref); err != nil {
@@ -61,7 +61,7 @@ func TestComposeReconciler_ConvergeError(t *testing.T) {
 		return errors.New("docker daemon not running")
 	}
 
-	r := New(WithExecutor(mockExec))
+	r := MustNew(WithExecutor(mockExec))
 	err := r.Converge(ctx, ports.ServerRef{Name: "srv"})
 	if err == nil || !strings.Contains(err.Error(), "docker daemon not running") {
 		t.Errorf("expected daemon error, got: %v", err)
@@ -136,7 +136,7 @@ func TestComposeReconciler_WriteAndConverge(t *testing.T) {
 		return nil
 	}
 
-	r := New(WithWorkDir(tempDir), WithDataRoot(t.TempDir()), WithExecutor(mockExec))
+	r := MustNew(WithWorkDir(tempDir), WithDataRoot(t.TempDir()), WithExecutor(mockExec))
 	ref := ports.ServerRef{Name: "valheim-01"}
 	spec := domain.RuntimeSpec{
 		Image: "lloesche/valheim-server:latest",
@@ -207,7 +207,7 @@ func TestComposeReconciler_ResolveDir_And_WriteAndConverge(t *testing.T) {
 		return nil
 	}
 
-	r := New(WithWorkDir(tempDir), WithDataRoot(t.TempDir()), WithExecutor(mockExec))
+	r := MustNew(WithWorkDir(tempDir), WithDataRoot(t.TempDir()), WithExecutor(mockExec))
 
 	// 1. resolveDir with empty ref.Name returns workDir
 	if dir := r.resolveDir(ports.ServerRef{Name: ""}); dir != tempDir {
@@ -290,13 +290,13 @@ func TestComposeReconciler_WriteAndConverge_Errors(t *testing.T) {
 	if err := os.WriteFile(filePath, []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	rFile := New(WithWorkDir(filePath))
+	rFile := MustNew(WithWorkDir(filePath))
 	if err := rFile.WriteAndConverge(ctx, ports.ServerRef{Name: "child"}, domain.RuntimeSpec{Image: "busybox"}); err == nil {
 		t.Error("expected WriteAndConverge to fail when MkdirAll fails")
 	}
 
 	// 2. WriteFile fails when target is an existing directory
-	rDir := New(WithWorkDir(tempDir))
+	rDir := MustNew(WithWorkDir(tempDir))
 	targetDir := filepath.Join(tempDir, "inst-dir", "docker-compose.yml")
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		t.Fatal(err)
@@ -334,3 +334,36 @@ func TestEscapeVarsIsIdempotentlyWrong(t *testing.T) {
 		t.Errorf("double-escaping must be visible rather than silently absorbed, got %q", got)
 	}
 }
+
+func TestReconcilerEnforcesDataRootSeparation(t *testing.T) {
+	temp := t.TempDir()
+	workDir := filepath.Join(temp, "compose")
+	dataRoot := filepath.Join(temp, "gamedata")
+
+	if _, err := New(WithWorkDir(workDir), WithDataRoot("relative/data")); err == nil {
+		t.Error("a relative data root must be rejected, or world saves resolve relative to process cwd and roam with caller execution context")
+	}
+
+	if _, err := New(WithWorkDir(workDir), WithDataRoot(workDir)); err == nil {
+		t.Error("identical workDir and dataRoot must be rejected, or materialization will overwrite persistent world data")
+	}
+
+	subData := filepath.Join(workDir, "nested-data")
+	if _, err := New(WithWorkDir(workDir), WithDataRoot(subData)); err == nil {
+		t.Error("dataRoot nested inside workDir must be rejected, or git operations in compose dir will delete world data")
+	}
+
+	subWork := filepath.Join(dataRoot, "nested-compose")
+	if _, err := New(WithWorkDir(subWork), WithDataRoot(dataRoot)); err == nil {
+		t.Error("workDir nested inside dataRoot must be rejected, or server volume mounts will collide with compose manifests")
+	}
+
+	r, err := New(WithWorkDir(workDir), WithDataRoot(dataRoot))
+	if err != nil {
+		t.Fatalf("separate absolute workDir and dataRoot must be accepted: %v", err)
+	}
+	if r == nil {
+		t.Fatal("expected non-nil reconciler")
+	}
+}
+

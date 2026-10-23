@@ -2,6 +2,7 @@ package hostrouter
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,7 @@ func TestRouterForwardsMaterializeToTheRoutedReconciler(t *testing.T) {
 	work := t.TempDir()
 	r := NewReconciler(map[domain.Host]ports.Reconciler{
 		domain.HostCluster: argocd.New(),
-		"fogo":             compose.New(compose.WithWorkDir(work)),
+		"fogo":             compose.MustNew(compose.WithWorkDir(work)),
 	})
 
 	mat, ok := any(r).(ports.Materializer)
@@ -55,5 +56,29 @@ func TestMaterializeRefusesAnUnknownHost(t *testing.T) {
 	err := r.Materialize(context.Background(), ports.ServerRef{Name: "x", Host: "nowhere"}, nil)
 	if err == nil {
 		t.Error("an unregistered Host must fail here too, not silently write nothing")
+	}
+}
+
+type syncReconcilerWithoutMaterializer struct{}
+
+func (s *syncReconcilerWithoutMaterializer) Converge(context.Context, ports.ServerRef) error {
+	return nil
+}
+
+func (s *syncReconcilerWithoutMaterializer) Async() bool { return false }
+
+func TestMaterializeRefusesSynchronousReconcilerWithoutMaterializer(t *testing.T) {
+	r := NewReconciler(map[domain.Host]ports.Reconciler{
+		"fogo": &syncReconcilerWithoutMaterializer{},
+	})
+
+	err := r.Materialize(context.Background(), ports.ServerRef{Name: "valheim-odin-01", Host: "fogo"}, map[string][]byte{
+		"docker-compose.yml": []byte("x"),
+	})
+	if err == nil {
+		t.Fatal("a synchronous reconciler that cannot materialize must fail, or compose up runs against an empty directory while reporting success")
+	}
+	if !errors.Is(err, ports.ErrNotImplemented) {
+		t.Errorf("err = %v, want wrapping ports.ErrNotImplemented so callers can match the capability", err)
 	}
 }
