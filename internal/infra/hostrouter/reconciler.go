@@ -40,7 +40,7 @@ func (r *ReconcilerRouter) For(host domain.Host) (ports.Reconciler, error) {
 	h := domain.NormalizeHost(string(host))
 	rc, ok := r.routes[h]
 	if !ok {
-		return nil, fmt.Errorf("no reconciler registered for host %q (known: %s)", h, strings.Join(r.Hosts(), ", "))
+		return nil, fmt.Errorf("no reconciler registered for host %q (known: %s): %w", h, strings.Join(r.Hosts(), ", "), ports.ErrUnknownHost)
 	}
 	return rc, nil
 }

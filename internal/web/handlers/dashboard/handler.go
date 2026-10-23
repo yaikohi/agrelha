@@ -203,6 +203,7 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 		uinst := pages.InstanceUI{
 			Host:            string(inst.EffectiveHost()),
 			HostUnreachable: inst.HostUnreachable,
+			HostUnknown:     inst.HostUnknown,
 			GameID:          string(inst.GameID),
 			Number:          inst.Number,
 			Name:            inst.Name,

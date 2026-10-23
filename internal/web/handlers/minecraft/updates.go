@@ -168,6 +168,7 @@ func (h *Handler) pushUpdatePanel(c *fiber.Ctx, inst domain.Instance, msg, kind 
 		InstanceUI: pages.InstanceUI{
 			Host:            string(inst.EffectiveHost()),
 			HostUnreachable: inst.HostUnreachable,
+			HostUnknown:     inst.HostUnknown,
 			GameID:          string(domain.GameMinecraft),
 			Number:          inst.Number,
 			Name:            inst.Name,

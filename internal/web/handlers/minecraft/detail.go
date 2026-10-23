@@ -54,6 +54,7 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 		InstanceUI: pages.InstanceUI{
 			Host:            string(inst.EffectiveHost()),
 			HostUnreachable: inst.HostUnreachable,
+			HostUnknown:     inst.HostUnknown,
 			IsAdmin:         shared.IsAdmin(c),
 			GameID:          string(domain.GameMinecraft),
 			Number:          inst.Number,

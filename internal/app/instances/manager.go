@@ -286,7 +286,7 @@ func (m *InstanceManager) instanceDirFor(inst domain.Instance) string {
 	return fmt.Sprintf("%s/instance-%02d", m.instanceRoot(inst.EffectiveHost()), inst.Number)
 }
 
-func (m *InstanceManager) clusterReaders(num int) bool {
+func (m *InstanceManager) readsFromCluster(num int) bool {
 	if m.repo == nil {
 		return true
 	}
@@ -404,6 +404,8 @@ func (m *InstanceManager) ListInstances(ctx context.Context) ([]domain.Instance,
 		if m.runtime != nil {
 			st, err := m.runtime.Status(ctx, m.serverRef(inst))
 			switch {
+			case errors.Is(err, ports.ErrUnknownHost):
+				inst.HostUnknown = true
 			case err != nil:
 				inst.HostUnreachable = true
 			default:
@@ -457,6 +459,8 @@ func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*domain.Ins
 	if m.runtime != nil {
 		st, err := m.runtime.Status(ctx, m.serverRef(inst))
 		switch {
+		case errors.Is(err, ports.ErrUnknownHost):
+			return nil, fmt.Errorf("instance %d declares host %q: %w", inst.Number, inst.EffectiveHost(), err)
 		case err != nil:
 			inst.HostUnreachable = true
 		default:
@@ -575,6 +579,8 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 //
 // Without a state store there is nowhere to write, so this is a no-op rather
 // than a silent partial render.
+const configsFileName = "configs.yaml"
+
 func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instance, mods domain.ModList, commitMsg string) error {
 	files, err := m.renderer.Render(inst, mods)
 	if err != nil {
@@ -587,6 +593,12 @@ func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instan
 	docs := make(map[string]ports.Document, len(files))
 	for fname, content := range files {
 		docs[fname] = ports.Document{Raw: content}
+	}
+	if _, rendered := docs[configsFileName]; rendered {
+		existing, getErr := m.stateStore.Get(ctx, dirRel+"/"+configsFileName)
+		if getErr == nil && len(existing.Data) > 0 && len(existing.Raw) > 0 {
+			docs[configsFileName] = ports.Document{Raw: existing.Raw}
+		}
 	}
 	if err := m.stateStore.PutTree(ctx, dirRel, docs, commitMsg); err != nil {
 		return fmt.Errorf("state store write instance manifests: %w", err)
@@ -920,7 +932,7 @@ func (m *InstanceManager) UpdateValheimSettings(ctx context.Context, num int, na
 }
 
 func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]string, error) {
-	if m.modsReader != nil && m.clusterReaders(num) {
+	if m.modsReader != nil && m.readsFromCluster(num) {
 		return m.modsReader(ctx, num)
 	}
 	if m.stateStore == nil {
@@ -954,7 +966,7 @@ func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]stri
 // GetCurseForgeMods reads the CurseForge half of a Mod list. An Instance with no
 // CurseForge entries has no such file, which is not an error.
 func (m *InstanceManager) GetCurseForgeMods(ctx context.Context, num int) ([]string, error) {
-	if m.cfModsReader != nil && m.clusterReaders(num) {
+	if m.cfModsReader != nil && m.readsFromCluster(num) {
 		return m.cfModsReader(ctx, num)
 	}
 	if m.stateStore == nil {
@@ -1155,7 +1167,15 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 	}
 
 	if m.reconciler != nil && !inst.EffectiveHost().IsCluster() {
-		if werr := m.writeManifests(ctx, *inst, domain.ModList{Primary: next}, msg); werr != nil {
+		converged := domain.ModList{Primary: next}
+		if m.gameID == domain.GameMinecraft {
+			cf, cfErr := m.GetCurseForgeMods(ctx, num)
+			if cfErr != nil {
+				return false, fmt.Errorf("converge mods on instance %d: read curseforge mods: %w", num, cfErr)
+			}
+			converged.CurseForge = joinLines(cf)
+		}
+		if werr := m.writeManifests(ctx, *inst, converged, msg); werr != nil {
 			return false, fmt.Errorf("converge mods on instance %d: %w", num, werr)
 		}
 	}
@@ -1381,7 +1401,7 @@ func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, a
 }
 
 func (m *InstanceManager) ListConfigs(ctx context.Context, num int) ([]string, error) {
-	if m.configsReader != nil && m.clusterReaders(num) {
+	if m.configsReader != nil && m.readsFromCluster(num) {
 		data, err := m.configsReader(ctx, num)
 		if err != nil {
 			return nil, err
@@ -1414,7 +1434,7 @@ func (m *InstanceManager) ListConfigs(ctx context.Context, num int) ([]string, e
 // BepInEx editor needs the bodies too and should not pay for that read once per
 // file.
 func (m *InstanceManager) ListConfigData(ctx context.Context, num int) (map[string]string, error) {
-	if m.configsReader != nil && m.clusterReaders(num) {
+	if m.configsReader != nil && m.readsFromCluster(num) {
 		return m.configsReader(ctx, num)
 	}
 	if m.stateStore == nil {
@@ -1454,7 +1474,7 @@ func (m *InstanceManager) configDataAt(ctx context.Context, path string) (map[st
 }
 
 func (m *InstanceManager) GetConfig(ctx context.Context, num int, filename string) (string, error) {
-	if m.configsReader != nil && m.clusterReaders(num) {
+	if m.configsReader != nil && m.readsFromCluster(num) {
 		data, err := m.configsReader(ctx, num)
 		if err != nil {
 			return "", err

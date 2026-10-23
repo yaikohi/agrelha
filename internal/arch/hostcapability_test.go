@@ -51,10 +51,6 @@ var clusterBackedCapabilities = map[string]hostCapability{
 		scope:  clusterOnly,
 		reason: "reads BEPINEX from a Deployment env var; a Docker Host has no Deployment and where its BepInEx version comes from is an open design question",
 	},
-	"ingest.Run": {
-		scope:  clusterOnly,
-		reason: "streams logs from a Kubernetes pod; a Docker Host world has no pod, so its logs page is empty until this grows a Runtime-backed source",
-	},
 }
 
 func TestEveryClusterBackedCapabilityIsClassified(t *testing.T) {
@@ -136,7 +132,7 @@ func TestEveryHostScopedCapabilityIsGatedOnTheInstanceHost(t *testing.T) {
 			if !strings.Contains(src, "m."+field+" != nil") {
 				continue
 			}
-			if strings.Contains(src, "clusterReaders(") || strings.Contains(src, "IsCluster()") {
+			if strings.Contains(src, "readsFromCluster(") || strings.Contains(src, "IsCluster()") {
 				continue
 			}
 			ungated = append(ungated, fset.Position(cond.Pos()).String()+": "+src)
@@ -149,7 +145,7 @@ func TestEveryHostScopedCapabilityIsGatedOnTheInstanceHost(t *testing.T) {
 		t.Errorf("%s consults a host-scoped reader without gating on the Instance Host:\n  %s\n"+
 			"a Docker Host world materialises its Mod list and configs through the state store;\n"+
 			"answering from the cluster there returns whatever ArgoCD last synced, which for a migrated world is frozen forever.\n"+
-			"add \"&& m.clusterReaders(num)\", or \"&& inst.EffectiveHost().IsCluster()\" where an Instance is already in hand.",
+			"add \"&& m.readsFromCluster(num)\", or \"&& inst.EffectiveHost().IsCluster()\" where an Instance is already in hand.",
 			managerFile, site)
 	}
 

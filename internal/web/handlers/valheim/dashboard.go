@@ -78,6 +78,7 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 		uiInstances = append(uiInstances, pages.InstanceUI{
 			Host:               string(inst.EffectiveHost()),
 			HostUnreachable:    inst.HostUnreachable,
+			HostUnknown:        inst.HostUnknown,
 			GameID:             string(inst.GameID),
 			Number:             inst.Number,
 			Name:               inst.Name,

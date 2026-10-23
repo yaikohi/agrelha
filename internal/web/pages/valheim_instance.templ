@@ -24,7 +24,7 @@ templ ValheimInstanceDetail(d InstanceDetailUI) {
 					</div>
 					<div class="mt-1 flex items-center gap-3">
 						<h1 class="text-xl font-bold text-zinc-100">{ d.Name }</h1>
-						@components.StatusPill(components.StatusPillProps{State: d.State})
+						@components.StatusPill(components.StatusPillProps{State: d.State, HostUnreachable: d.HostUnreachable, HostUnknown: d.HostUnknown})
 					</div>
 				</div>
 

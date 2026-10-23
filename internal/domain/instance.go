@@ -15,6 +15,7 @@ const (
 	StateStopped      InstanceState = "stopped"
 	StateProvisioning InstanceState = "provisioning"
 	StateError        InstanceState = "error"
+	StateUnknown      InstanceState = "unknown"
 )
 
 const annPrefix = "agrelha.dev/"
@@ -70,6 +71,7 @@ type Instance struct {
 	CreatedBy  string
 
 	HostUnreachable bool
+	HostUnknown     bool
 	CreatedAt       time.Time
 	LastUsed        time.Time
 

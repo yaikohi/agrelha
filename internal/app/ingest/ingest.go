@@ -31,21 +31,33 @@ type presenceStore interface {
 	RecordEvent(kind, id string) error
 }
 
-var retryDelay = 3 * time.Second
+var (
+	retryDelay    = 3 * time.Second
+	maxRetryDelay = 5 * time.Minute
+)
 
 func Run(ctx context.Context, k logStreamer, st presenceStore) {
 	_ = st.ClearPresence()
+	delay := retryDelay
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := consume(ctx, k, st); err != nil && ctx.Err() == nil {
-			slog.Warn("ingest: log stream ended, retrying", "err", err)
+		err := consume(ctx, k, st)
+		if err == nil {
+			delay = retryDelay
+		} else if ctx.Err() == nil {
+			slog.Warn("ingest: log stream ended, retrying", "err", err, "retry_in", delay)
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(retryDelay): // pod may be restarting
+		case <-time.After(delay): // the server may be restarting
+		}
+		if err != nil {
+			if delay *= 2; delay > maxRetryDelay {
+				delay = maxRetryDelay
+			}
 		}
 	}
 }

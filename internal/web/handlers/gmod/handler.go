@@ -102,6 +102,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		uiInstances = append(uiInstances, pages.InstanceUI{
 			Host:               string(inst.EffectiveHost()),
 			HostUnreachable:    inst.HostUnreachable,
+			HostUnknown:        inst.HostUnknown,
 			GameID:             string(inst.GameID),
 			Number:             inst.Number,
 			Name:               inst.Name,
@@ -319,6 +320,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 		InstanceUI: pages.InstanceUI{
 			Host:            string(inst.EffectiveHost()),
 			HostUnreachable: inst.HostUnreachable,
+			HostUnknown:     inst.HostUnknown,
 			IsAdmin:         shared.IsAdmin(c),
 			GameID:          string(inst.GameID),
 			Number:          inst.Number,

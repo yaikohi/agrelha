@@ -6,8 +6,10 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -111,6 +113,19 @@ func env(key, def string) string {
 	return def
 }
 
+func envSecret(key, def string) string {
+	path := os.Getenv(key + "_FILE")
+	if path == "" {
+		return env(key, def)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		slog.Error("config: cannot read secret file", "var", key+"_FILE", "path", path, "err", err)
+		return def
+	}
+	return strings.TrimRight(string(b), "\r\n")
+}
+
 func envInt(key string, def int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
@@ -152,7 +167,7 @@ func Load() *Config {
 		AuthMode:          env("AUTH_MODE", ""),
 		ZitadelProjectID:  env("ZITADEL_PROJECT_ID", ""),
 		ZitadelAPIURL:     env("ZITADEL_API_URL", ""),
-		ZitadelServiceKey: env("ZITADEL_SERVICE_KEY", ""),
+		ZitadelServiceKey: envSecret("ZITADEL_SERVICE_KEY", ""),
 
 		GitRepoURL:      env("GIT_REPO_URL", ""),
 		GitBranch:       env("GIT_BRANCH", "main"),

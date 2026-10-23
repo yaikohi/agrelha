@@ -186,6 +186,7 @@ type InstanceUI struct {
 	StartBlockedReason string
 	Host               string
 	HostUnreachable    bool
+	HostUnknown        bool
 }
 
 type InstanceDetailUI struct {

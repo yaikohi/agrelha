@@ -524,6 +524,7 @@ func (h *Handler) MCProvisioningPage(c *fiber.Ctx) error {
 		GameID:          string(inst.GameID),
 		Host:            string(inst.EffectiveHost()),
 		HostUnreachable: inst.HostUnreachable,
+		HostUnknown:     inst.HostUnknown,
 		Number:          inst.Number,
 		Name:            inst.Name,
 		Slug:            inst.Slug,

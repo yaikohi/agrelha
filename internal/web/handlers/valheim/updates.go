@@ -166,6 +166,7 @@ func (h *Handler) pushUpdatePanel(c *fiber.Ctx, inst domain.Instance, msg, kind 
 			GameID:          string(inst.GameID),
 			Host:            string(inst.EffectiveHost()),
 			HostUnreachable: inst.HostUnreachable,
+			HostUnknown:     inst.HostUnknown,
 			Number:          inst.Number,
 			Name:            inst.Name,
 			State:           string(inst.State),

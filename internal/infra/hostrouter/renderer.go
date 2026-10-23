@@ -39,7 +39,7 @@ func (r *RendererRouter) For(host domain.Host) (ports.SpecRenderer, error) {
 	h := domain.NormalizeHost(string(host))
 	rr, ok := r.routes[h]
 	if !ok {
-		return nil, fmt.Errorf("no renderer registered for host %q (known: %s)", h, strings.Join(r.Hosts(), ", "))
+		return nil, fmt.Errorf("no renderer registered for host %q (known: %s): %w", h, strings.Join(r.Hosts(), ", "), ports.ErrUnknownHost)
 	}
 	return rr, nil
 }

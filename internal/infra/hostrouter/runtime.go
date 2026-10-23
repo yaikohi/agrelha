@@ -42,7 +42,7 @@ func (r *RuntimeRouter) For(host domain.Host) (ports.Runtime, error) {
 	h := domain.NormalizeHost(string(host))
 	rt, ok := r.routes[h]
 	if !ok {
-		return nil, fmt.Errorf("no runtime registered for host %q (known: %s)", h, strings.Join(r.Hosts(), ", "))
+		return nil, fmt.Errorf("no runtime registered for host %q (known: %s): %w", h, strings.Join(r.Hosts(), ", "), ports.ErrUnknownHost)
 	}
 	return rt, nil
 }

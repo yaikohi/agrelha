@@ -88,6 +88,11 @@ func New(cfg Config) (*Client, error) {
 func parseRSAPrivateKey(pemData string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(pemData))
 	if block == nil {
+		if !strings.Contains(pemData, "\n") {
+			return nil, errors.New("zitadel: service key is not valid PEM: it contains no newlines, " +
+				"which usually means the JSON was passed through a systemd EnvironmentFile - that parser " +
+				"consumes the backslash of every \\n escape. Pass ZITADEL_SERVICE_KEY_FILE with a path instead")
+		}
 		return nil, errors.New("zitadel: service key is not valid PEM")
 	}
 	if k, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {

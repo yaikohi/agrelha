@@ -160,7 +160,6 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	} else {
 		c.SetNodeSelector(cfg.GameNodeSelector)
 		d.K8s = c
-		go ingest.Run(ctx, c, st)
 	}
 
 	var instOpts []instances.Option
@@ -471,6 +470,26 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		cfg.ValheimNamespace,
 		valheimInstOpts...,
 	)
+
+	go ingest.Run(ctx, ingest.NewInstanceSource(
+		d.ValheimInstances.InstanceLogs,
+		func(ctx context.Context) (int, error) {
+			insts, err := d.ValheimInstances.ListInstances(ctx)
+			if err != nil {
+				return 0, err
+			}
+			target := 0
+			for _, inst := range insts {
+				if target == 0 || inst.Number < target {
+					target = inst.Number
+				}
+			}
+			if target == 0 {
+				return 0, fmt.Errorf("no valheim instance to ingest logs from")
+			}
+			return target, nil
+		},
+	), st)
 
 	d.MCRuntime = rt
 	d.MCRef = ports.ServerRef{Name: cfg.MinecraftDeployment, Scope: cfg.MinecraftNamespace}

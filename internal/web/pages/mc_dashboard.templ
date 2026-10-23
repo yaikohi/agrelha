@@ -53,7 +53,7 @@ templ MinecraftDashboard(instances []InstanceUI, budget BudgetUI, admin ...bool)
 										<p class="mt-0.5 font-mono text-xs text-zinc-400">{ ConnectAddress(inst.LBIP, 25565) }</p>
 									</div>
 									<div>
-										@components.StatusPill(components.StatusPillProps{State: inst.State})
+										@components.StatusPill(components.StatusPillProps{State: inst.State, HostUnreachable: inst.HostUnreachable, HostUnknown: inst.HostUnknown})
 									</div>
 								</div>
 
