@@ -40,3 +40,21 @@ func TestProvisioningCopyKeepsTheClusterWordingItAlwaysHad(t *testing.T) {
 		t.Error("an unset Host must read as cluster, matching domain.NormalizeHost")
 	}
 }
+
+func TestTheConsoleNamesWhereItsLogsComeFrom(t *testing.T) {
+	onCluster := LogSourceNote("cluster")
+	onDocker := LogSourceNote("fogo")
+
+	if strings.Contains(onDocker, "pod") {
+		t.Errorf(`a Docker-Host console says %q.
+
+There is no pod on a Docker Host; the lines come from a container through the runtime. Calling it a
+pod stream is the same cluster assumption that left this page empty for every Docker-Host world.`, onDocker)
+	}
+	if !strings.Contains(onDocker, "fogo") {
+		t.Errorf("Docker-Host console copy %q never names the Host", onDocker)
+	}
+	if !strings.Contains(onCluster, "pod") {
+		t.Error("a cluster console must still say pod; that is what it reads")
+	}
+}

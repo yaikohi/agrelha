@@ -17,6 +17,7 @@ const (
 // Game implements ports.Game for Minecraft.
 type Game struct {
 	image            string
+	rconPassword     string
 	runtime          ports.Runtime
 	serverRef        ports.ServerRef
 	playerCountFn    func(context.Context) (int, error)
@@ -35,6 +36,10 @@ func WithImage(img string) Option {
 			g.image = img
 		}
 	}
+}
+
+func WithRconPassword(pass string) Option {
+	return func(g *Game) { g.rconPassword = pass }
 }
 
 // WithRuntime associates a workload execution runtime and server reference.
@@ -87,20 +92,46 @@ func New(opts ...Option) *Game {
 var _ ports.Game = (*Game)(nil)
 
 // RuntimeSpec defines the execution shape of a Minecraft server container.
+const jvmOpts = "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch"
+
 func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 	inst.GameID = domain.GameMinecraft
+	env := inst.Env(domain.MinecraftProfile)
+	if env == nil {
+		env = map[string]string{}
+	}
+	operational := map[string]string{
+		"EULA":              "TRUE",
+		"INIT_MEMORY":       fmt.Sprintf("%dG", inst.HeapInitMemoryGiB(domain.MinecraftProfile)),
+		"MAX_MEMORY":        fmt.Sprintf("%dG", inst.MemoryGiB(domain.MinecraftProfile)),
+		"SYNC_CHUNK_WRITES": "FALSE",
+		"JVM_XX_OPTS":       jvmOpts,
+		"TZ":                "Europe/Amsterdam",
+		"ENABLE_QUERY":      "TRUE",
+		"ONLINE_MODE":       "TRUE",
+		"ENABLE_RCON":       "TRUE",
+		"RCON_PORT":         fmt.Sprintf("%d", domain.MinecraftRconPort),
+	}
+	if g.rconPassword != "" {
+		operational["RCON_PASSWORD"] = g.rconPassword
+	}
+	for k, v := range operational {
+		if _, set := env[k]; !set {
+			env[k] = v
+		}
+	}
 	return domain.RuntimeSpec{
 		Image: g.image,
 		Ports: []domain.PortSpec{
-			{Name: "minecraft", Port: 25565, Protocol: "TCP"},
-			{Name: "rcon", Port: 25575, Protocol: "TCP"},
+			{Name: "minecraft", Port: domain.MinecraftGamePort, Protocol: "TCP"},
+			{Name: "rcon", Port: domain.MinecraftRconPort, Protocol: "TCP"},
 		},
 		Volumes: []domain.VolumeSpec{
 			{Name: "data", MountPath: "/data", ReadOnly: false},
 			{Name: "config-mods", MountPath: "/config-mods", ReadOnly: true},
 			{Name: "custom-configs", MountPath: "/custom-configs", ReadOnly: true},
 		},
-		Env:         inst.Env(domain.MinecraftProfile),
+		Env:         env,
 		HealthProbe: "mc-health",
 	}
 }

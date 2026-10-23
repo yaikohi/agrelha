@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"agrelha/internal/web/components"
+	"agrelha/internal/web/shared"
 )
 
 templ MinecraftInstanceDetail(d InstanceDetailUI) {
@@ -421,7 +422,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 					<div class="flex items-center justify-between">
 						<div>
 							<h2 class="text-base font-semibold text-zinc-100">Live Console & Logs</h2>
-							<p class="mt-0.5 text-xs text-zinc-400">Real-time pod logs stream + RCON execution</p>
+							<p class="mt-0.5 text-xs text-zinc-400">{ shared.LogSourceNote(d.Host) + " + RCON execution" }</p>
 						</div>
 					</div>
 

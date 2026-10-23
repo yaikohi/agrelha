@@ -61,3 +61,10 @@ func ProvisioningDetail(host string) string {
 	}
 	return fmt.Sprintf("Applying compose on %s...", h)
 }
+
+func LogSourceNote(host string) string {
+	if domain.NormalizeHost(host).IsCluster() {
+		return "Real-time pod log stream"
+	}
+	return fmt.Sprintf("Real-time container log stream from %s", domain.NormalizeHost(host))
+}

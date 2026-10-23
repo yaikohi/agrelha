@@ -84,6 +84,26 @@ Tick an item only when it is fixed **and** a test fails with the fix reverted.
       port per Instance, so a second Docker-Host world shows the port it actually listens on instead
       of instance 01's. Tests: `internal/web/shared/provisioning_test.go`.
 
+- [x] **A Minecraft world on Docker crash-looped on the EULA.** `RuntimeSpec` carried only the
+      *world-shaped* env from `Instance.Env` (LEVEL, TYPE, VERSION, mods). The **operational** env —
+      `EULA`, `INIT_MEMORY`, `MAX_MEMORY`, `JVM_XX_OPTS`, `TZ`, `ENABLE_RCON`, `RCON_PORT`,
+      `ENABLE_QUERY`, `ONLINE_MODE` — was hardcoded in the Deployment template, so it had never
+      needed to exist in `RuntimeSpec` until Compose started building worlds from it alone. itzg
+      refuses to boot without `EULA`, and the resource tier the operator picked was silently ignored
+      because `MAX_MEMORY` never arrived. `RCON_PASSWORD` is set only when one is configured, so an
+      empty password never reaches the server as an open console.
+      The compose renderer also overlays `inst.EnvWith(profile, mods)`, so `CURSEFORGE_FILES` reaches
+      a Docker world whose Mod list has CurseForge entries.
+      Tests: `internal/app/games/minecraft/runtimespec_test.go`.
+- [x] **Starting a world could not pick up a changed Desired state.** `StartInstance` converged only
+      when the container was *missing* — edge-triggered on one specific error — so a world whose
+      rendered state changed while its container still existed could never adopt it: the container
+      kept its original environment and Start reported success. That is exactly the wedge the EULA
+      bug created, with no way out of the UI. Start is now level-triggered on a Docker Host, matching
+      ADR 0008 and `ReplaceMods`. Test in `converge_test.go`.
+- [x] **The console called its logs a pod stream on a Docker Host.** Same cluster assumption as the
+      provisioning page; `shared.LogSourceNote` now names the Host. Cluster wording asserted unchanged.
+
 ---
 
 ## Still actively wrong on the box

@@ -42,6 +42,13 @@ func (r *Renderer) Render(inst domain.Instance, mods domain.ModList) (map[string
 	name := inst.DeploymentName(r.profile)
 	spec := r.spec(inst)
 
+	if spec.Env == nil {
+		spec.Env = map[string]string{}
+	}
+	for k, v := range inst.EnvWith(r.profile, mods) {
+		spec.Env[k] = v
+	}
+
 	hostPorts, err := domain.WithHostPorts(r.profile, inst, spec.Ports)
 	if err != nil {
 		return nil, fmt.Errorf("render compose for %s: %w", name, err)

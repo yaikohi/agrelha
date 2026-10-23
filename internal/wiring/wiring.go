@@ -564,6 +564,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 
 	d.MinecraftGame = minecraft.New(
 		minecraft.WithRuntime(rt, ports.ServerRef{Name: cfg.MinecraftDeployment, Scope: cfg.MinecraftNamespace}),
+		minecraft.WithRconPassword(cfg.MinecraftRconPassword),
 		minecraft.WithPlayerCount(func(ctx context.Context) (int, error) {
 			if d.MCAccess != nil {
 				players, err := d.MCAccess.OnlinePlayers()

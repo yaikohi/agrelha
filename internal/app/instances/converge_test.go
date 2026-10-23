@@ -390,3 +390,37 @@ func TestAnUnchangedModListStillConvergesADockerHost(t *testing.T) {
 		t.Error("converge was skipped because the desired state was unchanged;\nthe disk can drift from git independently, and gating convergence on a\ndesired-state edge means nothing ever repairs it - the world keeps running\nold mods and every retry is a no-op")
 	}
 }
+
+func TestStartingAWorldWhoseDesiredStateChangedReconvergesIt(t *testing.T) {
+	spy := &recordingReconciler{}
+	mgr, ctx := newConvergeManager(t, WithReconciler(spy))
+	mgr.runtime = &mockRuntimePort{}
+
+	created, err := mgr.CreateInstance(ctx, mcWorld("Fogueira", "fogo"), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	if err := mgr.repo.UpdateState(created.Number, domain.StateStopped); err != nil {
+		t.Fatal(err)
+	}
+	spy.order = nil
+
+	if err := mgr.StartInstance(ctx, created.Number); err != nil {
+		t.Fatalf("StartInstance: %v", err)
+	}
+
+	var converged bool
+	for _, step := range spy.order {
+		if step == "converge" {
+			converged = true
+		}
+	}
+	if !converged {
+		t.Errorf(`starting a Docker-Host world did not re-converge it (steps: %v).
+
+Convergence was edge-triggered on "the container is missing", so a world whose Desired state changed
+while its container still existed could never pick the change up: the container keeps running its
+original environment and Start looks like it worked. ADR 0008 makes convergence level-triggered,
+and ReplaceMods already is - Start must be too, or a world can be wedged with no way out of the UI.`, spy.order)
+	}
+}

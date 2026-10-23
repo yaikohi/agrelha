@@ -2,7 +2,10 @@ package domain
 
 import "fmt"
 
-const MinecraftGamePort = 25565
+const (
+	MinecraftGamePort = 25565
+	MinecraftRconPort = 25575
+)
 
 func HostPortFor(profile GameProfile, host Host, number, containerPort int) (int, error) {
 	if NormalizeHost(string(host)).IsCluster() || number <= 1 {
