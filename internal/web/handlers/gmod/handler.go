@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -333,7 +334,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 		if col, err := h.cfg.Workshop.GetCollection(c.UserContext(), collectionID); err == nil {
 			d.CollectionTitle = col.Title
 			d.CollectionItems = col.ItemCount
-			if !col.TimeUpdated.IsZero() && !inst.CreatedAt.IsZero() && col.TimeUpdated.After(inst.CreatedAt) {
+			if since, ok := h.serverRunningSince(c, num); ok && !col.TimeUpdated.IsZero() && col.TimeUpdated.After(since) {
 				d.RestartPending = true
 				d.RestartReason = fmt.Sprintf("Steam Workshop collection %q was updated upstream on %s. Restart the server to apply changes.", col.Title, col.TimeUpdated.Format("Jan 02, 2006"))
 			}
@@ -411,4 +412,15 @@ func (h *Handler) InstanceDelete(c *fiber.Ctx) error {
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted Garry's Mod instance #%02d.", num), map[string]any{
 		"redirect": "/gmod",
 	})
+}
+
+func (h *Handler) serverRunningSince(c *fiber.Ctx, num int) (time.Time, bool) {
+	if h.cfg.Instances == nil {
+		return time.Time{}, false
+	}
+	st, err := h.cfg.Instances.RuntimeStatus(c.UserContext(), num)
+	if err != nil || st.StartedAt.IsZero() {
+		return time.Time{}, false
+	}
+	return st.StartedAt, true
 }
