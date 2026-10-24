@@ -297,6 +297,9 @@ type ServerRowUI struct {
 	OverviewURL   string
 	Name          string
 	Address       string
+	JoinURL       string
+	JoinLabel     string
+	Password      string
 	VersionBadge  string
 	DownloadURL   string
 	DownloadFmt   string
@@ -395,8 +398,6 @@ func GModPort(inst InstanceUI) int {
 	}
 	return port
 }
-
-
 
 // EscapeJS escapes backslashes and quotes for safe embedding in JS inline strings.
 func EscapeJS(s string) string {
@@ -689,6 +690,55 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 	return g
 }
 
+func GModCard(summary GameSummaryUI, isAdmin bool) GameCardUI {
+	g := GameCardUI{
+		Icon:       "🔧",
+		Accent:     "sky",
+		Title:      "Garry's Mod Worlds",
+		Subtitle:   "Source engine sandbox",
+		AccessNote: "Join straight from Steam — the server password is shown below.",
+		EmptyText:  "All Garry's Mod worlds are currently offline.",
+		EmptyHint:  "Ask the server host on Discord to start a world!",
+	}
+
+	for _, inst := range summary.ActiveInstances {
+		port := GModPort(inst)
+		row := ServerRowUI{
+			Name:         inst.Name,
+			Address:      fmt.Sprintf("%s:%d", inst.LBIP, port),
+			Password:     inst.Password,
+			JoinLabel:    "Join via Steam",
+			Online:       true,
+			Players:      inst.Players,
+			PlayersKnown: inst.PlayersKnown,
+			Uptime:       inst.Uptime,
+		}
+		if inst.LBIP != "" {
+			if inst.Password != "" {
+				row.JoinURL = fmt.Sprintf("steam://connect/%s:%d/%s", inst.LBIP, port, inst.Password)
+			} else {
+				row.JoinURL = fmt.Sprintf("steam://connect/%s:%d", inst.LBIP, port)
+			}
+		}
+		if inst.Gamemode != "" && inst.Map != "" {
+			row.VersionBadge = fmt.Sprintf("%s · %s", inst.Gamemode, inst.Map)
+		}
+		if isAdmin && inst.Number > 0 {
+			row.OverviewURL = fmt.Sprintf("/gmod/%d/overview", inst.Number)
+		}
+		g.Rows = append(g.Rows, row)
+	}
+
+	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", summary.TotalInstances, summary.MaxInstances)}
+	if isAdmin {
+		g.Extras = append(g.Extras,
+			fmt.Sprintf("%d of %d running", summary.RunningCount, summary.MaxRunning),
+			fmt.Sprintf("RAM %dG of %dG", summary.UsedGiB, summary.TotalBudgetGiB),
+		)
+	}
+	return g
+}
+
 // GameActions builds a CardActionsUI for any registered game profile.
 func GameActions(p domain.GameProfile, summary ...GameSummaryUI) CardActionsUI {
 	var links []ActionUI
@@ -774,24 +824,45 @@ func withModpack(row ServerRowUI, url string, hasMods bool) ServerRowUI {
 }
 
 // InstanceTabs lists an instance's tabs, omitting Mods for a Vanilla World.
+var implementedTabs = map[string][]string{
+	"minecraft": {"overview", "mods", "configs", "console", "backups", "settings"},
+	"valheim":   {"overview", "mods", "configs", "console", "backups", "settings"},
+	"gmod":      {"overview", "console"},
+}
+
+var tabLabelBySlug = map[string]string{
+	"overview": "Overview",
+	"mods":     "Mods",
+	"configs":  "Configs",
+	"console":  "Console & Logs",
+	"backups":  "Backups",
+	"settings": "Settings",
+}
+
 func InstanceTabs(game string, num int, active string, vanilla bool) []components.TabItem {
-	labels := []struct{ label, slug string }{
-		{"Overview", "overview"},
-		{"Mods", "mods"},
-		{"Configs", "configs"},
-		{"Console & Logs", "console"},
-		{"Backups", "backups"},
-		{"Settings", "settings"},
+	slugs, ok := implementedTabs[game]
+	if !ok {
+		slugs = []string{"overview"}
 	}
-	tabs := make([]components.TabItem, 0, len(labels))
-	for _, l := range labels {
-		if l.slug == "mods" && vanilla {
+
+	consoleLabel := tabLabelBySlug["console"]
+	if p, ok := domain.ProfileFor(domain.GameID(game)); ok && !p.Capabilities.Console {
+		consoleLabel = "Logs"
+	}
+
+	tabs := make([]components.TabItem, 0, len(slugs))
+	for _, slug := range slugs {
+		if slug == "mods" && vanilla {
 			continue
 		}
+		label := tabLabelBySlug[slug]
+		if slug == "console" {
+			label = consoleLabel
+		}
 		tabs = append(tabs, components.TabItem{
-			Label:  l.label,
-			Href:   fmt.Sprintf("/%s/%d/%s", game, num, l.slug),
-			Active: active == l.slug,
+			Label:  label,
+			Href:   fmt.Sprintf("/%s/%d/%s", game, num, slug),
+			Active: active == slug,
 		})
 	}
 	return tabs
@@ -878,4 +949,13 @@ func MinecraftPort(inst InstanceUI) int {
 		return domain.MinecraftGamePort
 	}
 	return port
+}
+
+func HasInstanceTab(game, slug string, vanilla bool) bool {
+	for _, t := range InstanceTabs(game, 1, "", vanilla) {
+		if strings.HasSuffix(t.Href, "/"+slug) {
+			return true
+		}
+	}
+	return false
 }

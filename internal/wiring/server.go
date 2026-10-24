@@ -400,6 +400,7 @@ func buildConsoleHandler(d Deps) *consolehttp.Handler {
 		MCRuntime:        mcrt,
 		MCRef:            d.MCRef,
 		MCInstances:      d.MCInstances,
+		GModInstances:    d.GModInstances,
 		Audit:            d.Store,
 		Event:            d.Store,
 		Auth:             d.Auth,
@@ -774,7 +775,7 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 		mcModUpdateTotal = d.MCModUpdates.Total
 	}
 	return dashboardhttp.New(dashboardhttp.Config{
-		Games:                 d.Games,
+		Games: d.Games,
 		InstanceManagers: map[domain.GameID]*instances.InstanceManager{
 			domain.GameValheim:   d.ValheimInstances,
 			domain.GameMinecraft: d.MCInstances,

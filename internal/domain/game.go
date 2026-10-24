@@ -34,6 +34,7 @@ func (id InstanceID) IsZero() bool {
 // Capabilities declares what operational features a game supports.
 type Capabilities struct {
 	Mods               bool
+	Console            bool
 	Packs              bool
 	Configs            bool
 	Backups            bool
@@ -74,6 +75,7 @@ var (
 		},
 		Capabilities: Capabilities{
 			Mods:               true,
+			Console:            true,
 			Packs:              true,
 			Configs:            true,
 			Backups:            true,
@@ -97,6 +99,7 @@ var (
 		},
 		Capabilities: Capabilities{
 			Mods:              true,
+			Console:           true,
 			Configs:           true,
 			Backups:           true,
 			AdmissionPassword: true,

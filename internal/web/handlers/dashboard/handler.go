@@ -272,6 +272,9 @@ func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 		case domain.GameMinecraft:
 			card = pages.MinecraftCard(summary, isAdmin)
 			actions = pages.MinecraftActions(summary)
+		case domain.GameGMod:
+			card = pages.GModCard(summary, isAdmin)
+			actions = pages.GameActions(p, summary)
 		default:
 			card = pages.GenericGameCard(p, summary, isAdmin)
 			actions = pages.GameActions(p, summary)

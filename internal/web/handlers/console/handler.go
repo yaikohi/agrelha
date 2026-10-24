@@ -21,6 +21,7 @@ type Config struct {
 	MCRuntime        ports.Runtime
 	MCRef            ports.ServerRef
 	MCInstances      *instances.InstanceManager
+	GModInstances    *instances.InstanceManager
 	Audit            ports.AuditRecorder
 	Event            ports.EventRecorder
 	Auth             ports.Auth
@@ -57,6 +58,9 @@ func (h *Handler) Register(router fiber.Router) {
 
 	router.Get("/api/valheim/:num<int>/logs", h.ValheimLogsStream)
 	router.Get("/api/valheim/:num<int>/logs/stream", h.ValheimLogsStream)
+
+	router.Get("/api/gmod/:num<int>/logs", h.GModLogsStream)
+	router.Get("/api/gmod/:num<int>/logs/stream", h.GModLogsStream)
 
 	router.Post("/api/minecraft/:num<int>/rcon", h.MCRconCommand)
 	router.Get("/api/minecraft/:num<int>/logs", h.MCLogsStream)

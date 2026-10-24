@@ -103,6 +103,9 @@ func TestGModCapabilities(t *testing.T) {
 	if !c.Packs {
 		t.Error("Garry's Mod runs a Workshop collection; Capabilities.Packs must be true so the UI exposes the collection selector")
 	}
+	if c.Console {
+		t.Error("agrelha executes no commands on a Garry's Mod world; administration happens in-game through ULX")
+	}
 	if c.Configs || c.Operators || c.PlayerCount {
 		t.Error("configs, operators and player count are deliberately not supported yet")
 	}

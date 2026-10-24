@@ -277,7 +277,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 	}
 
 	tab := strings.ToLower(strings.TrimSpace(c.Params("tab", "overview")))
-	if tab != "overview" {
+	if !pages.HasInstanceTab(string(domain.GameGMod), tab, false) {
 		return c.Status(fiber.StatusNotFound).SendString("Unknown tab for a Garry's Mod world: " + tab)
 	}
 
