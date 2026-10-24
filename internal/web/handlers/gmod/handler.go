@@ -107,6 +107,8 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 			LBIP:               lbIP,
 			CanStart:           canStart,
 			StartBlockedReason: blockedReason,
+			IsAdmin:            shared.IsAdmin(c),
+			CanOperate:         shared.PrincipalOf(c).CanOperate(domain.GameGMod, inst.Number),
 		})
 	}
 

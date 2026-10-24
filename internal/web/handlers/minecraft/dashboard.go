@@ -52,6 +52,8 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 		}
 
 		uiInstances = append(uiInstances, pages.InstanceUI{
+			IsAdmin:            shared.IsAdmin(c),
+			CanOperate:         shared.PrincipalOf(c).CanOperate(domain.GameMinecraft, inst.Number),
 			Host:               inst.EffectiveHost(),
 			HostUnreachable:    inst.HostUnreachable,
 			HostUnknown:        inst.HostUnknown,

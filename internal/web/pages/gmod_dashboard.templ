@@ -7,7 +7,7 @@ import (
 
 templ GModDashboard(instances []InstanceUI, budget BudgetUI, admin ...bool) {
 	@Layout("Garry's Mod") {
-		@nav(isNavAdmin(admin))
+		@nav(isNavAdmin(admin), true)
 		<div class="space-y-6">
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<div>
@@ -82,23 +82,25 @@ templ GModDashboard(instances []InstanceUI, budget BudgetUI, admin ...bool) {
 
 							<div class="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800/60 pt-3">
 								<div class="flex flex-wrap items-center gap-1.5">
-									@components.Button(components.ButtonProps{
-										Variant: components.VariantSecondary,
-										Size:    components.SizeXs,
-										Href:    fmt.Sprintf("/gmod/%d/overview", inst.Number),
-										Text:    "Manage",
-									})
+									if inst.CanOperate {
+										@components.Button(components.ButtonProps{
+											Variant: components.VariantSecondary,
+											Size:    components.SizeXs,
+											Href:    fmt.Sprintf("/gmod/%d/overview", inst.Number),
+											Text:    "Manage",
+										})
+									}
 								</div>
 
 								<div class="flex items-center gap-2">
-									if inst.State == "running" {
+									if inst.CanOperate && inst.State == "running" {
 										@components.Button(components.ButtonProps{
 											Variant: components.VariantWarning,
 											Size:    components.SizeXs,
 											OnClick: fmt.Sprintf("@post('/api/gmod/instances/%d/stop')", inst.Number),
 											Text:    "Stop",
 										})
-									} else {
+									} else if inst.CanOperate {
 										if inst.CanStart {
 											@components.Button(components.ButtonProps{
 												Variant: components.VariantSuccess,
@@ -117,7 +119,7 @@ templ GModDashboard(instances []InstanceUI, budget BudgetUI, admin ...bool) {
 										}
 									}
 
-									if inst.State != "running" {
+									if inst.IsAdmin && inst.State != "running" {
 										@components.Button(components.ButtonProps{
 											Variant: components.VariantDanger,
 											Size:    components.SizeXs,

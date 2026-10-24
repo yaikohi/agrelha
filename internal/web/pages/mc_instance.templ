@@ -8,7 +8,7 @@ import (
 
 templ MinecraftInstanceDetail(d InstanceDetailUI) {
 	@Layout(d.Name + " · Minecraft") {
-		@nav(d.IsAdmin)
+		@nav(d.IsAdmin, true)
 		<div class="space-y-6">
 			if d.HostUnreachable {
 				@HostUnreachableBanner(d.Host)

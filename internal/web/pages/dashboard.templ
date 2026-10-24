@@ -1,8 +1,8 @@
 package pages
 
-templ Dashboard(grafanaURL string, games []DashboardGameUI, isAdmin bool, flashKind, flashMsg string) {
+templ Dashboard(grafanaURL string, games []DashboardGameUI, isAdmin, signedIn bool, flashKind, flashMsg string) {
 	@Layout("Agrelha · Game Server Portal") {
-		@nav(isAdmin)
+		@nav(isAdmin, signedIn)
 		@flashBanner(flashKind, flashMsg)
 		<div class="space-y-8">
 			<!-- Header Banner -->

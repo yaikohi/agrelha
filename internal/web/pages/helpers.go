@@ -187,6 +187,7 @@ type InstanceUI struct {
 	Host               domain.Host
 	HostUnreachable    bool
 	HostUnknown        bool
+	CanOperate         bool
 }
 
 type InstanceDetailUI struct {

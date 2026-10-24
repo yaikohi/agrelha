@@ -24,6 +24,7 @@ import (
 	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
 	"agrelha/internal/web/pages"
+	"agrelha/internal/web/shared"
 )
 
 type mockExportGame struct {
@@ -1162,6 +1163,7 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 	}, domain.ModList{})
 	hA := New(Config{MCInstances: mgrA})
 	appA := fiber.New()
+	appA.Use(asAdminPrincipal)
 	hA.RegisterProtected(appA)
 	respDashA, _ := appA.Test(httptest.NewRequest("GET", "/minecraft", nil))
 	bDashA, _ := io.ReadAll(respDashA.Body)
@@ -1188,6 +1190,7 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 	}, domain.ModList{})
 	hB := New(Config{MCInstances: mgrB})
 	appB := fiber.New()
+	appB.Use(asAdminPrincipal)
 	hB.RegisterProtected(appB)
 	respDashB, _ := appB.Test(httptest.NewRequest("GET", "/minecraft", nil))
 	bDashB, _ := io.ReadAll(respDashB.Body)
@@ -1388,4 +1391,12 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 	if !strings.Contains(string(bApplyZero), "Already up to date") {
 		t.Errorf("expected Already up to date toast, got: %s", bApplyZero)
 	}
+}
+
+func asAdminPrincipal(c *fiber.Ctx) error {
+	c.Locals(shared.PrincipalKey, domain.Principal{
+		Identity: domain.Identity{Subject: "test-admin"},
+		Admin:    true,
+	})
+	return c.Next()
 }

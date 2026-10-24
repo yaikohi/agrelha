@@ -27,6 +27,7 @@ import (
 	"agrelha/internal/infra/store"
 	"agrelha/internal/ports"
 	"agrelha/internal/web/pages"
+	"agrelha/internal/web/shared"
 )
 
 type mockRefRuntime struct {
@@ -250,6 +251,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 		},
 	})
 	appLegacy := fiber.New()
+	appLegacy.Use(asAdminPrincipal)
 	appLegacy.Get("/valheim", hLegacy.ValheimDashboard)
 	respLegacy, _ := appLegacy.Test(httptest.NewRequest("GET", "/valheim", nil))
 	bLegacy, _ := io.ReadAll(respLegacy.Body)
@@ -260,6 +262,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 	// 2. Nil ValheimInstances without LegacyConsole
 	hNil := New(Config{})
 	appNil := fiber.New()
+	appNil.Use(asAdminPrincipal)
 	appNil.Get("/valheim", hNil.ValheimDashboard)
 	respNil, _ := appNil.Test(httptest.NewRequest("GET", "/valheim", nil))
 	if respNil.StatusCode != fiber.StatusServiceUnavailable {
@@ -281,6 +284,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 
 	hErr := New(Config{ValheimInstances: mgrErr})
 	appErr := fiber.New()
+	appErr.Use(asAdminPrincipal)
 	appErr.Get("/valheim", hErr.ValheimDashboard)
 	respErr, _ := appErr.Test(httptest.NewRequest("GET", "/valheim", nil))
 	if respErr.StatusCode != fiber.StatusInternalServerError {
@@ -332,6 +336,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 		ModUpdates:       checker,
 	})
 	appBudget := fiber.New()
+	appBudget.Use(asAdminPrincipal)
 	appBudget.Get("/valheim", hBudget.ValheimDashboard)
 	respBudget, err := appBudget.Test(httptest.NewRequest("GET", "/valheim", nil))
 	if err != nil || respBudget.StatusCode != fiber.StatusOK {
@@ -367,6 +372,7 @@ func TestValheimDashboardAllEdges(t *testing.T) {
 	}, domain.ModList{}, "tester")
 	hRAM := New(Config{ValheimInstances: mgrRAM})
 	appRAM := fiber.New()
+	appRAM.Use(asAdminPrincipal)
 	appRAM.Get("/valheim", hRAM.ValheimDashboard)
 	respRAM, _ := appRAM.Test(httptest.NewRequest("GET", "/valheim", nil))
 	bodyRAM, _ := io.ReadAll(respRAM.Body)
@@ -1801,4 +1807,12 @@ func TestValheimUpdatesAllEdges(t *testing.T) {
 		t.Errorf("expected 500, got %d", respPatchErr.StatusCode)
 	}
 	patchSignals = origPatch
+}
+
+func asAdminPrincipal(c *fiber.Ctx) error {
+	c.Locals(shared.PrincipalKey, domain.Principal{
+		Identity: domain.Identity{Subject: "test-admin"},
+		Admin:    true,
+	})
+	return c.Next()
 }

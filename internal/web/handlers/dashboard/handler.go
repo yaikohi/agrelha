@@ -255,6 +255,7 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 	fk, fm := shared.TakeFlash(c)
 	isAdmin := shared.IsAdmin(c)
+	signedIn := shared.PrincipalOf(c).SignedIn()
 
 	var gameCards []pages.DashboardGameUI
 	for _, p := range h.registeredProfiles() {
@@ -286,7 +287,7 @@ func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 		})
 	}
 
-	return shared.Render(c, pages.Dashboard(h.cfg.GrafanaDashboardURL, gameCards, isAdmin, fk, fm))
+	return shared.Render(c, pages.Dashboard(h.cfg.GrafanaDashboardURL, gameCards, isAdmin, signedIn, fk, fm))
 }
 
 // SSEMain streams tile signals + updates badge/list every 5s.

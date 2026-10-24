@@ -9,7 +9,7 @@ import (
 
 templ GModInstanceDetail(d InstanceDetailUI) {
 	@Layout(d.Name + " · Garry's Mod") {
-		@nav(d.IsAdmin)
+		@nav(d.IsAdmin, true)
 		<div class="space-y-6">
 			if d.HostUnreachable {
 				@HostUnreachableBanner(d.Host)

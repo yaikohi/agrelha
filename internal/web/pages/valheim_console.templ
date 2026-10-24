@@ -5,7 +5,7 @@ package pages
 // deliberately absent rather than present-but-broken.
 templ ValheimConsole(isAdmin bool, flashKind, flashMsg string) {
 	@Layout("Valheim · Console & Logs") {
-		@nav(isAdmin)
+		@nav(isAdmin, true)
 		@flashBanner(flashKind, flashMsg)
 		<div class="space-y-4" data-effect="@get('/sse/logs?server=valheim')">
 			<div class="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
