@@ -34,7 +34,7 @@ func (id InstanceID) IsZero() bool {
 // Capabilities declares what operational features a game supports.
 type Capabilities struct {
 	Mods               bool
-	Modpacks           bool
+	Packs              bool
 	Configs            bool
 	Backups            bool
 	AdmissionPassword  bool
@@ -74,7 +74,7 @@ var (
 		},
 		Capabilities: Capabilities{
 			Mods:               true,
-			Modpacks:           true,
+			Packs:              true,
 			Configs:            true,
 			Backups:            true,
 			AdmissionAllowlist: true,
@@ -121,7 +121,7 @@ var (
 			Accent: "sky",
 		},
 		Capabilities: Capabilities{
-			Modpacks:          true,
+			Packs:             true,
 			Backups:           true,
 			AdmissionPassword: true,
 		},
@@ -223,7 +223,7 @@ type RuntimeSpec struct {
 
 // GameTelemetry represents real-time runtime and gameplay metrics for a game engine or instance.
 type GameTelemetry struct {
-	State        string            // e.g. "Up", "Pending", "Stopped", "unknown"
+	Lifecycle    string
 	Online       bool              // true if server is available / ready
 	StartedAt    time.Time         // timestamp when the workload started
 	Uptime       string            // human-readable uptime duration, e.g. "2h 15m"

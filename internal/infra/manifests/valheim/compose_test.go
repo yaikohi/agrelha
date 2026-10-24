@@ -229,3 +229,14 @@ func TestBothHostsRenderTheSameDesiredState(t *testing.T) {
 		}
 	}
 }
+
+func TestComposeStateFilesDoNotRenderEmptyNamespace(t *testing.T) {
+	files := renderCompose(t, false)
+	for _, name := range []string{"configs.yaml", "mods.yaml"} {
+		content := string(files[name])
+		if strings.Contains(content, "namespace:") {
+			t.Errorf("%s rendered at compose path includes namespace field, which is invalid YAML when empty and leaks Kubernetes concerns into Docker Host desired state:\n%s", name, content)
+		}
+	}
+}
+

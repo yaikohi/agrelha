@@ -142,8 +142,8 @@ func TestMinecraftTelemetry(t *testing.T) {
 		t.Fatalf("Telemetry failed: %v", err)
 	}
 
-	if tele.State != "Up" || !tele.Online {
-		t.Errorf("State = %s, Online = %v, want Up/true", tele.State, tele.Online)
+	if tele.Lifecycle != "running" || !tele.Online {
+		t.Errorf("Lifecycle = %s, Online = %v, want running/true", tele.Lifecycle, tele.Online)
 	}
 	if tele.Players != 3 || !tele.PlayersKnown {
 		t.Errorf("Players = %d, PlayersKnown = %v, want 3/true", tele.Players, tele.PlayersKnown)
@@ -213,10 +213,10 @@ func TestMinecraftEdgeCasesAndOptions(t *testing.T) {
 
 	// 1. WithStatusProvider
 	gStat := New(WithStatusProvider(func(ctx context.Context) (domain.GameTelemetry, error) {
-		return domain.GameTelemetry{State: "CustomMC"}, nil
+		return domain.GameTelemetry{Lifecycle: "CustomMC"}, nil
 	}))
 	tele, err := gStat.Telemetry(ctx)
-	if err != nil || tele.State != "CustomMC" {
+	if err != nil || tele.Lifecycle != "CustomMC" {
 		t.Errorf("unexpected status provider telemetry: %+v, err %v", tele, err)
 	}
 
@@ -233,14 +233,14 @@ func TestMinecraftEdgeCasesAndOptions(t *testing.T) {
 	rtStopped := &fakeMCRuntime{status: ports.Status{Lifecycle: ports.LifecycleStopped, Available: false}}
 	gStopped := New(WithRuntime(rtStopped, ports.ServerRef{Name: "mc"}))
 	teleStopped, _ := gStopped.Telemetry(ctx)
-	if teleStopped.State != "Stopped" || teleStopped.Online {
-		t.Errorf("expected Stopped telemetry, got %+v", teleStopped)
+	if teleStopped.Lifecycle != "stopped" || teleStopped.Online {
+		t.Errorf("expected stopped telemetry, got %+v", teleStopped)
 	}
 
 	rtPending := &fakeMCRuntime{status: ports.Status{Lifecycle: ports.Lifecycle("CrashLoopBackOff"), Available: false}}
 	gPending := New(WithRuntime(rtPending, ports.ServerRef{Name: "mc"}))
 	telePending, _ := gPending.Telemetry(ctx)
-	if telePending.State != "CrashLoopBackOff" {
+	if telePending.Lifecycle != "CrashLoopBackOff" {
 		t.Errorf("expected CrashLoopBackOff telemetry, got %+v", telePending)
 	}
 

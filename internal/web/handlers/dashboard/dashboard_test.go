@@ -113,7 +113,7 @@ func (f *fakeGameEngine) Telemetry(ctx context.Context) (domain.GameTelemetry, e
 func TestTileSignalsWithGameEngines(t *testing.T) {
 	valheim := &fakeGameEngine{
 		telemetry: domain.GameTelemetry{
-			State:        "Up",
+			Lifecycle:    "running",
 			Online:       true,
 			Players:      5,
 			PlayersKnown: true,
@@ -124,7 +124,7 @@ func TestTileSignalsWithGameEngines(t *testing.T) {
 	}
 	minecraft := &fakeGameEngine{
 		telemetry: domain.GameTelemetry{
-			State:        "Up",
+			Lifecycle:    "running",
 			Online:       true,
 			Players:      2,
 			PlayersKnown: true,
@@ -143,8 +143,8 @@ func TestTileSignalsWithGameEngines(t *testing.T) {
 
 	sig := h.TileSignals(context.Background())
 
-	if sig["state"] != "Up" || sig["online"] != true {
-		t.Errorf("Valheim state/online unexpected: state=%v, online=%v", sig["state"], sig["online"])
+	if sig["lifecycle"] != "running" || sig["online"] != true {
+		t.Errorf("Valheim lifecycle/online unexpected: lifecycle=%v, online=%v", sig["lifecycle"], sig["online"])
 	}
 	if sig["players"] != 5 {
 		t.Errorf("Valheim players = %v, want 5", sig["players"])
@@ -153,8 +153,8 @@ func TestTileSignalsWithGameEngines(t *testing.T) {
 		t.Errorf("Valheim metrics unexpected: %v, %v, %v", sig["uptime"], sig["cpu"], sig["mem"])
 	}
 
-	if sig["mc_state"] != "Up" || sig["mc_players"] != 2 {
-		t.Errorf("MC state/players unexpected: state=%v, players=%v", sig["mc_state"], sig["mc_players"])
+	if sig["mc_lifecycle"] != "running" || sig["mc_players"] != 2 {
+		t.Errorf("MC lifecycle/players unexpected: lifecycle=%v, players=%v", sig["mc_lifecycle"], sig["mc_players"])
 	}
 	if sig["mc_loader"] != "Fabric" || sig["mc_pack"] != "Cobblemon Official" {
 		t.Errorf("MC loader/pack unexpected: loader=%v, pack=%v", sig["mc_loader"], sig["mc_pack"])

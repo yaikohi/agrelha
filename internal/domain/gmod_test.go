@@ -100,8 +100,8 @@ func TestGModCapabilities(t *testing.T) {
 	if c.Mods {
 		t.Error("Garry's Mod has no per-mod browser; addons come from a collection")
 	}
-	if !c.Modpacks {
-		t.Error("Garry's Mod runs a Workshop collection")
+	if !c.Packs {
+		t.Error("Garry's Mod runs a Workshop collection; Capabilities.Packs must be true so the UI exposes the collection selector")
 	}
 	if c.Configs || c.Operators || c.PlayerCount {
 		t.Error("configs, operators and player count are deliberately not supported yet")

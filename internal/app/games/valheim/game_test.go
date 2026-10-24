@@ -170,8 +170,8 @@ func TestValheimTelemetry(t *testing.T) {
 		t.Fatalf("Telemetry failed: %v", err)
 	}
 
-	if tele.State != "Up" || !tele.Online {
-		t.Errorf("State = %s, Online = %v, want Up/true", tele.State, tele.Online)
+	if tele.Lifecycle != "running" || !tele.Online {
+		t.Errorf("Lifecycle = %s, Online = %v, want running/true", tele.Lifecycle, tele.Online)
 	}
 	if tele.Players != 4 || !tele.PlayersKnown {
 		t.Errorf("Players = %d, PlayersKnown = %v, want 4/true", tele.Players, tele.PlayersKnown)
@@ -346,10 +346,10 @@ func TestValheimTelemetryAndOptions(t *testing.T) {
 
 	// 1. WithStatusProvider
 	gStatus := New(WithStatusProvider(func(ctx context.Context) (domain.GameTelemetry, error) {
-		return domain.GameTelemetry{State: "Custom"}, nil
+		return domain.GameTelemetry{Lifecycle: "Custom"}, nil
 	}))
 	tele, err := gStatus.Telemetry(ctx)
-	if err != nil || tele.State != "Custom" {
+	if err != nil || tele.Lifecycle != "Custom" {
 		t.Errorf("expected Custom telemetry, got %+v, err %v", tele, err)
 	}
 
@@ -357,16 +357,16 @@ func TestValheimTelemetryAndOptions(t *testing.T) {
 	rtStopped := &fakeValheimRuntime{status: ports.Status{Lifecycle: ports.LifecycleStopped, Available: false}}
 	gStopped := New(WithRuntime(rtStopped, ports.ServerRef{Name: "v1"}))
 	teleStopped, _ := gStopped.Telemetry(ctx)
-	if teleStopped.State != "Stopped" || teleStopped.Online {
-		t.Errorf("expected Stopped telemetry, got %+v", teleStopped)
+	if teleStopped.Lifecycle != "stopped" || teleStopped.Online {
+		t.Errorf("expected stopped telemetry, got %+v", teleStopped)
 	}
 
 	// 5. Telemetry with custom Lifecycle string
 	rtPending := &fakeValheimRuntime{status: ports.Status{Lifecycle: ports.Lifecycle("CrashLoopBackOff"), Available: false}}
 	gPending := New(WithRuntime(rtPending, ports.ServerRef{Name: "v1"}))
 	telePending, _ := gPending.Telemetry(ctx)
-	if telePending.State != "CrashLoopBackOff" {
-		t.Errorf("expected CrashLoopBackOff state, got %+v", telePending)
+	if telePending.Lifecycle != "CrashLoopBackOff" {
+		t.Errorf("expected CrashLoopBackOff lifecycle, got %+v", telePending)
 	}
 
 	// 6. ExportClientBundle default name/slug and bundleSource error

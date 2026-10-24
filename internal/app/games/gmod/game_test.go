@@ -57,14 +57,14 @@ func TestGModGameTelemetry(t *testing.T) {
 
 	gCustom := New(WithStatusProvider(func(ctx context.Context) (domain.GameTelemetry, error) {
 		return domain.GameTelemetry{
-			Online: true,
-			State:  "Up",
-			CPU:    "100m",
+			Online:    true,
+			Lifecycle: "running",
+			CPU:       "100m",
 		}, nil
 	}))
 
 	teleCustom, err := gCustom.Telemetry(ctx)
-	if err != nil || !teleCustom.Online || teleCustom.State != "Up" {
+	if err != nil || !teleCustom.Online || teleCustom.Lifecycle != "running" {
 		t.Errorf("unexpected custom telemetry: %+v, %v", teleCustom, err)
 	}
 }

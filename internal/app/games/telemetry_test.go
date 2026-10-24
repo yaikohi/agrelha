@@ -39,8 +39,8 @@ func TestCollectTelemetryNilRuntime(t *testing.T) {
 	if tele.Online {
 		t.Fatalf("CollectTelemetry(nil) reported Online=true; dashboard will show offline server as active during midnight outage triage")
 	}
-	if tele.State != "unknown" {
-		t.Fatalf("CollectTelemetry(nil) State = %q, want 'unknown'; operator cannot tell if status probe failed or server is booting", tele.State)
+	if tele.Lifecycle != "unknown" {
+		t.Fatalf("CollectTelemetry(nil) Lifecycle = %q, want 'unknown'; operator cannot tell if status probe failed or server is booting", tele.Lifecycle)
 	}
 	if tele.CPU != "—" || tele.Memory != "—" || tele.Uptime != "—" {
 		t.Fatalf("CollectTelemetry(nil) displayed metrics %+v instead of placeholder '—'; misleading empty stats rendered to users", tele)
@@ -51,6 +51,7 @@ func TestCollectTelemetryActiveRuntime(t *testing.T) {
 	started := time.Now().Add(-90 * time.Minute)
 	rt := &fakeTelemetryRuntime{
 		status: ports.Status{
+			Lifecycle: ports.LifecycleRunning,
 			Available: true,
 			StartedAt: started,
 		},
@@ -62,8 +63,8 @@ func TestCollectTelemetryActiveRuntime(t *testing.T) {
 	}
 
 	tele := games.CollectTelemetry(context.Background(), rt, ports.ServerRef{Name: "mc"})
-	if !tele.Online || tele.State != "Up" {
-		t.Fatalf("CollectTelemetry reported Online=%v State=%q, want Online=true State='Up'; healthy server will be reported as down", tele.Online, tele.State)
+	if !tele.Online || tele.Lifecycle != "running" {
+		t.Fatalf("CollectTelemetry reported Online=%v Lifecycle=%q, want Online=true Lifecycle='running'; healthy server will be reported as down or have lifecycle corrupted to 'Up'", tele.Online, tele.Lifecycle)
 	}
 	if tele.CPU != "350m" {
 		t.Fatalf("CollectTelemetry CPU = %q, want '350m'; operator cannot diagnose cpu spikes", tele.CPU)
@@ -73,6 +74,23 @@ func TestCollectTelemetryActiveRuntime(t *testing.T) {
 	}
 	if !strings.Contains(tele.Uptime, "1h") {
 		t.Fatalf("CollectTelemetry Uptime = %q, want uptime containing '1h'; server uptime counter broken", tele.Uptime)
+	}
+}
+
+func TestCollectTelemetryStartingRuntime(t *testing.T) {
+	rt := &fakeTelemetryRuntime{
+		status: ports.Status{
+			Lifecycle: ports.LifecycleRunning,
+			Available: false,
+		},
+	}
+
+	tele := games.CollectTelemetry(context.Background(), rt, ports.ServerRef{Name: "mc"})
+	if tele.Online {
+		t.Fatalf("CollectTelemetry reported Online=true for starting runtime; players will attempt to connect before world generation finishes")
+	}
+	if tele.Lifecycle != "running" {
+		t.Fatalf("CollectTelemetry Lifecycle = %q, want 'running'; operator at 2am will mistake world generation for a crash and trigger a restart loop", tele.Lifecycle)
 	}
 }
 
@@ -88,7 +106,7 @@ func TestCollectTelemetryStoppedRuntime(t *testing.T) {
 	if tele.Online {
 		t.Fatalf("CollectTelemetry reported Online=true for stopped runtime; dashboard will indicate stopped server is running")
 	}
-	if tele.State != "Stopped" {
-		t.Fatalf("CollectTelemetry State = %q, want 'Stopped'; operator will not realize server has shut down", tele.State)
+	if tele.Lifecycle != "stopped" {
+		t.Fatalf("CollectTelemetry Lifecycle = %q, want 'stopped'; operator will not realize server has shut down", tele.Lifecycle)
 	}
 }

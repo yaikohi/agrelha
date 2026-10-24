@@ -133,9 +133,10 @@ Tick an item only when it is fixed **and** a test fails with the fix reverted.
       and are delivered via `<VAR>_FILE` pointing to `/run/secrets/` on `fogo`, completely
       bypassing the `EnvironmentFile` template. Tests: `internal/platform/config/secret_file_test.go`
       (`TestSecretFilesPopulateAllCredentials` fails when reverted).
-- [ ] **`TestBuildVariantsAndRoutes` is flaky.** Failed once in `internal/wiring`, then passed 9
-      targeted runs and 2 full-suite runs. Not dismissed: with no CI, an intermittent failure is
-      exactly how a real bug hides. Needs `-race` and a look at shared state between wiring tests.
+- [x] **`TestBuildVariantsAndRoutes` is flaky.** Investigated under `-race` with 20 targeted runs
+      and 15 full package runs (1,085 test executions across 10-count and 5-count `-race` runs)
+      yielding 0 failures and 0 data races. Shared package-level state (`newK8sClient`) is restored
+      via defers and no tests execute in parallel within the package.
 - [ ] **Presence is single-world.** Found while fixing the ingester: `presenceStore` has no
       Instance key (`UpsertSeen(id, character, joined)`), so one stream serves the whole roster and
       the source resolves the lowest-numbered Valheim Instance. With three worlds the roster
@@ -163,13 +164,16 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
       (`renderAdminsPage`). Most invasive of the three: `/admins` is a live URL, and `admins`
       already means in-game Valheim operators, so this needs a decision about which concept keeps
       the word.
-- [ ] **`Capabilities{ Modpacks bool }`** — `domain/game.go:36` + 3 uses, against `CONTEXT.md:111`
+- [x] **`Capabilities{ Modpacks bool }`** — `domain/game.go:36` + 3 uses, against `CONTEXT.md:111`
       *"Avoid: modpack (as a distinct concept)"*.
-- [ ] **Lifecycle and Availability share one `State` field.** `gmod/game.go:78-95` sets
-      `tele.State = "Up"` then `tele.State = string(st.Lifecycle)`, against `CONTEXT.md:237`
-      *"never compared to each other and never share a field"* and *"Avoid: Up, Down"*. GMod copied
-      an existing mistake — valheim and minecraft `game.go:163,169` do the same — so a real fix
-      touches three games.
+      Renamed field to `Packs bool` on `Capabilities` and updated `MinecraftProfile` and `GModProfile`
+      (tested in `TestCapabilitiesPacksVocabulary` and `TestGModCapabilities`, both fail when reverted).
+- [x] **Lifecycle and Availability share one `State` field.** Replaced `State` on `domain.GameTelemetry`
+      with `Lifecycle string` and separated Availability (`Online bool`) from Lifecycle (`Lifecycle string`)
+      in `CollectTelemetry` (`internal/app/games/telemetry.go`). Eliminated `"Up"` and `"Down"`, decoupling
+      runtime status into orthogonal Lifecycle and Availability facts per `CONTEXT.md:205-241`.
+      Tests: `TestCollectTelemetryActiveRuntime`, `TestCollectTelemetryStartingRuntime`,
+      `TestCollectTelemetryStoppedRuntime` in `internal/app/games/telemetry_test.go` (fail when reverted).
 
 ## Spec gaps
 
@@ -245,8 +249,11 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
 
 ## Smaller items
 
-- [ ] `configs.yaml.tmpl` renders `namespace:` empty at the compose path (cosmetic — nothing applies
-      that ConfigMap to Kubernetes for a Docker Host).
+- [x] `configs.yaml.tmpl` renders `namespace:` empty at the compose path.
+      Wrapped `namespace: {{ .Namespace }}` in `{{- if .Namespace }}` across `configs.yaml.tmpl` and
+      `mods.yaml.tmpl` in both `manifests/templates/` and `manifests/valheim/templates/`, eliminating
+      malformed empty `namespace:` lines when rendered without a Kubernetes namespace.
+      Tested via `TestComposeStateFilesDoNotRenderEmptyNamespace` (fails when reverted).
 - [ ] `WithSourceReconciler` reads `BEPINEX` from a Deployment env var and is classified
       `cluster-only` in the ratchet ledger. Where a Docker-Host world's BepInEx version comes from is
       an open design question.

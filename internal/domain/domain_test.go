@@ -841,5 +841,14 @@ operators will be misinformed about why a world cannot boot if the UI formats bu
 	}
 }
 
-
-
+func TestCapabilitiesPacksVocabulary(t *testing.T) {
+	if !MinecraftProfile.Capabilities.Packs {
+		t.Fatal("MinecraftProfile.Capabilities.Packs is false; wizard cannot display Modrinth/CurseForge pack selection during world creation")
+	}
+	if !GModProfile.Capabilities.Packs {
+		t.Fatal("GModProfile.Capabilities.Packs is false; Steam Workshop collection selection will be disabled")
+	}
+	if ValheimProfile.Capabilities.Packs {
+		t.Fatal("ValheimProfile.Capabilities.Packs is true; Valheim has no published packs (mods are individual BepInEx plugins) and will show broken pack browser")
+	}
+}

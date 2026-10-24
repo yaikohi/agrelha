@@ -11,7 +11,7 @@ import (
 
 func CollectTelemetry(ctx context.Context, rt ports.Runtime, ref ports.ServerRef) domain.GameTelemetry {
 	tele := domain.GameTelemetry{
-		State:        "unknown",
+		Lifecycle:    "unknown",
 		Online:       false,
 		CPU:          "—",
 		Memory:       "—",
@@ -24,15 +24,10 @@ func CollectTelemetry(ctx context.Context, rt ports.Runtime, ref ports.ServerRef
 	}
 
 	if st, err := rt.Status(ctx, ref); err == nil {
-		if st.Available {
-			tele.State = "Up"
-			tele.Online = true
-		} else if st.Lifecycle == ports.LifecycleStopped {
-			tele.State = "Stopped"
-			tele.Online = false
-		} else if st.Lifecycle != "" {
-			tele.State = string(st.Lifecycle)
+		if st.Lifecycle != "" {
+			tele.Lifecycle = string(st.Lifecycle)
 		}
+		tele.Online = st.Available
 		if !st.StartedAt.IsZero() {
 			tele.StartedAt = st.StartedAt
 			tele.Uptime = domain.FormatDuration(time.Since(st.StartedAt))

@@ -345,8 +345,8 @@ func (h *Handler) SSEMain(c *fiber.Ctx) error {
 // TileSignals computes the metric signals for live dashboard tiles.
 func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 	sig := map[string]any{
-		"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "online": false, "backup": "—", "backupinfo": "",
-		"mc_players": "—", "mc_cpu": "—", "mc_mem": "—", "mc_uptime": "—", "mc_state": "unknown", "mc_loader": "NeoForge",
+		"players": "—", "cpu": "—", "mem": "—", "uptime": "—", "state": "unknown", "lifecycle": "unknown", "online": false, "backup": "—", "backupinfo": "",
+		"mc_players": "—", "mc_cpu": "—", "mc_mem": "—", "mc_uptime": "—", "mc_state": "unknown", "mc_lifecycle": "unknown", "mc_loader": "NeoForge",
 		"updates": 0, "valheim_updates": 0, "mc_updates": 0,
 	}
 
@@ -392,8 +392,9 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 			if tele.PlayersKnown {
 				sig["players"] = tele.Players
 			}
-			if tele.State != "" {
-				sig["state"] = tele.State
+			if tele.Lifecycle != "" {
+				sig["lifecycle"] = tele.Lifecycle
+				sig["state"] = tele.Lifecycle
 			}
 			sig["online"] = tele.Online
 			if tele.Uptime != "" {
@@ -410,8 +411,9 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 		if tele.PlayersKnown {
 			sig[p.Prefix+"_players"] = tele.Players
 		}
-		if tele.State != "" {
-			sig[p.Prefix+"_state"] = tele.State
+		if tele.Lifecycle != "" {
+			sig[p.Prefix+"_lifecycle"] = tele.Lifecycle
+			sig[p.Prefix+"_state"] = tele.Lifecycle
 		}
 		sig[p.Prefix+"_online"] = tele.Online
 		if tele.Uptime != "" {

@@ -2,7 +2,9 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .ModsCMName }}
+{{- if .Namespace }}
   namespace: {{ .Namespace }}
+{{- end }}
   labels:
     app: {{ .DeploymentName }}
     instance: "{{ .Number }}"
