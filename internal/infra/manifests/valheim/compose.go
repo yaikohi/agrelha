@@ -64,7 +64,7 @@ func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map
 	}
 	env := make(map[string]string, len(raw))
 	for k, v := range raw {
-		env[k] = composereconcile.EscapeVars(v)
+		env[k] = composereconcile.EscapeComposeInterpolation(v)
 	}
 
 	server := composereconcile.ComposeService{
@@ -104,7 +104,7 @@ func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map
 			ContainerName: name + "-" + ModReconcileService,
 			Image:         ReconcilerImage,
 			Restart:       "no",
-			Command:       []string{"sh", "-c", composereconcile.EscapeVars(modReconcileScript)},
+			Command:       []string{"sh", "-c", composereconcile.EscapeComposeInterpolation(modReconcileScript)},
 			Volumes: []string{
 				filepath.Join(dir, "config") + ":/config",
 				"./" + ModsFileName + ":/config-mods/" + ModsFileName + ":ro",

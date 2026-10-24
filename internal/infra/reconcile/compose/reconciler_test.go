@@ -310,7 +310,7 @@ func TestShellVariablesSurviveComposeInterpolation(t *testing.T) {
 	spec := domain.RuntimeSpec{
 		Image:   "alpine:3.20",
 		Env:     map[string]string{"HOOK": `echo "$HOME" && test -n "${PLUGINS:-}"`},
-		Command: []string{"sh", "-c", EscapeVars(`for f in "$DIR"/*; do echo "$f"; done`)},
+		Command: []string{"sh", "-c", EscapeComposeInterpolation(`for f in "$DIR"/*; do echo "$f"; done`)},
 	}
 
 	body, err := RenderCompose("srv", "/srv/gamedata", spec)
@@ -327,11 +327,14 @@ func TestShellVariablesSurviveComposeInterpolation(t *testing.T) {
 }
 
 func TestEscapeVarsIsIdempotentlyWrong(t *testing.T) {
+	if got := EscapeComposeInterpolation("$A"); got != "$$A" {
+		t.Fatalf("EscapeComposeInterpolation(%q) = %q", "$A", got)
+	}
+	if got := EscapeComposeInterpolation(EscapeComposeInterpolation("$A")); got != "$$$$A" {
+		t.Errorf("double-escaping must be visible rather than silently absorbed, got %q", got)
+	}
 	if got := EscapeVars("$A"); got != "$$A" {
 		t.Fatalf("EscapeVars(%q) = %q", "$A", got)
-	}
-	if got := EscapeVars(EscapeVars("$A")); got != "$$$$A" {
-		t.Errorf("double-escaping must be visible rather than silently absorbed, got %q", got)
 	}
 }
 

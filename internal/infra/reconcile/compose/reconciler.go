@@ -113,8 +113,12 @@ func defaultExecutor(ctx context.Context, workDir string, args ...string) error 
 	return nil
 }
 
-func EscapeVars(s string) string {
+func EscapeComposeInterpolation(s string) string {
 	return strings.ReplaceAll(s, "$", "$$")
+}
+
+func EscapeVars(s string) string {
+	return EscapeComposeInterpolation(s)
 }
 
 const DefaultStartPeriod = "15m"
@@ -252,11 +256,11 @@ func RenderComposeWith(serviceName, dataRoot string, spec domain.RuntimeSpec, ex
 
 	env := make(map[string]string, len(spec.Env))
 	for k, v := range spec.Env {
-		env[k] = EscapeVars(v)
+		env[k] = EscapeComposeInterpolation(v)
 	}
 	command := make([]string, 0, len(spec.Command))
 	for _, c := range spec.Command {
-		command = append(command, EscapeVars(c))
+		command = append(command, EscapeComposeInterpolation(c))
 	}
 
 	svc := ComposeService{

@@ -54,19 +54,7 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 
 	uiInstances := make([]pages.InstanceUI, 0, len(instances))
 	for _, inst := range instances {
-		canStart := true
-		blockedReason := ""
-
-		if inst.State == domain.StateRunning {
-			canStart = false
-		} else if budget.RunningCount >= budget.MaxRunning {
-			canStart = false
-			blockedReason = fmt.Sprintf("Max %d running instances reached", budget.MaxRunning)
-		} else if budget.UsedGiB+inst.MemoryGiB(domain.ValheimProfile) > budget.TotalBudgetGiB {
-			canStart = false
-			blockedReason = fmt.Sprintf("Exceeds %d GiB RAM budget (%d used + %d required)",
-				budget.TotalBudgetGiB, budget.UsedGiB, inst.MemoryGiB(domain.ValheimProfile))
-		}
+		canStart, blockedReason := budget.StartBlockedReason(domain.ValheimProfile, inst)
 
 		pass := ""
 		seed := ""
@@ -76,7 +64,7 @@ func (h *Handler) ValheimDashboard(c *fiber.Ctx) error {
 		}
 
 		uiInstances = append(uiInstances, pages.InstanceUI{
-			Host:               string(inst.EffectiveHost()),
+			Host:               inst.EffectiveHost(),
 			HostUnreachable:    inst.HostUnreachable,
 			HostUnknown:        inst.HostUnknown,
 			GameID:             string(inst.GameID),

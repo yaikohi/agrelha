@@ -197,23 +197,41 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
 
 - [x] `hostrouter/{runtime,reconciler,renderer}.go` — `routes` map, `Hosts()`, `For()` deduplicated
       via generic `hostMap[T]` in `hostrouter/router.go`.
-- [ ] The RAM-budget error string, and the whole `Telemetry` method, duplicated across all three
-      dashboards.
+- [x] The RAM-budget error string, and the whole `Telemetry` method, duplicated across all three
+      dashboards. Centralized RAM-budget blocked checks via `(b Budget) StartBlockedReason` in
+      `domain/budget.go` (tested in `TestStartBlockedReason`), and centralized runtime telemetry
+      collection via `CollectTelemetry` in `games/telemetry.go` (tested in `games/telemetry_test.go`)
+      wired into `gmod`, `valheim`, and `minecraft`.
 - [x] `instance-%02d` path shape in four places in `manager.go` plus `compose/reconciler.go`.
       Factored out into `domain.InstanceDirName` (tested in `TestInstanceDirName`).
       `27015` literals in `helpers.go` and `.templ` replaced with `pages.GModPort` using
       `domain.HostPortFor` (tested in `TestGModPortDerivedFromHostAndNumber` and `TestGModWorldPasswordUI`).
-- [ ] `AdminsProps` carries 13 `Valheim*`/`MC*`/`GMod*` fields; `(host string, unreachable bool)`
+- [x] `AdminsProps` carries 13 `Valheim*`/`MC*`/`GMod*` fields; `(host string, unreachable bool)`
       threads through `web/shared/convergence.go`, and `host string` where `domain.Host` exists.
-- [ ] `admins.templ:51-62` hardcodes three games despite `domain.Profiles()`; `convergence.go`
+      Decomposed `AdminsProps` into `ValheimAccessProps`, `MCAccessProps`, and `GModAccessProps`,
+      decoupling tab templates from the root god-object. Centralized host convergence into `HostTarget`
+      in `web/shared/convergence.go` and migrated `InstanceUI.Host` to `domain.Host`, eliminating
+      `string(inst.EffectiveHost())` and `domain.Host(inst.Host)` casts across all handlers and helpers.
+- [x] `admins.templ:51-62` hardcodes three games despite `domain.Profiles()`; `convergence.go`
       switches the same pair twice.
-- [ ] `mcRedirectTarget(c *fiber.Ctx)` ignores its parameter and returns a constant, from 20 call
-      sites that all pass `c`.
-- [ ] `gmod/game.go:110` `ExportClientBundle` returns `domain.Bundle{}, nil`.
-- [ ] `BuiltinResources` special-cases GMod then delegates to `LegacyResources`;
+      Replaced hardcoded tabs with `AdminTabs(props.ActiveGame)` derived dynamically from `domain.Profiles()`
+      (tested in `TestAdminTabsDerivedFromProfiles`). Consolidated duplicate `(unreachable, h.IsCluster())`
+      branching in `convergence.go` into `HostTarget.Mode()` (tested in `TestHostTargetConvergenceMode`
+      and `TestTargetFromInstance`).
+- [x] `mcRedirectTarget(c *fiber.Ctx)` ignores its parameter and returns a constant.
+      Converted to constant `mcRedirectTarget` across 20 call sites in `minecraft.go`.
+- [x] `gmod/game.go:110` `ExportClientBundle` returns `domain.Bundle{}, nil`.
+      Returns `ports.ErrNotImplemented` and asserted via `TestGModGameExportClientBundle`
+      (fails when reverted). GMod has no client bundle export (Steam Workshop handles addons in-engine).
+- [x] `BuiltinResources` special-cases GMod then delegates to `LegacyResources`;
       `EnsureDefaults`/`Annotations` lost their `default: panic("unknown game")` while `EnvWith`
       kept it.
-- [ ] `compose.EscapeVars` — name does not say what it escapes or why.
+      `BuiltinResources` now switches uniformly across `GameGMod`, `GameMinecraft`, and `GameValheim`.
+      Restored `default: panic` in `EnsureDefaults` and `Annotations` (asserted via
+      `TestEnsureDefaultsAndAnnotationsPanicOnUnhandledGame`, which fails when reverted).
+- [x] `compose.EscapeVars` — name does not say what it escapes or why.
+      Introduced self-documenting `EscapeComposeInterpolation` (with `EscapeVars` kept as alias)
+      clarifying that `$` is escaped to `$$` to prevent Docker Compose host-level variable interpolation.
 
 ## Test-infrastructure debt
 

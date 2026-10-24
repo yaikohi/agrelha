@@ -184,7 +184,7 @@ type InstanceUI struct {
 	CollectionItems    int
 	CanStart           bool
 	StartBlockedReason string
-	Host               string
+	Host               domain.Host
 	HostUnreachable    bool
 	HostUnknown        bool
 }
@@ -389,7 +389,7 @@ func (p GModWorldPasswordUI) SteamURL() string {
 }
 
 func GModPort(inst InstanceUI) int {
-	port, err := domain.HostPortFor(domain.GModProfile, domain.Host(inst.Host), inst.Number, domain.GModGamePort)
+	port, err := domain.HostPortFor(domain.GModProfile, inst.Host, inst.Number, domain.GModGamePort)
 	if err != nil {
 		return domain.GModGamePort
 	}
@@ -873,7 +873,7 @@ func valheimAddress(inst InstanceUI) string {
 }
 
 func MinecraftPort(inst InstanceUI) int {
-	port, err := domain.HostPortFor(domain.MinecraftProfile, domain.Host(inst.Host), inst.Number, domain.MinecraftGamePort)
+	port, err := domain.HostPortFor(domain.MinecraftProfile, inst.Host, inst.Number, domain.MinecraftGamePort)
 	if err != nil {
 		return domain.MinecraftGamePort
 	}

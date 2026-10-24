@@ -67,19 +67,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 
 	uiInstances := make([]pages.InstanceUI, 0, len(insts))
 	for _, inst := range insts {
-		canStart := true
-		blockedReason := ""
-
-		if inst.State == domain.StateRunning {
-			canStart = false
-		} else if budget.RunningCount >= budget.MaxRunning {
-			canStart = false
-			blockedReason = fmt.Sprintf("Max %d running instances reached", budget.MaxRunning)
-		} else if budget.UsedGiB+inst.MemoryGiB(domain.GModProfile) > budget.TotalBudgetGiB {
-			canStart = false
-			blockedReason = fmt.Sprintf("Exceeds %d GiB RAM budget (%d used + %d required)",
-				budget.TotalBudgetGiB, budget.UsedGiB, inst.MemoryGiB(domain.GModProfile))
-		}
+		canStart, blockedReason := budget.StartBlockedReason(domain.GModProfile, inst)
 
 		pass := ""
 		gamemode := ""
@@ -100,7 +88,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		}
 
 		uiInstances = append(uiInstances, pages.InstanceUI{
-			Host:               string(inst.EffectiveHost()),
+			Host:               inst.EffectiveHost(),
 			HostUnreachable:    inst.HostUnreachable,
 			HostUnknown:        inst.HostUnknown,
 			GameID:             string(inst.GameID),
@@ -318,7 +306,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
-			Host:            string(inst.EffectiveHost()),
+			Host:            inst.EffectiveHost(),
 			HostUnreachable: inst.HostUnreachable,
 			HostUnknown:     inst.HostUnknown,
 			IsAdmin:         shared.IsAdmin(c),

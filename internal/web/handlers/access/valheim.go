@@ -98,19 +98,25 @@ func (h *Handler) renderAdminsPage(c *fiber.Ctx, activeGame string) error {
 
 	fk, fm := shared.TakeFlash(c)
 	return shared.Render(c, pages.Admins(pages.AdminsProps{
-		ActiveGame:        activeGame,
-		FlashKind:         fk,
-		FlashMsg:          fm,
-		ValheimPlayers:    players,
-		ValheimAdminIDs:   adminIDs,
-		ValheimPasswords:  valheimPasswords,
-		ValheimEnabled:    h.cfg.Admins != nil,
-		MCOps:             ops,
-		MCWhitelist:       whitelist,
-		MCOnlinePlayers:   onlinePlayers,
-		MCWhitelistActive: whitelistEnforced,
-		MCEnabled:         h.cfg.StateStore != nil,
-		GModPasswords:     gmodPasswords,
+		ActiveGame: activeGame,
+		FlashKind:  fk,
+		FlashMsg:   fm,
+		Valheim: pages.ValheimAccessProps{
+			Players:   players,
+			AdminIDs:  adminIDs,
+			Passwords: valheimPasswords,
+			Enabled:   h.cfg.Admins != nil,
+		},
+		Minecraft: pages.MCAccessProps{
+			Ops:             ops,
+			Whitelist:       whitelist,
+			OnlinePlayers:   onlinePlayers,
+			WhitelistActive: whitelistEnforced,
+			Enabled:         h.cfg.StateStore != nil,
+		},
+		GMod: pages.GModAccessProps{
+			Passwords: gmodPasswords,
+		},
 	}))
 }
 

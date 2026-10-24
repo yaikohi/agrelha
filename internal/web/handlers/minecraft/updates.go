@@ -108,7 +108,7 @@ func (h *Handler) MCModUpdatesApply(c *fiber.Ctx) error {
 	}
 
 	if h.cfg.ModUpdates.Pending(ctx, inst.Number) {
-		return shared.SSEToast(c, "ok", "An update is already in progress"+shared.ConvergenceClause(string(inst.EffectiveHost()), inst.HostUnreachable), nil)
+		return shared.SSEToast(c, "ok", "An update is already in progress"+shared.ConvergenceClause(inst.EffectiveHost(), inst.HostUnreachable), nil)
 	}
 
 	applied, err := h.cfg.ModUpdates.Apply(ctx, inst.Number, keys, h.cfg.Actor(c))
@@ -119,7 +119,7 @@ func (h *Handler) MCModUpdatesApply(c *fiber.Ctx) error {
 		return h.pushUpdatePanel(c, *inst, "Already up to date.", "ok")
 	}
 
-	msg := fmt.Sprintf("Updating %d mod(s)", len(applied)) + shared.ConvergenceClause(string(inst.EffectiveHost()), inst.HostUnreachable)
+	msg := fmt.Sprintf("Updating %d mod(s)", len(applied)) + shared.ConvergenceClause(inst.EffectiveHost(), inst.HostUnreachable)
 	return h.pushUpdatePanel(c, *inst, msg, "ok")
 }
 
@@ -138,7 +138,7 @@ func (h *Handler) MCModUpdatesUndo(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Undo failed: "+err.Error(), nil)
 	}
 	return h.pushUpdatePanel(c, *inst,
-		fmt.Sprintf("Reverted to the %d mod(s) from before the update", len(rp.Previous))+shared.ConvergenceClause(string(inst.EffectiveHost()), inst.HostUnreachable),
+		fmt.Sprintf("Reverted to the %d mod(s) from before the update", len(rp.Previous))+shared.ConvergenceClause(inst.EffectiveHost(), inst.HostUnreachable),
 		"ok")
 }
 
@@ -166,7 +166,7 @@ func (h *Handler) updatableInstance(c *fiber.Ctx) (*domain.Instance, error) {
 func (h *Handler) pushUpdatePanel(c *fiber.Ctx, inst domain.Instance, msg, kind string) error {
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
-			Host:            string(inst.EffectiveHost()),
+			Host:            inst.EffectiveHost(),
 			HostUnreachable: inst.HostUnreachable,
 			HostUnknown:     inst.HostUnknown,
 			GameID:          string(domain.GameMinecraft),

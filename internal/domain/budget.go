@@ -71,6 +71,21 @@ func (b Budget) CanStart(profile GameProfile, inst Instance) error {
 	return nil
 }
 
+func (b Budget) StartBlockedReason(profile GameProfile, inst Instance) (bool, string) {
+	if inst.State == StateRunning {
+		return false, ""
+	}
+	if b.MaxRunning > 0 && b.RunningCount >= b.MaxRunning {
+		return false, fmt.Sprintf("Max %d running instances reached", b.MaxRunning)
+	}
+	mem := inst.MemoryGiB(profile)
+	if b.TotalBudgetGiB > 0 && b.UsedGiB+mem > b.TotalBudgetGiB {
+		return false, fmt.Sprintf("Exceeds %d GiB RAM budget (%d used + %d required)",
+			b.TotalBudgetGiB, b.UsedGiB, mem)
+	}
+	return true, ""
+}
+
 // CanCreate checks whether a new instance can be created within max instance limits.
 func (b Budget) CanCreate() error {
 	if b.MaxInstances > 0 && b.TotalInstances >= b.MaxInstances {

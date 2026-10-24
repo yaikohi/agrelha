@@ -27,19 +27,7 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 
 	uiInstances := make([]pages.InstanceUI, 0, len(instances))
 	for _, inst := range instances {
-		canStart := true
-		blockedReason := ""
-
-		if inst.State == domain.StateRunning {
-			canStart = false
-		} else if budget.RunningCount >= budget.MaxRunning {
-			canStart = false
-			blockedReason = fmt.Sprintf("Max %d running instances reached", budget.MaxRunning)
-		} else if budget.UsedGiB+inst.MemoryGiB(domain.MinecraftProfile) > budget.TotalBudgetGiB {
-			canStart = false
-			blockedReason = fmt.Sprintf("Exceeds %d GiB RAM budget (%d used + %d required)",
-				budget.TotalBudgetGiB, budget.UsedGiB, inst.MemoryGiB(domain.MinecraftProfile))
-		}
+		canStart, blockedReason := budget.StartBlockedReason(domain.MinecraftProfile, inst)
 
 		packName := ""
 		packRef := ""
@@ -64,7 +52,7 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 		}
 
 		uiInstances = append(uiInstances, pages.InstanceUI{
-			Host:               string(inst.EffectiveHost()),
+			Host:               inst.EffectiveHost(),
 			HostUnreachable:    inst.HostUnreachable,
 			HostUnknown:        inst.HostUnknown,
 			GameID:             string(domain.GameMinecraft),
@@ -147,7 +135,7 @@ func (h *Handler) MCInstanceCreate(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Failed to create world: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("World %q created as instance #%02d.", created.Name, created.Number)+shared.CreationSentence(string(created.EffectiveHost()), created.HostUnreachable), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("World %q created as instance #%02d.", created.Name, created.Number)+shared.CreationSentence(created.EffectiveHost(), created.HostUnreachable), nil)
 }
 
 // MCInstanceStart starts a stopped Minecraft instance.

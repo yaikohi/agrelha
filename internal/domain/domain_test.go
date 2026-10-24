@@ -777,3 +777,69 @@ directory paths in state stores and compose reconciler rely on instance-%%02d ze
 	}
 }
 
+func TestEnsureDefaultsAndAnnotationsPanicOnUnhandledGame(t *testing.T) {
+	unhandledID := GameID("unhandled-game")
+	defaultProfiles[unhandledID] = GameProfile{ID: unhandledID}
+	t.Cleanup(func() { delete(defaultProfiles, unhandledID) })
+
+	profile := GameProfile{ID: unhandledID}
+	inst := Instance{Name: "Test", Number: 1}
+
+	assertPanics := func(name string, f func()) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf(`%s did not panic on an unhandled registered game profile;
+adding a game profile without handling its defaults or annotations produces incomplete instance state at runtime.`, name)
+			}
+		}()
+		f()
+	}
+
+	assertPanics("EnsureDefaults", func() {
+		i := inst
+		i.EnsureDefaults(profile, "")
+	})
+	assertPanics("Annotations", func() {
+		inst.Annotations(profile)
+	})
+}
+
+func TestStartBlockedReason(t *testing.T) {
+	budget := Budget{
+		TotalBudgetGiB: 24,
+		UsedGiB:        20,
+		MaxRunning:     2,
+		RunningCount:   1,
+	}
+
+	runningInst := Instance{State: StateRunning, Tier: TierSmall}
+	if canStart, reason := budget.StartBlockedReason(MinecraftProfile, runningInst); canStart || reason != "" {
+		t.Errorf(`StartBlockedReason on a running instance returned canStart=%v, reason=%q;
+a world that is already running must not be startable, but should not show a false-positive blocked warning on the card.`, canStart, reason)
+	}
+
+	budgetMaxed := Budget{
+		TotalBudgetGiB: 24,
+		UsedGiB:        10,
+		MaxRunning:     2,
+		RunningCount:   2,
+	}
+	stoppedInst := Instance{State: StateStopped, Tier: TierSmall}
+	if canStart, reason := budgetMaxed.StartBlockedReason(MinecraftProfile, stoppedInst); canStart || reason != "Max 2 running instances reached" {
+		t.Errorf(`StartBlockedReason on max running instances returned canStart=%v, reason=%q, want "Max 2 running instances reached"`, canStart, reason)
+	}
+
+	largeInst := Instance{State: StateStopped, Tier: TierLarge}
+	if canStart, reason := budget.StartBlockedReason(MinecraftProfile, largeInst); canStart || reason != "Exceeds 24 GiB RAM budget (20 used + 12 required)" {
+		t.Errorf(`StartBlockedReason on RAM budget overflow returned canStart=%v, reason=%q, want "Exceeds 24 GiB RAM budget (20 used + 12 required)";
+operators will be misinformed about why a world cannot boot if the UI formats budget errors inconsistently.`, canStart, reason)
+	}
+
+	smallInst := Instance{State: StateStopped, Tier: TierSmall}
+	if canStart, reason := budget.StartBlockedReason(MinecraftProfile, smallInst); !canStart || reason != "" {
+		t.Errorf(`StartBlockedReason within budget returned canStart=%v, reason=%q, want true and empty reason`, canStart, reason)
+	}
+}
+
+
+

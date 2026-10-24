@@ -52,7 +52,7 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
-			Host:            string(inst.EffectiveHost()),
+			Host:            inst.EffectiveHost(),
 			HostUnreachable: inst.HostUnreachable,
 			HostUnknown:     inst.HostUnknown,
 			IsAdmin:         shared.IsAdmin(c),

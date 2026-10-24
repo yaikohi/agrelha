@@ -93,13 +93,17 @@ var gmodTierResources = map[ResourceTier]Resources{
 // historical table, which must never change; for newer games it is simply the
 // shipped default.
 func BuiltinResources(gameID GameID, tier ResourceTier) Resources {
-	if gameID == GameGMod {
+	switch gameID {
+	case GameGMod:
 		if r, ok := gmodTierResources[tier]; ok {
 			return r
 		}
 		return gmodTierResources[TierMedium]
+	case GameMinecraft, GameValheim:
+		return LegacyResources(gameID, tier)
+	default:
+		return Resources{}
 	}
-	return LegacyResources(gameID, tier)
 }
 
 func LegacyHeapInitGiB(gameID GameID, tier ResourceTier) int {

@@ -2,9 +2,11 @@ package gmod
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"agrelha/internal/domain"
+	"agrelha/internal/ports"
 )
 
 func TestGModGameRuntimeSpec(t *testing.T) {
@@ -69,11 +71,10 @@ func TestGModGameTelemetry(t *testing.T) {
 
 func TestGModGameExportClientBundle(t *testing.T) {
 	g := New()
-	b, err := g.ExportClientBundle(context.Background(), domain.Instance{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if b.Filename != "" || len(b.Data) != 0 {
-		t.Errorf("expected empty bundle, got %+v", b)
+	_, err := g.ExportClientBundle(context.Background(), domain.Instance{})
+	if !errors.Is(err, ports.ErrNotImplemented) {
+		t.Fatalf(`ExportClientBundle error = %v, want ports.ErrNotImplemented;
+GMod has no exportable client mod bundles (Steam Workshop synchronizes addons directly in-game),
+so returning an empty bundle with nil error produces a corrupted/zero-byte bundle download.`, err)
 	}
 }

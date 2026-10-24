@@ -2,9 +2,8 @@ package gmod
 
 import (
 	"context"
-	"fmt"
-	"time"
 
+	"agrelha/internal/app/games"
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
@@ -77,40 +76,9 @@ func (g *Game) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
 		return g.statusProvider(ctx)
 	}
 
-	tele := domain.GameTelemetry{
-		State:        "unknown",
-		Online:       false,
-		CPU:          "—",
-		Memory:       "—",
-		Uptime:       "—",
-		PlayersKnown: false,
-	}
-
-	if g.runtime != nil {
-		if st, err := g.runtime.Status(ctx, g.serverRef); err == nil {
-			if st.Available {
-				tele.State = "Up"
-				tele.Online = true
-			} else if st.Lifecycle == ports.LifecycleStopped {
-				tele.State = "Stopped"
-				tele.Online = false
-			} else if st.Lifecycle != "" {
-				tele.State = string(st.Lifecycle)
-			}
-			if !st.StartedAt.IsZero() {
-				tele.StartedAt = st.StartedAt
-				tele.Uptime = domain.FormatDuration(time.Since(st.StartedAt))
-			}
-		}
-		if m, err := g.runtime.Metrics(ctx, g.serverRef); err == nil && m.Known {
-			tele.CPU = fmt.Sprintf("%dm", m.CPUMillicores)
-			tele.Memory = fmt.Sprintf("%d Mi", m.MemoryMiB)
-		}
-	}
-
-	return tele, nil
+	return games.CollectTelemetry(ctx, g.runtime, g.serverRef), nil
 }
 
 func (g *Game) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
-	return domain.Bundle{}, nil
+	return domain.Bundle{}, ports.ErrNotImplemented
 }

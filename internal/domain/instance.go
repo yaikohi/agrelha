@@ -248,6 +248,8 @@ func (inst *Instance) EnsureDefaults(profile GameProfile, lbBase string) {
 		if inst.GMod.Map == "" {
 			inst.GMod.Map = "gm_construct"
 		}
+	default:
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
 	if inst.Slug == "" {
 		inst.Slug = Slugify(inst.Name)
@@ -537,6 +539,8 @@ func (inst Instance) Annotations(profile GameProfile) map[string]string {
 				}
 			}
 		}
+	default:
+		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
 	return ann
 }

@@ -8,23 +8,54 @@ import (
 	"agrelha/internal/web/components"
 )
 
+type ValheimAccessProps struct {
+	Players   []domain.Player
+	AdminIDs  []string
+	Passwords []ValheimWorldPasswordUI
+	Enabled   bool
+}
+
+type MCAccessProps struct {
+	Ops             []string
+	Whitelist       []string
+	OnlinePlayers   []string
+	WhitelistActive bool
+	Enabled         bool
+}
+
+type GModAccessProps struct {
+	Passwords []GModWorldPasswordUI
+}
+
 type AdminsProps struct {
 	ActiveGame string
 	FlashKind  string
 	FlashMsg   string
 
-	ValheimPlayers   []domain.Player
-	ValheimAdminIDs  []string
-	ValheimPasswords []ValheimWorldPasswordUI
-	ValheimEnabled   bool
+	Valheim   ValheimAccessProps
+	Minecraft MCAccessProps
+	GMod      GModAccessProps
+}
 
-	MCOps             []string
-	MCWhitelist       []string
-	MCOnlinePlayers   []string
-	MCWhitelistActive bool
-	MCEnabled         bool
-
-	GModPasswords []GModWorldPasswordUI
+func AdminTabs(activeGame string) []components.TabItem {
+	var tabs []components.TabItem
+	for _, p := range domain.Profiles() {
+		emoji := ""
+		switch p.ID {
+		case domain.GameValheim:
+			emoji = "⚔️ "
+		case domain.GameMinecraft:
+			emoji = "⛏️ "
+		case domain.GameGMod:
+			emoji = "🔧 "
+		}
+		tabs = append(tabs, components.TabItem{
+			Label:  emoji + p.Display.Name,
+			Href:   "/admins?game=" + string(p.ID),
+			Active: activeGame == string(p.ID),
+		})
+	}
+	return tabs
 }
 
 templ Admins(props AdminsProps) {
@@ -47,27 +78,23 @@ templ Admins(props AdminsProps) {
 
 		<div class="mb-6">
 			@components.TabBar(components.TabBarProps{
-				Tabs: []components.TabItem{
-					{Label: "⚔️ Valheim", Href: "/admins?game=valheim", Active: props.ActiveGame == "valheim"},
-					{Label: "⛏️ Minecraft", Href: "/admins?game=minecraft", Active: props.ActiveGame == "minecraft"},
-					{Label: "🔧 Garry's Mod", Href: "/admins?game=gmod", Active: props.ActiveGame == "gmod"},
-				},
+				Tabs: AdminTabs(props.ActiveGame),
 			})
 		</div>
 
 		@flashBanner(props.FlashKind, props.FlashMsg)
 
 		if props.ActiveGame == "minecraft" {
-			@minecraftAccessTab(props)
+			@minecraftAccessTab(props.Minecraft)
 		} else if props.ActiveGame == "gmod" {
-			@gmodAccessTab(props)
+			@gmodAccessTab(props.GMod)
 		} else {
-			@valheimAccessTab(props)
+			@valheimAccessTab(props.Valheim)
 		}
 	}
 }
 
-templ valheimAccessTab(props AdminsProps) {
+templ valheimAccessTab(props ValheimAccessProps) {
 	<div class="mb-6">
 		<h2 class="text-xl font-semibold text-zinc-100">Valheim Access & Admins</h2>
 		<p class="mt-0.5 text-xs text-zinc-400">Manage server passwords, operator privileges, and player roster.</p>
@@ -82,13 +109,13 @@ templ valheimAccessTab(props AdminsProps) {
 				🔒 Password Enforced
 			</span>
 		</div>
-		if len(props.ValheimPasswords) == 0 {
+		if len(props.Passwords) == 0 {
 			<div class="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-4 text-center text-xs text-zinc-500">
 				No Valheim worlds configured yet.
 			</div>
 		} else {
 			<div class="divide-y divide-zinc-800/80 overflow-hidden rounded-lg border border-zinc-800/80 bg-zinc-950/50">
-				for _, w := range props.ValheimPasswords {
+				for _, w := range props.Passwords {
 					<div
 						class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
 						data-signals={ fmt.Sprintf("{showPass%d: false}", w.Number) }
@@ -172,7 +199,7 @@ templ valheimAccessTab(props AdminsProps) {
 		}
 	</div>
 
-	if !props.ValheimEnabled {
+	if !props.Enabled {
 		<p class="mb-4 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to grant/revoke admin.</p>
 	}
 	<form method="post" action="/admins/grant" class="mb-6 flex gap-2">
@@ -180,12 +207,12 @@ templ valheimAccessTab(props AdminsProps) {
 		<button class="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600 font-medium">Grant admin</button>
 	</form>
 	<p class="mb-6 text-xs text-zinc-500">Admin changes commit to git; they apply on the next server restart (ADMINLIST_IDS is rendered on start).</p>
-	<h2 class="mb-2 text-sm font-medium text-zinc-400">Current admins ({ strconv.Itoa(len(props.ValheimAdminIDs)) })</h2>
+	<h2 class="mb-2 text-sm font-medium text-zinc-400">Current admins ({ strconv.Itoa(len(props.AdminIDs)) })</h2>
 	<ul class="mb-8 divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900 border border-zinc-800">
-		if len(props.ValheimAdminIDs) == 0 {
+		if len(props.AdminIDs) == 0 {
 			<li class="px-4 py-3 text-xs text-zinc-500">No admins configured.</li>
 		}
-		for _, id := range props.ValheimAdminIDs {
+		for _, id := range props.AdminIDs {
 			<li class="flex items-center justify-between px-4 py-2 text-sm">
 				<span class="font-mono text-xs text-zinc-300">{ id }</span>
 				<form method="post" action="/admins/revoke">
@@ -202,10 +229,10 @@ templ valheimAccessTab(props AdminsProps) {
 				<tr><th class="px-4 py-2">Character</th><th>Steam ID</th><th>Sessions</th><th>Last seen</th><th></th></tr>
 			</thead>
 			<tbody class="divide-y divide-zinc-800">
-				if len(props.ValheimPlayers) == 0 {
+				if len(props.Players) == 0 {
 					<tr><td colspan="5" class="px-4 py-3 text-xs text-zinc-500">No players recorded yet.</td></tr>
 				}
-				for _, p := range props.ValheimPlayers {
+				for _, p := range props.Players {
 					<tr>
 						<td class="px-4 py-2">
 							if p.Online {
@@ -221,7 +248,7 @@ templ valheimAccessTab(props AdminsProps) {
 						<td>{ strconv.Itoa(p.Sessions) }</td>
 						<td class="text-zinc-500">{ p.LastSeen.Format("Jan 2 15:04") }</td>
 						<td class="px-4 text-right">
-							if Contains(props.ValheimAdminIDs, p.SteamID) {
+							if Contains(props.AdminIDs, p.SteamID) {
 								<span class="text-xs text-emerald-400">admin</span>
 							} else {
 								<form method="post" action="/admins/grant">
@@ -237,12 +264,12 @@ templ valheimAccessTab(props AdminsProps) {
 	</div>
 }
 
-templ minecraftAccessTab(props AdminsProps) {
+templ minecraftAccessTab(props MCAccessProps) {
 	<div class="mb-6">
 		<h2 class="text-xl font-semibold text-zinc-100">Minecraft Access Management</h2>
 		<p class="mt-0.5 text-xs text-zinc-400">Configure operator privileges, connection whitelist, and live in-game admission.</p>
 	</div>
-	if !props.MCEnabled {
+	if !props.Enabled {
 		<p class="mb-6 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to manage ops or whitelist.</p>
 	}
 
@@ -250,14 +277,14 @@ templ minecraftAccessTab(props AdminsProps) {
 		<div>
 			<div class="flex items-center gap-3">
 				<h2 class="text-base font-medium text-zinc-100">Whitelist Enforcement</h2>
-				if props.MCWhitelistActive {
+				if props.WhitelistActive {
 					<span class="rounded bg-emerald-950 border border-emerald-800 px-2.5 py-0.5 text-xs font-medium text-emerald-400">ACTIVE (Enforced)</span>
 				} else {
 					<span class="rounded bg-amber-950 border border-amber-800 px-2.5 py-0.5 text-xs font-medium text-amber-400">DISABLED (Public)</span>
 				}
 			</div>
 			<p class="mt-1 text-xs text-zinc-400">
-				if props.MCWhitelistActive {
+				if props.WhitelistActive {
 					Only players in the whitelist are permitted to join. Non-whitelisted players are rejected.
 				} else {
 					Whitelist is currently inactive in-game — any player with the server address can join.
@@ -265,7 +292,7 @@ templ minecraftAccessTab(props AdminsProps) {
 			</p>
 		</div>
 		<form method="post" action="/api/minecraft/access/whitelist/toggle">
-			if props.MCWhitelistActive {
+			if props.WhitelistActive {
 				<button class="rounded bg-amber-700 px-4 py-2 text-xs font-medium hover:bg-amber-600 text-white">Disable Whitelist</button>
 			} else {
 				<button class="rounded bg-emerald-700 px-4 py-2 text-xs font-medium hover:bg-emerald-600 text-white">Enforce Whitelist</button>
@@ -276,7 +303,7 @@ templ minecraftAccessTab(props AdminsProps) {
 	<div class="grid grid-cols-1 gap-8 md:grid-cols-2">
 		<section class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
 			<div class="mb-4">
-				<h2 class="text-lg font-medium text-zinc-100">Server Operators ({ strconv.Itoa(len(props.MCOps)) })</h2>
+				<h2 class="text-lg font-medium text-zinc-100">Server Operators ({ strconv.Itoa(len(props.Ops)) })</h2>
 				<p class="text-xs text-zinc-400">Operators hold in-game level-4 admin permissions. Synced live via RCON and stored in Git.</p>
 			</div>
 			<form method="post" action="/api/minecraft/access/op" class="mb-4 flex gap-2">
@@ -284,10 +311,10 @@ templ minecraftAccessTab(props AdminsProps) {
 				<button class="shrink-0 rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Op Player</button>
 			</form>
 			<ul class="divide-y divide-zinc-800 rounded border border-zinc-800 bg-zinc-950 overflow-hidden">
-				if len(props.MCOps) == 0 {
+				if len(props.Ops) == 0 {
 					<li class="px-4 py-3 text-xs text-zinc-500">No server operators defined.</li>
 				}
-				for _, op := range props.MCOps {
+				for _, op := range props.Ops {
 					<li class="flex items-center justify-between px-4 py-2.5 text-sm">
 						<span class="font-mono text-zinc-200">{ op }</span>
 						<form method="post" action="/api/minecraft/access/deop">
@@ -301,7 +328,7 @@ templ minecraftAccessTab(props AdminsProps) {
 
 		<section class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
 			<div class="mb-4">
-				<h2 class="text-lg font-medium text-zinc-100">Whitelist ({ strconv.Itoa(len(props.MCWhitelist)) })</h2>
+				<h2 class="text-lg font-medium text-zinc-100">Whitelist ({ strconv.Itoa(len(props.Whitelist)) })</h2>
 				<p class="text-xs text-zinc-400">Players permitted to connect. Synced live via RCON and stored in Git.</p>
 			</div>
 			<form method="post" action="/api/minecraft/access/whitelist/add" class="mb-4 flex gap-2">
@@ -309,10 +336,10 @@ templ minecraftAccessTab(props AdminsProps) {
 				<button class="shrink-0 rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Add to Whitelist</button>
 			</form>
 			<ul class="divide-y divide-zinc-800 rounded border border-zinc-800 bg-zinc-950 overflow-hidden">
-				if len(props.MCWhitelist) == 0 {
+				if len(props.Whitelist) == 0 {
 					<li class="px-4 py-3 text-xs text-zinc-500">Whitelist is empty.</li>
 				}
-				for _, user := range props.MCWhitelist {
+				for _, user := range props.Whitelist {
 					<li class="flex items-center justify-between px-4 py-2.5 text-sm">
 						<span class="font-mono text-zinc-200">{ user }</span>
 						<form method="post" action="/api/minecraft/access/whitelist/remove">
@@ -326,20 +353,20 @@ templ minecraftAccessTab(props AdminsProps) {
 	</div>
 
 	<section class="mt-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-		<h2 class="mb-1 text-sm font-medium text-zinc-300">Online Players Now ({ strconv.Itoa(len(props.MCOnlinePlayers)) })</h2>
+		<h2 class="mb-1 text-sm font-medium text-zinc-300">Online Players Now ({ strconv.Itoa(len(props.OnlinePlayers)) })</h2>
 		<p class="mb-4 text-xs text-zinc-400">Players currently connected in-game. Live query via RCON.</p>
-		if len(props.MCOnlinePlayers) == 0 {
+		if len(props.OnlinePlayers) == 0 {
 			<p class="rounded-lg bg-zinc-950/60 border border-zinc-800/60 p-4 text-xs text-zinc-500">No players currently connected to the server.</p>
 		} else {
 			<div class="flex flex-wrap gap-3">
-				for _, player := range props.MCOnlinePlayers {
+				for _, player := range props.OnlinePlayers {
 					<div class="flex items-center gap-3 rounded-lg bg-zinc-950 px-3.5 py-2 border border-zinc-800">
 						<div class="flex items-center gap-2">
 							<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
 							<span class="font-mono text-sm text-zinc-200">{ player }</span>
 						</div>
 						<div class="flex items-center gap-1.5 border-l border-zinc-800 pl-3">
-							if Contains(props.MCOps, player) {
+							if Contains(props.Ops, player) {
 								<span class="rounded bg-amber-950/80 border border-amber-800/40 px-2 py-0.5 text-[10px] text-amber-400 font-mono">OP</span>
 							} else {
 								<form method="post" action="/api/minecraft/access/op" class="inline">
@@ -347,7 +374,7 @@ templ minecraftAccessTab(props AdminsProps) {
 									<button class="rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-1 text-[11px] text-zinc-300">Make Op</button>
 								</form>
 							}
-							if Contains(props.MCWhitelist, player) {
+							if Contains(props.Whitelist, player) {
 								<span class="rounded bg-emerald-950/80 border border-emerald-800/40 px-2 py-0.5 text-[10px] text-emerald-400 font-mono">Whitelisted</span>
 							} else {
 								<form method="post" action="/api/minecraft/access/whitelist/add" class="inline">
@@ -363,7 +390,7 @@ templ minecraftAccessTab(props AdminsProps) {
 	</section>
 }
 
-templ gmodAccessTab(props AdminsProps) {
+templ gmodAccessTab(props GModAccessProps) {
 	<div class="mb-6">
 		<h2 class="text-xl font-semibold text-zinc-100">Garry's Mod Access & Connection</h2>
 		<p class="mt-0.5 text-xs text-zinc-400">Manage world admission passwords, direct connect endpoints, and Steam join links.</p>
@@ -378,13 +405,13 @@ templ gmodAccessTab(props AdminsProps) {
 				Source Engine
 			</span>
 		</div>
-		if len(props.GModPasswords) == 0 {
+		if len(props.Passwords) == 0 {
 			<div class="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-4 text-center text-xs text-zinc-500">
 				No Garry's Mod worlds configured yet.
 			</div>
 		} else {
 			<div class="divide-y divide-zinc-800/80 overflow-hidden rounded-lg border border-zinc-800/80 bg-zinc-950/50">
-				for _, w := range props.GModPasswords {
+				for _, w := range props.Passwords {
 					<div
 						class="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between"
 						data-signals={ fmt.Sprintf("{showGModPass%d: false}", w.Number) }

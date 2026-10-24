@@ -3,12 +3,14 @@ package shared
 import (
 	"strings"
 	"testing"
+
+	"agrelha/internal/domain"
 )
 
 func TestConvergenceClauseByHost(t *testing.T) {
 	tests := []struct {
 		name        string
-		host        string
+		host        domain.Host
 		unreachable bool
 		want        string
 	}{
@@ -29,7 +31,7 @@ func TestConvergenceClauseByHost(t *testing.T) {
 }
 
 func TestADockerHostIsNeverToldAboutArgoCD(t *testing.T) {
-	for _, host := range []string{"fogo", "FOGO", " fogo "} {
+	for _, host := range []domain.Host{"fogo", "FOGO", " fogo "} {
 		if strings.Contains(ConvergenceClause(host, false), "ArgoCD") {
 			t.Errorf("host %q was promised an ArgoCD sync that will never happen", host)
 		}
@@ -37,7 +39,7 @@ func TestADockerHostIsNeverToldAboutArgoCD(t *testing.T) {
 }
 
 func TestANewWorldIsNotDescribedAsRestarting(t *testing.T) {
-	for _, host := range []string{"cluster", "fogo"} {
+	for _, host := range []domain.Host{"cluster", "fogo"} {
 		got := CreationSentence(host, false)
 		if strings.Contains(got, "restart") {
 			t.Errorf("CreationSentence(%q) = %q; a world being created for the first time has nothing to restart", host, got)
@@ -51,5 +53,37 @@ func TestANewWorldIsNotDescribedAsRestarting(t *testing.T) {
 	}
 	if got := CreationSentence("fogo", true); got != " It starts when fogo is reachable again." {
 		t.Errorf("unreachable creation copy = %q", got)
+	}
+}
+
+func TestHostTargetConvergenceMode(t *testing.T) {
+	if m := Target("cluster", false).Mode(); m != ConvergenceCluster {
+		t.Fatalf("Target('cluster', false).Mode() = %v, want ConvergenceCluster; cluster world will not wait for ArgoCD sync", m)
+	}
+	if m := Target("fogo", false).Mode(); m != ConvergenceDirect {
+		t.Fatalf("Target('fogo', false).Mode() = %v, want ConvergenceDirect; direct docker world will wait for non-existent ArgoCD sync", m)
+	}
+	if m := Target("cluster", true).Mode(); m != ConvergenceUnreachable {
+		t.Fatalf("Target('cluster', true).Mode() = %v, want ConvergenceUnreachable; unreachable host will promise immediate restart", m)
+	}
+	if m := Target("fogo", true).Mode(); m != ConvergenceUnreachable {
+		t.Fatalf("Target('fogo', true).Mode() = %v, want ConvergenceUnreachable; unreachable host will promise immediate restart", m)
+	}
+}
+
+func TestTargetFromInstance(t *testing.T) {
+	inst := domain.Instance{
+		Host:            "fogo",
+		HostUnreachable: true,
+	}
+	tgt := TargetFromInstance(inst)
+	if tgt.Host != "fogo" || !tgt.Unreachable {
+		t.Fatalf("TargetFromInstance(%+v) = %+v, want Host='fogo' and Unreachable=true; convergence copy will mismatch instance state", inst, tgt)
+	}
+	if tgt.Mode() != ConvergenceUnreachable {
+		t.Fatalf("tgt.Mode() = %v, want ConvergenceUnreachable; unreachable world will report incorrect restart clause", tgt.Mode())
+	}
+	if got := tgt.ConvergenceClause(); got != " — this world restarts when fogo is reachable again." {
+		t.Fatalf("tgt.ConvergenceClause() = %q, want unreachable restart clause", got)
 	}
 }

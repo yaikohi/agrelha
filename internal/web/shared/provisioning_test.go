@@ -3,10 +3,12 @@ package shared
 import (
 	"strings"
 	"testing"
+
+	"agrelha/internal/domain"
 )
 
 func TestProvisioningCopyFollowsTheHost(t *testing.T) {
-	for _, step := range []func(string) string{
+	for _, step := range []func(domain.Host) string{
 		ProvisioningStepReconciling,
 		ProvisioningStepStarting,
 		ProvisioningDetail,

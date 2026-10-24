@@ -3,8 +3,8 @@ package minecraft
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"agrelha/internal/app/games"
 	"agrelha/internal/app/modpack"
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
@@ -141,15 +141,8 @@ func (g *Game) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
 		return g.statusProvider(ctx)
 	}
 
-	tele := domain.GameTelemetry{
-		State:        "unknown",
-		Online:       false,
-		CPU:          "—",
-		Memory:       "—",
-		Uptime:       "—",
-		Loader:       "NeoForge",
-		PlayersKnown: false,
-	}
+	tele := games.CollectTelemetry(ctx, g.runtime, g.serverRef)
+	tele.Loader = "NeoForge"
 
 	if g.playerCountFn != nil {
 		if n, err := g.playerCountFn(ctx); err == nil {
@@ -167,28 +160,6 @@ func (g *Game) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {
 		}
 		if pack != "" {
 			tele.PackName = pack
-		}
-	}
-
-	if g.runtime != nil {
-		if st, err := g.runtime.Status(ctx, g.serverRef); err == nil {
-			if st.Available {
-				tele.State = "Up"
-				tele.Online = true
-			} else if st.Lifecycle == ports.LifecycleStopped {
-				tele.State = "Stopped"
-				tele.Online = false
-			} else if st.Lifecycle != "" {
-				tele.State = string(st.Lifecycle)
-			}
-			if !st.StartedAt.IsZero() {
-				tele.StartedAt = st.StartedAt
-				tele.Uptime = domain.FormatDuration(time.Since(st.StartedAt))
-			}
-		}
-		if m, err := g.runtime.Metrics(ctx, g.serverRef); err == nil && m.Known {
-			tele.CPU = fmt.Sprintf("%dm", m.CPUMillicores)
-			tele.Memory = fmt.Sprintf("%d Mi", m.MemoryMiB)
 		}
 	}
 
