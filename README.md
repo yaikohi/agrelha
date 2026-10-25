@@ -211,8 +211,15 @@ cp .env.example .env  # leave OIDC_ISSUER empty to bypass auth locally
 go mod tidy           # generates go.sum + resolves k8s/oidc deps
 task build            # templ generate + tailwind + vendor datastar + go build
 task watch            # air live-reload
-go test ./...         # unit tests (server package)
+task vet              # go vet ./...
+task test             # go test -race with coverage
 ```
+
+`*_templ.go` is generated from the `.templ` files and is **not committed** — a
+fresh checkout has no Go code for `internal/web/pages` or `internal/web/components`
+until `templ generate` has run. Every task that compiles Go (`build`, `vet`, and
+all `test:*` variants) depends on `generate` for that reason, so reach for the
+tasks rather than calling `go build` or `go test` directly.
 
 Every key has a default and the full reference is
 [docs/configuration.md](docs/configuration.md). The ones you are most likely to
@@ -263,6 +270,15 @@ turns on.
 task build:image TAG=0.26.2     # docker build + push; TAG stamps the binary
 # then bump the image tag wherever your GitOps repo declares it
 ```
+
+### CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `task vet` and
+`task test` on every push to `main` and every pull request. It installs nothing
+of its own: `jdx/mise-action` reads [`mise.toml`](mise.toml) for the toolchain
+and the tasks come from [`Taskfile.yml`](Taskfile.yml), so CI and your machine
+run the same commands against the same tool versions. Actions are pinned to
+commit SHAs rather than tags.
 
 See `plan.md` for the version changelog and remaining work.
 
