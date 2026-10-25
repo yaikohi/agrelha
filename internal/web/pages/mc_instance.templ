@@ -456,6 +456,10 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 			}
 
 			<!-- TAB 4: BACKUPS -->
+			if d.ActiveTab == "crashes" {
+				@IncidentList(d)
+			}
+
 			if d.ActiveTab == "backups" {
 				<div
 					class="space-y-6"

@@ -254,6 +254,7 @@ func (s *Store) migrate() error {
 		`ALTER TABLE valheim_instances ADD COLUMN host TEXT NOT NULL DEFAULT 'cluster'`,
 		`ALTER TABLE mc_instances ADD COLUMN host TEXT NOT NULL DEFAULT 'cluster'`,
 		`ALTER TABLE gmod_instances ADD COLUMN host TEXT NOT NULL DEFAULT 'cluster'`,
+		`ALTER TABLE incidents ADD COLUMN acknowledged_at TIMESTAMP`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err

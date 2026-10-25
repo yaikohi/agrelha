@@ -322,6 +322,10 @@ templ ValheimInstanceDetail(d InstanceDetailUI) {
 			}
 
 			<!-- TAB 5: BACKUPS -->
+			if d.ActiveTab == "crashes" {
+				@IncidentList(d)
+			}
+
 			if d.ActiveTab == "backups" {
 				<div
 					class="space-y-6"

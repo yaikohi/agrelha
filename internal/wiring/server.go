@@ -430,6 +430,8 @@ func buildValheimHandler(cfg *config.Config, d Deps, applyValheimAfterSync func(
 	return valheimhttp.New(valheimhttp.Config{
 		Requests:              d.Requests,
 		LastIncident:          incidentReader(d, domain.GameValheim),
+		ListIncidents:         incidentLister(d, domain.GameValheim),
+		DismissIncident:       incidentDismisser(d),
 		ServerBuild:           serverBuild,
 		ValheimInstances:      d.ValheimInstances,
 		ValheimConfigs:        d.ValheimConfigs,
@@ -573,6 +575,8 @@ func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 
 	return minecrafthttp.New(minecrafthttp.Config{
 		LastIncident:            incidentReader(d, domain.GameMinecraft),
+		ListIncidents:           incidentLister(d, domain.GameMinecraft),
+		DismissIncident:         incidentDismisser(d),
 		MCInstances:             d.MCInstances,
 		MinecraftGame:           d.MinecraftGame,
 		SearchMods:              searchMods,
@@ -817,6 +821,24 @@ func incidentReader(d Deps, game domain.GameID) func(context.Context, int) (*dom
 	}
 	return func(ctx context.Context, number int) (*domain.Incident, error) {
 		return d.Store.LastIncident(ctx, game, number)
+	}
+}
+
+func incidentLister(d Deps, game domain.GameID) func(context.Context, int, int) ([]domain.Incident, error) {
+	if d.Store == nil {
+		return nil
+	}
+	return func(ctx context.Context, number, limit int) ([]domain.Incident, error) {
+		return d.Store.ListIncidents(ctx, game, number, limit)
+	}
+}
+
+func incidentDismisser(d Deps) func(context.Context, int64) error {
+	if d.Store == nil {
+		return nil
+	}
+	return func(ctx context.Context, id int64) error {
+		return d.Store.AcknowledgeIncident(ctx, id)
 	}
 }
 

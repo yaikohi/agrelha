@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -78,9 +79,23 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 	d.Vanilla = inst.IsVanilla()
 	d.Pack = packName
 
+	if tab == "crashes" && h.cfg.ListIncidents != nil {
+		if list, err := h.cfg.ListIncidents(c.UserContext(), inst.Number, 50); err == nil {
+			d.Incidents = pages.IncidentViews(list)
+		}
+	}
+
 	if h.cfg.LastIncident != nil {
-		if in, err := h.cfg.LastIncident(c.UserContext(), inst.Number); err == nil {
-			d.LastIncident = pages.IncidentView(in)
+		if in, err := h.cfg.LastIncident(c.UserContext(), inst.Number); err == nil && in != nil {
+			var startedAt time.Time
+			if h.cfg.MCInstances != nil {
+				if st, serr := h.cfg.MCInstances.RuntimeStatus(c.UserContext(), inst.Number); serr == nil {
+					startedAt = st.StartedAt
+				}
+			}
+			if !in.SupersededBy(startedAt) {
+				d.LastIncident = pages.IncidentView(in)
+			}
 		}
 	}
 

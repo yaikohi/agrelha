@@ -2,6 +2,8 @@ package pages
 
 import "slices"
 
+import "time"
+
 import "agrelha/internal/web/components"
 
 import "agrelha/internal/domain"
@@ -210,6 +212,7 @@ type InstanceDetailUI struct {
 	ConfigFiles     []string
 	Backups         []BackupUI
 	LastIncident    *IncidentUI
+	Incidents       []IncidentUI
 
 	// Configs is the BepInEx config set the publish sidecar last copied off the
 	// world's disk. ConfigsUnpublished distinguishes "the sidecar has not run
@@ -244,6 +247,11 @@ type ConfigFileUI struct {
 // IncidentUI is the last recorded failure of an Instance, shown so the operator
 // can see why a server died without reaching for kubectl.
 type IncidentUI struct {
+	ID           int64
+	GamePath     string
+	Number       int
+	Acknowledged bool
+	Ago          string
 	Summary      string
 	When         string
 	RestartCount int32
@@ -822,6 +830,11 @@ func IncidentView(in *domain.Incident) *IncidentUI {
 		return nil
 	}
 	return &IncidentUI{
+		ID:           in.ID,
+		GamePath:     string(in.GameID),
+		Number:       in.Number,
+		Acknowledged: in.Acknowledged,
+		Ago:          humanAgo(in.At),
 		Summary:      in.Summary(),
 		When:         in.At.Format("2006-01-02 15:04"),
 		RestartCount: in.RestartCount,
@@ -852,8 +865,8 @@ func withModpack(row ServerRowUI, url string, hasMods bool) ServerRowUI {
 
 // InstanceTabs lists an instance's tabs, omitting Mods for a Vanilla World.
 var implementedTabs = map[string][]string{
-	"minecraft": {"overview", "mods", "configs", "console", "backups", "settings"},
-	"valheim":   {"overview", "mods", "configs", "console", "backups", "settings"},
+	"minecraft": {"overview", "mods", "configs", "console", "crashes", "backups", "settings"},
+	"valheim":   {"overview", "mods", "configs", "console", "crashes", "backups", "settings"},
 	"gmod":      {"overview", "console"},
 }
 
@@ -862,6 +875,7 @@ var tabLabelBySlug = map[string]string{
 	"mods":     "Mods",
 	"configs":  "Configs",
 	"console":  "Console & Logs",
+	"crashes":  "Crashes",
 	"backups":  "Backups",
 	"settings": "Settings",
 }
@@ -985,4 +999,31 @@ func HasInstanceTab(game, slug string, vanilla bool) bool {
 		}
 	}
 	return false
+}
+
+func humanAgo(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+func IncidentViews(list []domain.Incident) []IncidentUI {
+	out := make([]IncidentUI, 0, len(list))
+	for i := range list {
+		if v := IncidentView(&list[i]); v != nil {
+			out = append(out, *v)
+		}
+	}
+	return out
 }

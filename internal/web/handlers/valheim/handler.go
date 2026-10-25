@@ -21,6 +21,7 @@ import (
 	"agrelha/internal/ports"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/sse"
+	"strconv"
 )
 
 var (
@@ -48,6 +49,8 @@ const instanceStatsTTL = 15 * time.Second
 type Config struct {
 	Requests         *requests.Service
 	LastIncident     func(ctx context.Context, number int) (*domain.Incident, error)
+	ListIncidents    func(ctx context.Context, number, limit int) ([]domain.Incident, error)
+	DismissIncident  func(ctx context.Context, id int64) error
 	ValheimInstances *instances.InstanceManager
 	ValheimConfigs   *appbepinex.Service
 	ValheimRestarts  *restarts.Queue
@@ -128,6 +131,7 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	})
 	router.Get("/valheim/:num<int>/:tab", h.ValheimInstancePage)
 	router.Post("/api/valheim/:num<int>/settings", h.ValheimInstanceSettingsSave)
+	router.Post("/api/valheim/:num<int>/incidents/:id<int>/dismiss", h.DismissIncidentHandler)
 	router.Get("/api/valheim/:num<int>/mods/search", h.ValheimInstanceModsSearch)
 	router.Post("/api/valheim/:num<int>/mods/search", h.ValheimInstanceModsSearch)
 	router.Get("/api/valheim/:num<int>/mods/detail", h.ValheimModDetail)
@@ -193,4 +197,18 @@ func (h *Handler) InstanceStats(ctx context.Context, insts []domain.Instance) ma
 	h.instStats.data = out
 	h.instStats.at = time.Now()
 	return out
+}
+
+func (h *Handler) DismissIncidentHandler(c *fiber.Ctx) error {
+	if h.cfg.DismissIncident == nil {
+		return shared.SSEToast(c, "err", "Dismissing failures is not configured.", nil)
+	}
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return shared.SSEToast(c, "err", "Invalid failure id.", nil)
+	}
+	if err := h.cfg.DismissIncident(c.UserContext(), id); err != nil {
+		return shared.SSEToast(c, "err", "Could not dismiss that failure: "+err.Error(), nil)
+	}
+	return shared.SSEToast(c, "ok", "Failure dismissed. It stays on the Crashes tab.", map[string]any{"reload": true})
 }

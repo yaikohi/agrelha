@@ -16,6 +16,7 @@ import (
 	"agrelha/internal/ports"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/sse"
+	"strconv"
 )
 
 var (
@@ -43,6 +44,8 @@ type Config struct {
 	MinecraftGame           ports.Game
 	SearchMods              SearchModsFunc
 	LastIncident            func(ctx context.Context, number int) (*domain.Incident, error)
+	ListIncidents           func(ctx context.Context, number, limit int) ([]domain.Incident, error)
+	DismissIncident         func(ctx context.Context, id int64) error
 	Actor                   func(*fiber.Ctx) string
 	ApplyMinecraftAfterSync func(cmName, depName, key string, want func(string) bool)
 	ModUpdates              *modupdates.Checker
@@ -102,6 +105,7 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 	})
 	router.Get("/minecraft/:num<int>/:tab", h.MCInstancePage)
 	router.Post("/api/minecraft/:num<int>/settings", h.MCInstanceSettingsSave)
+	router.Post("/api/minecraft/:num<int>/incidents/:id<int>/dismiss", h.DismissIncidentHandler)
 	router.Get("/api/minecraft/:num<int>/mods/search", h.MCInstanceModsSearch)
 	router.Post("/api/minecraft/:num<int>/mods/search", h.MCInstanceModsSearch)
 	router.Post("/api/minecraft/:num<int>/mods/install", h.MCInstanceModsInstall)
@@ -149,4 +153,18 @@ func (h *Handler) InstanceStats(ctx context.Context, insts []domain.Instance) ma
 	h.instStats.data = out
 	h.instStats.at = time.Now()
 	return out
+}
+
+func (h *Handler) DismissIncidentHandler(c *fiber.Ctx) error {
+	if h.cfg.DismissIncident == nil {
+		return shared.SSEToast(c, "err", "Dismissing failures is not configured.", nil)
+	}
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return shared.SSEToast(c, "err", "Invalid failure id.", nil)
+	}
+	if err := h.cfg.DismissIncident(c.UserContext(), id); err != nil {
+		return shared.SSEToast(c, "err", "Could not dismiss that failure: "+err.Error(), nil)
+	}
+	return shared.SSEToast(c, "ok", "Failure dismissed. It stays on the Crashes tab.", map[string]any{"reload": true})
 }

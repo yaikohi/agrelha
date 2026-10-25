@@ -22,6 +22,10 @@ type Incident struct {
 	// Step names the setup stage that failed when the server never started.
 	// Empty means the server ran and then died.
 	Step string `json:"step,omitempty"`
+
+	// Acknowledged records that an operator has seen this failure and dismissed
+	// it. The failure stays in the history; it just stops demanding attention.
+	Acknowledged bool `json:"acknowledged,omitempty"`
 }
 
 // Summary is a one-line account of how the server died, for a badge or tile.
@@ -56,4 +60,11 @@ func stepSummary(step string, restarts int32) string {
 		return fmt.Sprintf("%s failed — the server never started (%d attempts)", what, restarts)
 	}
 	return fmt.Sprintf("%s failed — the server never started", what)
+}
+
+func (i Incident) SupersededBy(serverStartedAt time.Time) bool {
+	if serverStartedAt.IsZero() || i.At.IsZero() {
+		return false
+	}
+	return i.At.Before(serverStartedAt)
 }

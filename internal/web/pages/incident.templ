@@ -14,6 +14,7 @@ templ IncidentPanel(in *IncidentUI) {
 					<p class="mt-0.5 text-xs text-red-200/60">{ in.When }</p>
 				</div>
 				<div class="flex flex-wrap items-center gap-1.5">
+					@dismissIncidentButton(*in)
 					if in.OOMKilled {
 						<span class="rounded border border-red-700/60 bg-red-950/60 px-2 py-0.5 text-[10px] font-medium text-red-200">Out of memory</span>
 					}
@@ -39,6 +40,12 @@ templ IncidentPanel(in *IncidentUI) {
 			} else {
 				<p class="mt-3 text-[11px] text-red-200/50">No log was captured — the container was replaced before agrelha could read it.</p>
 			}
+			<a
+				href={ templ.SafeURL(fmt.Sprintf("/%s/%d/crashes", in.GamePath, in.Number)) }
+				class="mt-3 inline-block text-xs font-medium text-red-200/70 underline-offset-2 hover:text-red-100 hover:underline"
+			>
+				See all failures &rarr;
+			</a>
 		</div>
 	}
 }

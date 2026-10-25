@@ -26,7 +26,8 @@ func (s *Store) RecordIncident(ctx context.Context, in domain.Incident) (int64, 
 func (s *Store) LastIncident(ctx context.Context, game domain.GameID, number int) (*domain.Incident, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,'')
-		 FROM incidents WHERE game_id = ? AND number = ? ORDER BY at DESC, id DESC LIMIT 1`,
+		 FROM incidents WHERE game_id = ? AND number = ? AND acknowledged_at IS NULL
+		 ORDER BY at DESC, id DESC LIMIT 1`,
 		string(game), number)
 
 	in, err := scanIncident(row)
@@ -44,7 +45,7 @@ func (s *Store) ListIncidents(ctx context.Context, game domain.GameID, number, l
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,'')
+		`SELECT id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,''), acknowledged_at
 		 FROM incidents WHERE game_id = ? AND number = ? ORDER BY at DESC, id DESC LIMIT ?`,
 		string(game), number, limit)
 	if err != nil {
@@ -54,13 +55,23 @@ func (s *Store) ListIncidents(ctx context.Context, game domain.GameID, number, l
 
 	var out []domain.Incident
 	for rows.Next() {
-		in, err := scanIncident(rows)
+		in, err := scanIncidentWithAck(rows)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, in)
 	}
 	return out, rows.Err()
+}
+
+func scanIncidentWithAck(sc scanner) (domain.Incident, error) {
+	var in domain.Incident
+	var game string
+	var ack sql.NullTime
+	err := sc.Scan(&in.ID, &game, &in.Number, &in.At, &in.RestartCount, &in.ExitCode, &in.Reason, &in.OOMKilled, &in.LogTail, &ack)
+	in.GameID = domain.GameID(game)
+	in.Acknowledged = ack.Valid
+	return in, err
 }
 
 type scanner interface {
@@ -73,4 +84,10 @@ func scanIncident(sc scanner) (domain.Incident, error) {
 	err := sc.Scan(&in.ID, &game, &in.Number, &in.At, &in.RestartCount, &in.ExitCode, &in.Reason, &in.OOMKilled, &in.LogTail)
 	in.GameID = domain.GameID(game)
 	return in, err
+}
+
+func (s *Store) AcknowledgeIncident(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE incidents SET acknowledged_at = CURRENT_TIMESTAMP WHERE id = ? AND acknowledged_at IS NULL`, id)
+	return err
 }
