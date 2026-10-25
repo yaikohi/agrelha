@@ -276,6 +276,7 @@ type GameSummaryUI struct {
 	TotalBudgetGiB  int
 	ActiveInstance  *InstanceUI
 	ActiveInstances []InstanceUI
+	SavedInstances  []InstanceUI
 }
 
 type MinecraftSummaryUI = GameSummaryUI
@@ -300,6 +301,8 @@ type ServerRowUI struct {
 	Address       string
 	JoinURL       string
 	JoinLabel     string
+	BrowseURL     string
+	BrowseLabel   string
 	Password      string
 	VersionBadge  string
 	DownloadURL   string
@@ -580,6 +583,22 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), inst.HasMods))
 	}
 
+	for _, inst := range mc.SavedInstances {
+		row := ServerRowUI{
+			Name:         inst.Name,
+			Address:      fmt.Sprintf("%s:%d", inst.LBIP, MinecraftPort(inst)),
+			VersionBadge: modBadge(inst.Source, fmt.Sprintf("%s · %s", inst.MCVersion, inst.Loader)),
+			DownloadFmt:  ".mrpack",
+			Launchers:    []string{"Prism Launcher", "Modrinth App"},
+			ImportSteps:  "Add Instance → Import from zip",
+			Online:       false,
+		}
+		if isAdmin && inst.Number > 0 {
+			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
+		}
+		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), inst.HasMods))
+	}
+
 	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", mc.TotalInstances, mc.MaxInstances)}
 	if isAdmin {
 		g.Extras = append(g.Extras,
@@ -723,6 +742,13 @@ func GModCard(summary GameSummaryUI, isAdmin bool) GameCardUI {
 		}
 		if inst.Gamemode != "" && inst.Map != "" {
 			row.VersionBadge = fmt.Sprintf("%s · %s", inst.Gamemode, inst.Map)
+		}
+		if inst.CollectionID != "" {
+			row.BrowseURL = fmt.Sprintf("https://steamcommunity.com/sharedfiles/filedetails/?id=%s", inst.CollectionID)
+			row.BrowseLabel = "Browse addons"
+			if inst.CollectionItems > 0 {
+				row.BrowseLabel = fmt.Sprintf("Browse %d addons", inst.CollectionItems)
+			}
 		}
 		if isAdmin && inst.Number > 0 {
 			row.OverviewURL = fmt.Sprintf("/gmod/%d/overview", inst.Number)

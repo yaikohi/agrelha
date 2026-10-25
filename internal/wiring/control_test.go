@@ -191,8 +191,8 @@ func TestGuestRootDashboardAndAuthProtection(t *testing.T) {
 	if !strings.Contains(content, "Community Game Servers") {
 		t.Errorf("expected 'Community Game Servers' in guest body")
 	}
-	if !strings.Contains(content, "Admin Sign In") {
-		t.Errorf("expected 'Admin Sign In' button in guest nav")
+	if !strings.Contains(content, "Sign in") {
+		t.Errorf("expected a 'Sign in' button in guest nav")
 	}
 	if !strings.Contains(content, "Download Modpack") {
 		t.Errorf("expected 'Download Modpack' in guest view")
@@ -283,8 +283,8 @@ func TestDevAuthenticatorLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(body), "Admin Sign In") {
-		t.Fatalf("expected Admin Sign In for unauthenticated dev visitor")
+	if !strings.Contains(string(body), "Sign in") {
+		t.Fatalf("expected a Sign in button for an unauthenticated dev visitor")
 	}
 
 	// 2. Protected admin route redirects to /auth/login

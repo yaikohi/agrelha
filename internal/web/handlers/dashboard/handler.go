@@ -197,6 +197,19 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 
 	for _, inst := range insts {
 		if inst.State != domain.StateRunning {
+			summary.SavedInstances = append(summary.SavedInstances, pages.InstanceUI{
+				GameID:    string(inst.GameID),
+				Number:    inst.Number,
+				Name:      inst.Name,
+				Slug:      inst.Slug,
+				Host:      inst.EffectiveHost(),
+				LBIP:      inst.LBIP,
+				Source:    string(inst.Source),
+				State:     string(inst.State),
+				HasMods:   hasMods(ctx, mgr, inst.Number),
+				MCVersion: mcVersionOf(inst),
+				Loader:    mcLoaderOf(inst),
+			})
 			continue
 		}
 
@@ -455,4 +468,18 @@ func hasMods(ctx context.Context, m modLister, num int) bool {
 	}
 	mods, err := m.GetInstalledMods(ctx, num)
 	return err == nil && len(mods) > 0
+}
+
+func mcVersionOf(inst domain.Instance) string {
+	if inst.Minecraft == nil {
+		return ""
+	}
+	return inst.Minecraft.MCVersion
+}
+
+func mcLoaderOf(inst domain.Instance) string {
+	if inst.Minecraft == nil {
+		return ""
+	}
+	return string(inst.Minecraft.Loader)
 }
