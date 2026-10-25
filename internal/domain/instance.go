@@ -337,7 +337,6 @@ func (inst Instance) DirName() string {
 	return InstanceDirName(inst.Number)
 }
 
-
 // ModList is an Instance's mods as the server will receive them: one body per
 // Provider, because each Provider reads its own file in its own syntax. Merging
 // them would need a translation that could only ever be wrong.
@@ -463,20 +462,19 @@ func (inst Instance) EnvWith(profile GameProfile, mods ModList) map[string]strin
 			"GAMEMODE":   cfg.Gamemode,
 			"MAP":        cfg.Map,
 			"PRODUCTION": "1",
+			"TZ":         "Europe/Amsterdam",
 		}
 		if inst.MaxPlayers > 0 {
 			env["MAXPLAYERS"] = fmt.Sprintf("%d", inst.MaxPlayers)
 		}
-		var args []string
+		args := []string{"-condebug", "+con_logfile " + GModConsoleLogRelPath}
 		if id := cfg.CollectionID(); id != "" {
 			args = append(args, "+host_workshop_collection "+id)
 		}
 		if cfg.Password != "" {
 			args = append(args, "+sv_password "+cfg.Password)
 		}
-		if len(args) > 0 {
-			env["ARGS"] = strings.Join(args, " ")
-		}
+		env["ARGS"] = strings.Join(args, " ")
 		return env
 
 	default:

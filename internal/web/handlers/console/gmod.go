@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io"
 	"strconv"
 
 	"agrelha/internal/web/sse"
@@ -25,7 +26,7 @@ func (h *Handler) GModLogsStream(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid number")
 	}
 
-	stream, err := h.cfg.GModInstances.InstanceLogs(context.Background(), num, gmodLogTail)
+	stream, err := h.gmodStream(num)
 	if err != nil {
 		return sseMessage(c, fmt.Sprintf("<p class=\"text-red-400\">Log stream error: %s</p>", html.EscapeString(err.Error())))
 	}
@@ -55,4 +56,17 @@ func sseMessage(c *fiber.Ctx, frag string) error {
 	w := bufio.NewWriter(&buf)
 	_ = sse.AppendElement(w, "#console-logs", frag)
 	return c.Send(buf.Bytes())
+}
+
+// gmodStream prefers the server's own console log. The image sends srcds
+// stdout to /dev/null, so the runtime stream carries only steamcmd output and
+// never the game itself; the file is the only place the console exists. A
+// world that has not written one yet falls back, so the tab is never empty.
+func (h *Handler) gmodStream(num int) (io.ReadCloser, error) {
+	if h.cfg.GModConsoleLog != nil {
+		if rc, err := h.cfg.GModConsoleLog(context.Background(), num, gmodLogTail); err == nil {
+			return rc, nil
+		}
+	}
+	return h.cfg.GModInstances.InstanceLogs(context.Background(), num, gmodLogTail)
 }

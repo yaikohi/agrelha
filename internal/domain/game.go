@@ -222,6 +222,12 @@ type RuntimeSpec struct {
 	Env         map[string]string
 	Volumes     []VolumeSpec
 	HealthProbe string
+
+	// RunAsUser is the uid the image drops to before running the server. Zero
+	// means it stays root. A Compose host creates data directories as the
+	// agrelha user, so an image that runs as anyone else cannot read or write
+	// them unless something fixes the ownership first.
+	RunAsUser int
 }
 
 // GameTelemetry represents real-time runtime and gameplay metrics for a game engine or instance.

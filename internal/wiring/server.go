@@ -16,6 +16,8 @@ import (
 	"agrelha/internal/domain"
 	infrabackups "agrelha/internal/infra/backups"
 	"agrelha/internal/infra/content/modpackindex"
+	"agrelha/internal/infra/logtail"
+	compose "agrelha/internal/infra/reconcile/compose"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
@@ -33,6 +35,8 @@ import (
 	valheimhttp "agrelha/internal/web/handlers/valheim"
 	wizardhttp "agrelha/internal/web/handlers/wizard"
 	"agrelha/internal/web/shared"
+	"io"
+	"path/filepath"
 )
 
 // BuildServer constructs the HTTP application with all handlers and background reconciliation loops.
@@ -75,7 +79,7 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 
 	accessH := buildAccessHandler(d, applyAfterSync)
 	backupsH := buildBackupsHandler(cfg, d)
-	consoleH := buildConsoleHandler(d)
+	consoleH := buildConsoleHandler(cfg, d)
 	contentH := buildContentHandler(cfg, d, applyAfterSync)
 	minecraftH := buildMinecraftHandler(cfg, d, applyMCAfterSync)
 	wizardH := buildWizardHandler(d)
@@ -384,7 +388,7 @@ func buildBackupsHandler(cfg *config.Config, d Deps) *backupshttp.Handler {
 	})
 }
 
-func buildConsoleHandler(d Deps) *consolehttp.Handler {
+func buildConsoleHandler(cfg *config.Config, d Deps) *consolehttp.Handler {
 	vrt := d.ValheimRuntime
 	if vrt == nil && d.K8s != nil {
 		vrt = k8sruntime.New(d.K8s)
@@ -401,6 +405,7 @@ func buildConsoleHandler(d Deps) *consolehttp.Handler {
 		MCRef:            d.MCRef,
 		MCInstances:      d.MCInstances,
 		GModInstances:    d.GModInstances,
+		GModConsoleLog:   gmodConsoleLog(cfg.DataDir),
 		Audit:            d.Store,
 		Event:            d.Store,
 		Auth:             d.Auth,
@@ -894,4 +899,17 @@ func startAuthzLoops(ctx context.Context, d Deps) {
 		slog.Info("instance role reconcile complete",
 			"instances", len(insts), "created", created, "failed", failed)
 	}()
+}
+
+// gmodConsoleLog reads the console srcds mirrors into the world's data volume.
+// The image sends stdout to /dev/null, so this file is the only place the game
+// console exists.
+func gmodConsoleLog(dataRoot string) func(context.Context, int, int) (io.ReadCloser, error) {
+	if dataRoot == "" {
+		return nil
+	}
+	return func(ctx context.Context, num, tailLines int) (io.ReadCloser, error) {
+		dir := compose.InstanceDataDir(dataRoot, domain.NewInstanceID(domain.GameGMod, num), "")
+		return logtail.Follow(ctx, filepath.Join(dir, domain.GModConsoleLogRelPath), tailLines)
+	}
 }

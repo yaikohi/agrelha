@@ -30,3 +30,9 @@ func WithHostPorts(profile GameProfile, inst Instance, ports []PortSpec) ([]Port
 	}
 	return out, nil
 }
+
+// GModConsoleLogRelPath is where srcds is told to mirror its console, relative
+// to the game directory. The image sends stdout to /dev/null, so without this
+// the game console is discarded entirely. It lands inside the mounted data
+// directory so agrelha can read it without a second mount.
+const GModConsoleLogRelPath = "data/console.log"

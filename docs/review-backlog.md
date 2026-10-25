@@ -137,6 +137,32 @@ Tick an item only when it is fixed **and** a test fails with the fix reverted.
       and 15 full package runs (1,085 test executions across 10-count and 5-count `-race` runs)
       yielding 0 failures and 0 data races. Shared package-level state (`newK8sClient`) is restored
       via defers and no tests execute in parallel within the package.
+- [ ] **The GMod Logs tab shows steamcmd output, not the game console.** PARTLY DONE: srcds's
+      stdout goes to `/dev/null`, so the console is discarded entirely — there is no file to read.
+      Added `-condebug +con_logfile data/console.log` plus `internal/infra/logtail` (opens at the
+      newest lines, follows appends) and a fallback to the runtime stream. **Unverified**: with
+      `+con_logfile` alone no file appeared; `-condebug` is deployed but needs a Stop/Start to take
+      effect. If it still produces nothing, the options are streaming `data/ulx_logs/` (connects and
+      commands only, not workshop downloads) or removing the tab. Original text: It streams `docker logs`,
+      which for `ceifa/garrysmod` carries steamcmd and Steam API noise: measured 0 matches for
+      `Loading map`, `spawned in server`, `Dropped` or `ULX` across 1,672 lines while ten people were
+      playing. Real game events go to `data/ulx_logs/`. The tab was built for "monitoring workshop
+      downloads" and does not serve it. Find where srcds actually writes, then repoint the source —
+      which means the log source becomes per-game rather than "whatever the runtime streams".
+- [x] **GMod's data directory is created with the wrong owner.** Fixed durably: `RuntimeSpec`
+      gained `RunAsUser` (GMod declares 1000) and the Compose renderer emits a root `data-perms`
+      one-shot that chowns every volume before the server starts. Sets the owner only and adds group
+      rwX, so agrelha (999) keeps access — an earlier hand-fix chowned the group too and locked it
+      out. Original text: The dir is made as uid 999
+      (`agrelha`) but `srcds` runs as `steam`, **uid 1000**, so the server silently cannot read or
+      write its own `data/`: no ULX users, no saves, no `ulx_logs`, and no error anywhere. Fixed by
+      hand on `instance-01`; **it returns the moment that directory is recreated**. Game-specific —
+      Valheim runs as root and itzg chowns `/data` itself, so only GMod is exposed. The durable fix
+      is for the Compose renderer to know the uid its image runs as.
+- [x] **GMod sets `TZ=Europe/Amsterdam`** like the other games; a test asserts every game agrees
+      on the wall clock. Original text: while Valheim and Minecraft both set `Europe/Amsterdam`. In-game times
+      and ULX logs are UTC, which is why `ulx thetime` reads two hours off. One line in the
+      `GameGMod` branch of `Instance.EnvWith`.
 - [ ] **Presence is single-world.** Found while fixing the ingester: `presenceStore` has no
       Instance key (`UpsertSeen(id, character, joined)`), so one stream serves the whole roster and
       the source resolves the lowest-numbered Valheim Instance. With three worlds the roster

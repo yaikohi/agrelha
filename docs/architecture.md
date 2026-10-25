@@ -335,6 +335,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/roles/zitadel` | Zitadel client: mints and retires one project Role per Instance, and grants them to Accounts, as a project-scoped service user. |
 | `infra/bepinex` | Applies Override sets to generated BepInEx configs on disk, shared by the init container and the Docker Host path. |
 | `infra/backups` | Backup archive naming, stat and pruning on the local or NFS filesystem. |
+| `infra/logtail` | Streams a growing log file: the last lines, then whatever is appended. For images that discard the server console on stdout. |
 | `infra/content/mcversions` | Minecraft version list and version comparison. |
 | `infra/content/modpackindex` | Modpack Index REST client. |
 | `infra/content/curseforge` | CurseForge v1 client: mod search, file pinning, dependency resolution and export URLs. Needs an API key; absent without one. |

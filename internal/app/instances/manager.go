@@ -582,6 +582,14 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 const configsFileName = "configs.yaml"
 
 func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instance, mods domain.ModList, commitMsg string) error {
+	return m.writeManifestsConverging(ctx, inst, mods, commitMsg, true)
+}
+
+// writeManifestsConverging records Desired state and materialises it. Passing
+// converge=false stops short of telling the runtime to apply it, which is what
+// a stopped world wants: editing its Mod list should not start it. Start is
+// level-triggered, so it picks the change up when the operator asks for it.
+func (m *InstanceManager) writeManifestsConverging(ctx context.Context, inst domain.Instance, mods domain.ModList, commitMsg string, converge bool) error {
 	files, err := m.renderer.Render(inst, mods)
 	if err != nil {
 		return fmt.Errorf("render manifests: %w", err)
@@ -612,13 +620,15 @@ func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instan
 		} else if !m.reconciler.Async() {
 			return fmt.Errorf("reconciler for %s does not implement ports.Materializer: %w", inst.EffectiveHost(), ports.ErrNotImplemented)
 		}
-		if m.preConverge != nil {
-			if err := m.preConverge(ctx, inst); err != nil {
-				return fmt.Errorf("pre-converge %s: %w", inst.EffectiveHost(), err)
+		if converge {
+			if m.preConverge != nil {
+				if err := m.preConverge(ctx, inst); err != nil {
+					return fmt.Errorf("pre-converge %s: %w", inst.EffectiveHost(), err)
+				}
 			}
-		}
-		if err := m.reconciler.Converge(ctx, ref); err != nil {
-			return fmt.Errorf("converge %s: %w", inst.EffectiveHost(), err)
+			if err := m.reconciler.Converge(ctx, ref); err != nil {
+				return fmt.Errorf("converge %s: %w", inst.EffectiveHost(), err)
+			}
 		}
 	}
 	return nil
@@ -1166,7 +1176,8 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 			}
 			converged.CurseForge = joinLines(cf)
 		}
-		if werr := m.writeManifests(ctx, *inst, converged, msg); werr != nil {
+		running := inst.State == domain.StateRunning
+		if werr := m.writeManifestsConverging(ctx, *inst, converged, msg, running); werr != nil {
 			return false, fmt.Errorf("converge mods on instance %d: %w", num, werr)
 		}
 	}

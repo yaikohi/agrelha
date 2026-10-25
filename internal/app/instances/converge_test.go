@@ -448,3 +448,72 @@ original environment and Start looks like it worked. ADR 0008 makes convergence 
 and ReplaceMods already is - Start must be too, or a world can be wedged with no way out of the UI.`, spy.order)
 	}
 }
+
+func TestUpdatingModsOnAStoppedWorldDoesNotStartIt(t *testing.T) {
+	spy := &recordingReconciler{}
+	mgr, ctx := newConvergeManager(t, WithReconciler(spy))
+	mgr.runtime = &mockRuntimePort{}
+
+	created, err := mgr.CreateInstance(ctx, mcWorld("Fogueira", "fogo"), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	if err := mgr.repo.UpdateState(created.Number, domain.StateStopped); err != nil {
+		t.Fatal(err)
+	}
+	spy.order = nil
+
+	if _, err := mgr.ReplaceMods(ctx, created.Number, []string{"fabric/sodium"}, "", "tester"); err != nil {
+		t.Fatalf("ReplaceMods: %v", err)
+	}
+
+	for _, step := range spy.order {
+		if step == "converge" {
+			t.Errorf(`editing the Mod list started a world the operator had stopped (steps: %v).
+
+Convergence on a Compose host is "docker compose up", which starts the container. Level-triggering
+every mod edit therefore turned "save my new mod list" into "and boot the server", which is not what
+the operator asked for. Desired state should be recorded and materialised; starting stays an
+explicit action.`, spy.order)
+		}
+	}
+
+	var materialised bool
+	for _, step := range spy.order {
+		if step == "materialize" {
+			materialised = true
+		}
+	}
+	if !materialised {
+		t.Errorf(`the new Mod list never reached the host (steps: %v).
+
+Skipping the start must not also skip writing the state, or the world would come up with the old
+mods the next time it is started.`, spy.order)
+	}
+}
+
+func TestUpdatingModsOnARunningWorldStillApplies(t *testing.T) {
+	spy := &recordingReconciler{}
+	mgr, ctx := newConvergeManager(t, WithReconciler(spy))
+	mgr.runtime = &mockRuntimePort{status: ports.Status{Lifecycle: ports.LifecycleRunning, Available: true}}
+
+	created, err := mgr.CreateInstance(ctx, mcWorld("Fogueira", "fogo"), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	spy.order = nil
+
+	if _, err := mgr.ReplaceMods(ctx, created.Number, []string{"fabric/lithium"}, "", "tester"); err != nil {
+		t.Fatalf("ReplaceMods: %v", err)
+	}
+
+	var converged bool
+	for _, step := range spy.order {
+		if step == "converge" {
+			converged = true
+		}
+	}
+	if !converged {
+		t.Errorf("a running world must pick up its new mods immediately; steps were %v", spy.order)
+	}
+}

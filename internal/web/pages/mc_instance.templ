@@ -426,13 +426,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 						</div>
 					</div>
 
-					<!-- Terminal log box -->
-					<div
-						id="console-logs"
-						class="h-96 w-full overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-zinc-300 leading-relaxed space-y-1 shadow-inner"
-					>
-						<p class="text-zinc-500">Connected to container logs...</p>
-					</div>
+					@LogPane("console-logs", "Connected to container logs…")
 
 					<!-- Command input bar -->
 					<form

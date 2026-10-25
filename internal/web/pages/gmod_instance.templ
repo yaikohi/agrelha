@@ -73,12 +73,7 @@ templ GModInstanceDetail(d InstanceDetailUI) {
 						<h2 class="text-base font-semibold text-zinc-100">Live Logs</h2>
 						<p class="mt-0.5 text-xs text-zinc-400">{ shared.LogSourceNote(d.Host) + " — Workshop downloads appear here while the world boots" }</p>
 					</div>
-					<div
-						id="console-logs"
-						class="h-96 w-full overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-zinc-300 leading-relaxed space-y-1 shadow-inner"
-					>
-						<p class="text-zinc-500">Connecting to the Garry's Mod container logs...</p>
-					</div>
+					@LogPane("console-logs", "Connecting to the Garry's Mod container logs…")
 				</div>
 			}
 

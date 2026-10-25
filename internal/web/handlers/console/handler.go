@@ -2,6 +2,7 @@ package console
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"time"
 
@@ -22,6 +23,7 @@ type Config struct {
 	MCRef            ports.ServerRef
 	MCInstances      *instances.InstanceManager
 	GModInstances    *instances.InstanceManager
+	GModConsoleLog   func(ctx context.Context, num int, tailLines int) (io.ReadCloser, error)
 	Audit            ports.AuditRecorder
 	Event            ports.EventRecorder
 	Auth             ports.Auth

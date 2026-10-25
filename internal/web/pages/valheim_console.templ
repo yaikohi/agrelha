@@ -25,12 +25,7 @@ templ ValheimConsole(isAdmin bool, flashKind, flashMsg string) {
 				</span>
 			</div>
 
-			<div
-				id="logs"
-				class="h-96 w-full space-y-1 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-relaxed text-zinc-300 shadow-inner"
-			>
-				<p class="text-zinc-500">Connected to container logs…</p>
-			</div>
+			@LogPane("logs", "Connected to container logs…")
 
 			<p class="text-[11px] text-zinc-500">
 				Valheim's dedicated server exposes no RCON console, so commands cannot be sent from here — use in-game admin commands instead. Minecraft instances do have a command bar on their Console &amp; Logs tab.

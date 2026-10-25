@@ -55,10 +55,13 @@ func New(opts ...Option) *Game {
 
 var _ ports.Game = (*Game)(nil)
 
+const gmodRuntimeUID = 1000
+
 func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 	inst.GameID = domain.GameGMod
 	return domain.RuntimeSpec{
-		Image: g.image,
+		Image:     g.image,
+		RunAsUser: gmodRuntimeUID,
 		Ports: []domain.PortSpec{
 			{Name: "game", Port: 27015, Protocol: "UDP"},
 			{Name: "rcon", Port: 27015, Protocol: "TCP"},

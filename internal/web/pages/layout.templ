@@ -34,12 +34,54 @@ templ Layout(title string) {
 			</div>
 			<script>
 				(function () {
-					var el = document.getElementById("logs");
-					if (!el) return;
-					new MutationObserver(function () {
-						while (el.childElementCount > 500) el.removeChild(el.firstElementChild);
-						el.scrollTop = el.scrollHeight;
-					}).observe(el, { childList: true });
+					document.querySelectorAll("[data-log-pane]").forEach(function (el) {
+						var wrap = el.closest("[data-log-pane-wrap]");
+						var status = wrap && wrap.querySelector("[data-log-status]");
+						var jump = wrap && wrap.querySelector("[data-log-jump]");
+						var follow = true;
+
+						function atBottom() {
+							return el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+						}
+						function toBottom() {
+							el.scrollTop = el.scrollHeight;
+						}
+						function render() {
+							if (status) {
+								status.textContent = follow ? "Following" : "Paused — scrolled up";
+							}
+							if (jump) {
+								jump.classList.toggle("hidden", follow);
+								jump.classList.toggle("inline-flex", !follow);
+							}
+						}
+
+						el.addEventListener("scroll", function () {
+							var b = atBottom();
+							if (b !== follow) {
+								follow = b;
+								render();
+							}
+						});
+						if (jump) {
+							jump.addEventListener("click", function () {
+								follow = true;
+								toBottom();
+								render();
+							});
+						}
+
+						new MutationObserver(function () {
+							if (!follow) return;
+							while (el.childElementCount > 500) {
+								el.removeChild(el.firstElementChild);
+							}
+							toBottom();
+						}).observe(el, { childList: true });
+
+						render();
+						toBottom();
+					});
 				})();
 			</script>
 		</body>
