@@ -8,6 +8,9 @@ import (
 	"agrelha/internal/ports"
 	"context"
 	"errors"
+	"fmt"
+	"gopkg.in/yaml.v3"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -138,50 +141,124 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 	}
 }
 
+// mockStateStore stands in for the git-backed StateStore. It keeps raw bytes
+// per path, the way a repository keeps files, because the behaviours that have
+// actually bitten us live in the gaps between Data and Raw: a missing path is
+// fs.ErrNotExist rather than an empty document, a document written as Raw reads
+// back with its Data parsed, and PutTree removes files it was not given.
 type mockStateStore struct {
-	docs map[string]ports.Document
+	files map[string][]byte
 }
 
 func newMockStateStore() *mockStateStore {
-	return &mockStateStore{docs: make(map[string]ports.Document)}
+	return &mockStateStore{files: make(map[string][]byte)}
 }
 
 func (m *mockStateStore) Get(ctx context.Context, path string) (ports.Document, error) {
-	doc, ok := m.docs[path]
+	raw, ok := m.files[path]
 	if !ok {
-		return ports.Document{Data: make(map[string]string)}, nil
+		return ports.Document{}, fmt.Errorf("mock state store: %s: %w", path, fs.ErrNotExist)
 	}
-	return doc, nil
+	return ports.Document{Data: parseDataMap(raw), Raw: raw}, nil
 }
 
 func (m *mockStateStore) Put(ctx context.Context, path string, doc ports.Document, msg string) error {
-	m.docs[path] = doc
+	m.files[path] = encodeDoc(doc)
 	return nil
 }
 
 func (m *mockStateStore) Patch(ctx context.Context, path string, msg string, mutate func(doc *ports.Document) (bool, error)) (bool, error) {
-	doc, ok := m.docs[path]
-	if !ok {
-		doc = ports.Document{Data: make(map[string]string)}
+	doc := ports.Document{Data: map[string]string{}}
+	if raw, ok := m.files[path]; ok {
+		doc = ports.Document{Data: parseDataMap(raw), Raw: raw}
+	}
+	if doc.Data == nil {
+		doc.Data = map[string]string{}
 	}
 	changed, err := mutate(&doc)
-	if err != nil {
+	if err != nil || !changed {
 		return false, err
 	}
-	if changed {
-		m.docs[path] = doc
-	}
-	return changed, nil
+	doc.Raw = nil
+	m.files[path] = encodeDoc(doc)
+	return true, nil
 }
 
 func (m *mockStateStore) Delete(ctx context.Context, path string, msg string) error {
-	delete(m.docs, path)
+	for p := range m.files {
+		if p == path || strings.HasPrefix(p, path+"/") {
+			delete(m.files, p)
+		}
+	}
 	return nil
 }
 
+// PutTree mirrors the real contract: the directory ends up holding exactly the
+// documents it was given, so a renderer that stops emitting a file deletes it.
 func (m *mockStateStore) PutTree(ctx context.Context, dirPath string, docs map[string]ports.Document, msg string) error {
-	for k, v := range docs {
-		m.docs[dirPath+"/"+k] = v
+	for p := range m.files {
+		if strings.HasPrefix(p, dirPath+"/") && !strings.Contains(strings.TrimPrefix(p, dirPath+"/"), "/") {
+			delete(m.files, p)
+		}
+	}
+	for name, doc := range docs {
+		m.files[dirPath+"/"+name] = encodeDoc(doc)
+	}
+	return nil
+}
+
+// seed writes a document the way a repository would already contain it.
+func (m *mockStateStore) seed(path string, data map[string]string) {
+	m.files[path] = encodeDoc(ports.Document{Data: data})
+}
+
+// doc reads a path back, or the zero Document when it does not exist.
+func (m *mockStateStore) doc(path string) ports.Document {
+	raw, ok := m.files[path]
+	if !ok {
+		return ports.Document{}
+	}
+	return ports.Document{Data: parseDataMap(raw), Raw: raw}
+}
+
+func (m *mockStateStore) has(path string) bool {
+	_, ok := m.files[path]
+	return ok
+}
+
+func encodeDoc(doc ports.Document) []byte {
+	if len(doc.Raw) > 0 {
+		return doc.Raw
+	}
+	out, err := yaml.Marshal(map[string]any{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"data":       doc.Data,
+	})
+	if err != nil {
+		panic("mock state store: encode document: " + err.Error())
+	}
+	return out
+}
+
+// parseDataMap extracts the data map the way gitops.ReadDocument does, so a
+// document written as bytes reads back with its keys populated.
+func parseDataMap(raw []byte) map[string]string {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil || len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value != "data" || root.Content[i+1].Kind != yaml.MappingNode {
+			continue
+		}
+		out := map[string]string{}
+		node := root.Content[i+1]
+		for j := 0; j+1 < len(node.Content); j += 2 {
+			out[node.Content[j].Value] = node.Content[j+1].Value
+		}
+		return out
 	}
 	return nil
 }
@@ -259,8 +336,13 @@ func TestInstanceManagerDeepWorkflows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get mods: %v", err)
 	}
-	if len(mods) != 2 || mods[0] != "create" || mods[1] != "flywheel" {
-		t.Fatalf("unexpected mods: %v", mods)
+	if len(mods) != 3 || mods[0] != "jei" || mods[1] != "create" || mods[2] != "flywheel" {
+		t.Fatalf(`unexpected mods: %v
+
+The world was created with jei, so installing create (and its dependency flywheel) must leave three.
+This asserted two until the mock stopped losing writes: Patch stored Data while PutTree stored Raw
+and neither read the other back, so the mod the world was created with silently vanished in the
+test and nowhere else.`, mods)
 	}
 
 	// RemoveMod
@@ -269,8 +351,8 @@ func TestInstanceManagerDeepWorkflows(t *testing.T) {
 		t.Fatalf("remove mod: %v", err)
 	}
 	modsAfter, err := mgr.GetInstalledMods(ctx, inst.Number)
-	if err != nil || len(modsAfter) != 1 || modsAfter[0] != "create" {
-		t.Fatalf("unexpected mods after remove: %v", modsAfter)
+	if err != nil || len(modsAfter) != 2 || modsAfter[0] != "jei" || modsAfter[1] != "create" {
+		t.Fatalf("unexpected mods after remove: %v (removing flywheel must leave jei and create)", modsAfter)
 	}
 
 	// Instance Configs
@@ -371,11 +453,11 @@ func TestValheimInstanceManager(t *testing.T) {
 	}
 
 	// Verify manifests written to stateStore
-	depDoc, ok := state.docs["manifests/valheim/instance-01/deployment.yaml"]
+	depDoc, ok := state.doc("manifests/valheim/instance-01/deployment.yaml"), state.has("manifests/valheim/instance-01/deployment.yaml")
 	if !ok || !strings.Contains(string(depDoc.Raw), "lloesche/valheim-server@sha256:") {
 		t.Fatalf("deployment.yaml not written to stateStore or image not digest-pinned: %s", string(depDoc.Raw))
 	}
-	svcDoc, ok := state.docs["manifests/valheim/instance-01/service.yaml"]
+	svcDoc, ok := state.doc("manifests/valheim/instance-01/service.yaml"), state.has("manifests/valheim/instance-01/service.yaml")
 	if !ok || !strings.Contains(string(svcDoc.Raw), "192.168.20.211") {
 		t.Fatalf("service.yaml not written to stateStore or missing IP: %s", string(svcDoc.Raw))
 	}

@@ -3,7 +3,6 @@ package instances
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"path/filepath"
 	"testing"
 
@@ -265,17 +264,6 @@ func TestStartInstanceConvergesWhenContainerMissing(t *testing.T) {
 	}
 }
 
-type absentIsNotExistStore struct {
-	*mockStateStore
-}
-
-func (s *absentIsNotExistStore) Get(ctx context.Context, path string) (ports.Document, error) {
-	if _, ok := s.docs[path]; !ok {
-		return ports.Document{}, fs.ErrNotExist
-	}
-	return s.mockStateStore.Get(ctx, path)
-}
-
 func TestStartConvergesAGameThatHasNoModList(t *testing.T) {
 	spy := &recordingReconciler{}
 	rt := &mockRuntimePort{err: os.ErrNotExist}
@@ -286,7 +274,7 @@ func TestStartConvergesAGameThatHasNoModList(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	mgr := NewInstanceManager(
-		store.NewGameInstanceRepo(st, domain.GModProfile), &absentIsNotExistStore{mockStateStore: newMockStateStore()}, rt, 64, 4, 4,
+		store.NewGameInstanceRepo(st, domain.GModProfile), newMockStateStore(), rt, 64, 4, 4,
 		"manifests/gmod", "192.168.20.230",
 		&fullMockRenderer{}, "gmod",
 		WithReconciler(spy),

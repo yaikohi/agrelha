@@ -126,9 +126,8 @@ func TestADockerHostWorldDoesNotFallBackToStaleClusterManifestsForMods(t *testin
 	t.Cleanup(func() { _ = st.Close() })
 
 	states := newMockStateStore()
-	storeAdapter := &absentIsNotExistStore{mockStateStore: states}
 	mgr := NewInstanceManager(
-		store.NewGameInstanceRepo(st, domain.ValheimProfile), storeAdapter, nil, 64, 4, 4,
+		store.NewGameInstanceRepo(st, domain.ValheimProfile), states, nil, 64, 4, 4,
 		"manifests/valheim", "192.168.20.224",
 		manifests.New("ykhi.xyz/gameserver=true", "valheim"), "valheim",
 		WithGameID(domain.GameValheim),
@@ -158,4 +157,3 @@ a Docker-Host world whose compose/.../mods.yaml is missing must never fall back 
 as reading stale cluster manifests can answer questions about a Docker-Host world and resurrect old mods.`, got)
 	}
 }
-

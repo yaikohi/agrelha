@@ -61,7 +61,7 @@ func TestSetResourcesRewritesTheManifest(t *testing.T) {
 	inst := seedWorld(t, mgr, ctx, "")
 
 	dep := func() string {
-		return string(state.docs["manifests/minecraft-modded/instance-01/deployment.yaml"].Raw)
+		return string(state.doc("manifests/minecraft-modded/instance-01/deployment.yaml").Raw)
 	}
 	if !strings.Contains(dep(), "memory: 8Gi") {
 		t.Fatalf("expected the medium tier's 8Gi at creation, got:\n%s", dep())
@@ -92,7 +92,7 @@ func TestSetResourcesPreservesMods(t *testing.T) {
 	inst := seedWorld(t, mgr, ctx, "fabric/sodium\nfabric/lithium\n")
 
 	modsPath := "manifests/minecraft-modded/instance-01/mods.yaml"
-	before := string(state.docs[modsPath].Raw)
+	before := string(state.doc(modsPath).Raw)
 	if !strings.Contains(before, "sodium") {
 		t.Fatalf("seed failed, mods.yaml has no mods:\n%s", before)
 	}
@@ -102,7 +102,7 @@ func TestSetResourcesPreservesMods(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	after := string(state.docs[modsPath].Raw)
+	after := string(state.doc(modsPath).Raw)
 	for _, mod := range []string{"sodium", "lithium"} {
 		if !strings.Contains(after, mod) {
 			t.Errorf("resize stripped %q from mods.yaml:\n%s", mod, after)
@@ -136,13 +136,13 @@ func TestSetResourcesRejectsNonsense(t *testing.T) {
 	mgr, state, installed, ctx := newResizeManager(t)
 	_ = installed
 	inst := seedWorld(t, mgr, ctx, "")
-	before := string(state.docs["manifests/minecraft-modded/instance-01/deployment.yaml"].Raw)
+	before := string(state.doc("manifests/minecraft-modded/instance-01/deployment.yaml").Raw)
 
 	if err := mgr.SetResources(ctx, inst.Number,
 		domain.Resources{MemRequestGiB: 16, MemLimitGiB: 4}, "me"); err == nil {
 		t.Error("a limit below the request must be rejected")
 	}
-	if after := string(state.docs["manifests/minecraft-modded/instance-01/deployment.yaml"].Raw); after != before {
+	if after := string(state.doc("manifests/minecraft-modded/instance-01/deployment.yaml").Raw); after != before {
 		t.Error("a rejected resize must not touch the manifest")
 	}
 }

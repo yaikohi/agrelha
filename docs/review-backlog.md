@@ -265,12 +265,22 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
 
 ## Test-infrastructure debt
 
-- [ ] **`mockStateStore` fidelity.** `Get` returns an empty document with a nil error where real git
+- [x] **`mockStateStore` fidelity.** Rewritten to keep raw bytes per path, the way a repository
+      keeps files: a missing path returns `fs.ErrNotExist`, documents written as `Raw` read back
+      with their `Data` parsed (via yaml, matching `gitops.ReadDocument`), and `PutTree` removes
+      files it was not given. The `absentIsNotExistStore` workaround is gone. Fixing it immediately
+      exposed a test asserting that installing a mod **loses the mods the world was created with** —
+      it only passed because writes vanished between `Patch` and `PutTree`. Five tests in
+      `mockstore_fidelity_test.go` keep the mock honest. Original text: `Get` returns an empty document with a nil error where real git
       returns `fs.ErrNotExist`; `Patch` stores `Document.Data` while `PutTree` stores `Document.Raw`
       and they never round-trip. This is the direct cause of four false-green tests in one session.
       The pattern that fixes it: drive `InstanceManager` through the real `gitops.Committer` over
       go-git's filesystem transport, as `internal/infra/gitops/harness_test.go` already does.
-- [ ] **No CI.** Nothing runs `go test` on push; every bug in this document reached the box first.
+- [x] **CI added.** `.github/workflows/ci.yml` runs build, vet, the full suite and a check that the
+      committed `*_templ.go` files match their templates, pinned to the repo's own Go and templ
+      versions. Verified green by running the identical steps locally. A repo-wide `gofmt` gate was
+      deliberately left out: 26 files are already unformatted, and CI that is red on day one gets
+      ignored. Original text: Nothing runs `go test` on push; every bug in this document reached the box first.
       agrelha also has no `flake.nix` — its `vendorHash` lives in the fogo repo.
 
 ## Smaller items

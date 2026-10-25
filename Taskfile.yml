@@ -29,6 +29,7 @@ tasks:
 
   setup:
     desc: "Install missing mise tools (go, bun, templ, air)"
+    run: once
     cmds:
       - mise install
     status:
@@ -41,15 +42,20 @@ tasks:
     desc: "Generate assets + templ and compile the Go binary"
     deps: [setup, go:build]
 
+  generate:
+    desc: "Generate the Go code behind the .templ files"
+    deps: [setup]
+    cmds:
+      - templ generate
+
   go:build:
-    desc: "templ generate + go build"
-    deps: [tailwind:build, assets:datastar]
+    desc: "Generate templ + compile the Go binary"
+    deps: [generate, tailwind:build, assets:datastar]
     # Deliberately not fingerprinted with sources/generates. The stamped version
     # is an input that no source file records, so a fingerprint would report
     # "up to date" and hand back a binary labelled `dev` after you asked for a
     # release. Go's own build cache already makes the repeat build cheap.
     cmds:
-      - templ generate
       - >-
         CGO_ENABLED=0 go build -trimpath
         -ldflags "-s -w
@@ -101,28 +107,34 @@ tasks:
     cmds:
       - air
 
+  vet:
+    desc: "Run go vet across the module"
+    deps: [setup, generate]
+    cmds:
+      - go vet ./...
+
   test:
     desc: "Run Go tests with race detection and statement coverage"
-    deps: [setup]
+    deps: [setup, generate]
     cmds:
       - go test -race -covermode=atomic -coverprofile=coverage.out ./...
       - go tool cover -func=coverage.out | tail -n 1
 
   test:cover:
     desc: "Run Go tests and print per-package coverage summary"
-    deps: [setup]
+    deps: [setup, generate]
     cmds:
       - go test -cover ./...
 
   test:coverage:
     desc: "Run Go tests and calculate handwritten statement coverage (excludes *_templ.go)"
-    deps: [setup]
+    deps: [setup, generate]
     cmds:
       - bash scripts/coverage.sh
 
   test:fast:
     desc: "Run quick Go tests without race detector or coverage profiling"
-    deps: [setup]
+    deps: [setup, generate]
     cmds:
       - go test ./...
 
