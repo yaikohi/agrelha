@@ -904,7 +904,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 // no runtime (dev, or a game not configured) is left out rather than polled.
 func healthSources(d *Deps) []health.Source {
 	var out []health.Source
-	for _, m := range []*instances.InstanceManager{d.MCInstances, d.ValheimInstances} {
+	for _, m := range []*instances.InstanceManager{d.MCInstances, d.ValheimInstances, d.GModInstances} {
 		if m != nil {
 			out = append(out, m)
 		}

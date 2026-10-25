@@ -196,23 +196,24 @@ type InstanceDetailUI struct {
 	InstanceUI
 	// Vanilla worlds run no Loader, so they have no Mods tab: gaining mods is a
 	// new Instance, not an edit (CONTEXT.md).
-	Vanilla         bool
-	ActiveTab       string // overview, mods, configs, console, backups, settings
-	InstalledMods   []string
-	ModUpdates      []ModUpdate
-	ModsMissing     []string
-	ModsUnreachable []string
-	ModsChecked     int
-	ModsTotal       int
-	UpdatesPending  bool
-	UpdatesChecked  string
-	UpdatesError    string
-	CanUndo         bool
-	UndoWhen        string
-	ConfigFiles     []string
-	Backups         []BackupUI
-	LastIncident    *IncidentUI
-	Incidents       []IncidentUI
+	Vanilla              bool
+	ActiveTab            string // overview, mods, configs, console, backups, settings
+	InstalledMods        []string
+	ModUpdates           []ModUpdate
+	ModsMissing          []string
+	ModsUnreachable      []string
+	ModsChecked          int
+	ModsTotal            int
+	UpdatesPending       bool
+	UpdatesChecked       string
+	UpdatesError         string
+	CanUndo              bool
+	UndoWhen             string
+	ConfigFiles          []string
+	Backups              []BackupUI
+	LastIncident         *IncidentUI
+	Incidents            []IncidentUI
+	IncidentsOldestFirst bool
 
 	// Configs is the BepInEx config set the publish sidecar last copied off the
 	// world's disk. ConfigsUnpublished distinguishes "the sidecar has not run
@@ -867,7 +868,7 @@ func withModpack(row ServerRowUI, url string, hasMods bool) ServerRowUI {
 var implementedTabs = map[string][]string{
 	"minecraft": {"overview", "mods", "configs", "console", "crashes", "backups", "settings"},
 	"valheim":   {"overview", "mods", "configs", "console", "crashes", "backups", "settings"},
-	"gmod":      {"overview", "console"},
+	"gmod":      {"overview", "console", "crashes"},
 }
 
 var tabLabelBySlug = map[string]string{
@@ -1026,4 +1027,11 @@ func IncidentViews(list []domain.Incident) []IncidentUI {
 		}
 	}
 	return out
+}
+
+func ariaCurrent(active bool) string {
+	if active {
+		return "true"
+	}
+	return "false"
 }

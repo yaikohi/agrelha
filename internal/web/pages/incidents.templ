@@ -20,11 +20,16 @@ templ incidentBadges(in IncidentUI) {
 
 templ IncidentList(d InstanceDetailUI) {
 	<div class="space-y-4">
-		<div>
-			<h2 class="text-base font-semibold text-zinc-100">Crashes & failures</h2>
-			<p class="mt-0.5 text-xs text-zinc-400">
-				Every failure agrelha has recorded for this world, newest first. Dismissing one keeps it here but stops it appearing on the Overview.
-			</p>
+		<div class="flex flex-wrap items-end justify-between gap-3">
+			<div>
+				<h2 class="text-base font-semibold text-zinc-100">Crashes & failures</h2>
+				<p class="mt-0.5 text-xs text-zinc-400">
+					A permanent record of every failure agrelha has seen for this world. Nothing here can be deleted; dismissing a failure on the Overview only stops it appearing there.
+				</p>
+			</div>
+			if len(d.Incidents) > 0 {
+				@incidentSort(d)
+			}
 		</div>
 		if len(d.Incidents) == 0 {
 			<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-8 text-center">
@@ -57,9 +62,6 @@ templ IncidentList(d InstanceDetailUI) {
 							</div>
 							<div class="flex flex-wrap items-center gap-1.5">
 								@incidentBadges(in)
-								if !in.Acknowledged {
-									@dismissIncidentButton(in)
-								}
 							</div>
 						</div>
 						if in.LogTail != "" {
@@ -87,4 +89,23 @@ templ dismissIncidentButton(in IncidentUI) {
 	>
 		&times;
 	</button>
+}
+
+templ incidentSort(d InstanceDetailUI) {
+	<div class="flex shrink-0 items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5 text-xs">
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/%s/%d/crashes?sort=newest", d.GamePath(), d.Number)) }
+			aria-current={ ariaCurrent(!d.IncidentsOldestFirst) }
+			class={ "rounded-md px-2.5 py-1 font-medium transition", templ.KV("bg-zinc-800 text-zinc-100", !d.IncidentsOldestFirst), templ.KV("text-zinc-400 hover:text-zinc-200", d.IncidentsOldestFirst) }
+		>
+			Newest first
+		</a>
+		<a
+			href={ templ.SafeURL(fmt.Sprintf("/%s/%d/crashes?sort=oldest", d.GamePath(), d.Number)) }
+			aria-current={ ariaCurrent(d.IncidentsOldestFirst) }
+			class={ "rounded-md px-2.5 py-1 font-medium transition", templ.KV("bg-zinc-800 text-zinc-100", d.IncidentsOldestFirst), templ.KV("text-zinc-400 hover:text-zinc-200", !d.IncidentsOldestFirst) }
+		>
+			Oldest first
+		</a>
+	</div>
 }

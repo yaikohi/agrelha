@@ -45,10 +45,10 @@ func TestIncidentRoundTrip(t *testing.T) {
 		t.Error("log tail must survive: it is the only record of why the server died")
 	}
 
-	if all, err := st.ListIncidents(ctx, domain.GameMinecraft, 3, 10); err != nil || len(all) != 2 {
+	if all, err := st.ListIncidents(ctx, domain.GameMinecraft, 3, 10, false); err != nil || len(all) != 2 {
 		t.Errorf("ListIncidents = %d rows, %v", len(all), err)
 	}
-	if other, err := st.ListIncidents(ctx, domain.GameValheim, 3, 10); err != nil || len(other) != 0 {
+	if other, err := st.ListIncidents(ctx, domain.GameValheim, 3, 10, false); err != nil || len(other) != 0 {
 		t.Errorf("incidents must be scoped per game: got %d for valheim", len(other))
 	}
 
@@ -61,7 +61,7 @@ func TestIncidentRoundTrip(t *testing.T) {
 	if err != nil || id == 0 {
 		t.Fatalf("RecordIncident with zero time failed: %v", err)
 	}
-	defaultLimitList, err := st.ListIncidents(ctx, domain.GameMinecraft, 3, 0)
+	defaultLimitList, err := st.ListIncidents(ctx, domain.GameMinecraft, 3, 0, false)
 	if err != nil || len(defaultLimitList) != 3 {
 		t.Fatalf("ListIncidents with limit 0 should default to 20, got count %d, err=%v", len(defaultLimitList), err)
 	}

@@ -103,7 +103,30 @@ func (r *Runtime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status
 		}
 	}
 
+	st.Failure = failureFrom(inspect)
+
 	return st, nil
+}
+
+// failureFrom reports what Docker knows about this container dying. An operator
+// stopping a server also exits non-zero - docker stop kills with 137 - so the
+// exit code alone cannot say "crash". What can is the restart policy having
+// acted, or the kernel having killed it for memory.
+func failureFrom(inspect ContainerInspect) ports.Failure {
+	var f ports.Failure
+	f.RestartCount = inspect.RestartCount
+	f.OOMKilled = inspect.State.OOMKilled
+	f.Reason = inspect.State.Error
+
+	if !inspect.State.OOMKilled && inspect.RestartCount == 0 {
+		return ports.Failure{}
+	}
+
+	f.ExitCode = int32(inspect.State.ExitCode)
+	if t, err := time.Parse(time.RFC3339Nano, inspect.State.FinishedAt); err == nil && t.Year() > 1 {
+		f.FinishedAt = t
+	}
+	return f
 }
 
 func (r *Runtime) Metrics(ctx context.Context, ref ports.ServerRef) (ports.Metrics, error) {

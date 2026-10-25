@@ -26,7 +26,7 @@ func (s *Store) RecordIncident(ctx context.Context, in domain.Incident) (int64, 
 func (s *Store) LastIncident(ctx context.Context, game domain.GameID, number int) (*domain.Incident, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,'')
-		 FROM incidents WHERE game_id = ? AND number = ? AND acknowledged_at IS NULL
+		 FROM incidents WHERE game_id = ? AND number = ?
 		 ORDER BY at DESC, id DESC LIMIT 1`,
 		string(game), number)
 
@@ -40,13 +40,17 @@ func (s *Store) LastIncident(ctx context.Context, game domain.GameID, number int
 	return &in, nil
 }
 
-func (s *Store) ListIncidents(ctx context.Context, game domain.GameID, number, limit int) ([]domain.Incident, error) {
+func (s *Store) ListIncidents(ctx context.Context, game domain.GameID, number, limit int, oldestFirst bool) ([]domain.Incident, error) {
 	if limit <= 0 {
 		limit = 20
 	}
+	order := "at DESC, id DESC"
+	if oldestFirst {
+		order = "at ASC, id ASC"
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,''), acknowledged_at
-		 FROM incidents WHERE game_id = ? AND number = ? ORDER BY at DESC, id DESC LIMIT ?`,
+		 FROM incidents WHERE game_id = ? AND number = ? ORDER BY `+order+` LIMIT ?`,
 		string(game), number, limit)
 	if err != nil {
 		return nil, err
@@ -90,4 +94,21 @@ func (s *Store) AcknowledgeIncident(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE incidents SET acknowledged_at = CURRENT_TIMESTAMP WHERE id = ? AND acknowledged_at IS NULL`, id)
 	return err
+}
+
+func (s *Store) LastUnacknowledgedIncident(ctx context.Context, game domain.GameID, number int) (*domain.Incident, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,'')
+		 FROM incidents WHERE game_id = ? AND number = ? AND acknowledged_at IS NULL
+		 ORDER BY at DESC, id DESC LIMIT 1`,
+		string(game), number)
+
+	in, err := scanIncident(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &in, nil
 }

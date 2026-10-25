@@ -77,7 +77,9 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 	}
 
 	if tab == "crashes" && h.cfg.ListIncidents != nil {
-		if list, err := h.cfg.ListIncidents(c.UserContext(), inst.Number, 50); err == nil {
+		oldestFirst := c.Query("sort") == "oldest"
+		d.IncidentsOldestFirst = oldestFirst
+		if list, err := h.cfg.ListIncidents(c.UserContext(), inst.Number, 200, oldestFirst); err == nil {
 			d.Incidents = pages.IncidentViews(list)
 		}
 	}

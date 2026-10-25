@@ -560,7 +560,7 @@ func TestStore_ClosedStoreErrors(t *testing.T) {
 	if _, err := s.LastIncident(ctx, domain.GameMinecraft, 1); err == nil {
 		t.Error("expected error from LastIncident on closed store")
 	}
-	if _, err := s.ListIncidents(ctx, domain.GameMinecraft, 1, 10); err == nil {
+	if _, err := s.ListIncidents(ctx, domain.GameMinecraft, 1, 10, false); err == nil {
 		t.Error("expected error from ListIncidents on closed store")
 	}
 

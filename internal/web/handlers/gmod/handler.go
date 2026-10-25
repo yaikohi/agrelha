@@ -1,6 +1,7 @@
 package gmod
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -18,10 +19,13 @@ import (
 )
 
 type Config struct {
-	Instances *instances.InstanceManager
-	Workshop  ports.WorkshopResolver
-	Requests  *requests.Service
-	Actor     func(*fiber.Ctx) string
+	Instances       *instances.InstanceManager
+	LastIncident    func(ctx context.Context, number int) (*domain.Incident, error)
+	ListIncidents   func(ctx context.Context, number, limit int, oldestFirst bool) ([]domain.Incident, error)
+	DismissIncident func(ctx context.Context, id int64) error
+	Workshop        ports.WorkshopResolver
+	Requests        *requests.Service
+	Actor           func(*fiber.Ctx) string
 }
 
 type Handler struct {
@@ -47,6 +51,8 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 		return c.Redirect(fmt.Sprintf("/gmod/%s/overview", c.Params("num")))
 	})
 	router.Get("/gmod/:num<int>/:tab", h.InstancePage)
+
+	router.Post("/api/gmod/:num<int>/incidents/:id<int>/dismiss", h.DismissIncidentHandler)
 
 	router.Post("/api/gmod/instances/:num/start", h.InstanceStart)
 	router.Post("/api/gmod/instances/:num/stop", h.InstanceStop)
@@ -330,6 +336,28 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 		ActiveTab: tab,
 	}
 
+	if h.cfg.LastIncident != nil {
+		if in, ierr := h.cfg.LastIncident(c.UserContext(), inst.Number); ierr == nil && in != nil {
+			var startedAt time.Time
+			if h.cfg.Instances != nil {
+				if st, serr := h.cfg.Instances.RuntimeStatus(c.UserContext(), inst.Number); serr == nil {
+					startedAt = st.StartedAt
+				}
+			}
+			if !in.SupersededBy(startedAt) {
+				d.LastIncident = pages.IncidentView(in)
+			}
+		}
+	}
+
+	if tab == "crashes" && h.cfg.ListIncidents != nil {
+		oldestFirst := c.Query("sort") == "oldest"
+		d.IncidentsOldestFirst = oldestFirst
+		if list, lerr := h.cfg.ListIncidents(c.UserContext(), inst.Number, 200, oldestFirst); lerr == nil {
+			d.Incidents = pages.IncidentViews(list)
+		}
+	}
+
 	if collectionID != "" && h.cfg.Workshop != nil {
 		if col, err := h.cfg.Workshop.GetCollection(c.UserContext(), collectionID); err == nil {
 			d.CollectionTitle = col.Title
@@ -423,4 +451,18 @@ func (h *Handler) serverRunningSince(c *fiber.Ctx, num int) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return st.StartedAt, true
+}
+
+func (h *Handler) DismissIncidentHandler(c *fiber.Ctx) error {
+	if h.cfg.DismissIncident == nil {
+		return shared.SSEToast(c, "err", "Dismissing failures is not configured.", nil)
+	}
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return shared.SSEToast(c, "err", "Invalid failure id.", nil)
+	}
+	if err := h.cfg.DismissIncident(c.UserContext(), id); err != nil {
+		return shared.SSEToast(c, "err", "Could not dismiss that failure: "+err.Error(), nil)
+	}
+	return shared.SSEToast(c, "ok", "Failure dismissed. It stays on the Crashes tab.", map[string]any{"reload": true})
 }

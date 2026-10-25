@@ -29,6 +29,8 @@ type ContainerState struct {
 	StartedAt  string `json:"StartedAt"`
 	FinishedAt string `json:"FinishedAt"`
 	ExitCode   int    `json:"ExitCode"`
+	OOMKilled  bool   `json:"OOMKilled"`
+	Error      string `json:"Error"`
 	Health     *struct {
 		Status string `json:"Status"` // "healthy", "unhealthy", "starting"
 	} `json:"Health,omitempty"`
@@ -36,9 +38,10 @@ type ContainerState struct {
 
 // ContainerInspect represents the inspect JSON response.
 type ContainerInspect struct {
-	ID    string         `json:"Id"`
-	Name  string         `json:"Name"`
-	State ContainerState `json:"State"`
+	ID           string         `json:"Id"`
+	Name         string         `json:"Name"`
+	State        ContainerState `json:"State"`
+	RestartCount int32          `json:"RestartCount"`
 }
 
 // ContainerStats represents the stats JSON response.

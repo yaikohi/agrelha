@@ -418,4 +418,3 @@ func TestSocketClient_TransportErrors(t *testing.T) {
 		t.Error("ContainerLogs expected transport error, got nil")
 	}
 }
-

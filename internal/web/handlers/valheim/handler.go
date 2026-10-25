@@ -49,7 +49,7 @@ const instanceStatsTTL = 15 * time.Second
 type Config struct {
 	Requests         *requests.Service
 	LastIncident     func(ctx context.Context, number int) (*domain.Incident, error)
-	ListIncidents    func(ctx context.Context, number, limit int) ([]domain.Incident, error)
+	ListIncidents    func(ctx context.Context, number, limit int, oldestFirst bool) ([]domain.Incident, error)
 	DismissIncident  func(ctx context.Context, id int64) error
 	ValheimInstances *instances.InstanceManager
 	ValheimConfigs   *appbepinex.Service

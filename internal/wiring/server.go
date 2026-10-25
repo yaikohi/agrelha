@@ -805,10 +805,13 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 
 func buildGModHandler(cfg *config.Config, d Deps) *gmodhttp.Handler {
 	return gmodhttp.New(gmodhttp.Config{
-		Instances: d.GModInstances,
-		Workshop:  d.Steam,
-		Requests:  d.Requests,
-		Actor:     actor,
+		LastIncident:    incidentReader(d, domain.GameGMod),
+		ListIncidents:   incidentLister(d, domain.GameGMod),
+		DismissIncident: incidentDismisser(d),
+		Instances:       d.GModInstances,
+		Workshop:        d.Steam,
+		Requests:        d.Requests,
+		Actor:           actor,
 	})
 }
 
@@ -820,16 +823,16 @@ func incidentReader(d Deps, game domain.GameID) func(context.Context, int) (*dom
 		return nil
 	}
 	return func(ctx context.Context, number int) (*domain.Incident, error) {
-		return d.Store.LastIncident(ctx, game, number)
+		return d.Store.LastUnacknowledgedIncident(ctx, game, number)
 	}
 }
 
-func incidentLister(d Deps, game domain.GameID) func(context.Context, int, int) ([]domain.Incident, error) {
+func incidentLister(d Deps, game domain.GameID) func(context.Context, int, int, bool) ([]domain.Incident, error) {
 	if d.Store == nil {
 		return nil
 	}
-	return func(ctx context.Context, number, limit int) ([]domain.Incident, error) {
-		return d.Store.ListIncidents(ctx, game, number, limit)
+	return func(ctx context.Context, number, limit int, oldestFirst bool) ([]domain.Incident, error) {
+		return d.Store.ListIncidents(ctx, game, number, limit, oldestFirst)
 	}
 }
 

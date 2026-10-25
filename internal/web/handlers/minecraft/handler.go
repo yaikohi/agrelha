@@ -44,7 +44,7 @@ type Config struct {
 	MinecraftGame           ports.Game
 	SearchMods              SearchModsFunc
 	LastIncident            func(ctx context.Context, number int) (*domain.Incident, error)
-	ListIncidents           func(ctx context.Context, number, limit int) ([]domain.Incident, error)
+	ListIncidents           func(ctx context.Context, number, limit int, oldestFirst bool) ([]domain.Incident, error)
 	DismissIncident         func(ctx context.Context, id int64) error
 	Actor                   func(*fiber.Ctx) string
 	ApplyMinecraftAfterSync func(cmName, depName, key string, want func(string) bool)
