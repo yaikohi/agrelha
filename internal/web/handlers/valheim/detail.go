@@ -206,14 +206,20 @@ func (h *Handler) ValheimInstanceModsRemove(c *fiber.Ctx) error {
 	}
 
 	updatedMods, _ := h.cfg.ValheimInstances.GetInstalledMods(c.UserContext(), num)
+	modsMap := make(map[string]bool, len(updatedMods))
+	for _, m := range updatedMods {
+		modsMap[m] = true
+	}
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 	_ = innerElement(w, "#installed-mods-container", renderInstalledModsHTML(num, updatedMods))
 	_ = patchSignals(w, map[string]any{
-		"toast":     fmt.Sprintf("Removed %s. Updating...", slug),
-		"toastkind": "ok",
+		"toast":                                        fmt.Sprintf("Removed %s. Updating...", slug),
+		"toastkind":                                    "ok",
+		fmt.Sprintf("inst_valheim_%d_mods", num):       modsMap,
+		fmt.Sprintf("inst_valheim_%d_mods_count", num): len(modsMap),
 	})
 	_ = w.Flush()
 	return c.Send(buf.Bytes())
@@ -252,14 +258,20 @@ func (h *Handler) ValheimInstanceModsInstall(c *fiber.Ctx) error {
 	}
 
 	updatedMods, _ := h.cfg.ValheimInstances.GetInstalledMods(c.UserContext(), num)
+	modsMap := make(map[string]bool, len(updatedMods))
+	for _, m := range updatedMods {
+		modsMap[m] = true
+	}
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 	_ = innerElement(w, "#installed-mods-container", renderInstalledModsHTML(num, updatedMods))
 	_ = patchSignals(w, map[string]any{
-		"toast":     fmt.Sprintf("Installed %s (+%d mods). Updating...", slug, added),
-		"toastkind": "ok",
+		"toast":                                        fmt.Sprintf("Installed %s (+%d mods). Updating...", slug, added),
+		"toastkind":                                    "ok",
+		fmt.Sprintf("inst_valheim_%d_mods", num):       modsMap,
+		fmt.Sprintf("inst_valheim_%d_mods_count", num): len(modsMap),
 	})
 	_ = w.Flush()
 	return c.Send(buf.Bytes())

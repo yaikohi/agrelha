@@ -7,7 +7,7 @@ import "fmt"
 
 templ History(entries []domain.HistoryEntry) {
 	@Layout("History") {
-		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
+		@components.Nav(components.NavProps{Current: "history", IsAdmin: true, SignedIn: true})
 		<h1 class="mb-2 text-2xl font-semibold">History</h1>
 		<p class="mb-6 text-xs text-ink-faint">Recent actions (who did what) and server events (joins, backups, crashes). Times are UTC.</p>
 		if len(entries) == 0 {

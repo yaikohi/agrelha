@@ -340,3 +340,43 @@ func (p ManagerPortUI) CopyClick() string {
 func (p ManagerPortUI) CopyLabelExpr() string {
 	return fmt.Sprintf("$%s ? 'copied!' : 'copy'", p.CopySignal())
 }
+
+func InstanceLamp(inst InstanceUI) string {
+	return managerLamp(inst)
+}
+
+func InstanceStateLabel(inst InstanceUI) string {
+	return managerStateLabel(inst)
+}
+
+func InstancePresence(inst InstanceUI) string {
+	return managerPresence(inst)
+}
+
+func (p ManagerPortUI) SignalPrefix() string {
+	return fmt.Sprintf("inst_%s_%d", p.Game, p.Number)
+}
+
+func (p ManagerPortUI) LampSignals() string {
+	pref := p.SignalPrefix()
+	return fmt.Sprintf(
+		"{'lamp-lit': $%s_online && $%s_players > 0, 'lamp-dim': ($%s_online && !($%s_players > 0)) || $%s_state === 'Starting…', 'lamp-out': !$%s_online && $%s_state !== 'Starting…'}",
+		pref, pref, pref, pref, pref, pref, pref,
+	)
+}
+
+func (p ManagerPortUI) StateSignalExpr() string {
+	return fmt.Sprintf("$%s_state || '%s'", p.SignalPrefix(), EscapeJS(p.StateLabel))
+}
+
+func (p ManagerPortUI) PresenceShowExpr() string {
+	return fmt.Sprintf("$%s_online", p.SignalPrefix())
+}
+
+func (p ManagerPortUI) PresenceExpr() string {
+	pref := p.SignalPrefix()
+	return fmt.Sprintf(
+		"($%s_players > 0 ? $%s_players + ' playing' : 'nobody on') + (($%s_uptime && $%s_uptime !== '—') ? ', up ' + $%s_uptime : '')",
+		pref, pref, pref, pref, pref,
+	)
+}

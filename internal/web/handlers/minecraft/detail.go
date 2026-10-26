@@ -1,6 +1,9 @@
 package minecraft
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +14,7 @@ import (
 	"agrelha/internal/domain"
 	"agrelha/internal/web/pages"
 	"agrelha/internal/web/shared"
+	"agrelha/internal/web/sse"
 )
 
 // MCInstancePage renders the instance detail tab view.
@@ -197,7 +201,32 @@ func (h *Handler) MCInstanceModsRemove(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Remove failed: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Removed %s. Updating...", slug), nil)
+	updatedModsHTML := h.renderMCInstalledModsHTML(c.UserContext(), num)
+	modsMap := make(map[string]bool)
+	if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), num); err == nil {
+		for _, m := range mods {
+			modsMap[m] = true
+		}
+	}
+	if cfMods, err := h.cfg.MCInstances.GetCurseForgeMods(c.UserContext(), num); err == nil {
+		for _, m := range cfMods {
+			modsMap[m] = true
+		}
+	}
+
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	_ = sse.InnerElement(w, "#installed-mods-container", updatedModsHTML)
+	_ = sse.PatchSignals(w, map[string]any{
+		"toast":                                           fmt.Sprintf("Removed %s. Updating...", slug),
+		"toastkind":                                       "ok",
+		fmt.Sprintf("inst_minecraft_%d_mods", num):       modsMap,
+		fmt.Sprintf("inst_minecraft_%d_mods_count", num): len(modsMap),
+	})
+	_ = w.Flush()
+	return c.Send(buf.Bytes())
 }
 
 // MCInstanceModsInstall installs a mod and its dependencies onto an instance.
@@ -218,24 +247,75 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 	// Routed by Provider, never guessed: the two catalogues store entries in
 	// different files in different syntaxes, and a CurseForge file id handed to
 	// Modrinth would only fail at boot.
+	var msg string
 	if provider == domain.ProviderCurseForge {
 		added, err := h.cfg.MCInstances.InstallCurseForgeMod(c.UserContext(), num, slug, h.cfg.Actor(c))
 		if err != nil {
 			return shared.SSEToast(c, "err", "Install failed: "+err.Error(), nil)
 		}
-		msg := fmt.Sprintf("Installed %s from CurseForge. Updating...", slug)
+		msg = fmt.Sprintf("Installed %s from CurseForge. Updating...", slug)
 		if added > 1 {
 			msg = fmt.Sprintf("Installed %s from CurseForge (+%d required). Updating...", slug, added-1)
 		}
-		return shared.SSEToast(c, "ok", msg, nil)
+	} else {
+		added, err := h.cfg.MCInstances.InstallMod(c.UserContext(), num, slug, h.cfg.Actor(c))
+		if err != nil {
+			return shared.SSEToast(c, "err", "Install failed: "+err.Error(), nil)
+		}
+		msg = fmt.Sprintf("Installed %s (+%d deps). Updating...", slug, added-1)
 	}
 
-	added, err := h.cfg.MCInstances.InstallMod(c.UserContext(), num, slug, h.cfg.Actor(c))
-	if err != nil {
-		return shared.SSEToast(c, "err", "Install failed: "+err.Error(), nil)
+	updatedModsHTML := h.renderMCInstalledModsHTML(c.UserContext(), num)
+	modsMap := make(map[string]bool)
+	if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), num); err == nil {
+		for _, m := range mods {
+			modsMap[m] = true
+		}
+	}
+	if cfMods, err := h.cfg.MCInstances.GetCurseForgeMods(c.UserContext(), num); err == nil {
+		for _, m := range cfMods {
+			modsMap[m] = true
+		}
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Installed %s (+%d deps). Updating...", slug, added-1), nil)
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	_ = sse.InnerElement(w, "#installed-mods-container", updatedModsHTML)
+	_ = sse.PatchSignals(w, map[string]any{
+		"toast":                                           msg,
+		"toastkind":                                       "ok",
+		fmt.Sprintf("inst_minecraft_%d_mods", num):       modsMap,
+		fmt.Sprintf("inst_minecraft_%d_mods_count", num): len(modsMap),
+	})
+	_ = w.Flush()
+	return c.Send(buf.Bytes())
+}
+
+func (h *Handler) renderMCInstalledModsHTML(ctx context.Context, num int) string {
+	var installed []string
+	if mods, err := h.cfg.MCInstances.GetInstalledMods(ctx, num); err == nil {
+		installed = append(installed, mods...)
+	}
+	if cfMods, err := h.cfg.MCInstances.GetCurseForgeMods(ctx, num); err == nil {
+		installed = append(installed, cfMods...)
+	}
+	inst, _ := h.cfg.MCInstances.GetInstance(ctx, num)
+	d := pages.InstanceDetailUI{
+		InstanceUI: pages.InstanceUI{
+			GameID: "minecraft",
+			Number: num,
+		},
+		InstalledMods: installed,
+	}
+	if inst != nil && inst.Minecraft != nil && inst.Minecraft.Pack != nil {
+		d.Pack = inst.Minecraft.Pack.Name
+		d.PackRef = inst.Minecraft.Pack.Ref
+	}
+	var sb strings.Builder
+	_ = pages.InstalledMods(pages.MinecraftInstalledMods(d)).Render(ctx, &sb)
+	return sb.String()
 }
 
 // MCInstanceExport exports the instance as a Modrinth modpack (.mrpack).

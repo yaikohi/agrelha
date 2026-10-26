@@ -26,7 +26,7 @@ type InstanceOptionUI struct {
 
 templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady bool, registryNote string, flashKind, flashMsg string) {
 	@Layout("Accounts") {
-		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
+		@components.Nav(components.NavProps{Current: "accounts", IsAdmin: true, SignedIn: true})
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
 				<h1 class="text-2xl font-semibold text-ink">Accounts & Grants</h1>

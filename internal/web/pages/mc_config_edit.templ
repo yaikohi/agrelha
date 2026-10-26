@@ -4,7 +4,7 @@ import "agrelha/internal/web/components"
 
 templ MinecraftConfigEdit(name, content string, isNew, enabled bool) {
 	@Layout("Edit Minecraft Config") {
-		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
+		@components.Nav(components.NavProps{Current: "minecraft", IsAdmin: true, SignedIn: true})
 		<div class="mb-6 flex items-center gap-3">
 			<a href="/minecraft/configs" class="text-sm text-ink-muted hover:text-ink">← Minecraft Configs</a>
 			<h1 class="text-2xl font-semibold">

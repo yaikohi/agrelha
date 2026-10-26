@@ -25,7 +25,9 @@ templ ModSearchResults(m ModResultsUI) {
 					<p class="flex flex-wrap items-baseline gap-x-3">
 						<span class="font-display text-base font-semibold text-ink">{ r.Title }</span>
 						if r.Installed {
-							<span class="font-pixel text-[11px] text-accent">installed</span>
+							<span class="font-pixel text-[11px] text-accent" data-show={ r.InstalledExpr(m.Game, m.Num) }>installed</span>
+						} else {
+							<span class="font-pixel text-[11px] text-accent" data-show={ r.InstalledExpr(m.Game, m.Num) } style="display:none;">installed</span>
 						}
 					</p>
 					<p class="mt-1 flex flex-wrap gap-x-3 font-pixel text-[11px] text-ink-faint">
@@ -44,9 +46,13 @@ templ ModSearchResults(m ModResultsUI) {
 				}
 				if r.Restricted {
 					<span title="This mod's author does not allow third-party downloads. No API key changes this." class={ components.ButtonClass(components.VariantDisabled) }>Not downloadable</span>
-				} else if r.Installed {
+				} else {
 					<button
 						type="button"
+						data-show={ r.InstalledExpr(m.Game, m.Num) }
+						if !r.Installed {
+							style="display:none;"
+						}
 						data-indicator={ "busy_mod_" + UpdateToken(r.Slug) }
 						data-attr:disabled={ "$busy_mod_" + UpdateToken(r.Slug) }
 						data-on:click={ toastActionClick(r.RemoveScript(m.Game, m.Num)) }
@@ -58,9 +64,12 @@ templ ModSearchResults(m ModResultsUI) {
 							<span>Removing…</span>
 						</span>
 					</button>
-				} else {
 					<button
 						type="button"
+						data-show={ "!" + r.InstalledExpr(m.Game, m.Num) }
+						if r.Installed {
+							style="display:none;"
+						}
 						data-indicator={ "busy_mod_" + UpdateToken(r.Slug) }
 						data-attr:disabled={ "$busy_mod_" + UpdateToken(r.Slug) }
 						data-on:click={ toastActionClick(r.InstallScript(m.Game, m.Num)) }

@@ -14,6 +14,7 @@ type InstanceTabUI struct {
 
 type InstanceHeadUI struct {
 	Game       string
+	Number     int
 	GameLabel  string
 	Tint       string
 	Slot       string
@@ -27,9 +28,10 @@ type InstanceHeadUI struct {
 }
 
 type InstanceFactUI struct {
-	Label string
-	Value string
-	Note  string
+	Label      string
+	Value      string
+	Note       string
+	SignalExpr string
 }
 
 type InstanceNoticeUI struct {
@@ -107,6 +109,7 @@ func instanceActions(spec instanceSpec, d InstanceDetailUI) []ActionUI {
 func buildInstanceHead(spec instanceSpec, d InstanceDetailUI) InstanceHeadUI {
 	h := InstanceHeadUI{
 		Game:       spec.game,
+		Number:     d.Number,
 		GameLabel:  spec.label,
 		Tint:       tintClass(spec.accent),
 		Slot:       fmt.Sprintf("#%02d", d.Number),
@@ -121,6 +124,34 @@ func buildInstanceHead(spec instanceSpec, d InstanceDetailUI) InstanceHeadUI {
 		h.Blocked = "Lifecycle controls are unavailable while the Host is out of reach."
 	}
 	return h
+}
+
+func (h InstanceHeadUI) SignalPrefix() string {
+	return fmt.Sprintf("inst_%s_%d", h.Game, h.Number)
+}
+
+func (h InstanceHeadUI) LampSignals() string {
+	pref := h.SignalPrefix()
+	return fmt.Sprintf(
+		"{'lamp-lit': $%s_online && $%s_players > 0, 'lamp-dim': ($%s_online && !($%s_players > 0)) || $%s_state === 'Starting…', 'lamp-out': !$%s_online && $%s_state !== 'Starting…'}",
+		pref, pref, pref, pref, pref, pref, pref,
+	)
+}
+
+func (h InstanceHeadUI) StateSignalExpr() string {
+	return fmt.Sprintf("$%s_state || '%s'", h.SignalPrefix(), EscapeJS(h.StateLabel))
+}
+
+func (h InstanceHeadUI) PresenceShowExpr() string {
+	return fmt.Sprintf("$%s_online", h.SignalPrefix())
+}
+
+func (h InstanceHeadUI) PresenceExpr() string {
+	pref := h.SignalPrefix()
+	return fmt.Sprintf(
+		"($%s_players > 0 ? $%s_players + ' playing' : 'nobody on') + (($%s_uptime && $%s_uptime !== '—') ? ', up ' + $%s_uptime : '')",
+		pref, pref, pref, pref, pref,
+	)
 }
 
 func buildInstanceOverview(spec instanceSpec, d InstanceDetailUI) InstanceOverviewUI {
@@ -180,7 +211,11 @@ var valheimInstanceSpec = instanceSpec{
 		facts := []InstanceFactUI{
 			{Label: "Modding", Value: modBadge(d.Source, "BepInEx"), Note: "Thunderstore packages"},
 			{Label: "Resources", Value: d.Tier, Note: fmt.Sprintf("%d GiB memory limit", d.MemoryGiB)},
-			{Label: "Mods", Value: fmt.Sprintf("%d installed", len(d.InstalledMods))},
+			{
+				Label:      "Mods",
+				Value:      fmt.Sprintf("%d installed", len(d.InstalledMods)),
+				SignalExpr: fmt.Sprintf("($inst_valheim_%d_mods_count !== undefined ? $inst_valheim_%d_mods_count + ' installed' : '%d installed')", d.Number, d.Number, len(d.InstalledMods)),
+			},
 		}
 		if d.Seed != "" {
 			facts = append(facts, InstanceFactUI{Label: "Seed", Value: d.Seed})
@@ -222,7 +257,11 @@ var minecraftInstanceSpec = instanceSpec{
 		facts := []InstanceFactUI{
 			{Label: "Loader", Value: minecraftLoaderLabel(d.Loader), Note: d.MCVersion},
 			{Label: "Resources", Value: d.Tier, Note: fmt.Sprintf("%d GiB memory limit", d.MemoryGiB)},
-			{Label: "Mods", Value: fmt.Sprintf("%d installed", len(d.InstalledMods))},
+			{
+				Label:      "Mods",
+				Value:      fmt.Sprintf("%d installed", len(d.InstalledMods)),
+				SignalExpr: fmt.Sprintf("($inst_minecraft_%d_mods_count !== undefined ? $inst_minecraft_%d_mods_count + ' installed' : '%d installed')", d.Number, d.Number, len(d.InstalledMods)),
+			},
 		}
 		if d.Pack != "" {
 			facts = append(facts, InstanceFactUI{Label: "Modpack", Value: d.Pack})

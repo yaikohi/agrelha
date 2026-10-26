@@ -61,6 +61,11 @@ func (r ModResultUI) DetailScript(game string, num int) string {
 	return fmt.Sprintf("@post('/api/%s/%d/mods/detail', %s); $showModDetail = true", game, num, modPayload(r.Slug, ""))
 }
 
+func (r ModResultUI) InstalledExpr(game string, num int) string {
+	pref := fmt.Sprintf("inst_%s_%d", game, num)
+	return fmt.Sprintf("($%s_mods ? !!$%s_mods['%s'] : %t)", pref, pref, EscapeJS(r.Slug), r.Installed)
+}
+
 func (r ModResultUI) Meta() []string {
 	var out []string
 	if r.Author != "" {

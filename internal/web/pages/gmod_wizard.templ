@@ -7,7 +7,7 @@ import (
 
 templ GModWizard(budget BudgetUI) {
 	@Layout("Create Garry's Mod World") {
-		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
+		@components.Nav(components.NavProps{Current: "gmod", IsAdmin: true, SignedIn: true})
 		<div
 			class="space-y-6"
 			data-signals="{step:1,name:'',password:'',gamemode:'sandbox',map:'gm_construct',collectionID:'',tier:'small',creating:false,redirect:''}"

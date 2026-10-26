@@ -25,10 +25,12 @@ templ instanceHead(h InstanceHeadUI) {
 				</p>
 				<h1 class="mt-0.5 font-display text-3xl font-semibold tracking-tight text-ink">{ h.Name }</h1>
 				<p class="mt-2 flex flex-wrap items-center gap-2 font-pixel text-xs text-ink-muted">
-					<span class={ h.Lamp }></span>
-					<span>{ h.StateLabel }</span>
+					<span class={ h.Lamp } data-class={ h.LampSignals() }></span>
+					<span data-text={ h.StateSignalExpr() }>{ h.StateLabel }</span>
 					if h.Presence != "" {
-						<span class="text-ink-faint">{ h.Presence }</span>
+						<span class="text-ink-faint" data-show={ h.PresenceShowExpr() } data-text={ h.PresenceExpr() }>{ h.Presence }</span>
+					} else {
+						<span class="text-ink-faint" data-show={ h.PresenceShowExpr() } data-text={ h.PresenceExpr() } style="display:none;"></span>
 					}
 				</p>
 			</div>
@@ -128,7 +130,11 @@ templ instanceOverview(o InstanceOverviewUI) {
 			for _, f := range o.Facts {
 				<div>
 					<dt class="font-pixel text-[11px] text-ink-faint">{ f.Label }</dt>
-					<dd class="mt-1 font-pixel text-sm text-ink">{ f.Value }</dd>
+					if f.SignalExpr != "" {
+						<dd class="mt-1 font-pixel text-sm text-ink" data-text={ f.SignalExpr }>{ f.Value }</dd>
+					} else {
+						<dd class="mt-1 font-pixel text-sm text-ink">{ f.Value }</dd>
+					}
 					if f.Note != "" {
 						<dd class="font-pixel text-[11px] text-ink-faint">{ f.Note }</dd>
 					}

@@ -542,6 +542,11 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
 		}
+		if inst.Number > 0 {
+			row.OnlineSignal = fmt.Sprintf("inst_valheim_%d_online", inst.Number)
+			row.PlayersSignal = fmt.Sprintf("inst_valheim_%d_players", inst.Number)
+			row.UptimeSignal = fmt.Sprintf("inst_valheim_%d_uptime", inst.Number)
+		}
 		if isAdmin && inst.Number > 0 {
 			row.OverviewURL = fmt.Sprintf("/valheim/%d/overview", inst.Number)
 		}
@@ -585,6 +590,11 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
+		}
+		if inst.Number > 0 {
+			row.OnlineSignal = fmt.Sprintf("inst_minecraft_%d_online", inst.Number)
+			row.PlayersSignal = fmt.Sprintf("inst_minecraft_%d_players", inst.Number)
+			row.UptimeSignal = fmt.Sprintf("inst_minecraft_%d_uptime", inst.Number)
 		}
 		if isAdmin && inst.Number > 0 {
 			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
@@ -749,6 +759,11 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
 		}
+		if inst.Number > 0 {
+			row.OnlineSignal = fmt.Sprintf("inst_%s_%d_online", p.ID, inst.Number)
+			row.PlayersSignal = fmt.Sprintf("inst_%s_%d_players", p.ID, inst.Number)
+			row.UptimeSignal = fmt.Sprintf("inst_%s_%d_uptime", p.ID, inst.Number)
+		}
 		if isAdmin && inst.Number > 0 {
 			row.OverviewURL = fmt.Sprintf("/%s/%d/overview", p.ID, inst.Number)
 		}
@@ -790,6 +805,11 @@ func GModCard(summary GameSummaryUI, isAdmin bool) GameCardUI {
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
+		}
+		if inst.Number > 0 {
+			row.OnlineSignal = fmt.Sprintf("inst_gmod_%d_online", inst.Number)
+			row.PlayersSignal = fmt.Sprintf("inst_gmod_%d_players", inst.Number)
+			row.UptimeSignal = fmt.Sprintf("inst_gmod_%d_uptime", inst.Number)
 		}
 		if inst.LBIP != "" {
 			if inst.Password != "" {

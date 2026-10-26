@@ -368,3 +368,107 @@ func TestDashboardRemainingEdges(t *testing.T) {
 	}
 	_, _ = sseCtx.Response.WriteTo(&failAfterWriteOnce{})
 }
+
+func TestTileSignalsWithPerInstanceStreams(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "dash_signals.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	mcRepo := store.NewInstanceRepo(st)
+	_ = mcRepo.Upsert(domain.Instance{
+		Number: 1,
+		Slug:   "ducktopia",
+		Name:   "Ducktopia",
+		State:  domain.StateRunning,
+		GameID: domain.GameMinecraft,
+		Tier:   domain.TierMedium,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
+	})
+
+	mcMgr := instances.NewInstanceManager(
+		mcRepo, nil, nil, 32, 8, 4,
+		"manifests/minecraft-modded", "192.168.20.225", nil, "minecraft-modded",
+		instances.WithGameID(domain.GameMinecraft),
+		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+			return []string{"jei"}, nil
+		}),
+	)
+
+	vhRepo := store.NewValheimInstanceRepo(st)
+	_ = vhRepo.Upsert(domain.Instance{
+		Number:  1,
+		Slug:    "midgard",
+		Name:    "Midgard",
+		State:   domain.StateRunning,
+		GameID:  domain.GameValheim,
+		Tier:    domain.TierMedium,
+		Valheim: &domain.ValheimConfig{Password: "pass"},
+	})
+
+	vhMgr := instances.NewInstanceManager(
+		vhRepo, nil, nil, 16, 4, 2,
+		"manifests/valheim", "192.168.20.224", nil, "valheim",
+		instances.WithGameID(domain.GameValheim),
+		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+			return []string{"bepinex"}, nil
+		}),
+	)
+
+	h := New(Config{
+		GameNodeName:     "game-01",
+		ValheimAddress:   "192.168.20.224:2456",
+		MCInstances:      mcMgr,
+		ValheimInstances: vhMgr,
+		InstanceStats: func(ctx context.Context, insts []domain.Instance) map[int]InstanceStat {
+			return map[int]InstanceStat{
+				1: {Players: 3, PlayersKnown: true, Uptime: "5h"},
+			}
+		},
+		ValheimInstanceStats: func(ctx context.Context, insts []domain.Instance) map[int]InstanceStat {
+			return map[int]InstanceStat{
+				1: {Players: 2, PlayersKnown: true, Uptime: "2h"},
+			}
+		},
+	})
+
+	sig := h.TileSignals(context.Background())
+
+	if sig["inst_minecraft_1_online"] != true {
+		t.Fatalf("expected inst_minecraft_1_online to be true; at 2am during an incident an operator will assume Minecraft is offline when it is actually running")
+	}
+	if sig["inst_minecraft_1_state"] != "Running" {
+		t.Fatalf("expected inst_minecraft_1_state to be 'Running', got %v; at 2am operators see stale status on the dashboard", sig["inst_minecraft_1_state"])
+	}
+	if sig["inst_minecraft_1_lamp"] != "lamp lamp-lit" {
+		t.Fatalf("expected inst_minecraft_1_lamp to be 'lamp lamp-lit', got %v; at 2am the server health lamp will misreport server reachability", sig["inst_minecraft_1_lamp"])
+	}
+	if sig["inst_minecraft_1_players"] != 3 {
+		t.Fatalf("expected inst_minecraft_1_players to be 3, got %v; at 2am operators cannot tell if players are affected by maintenance", sig["inst_minecraft_1_players"])
+	}
+	if sig["inst_minecraft_1_presence"] != "3 playing, up 5h" {
+		t.Fatalf("expected inst_minecraft_1_presence to be '3 playing, up 5h', got %v; at 2am uptime and player count are missing from live dashboard tiles", sig["inst_minecraft_1_presence"])
+	}
+	mcMods, ok := sig["inst_minecraft_1_mods"].(map[string]bool)
+	if !ok || !mcMods["jei"] {
+		t.Fatalf("expected inst_minecraft_1_mods to contain 'jei', got %v; at 2am mod status checks fail to reflect live installed mods without page reload", sig["inst_minecraft_1_mods"])
+	}
+	if sig["inst_minecraft_1_mods_count"] != 1 {
+		t.Fatalf("expected inst_minecraft_1_mods_count to be 1, got %v; at 2am mod counts show 0 on live tiles", sig["inst_minecraft_1_mods_count"])
+	}
+
+	if sig["inst_valheim_1_online"] != true {
+		t.Fatalf("expected inst_valheim_1_online to be true; at 2am during a restart loop Valheim appears offline when it is running")
+	}
+	if sig["inst_valheim_1_presence"] != "2 playing, up 2h" {
+		t.Fatalf("expected inst_valheim_1_presence to be '2 playing, up 2h', got %v; at 2am Valheim presence fails to stream", sig["inst_valheim_1_presence"])
+	}
+	vhMods, ok := sig["inst_valheim_1_mods"].(map[string]bool)
+	if !ok || !vhMods["bepinex"] {
+		t.Fatalf("expected inst_valheim_1_mods to contain 'bepinex', got %v; at 2am Valheim mod catalog reports stale state", sig["inst_valheim_1_mods"])
+	}
+}

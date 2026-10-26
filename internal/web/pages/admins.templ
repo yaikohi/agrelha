@@ -66,7 +66,7 @@ func AdminTabs(activeGame string) []components.TabItem {
 
 templ Access(props AccessProps) {
 	@Layout("Access") {
-		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
+		@components.Nav(components.NavProps{Current: "access", IsAdmin: true, SignedIn: true})
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
 				<h1 class="text-2xl font-semibold text-ink">Access</h1>

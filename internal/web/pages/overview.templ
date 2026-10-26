@@ -45,7 +45,7 @@ type OverviewGameUI struct {
 
 templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, flashKind, flashMsg string) {
 	@Layout("Overview") {
-		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
+		@components.Nav(components.NavProps{Current: "overview", IsAdmin: true, SignedIn: true})
 		<div class="mb-6">
 			<h1 class="text-2xl font-semibold text-ink">Overview</h1>
 			<p class="mt-1 text-xs text-ink-muted">

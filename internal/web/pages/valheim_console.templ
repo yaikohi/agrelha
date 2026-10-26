@@ -7,7 +7,7 @@ import "agrelha/internal/web/components"
 // deliberately absent rather than present-but-broken.
 templ ValheimConsole(isAdmin bool, flashKind, flashMsg string) {
 	@Layout("Valheim · Console & Logs") {
-		@components.Nav(components.NavProps{IsAdmin: isAdmin, SignedIn: true})
+		@components.Nav(components.NavProps{Current: "valheim", IsAdmin: isAdmin, SignedIn: true})
 		@flashBanner(flashKind, flashMsg)
 		<div class="space-y-4" data-effect="@get('/sse/logs?server=valheim')">
 			<div class="flex flex-wrap items-center justify-between gap-3 border-b border-edge pb-4">

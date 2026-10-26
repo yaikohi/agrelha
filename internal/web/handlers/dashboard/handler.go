@@ -459,6 +459,64 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 		}
 	}
 
+	for _, p := range h.registeredProfiles() {
+		mgr := h.instanceManager(p.ID)
+		if mgr == nil {
+			continue
+		}
+		insts, err := mgr.ListInstances(ctx)
+		if err != nil {
+			continue
+		}
+		var stats map[int]InstanceStat
+		if statsFn := h.instanceStatsFunc(p.ID); statsFn != nil {
+			stats = statsFn(ctx, insts)
+		}
+		for _, inst := range insts {
+			prefix := fmt.Sprintf("inst_%s_%d", p.ID, inst.Number)
+			uinst := pages.InstanceUI{
+				GameID:          string(p.ID),
+				Number:          inst.Number,
+				Name:            inst.Name,
+				State:           string(inst.State),
+				HostUnknown:     inst.HostUnknown,
+				HostUnreachable: inst.HostUnreachable,
+			}
+			if s, ok := stats[inst.Number]; ok {
+				uinst.Players = s.Players
+				uinst.PlayersKnown = s.PlayersKnown
+				uinst.Uptime = s.Uptime
+			}
+			online := inst.State == domain.StateRunning && !inst.HostUnknown && !inst.HostUnreachable
+			sig[prefix+"_online"] = online
+			sig[prefix+"_state"] = pages.InstanceStateLabel(uinst)
+			sig[prefix+"_lamp"] = pages.InstanceLamp(uinst)
+			sig[prefix+"_players"] = uinst.Players
+			sig[prefix+"_players_known"] = uinst.PlayersKnown
+			sig[prefix+"_uptime"] = uinst.Uptime
+			sig[prefix+"_presence"] = pages.InstancePresence(uinst)
+
+			if p.Capabilities.Mods {
+				mods, err := mgr.GetInstalledMods(ctx, inst.Number)
+				if err == nil {
+					modsMap := make(map[string]bool, len(mods))
+					for _, m := range mods {
+						modsMap[m] = true
+					}
+					if p.ID == domain.GameMinecraft {
+						if cfMods, cfErr := mgr.GetCurseForgeMods(ctx, inst.Number); cfErr == nil {
+							for _, m := range cfMods {
+								modsMap[m] = true
+							}
+						}
+					}
+					sig[prefix+"_mods"] = modsMap
+					sig[prefix+"_mods_count"] = len(modsMap)
+				}
+			}
+		}
+	}
+
 	return sig
 }
 
