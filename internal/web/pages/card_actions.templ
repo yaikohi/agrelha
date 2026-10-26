@@ -6,9 +6,17 @@ templ cardActions(a CardActionsUI) {
 			for _, act := range a.Lifecycle {
 				<button
 					type="button"
+					data-indicator={ actionIndicator(act.Label) }
+					data-attr:disabled={ "$" + actionIndicator(act.Label) }
 					data-on:click={ act.Script }
 					class={ "rounded-control px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
-				>{ act.Label }</button>
+				>
+					<span data-show={ "!" + "$" + actionIndicator(act.Label) }>{ act.Label }</span>
+					<span class="inline-flex items-center gap-1.5" data-show={ "$" + actionIndicator(act.Label) } style="display:none;">
+						<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+						<span>{ inFlightVerb(act.Label) }</span>
+					</span>
+				</button>
 			}
 			for _, act := range a.Special {
 				if act.Href != "" {
@@ -20,10 +28,18 @@ templ cardActions(a CardActionsUI) {
 				} else {
 					<button
 						type="button"
+						data-indicator={ actionIndicator(act.Label) }
+						data-attr:disabled={ "$" + actionIndicator(act.Label) }
 						data-on:click={ act.Script }
 						title="Only available for this game"
 						class={ "rounded-control px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
-					>{ act.Label }</button>
+					>
+						<span data-show={ "!" + "$" + actionIndicator(act.Label) }>{ act.Label }</span>
+						<span class="inline-flex items-center gap-1.5" data-show={ "$" + actionIndicator(act.Label) } style="display:none;">
+							<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+							<span>{ inFlightVerb(act.Label) }</span>
+						</span>
+					</button>
 				}
 			}
 			if len(a.Links) > 0 {

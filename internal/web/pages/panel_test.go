@@ -1,6 +1,8 @@
 package pages
 
 import (
+	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
@@ -166,3 +168,31 @@ func TestImportHintOnlyAppearsWithADownload(t *testing.T) {
 		t.Error("an import hint without a download tells people to import nothing")
 	}
 }
+
+func TestPanelPortConnectionPlateAndTitleProminence(t *testing.T) {
+	port := PanelPortUI{
+		Index: 0,
+		Game:  "valheim",
+		Tint:  "text-accent",
+		Row: ServerRowUI{
+			Name:    "Ducktopia",
+			Address: "10.0.0.1:2456",
+			Online:  true,
+		},
+	}
+	var buf bytes.Buffer
+	if err := panelPort(port).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "text-3xl") {
+		t.Fatalf("panel card does not render world title with text-3xl prominence; at 2am players confuse the large raw IP address with the world title, got: %s", out)
+	}
+	if !strings.Contains(out, "bg-surface-raised/40") || !strings.Contains(out, "border-edge") {
+		t.Fatalf("panel card does not render the connection address within a distinct connection plate; at 2am an uncontained floating address creates visual disarray, got: %s", out)
+	}
+	if !strings.Contains(out, ">copy<") && !strings.Contains(out, "data-text") {
+		t.Fatalf("panel card is missing copy chip affordance; at 2am an operator or player cannot immediately discover one-click copy feedback, got: %s", out)
+	}
+}
+

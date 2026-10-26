@@ -45,16 +45,52 @@ templ ModSearchResults(m ModResultsUI) {
 				if r.Restricted {
 					<span title="This mod's author does not allow third-party downloads. No API key changes this." class={ components.ButtonClass(components.VariantDisabled) }>Not downloadable</span>
 				} else if r.Installed {
-					<button type="button" data-on:click={ r.RemoveScript(m.Game, m.Num) } class={ components.ButtonClass(components.VariantDanger) }>Remove</button>
+					<button
+						type="button"
+						data-indicator={ "busy_mod_" + UpdateToken(r.Slug) }
+						data-attr:disabled={ "$busy_mod_" + UpdateToken(r.Slug) }
+						data-on:click={ r.RemoveScript(m.Game, m.Num) }
+						class={ components.ButtonClass(components.VariantDanger) }
+					>
+						<span data-show={ "!$busy_mod_" + UpdateToken(r.Slug) }>Remove</span>
+						<span class="inline-flex items-center gap-1.5" data-show={ "$busy_mod_" + UpdateToken(r.Slug) } style="display:none;">
+							<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+							<span>Removing…</span>
+						</span>
+					</button>
 				} else {
-					<button type="button" data-on:click={ r.InstallScript(m.Game, m.Num) } class={ components.ButtonClass(components.VariantPrimary) }>Install</button>
+					<button
+						type="button"
+						data-indicator={ "busy_mod_" + UpdateToken(r.Slug) }
+						data-attr:disabled={ "$busy_mod_" + UpdateToken(r.Slug) }
+						data-on:click={ r.InstallScript(m.Game, m.Num) }
+						class={ components.ButtonClass(components.VariantPrimary) }
+					>
+						<span data-show={ "!$busy_mod_" + UpdateToken(r.Slug) }>Install</span>
+						<span class="inline-flex items-center gap-1.5" data-show={ "$busy_mod_" + UpdateToken(r.Slug) } style="display:none;">
+							<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+							<span>Installing…</span>
+						</span>
+					</button>
 				}
 			</div>
 		</article>
 	}
 	if m.NextN > 0 {
 		<div class="border-t border-seam px-6 py-4">
-			<button type="button" data-on:click={ m.MoreScript() } class={ components.ButtonClass(components.VariantSecondary) }>Load more</button>
+			<button
+				type="button"
+				data-indicator="busy_load_more"
+				data-attr:disabled="$busy_load_more"
+				data-on:click={ m.MoreScript() }
+				class={ components.ButtonClass(components.VariantSecondary) }
+			>
+				<span data-show="!$busy_load_more">Load more</span>
+				<span class="inline-flex items-center gap-1.5" data-show="$busy_load_more" style="display:none;">
+					<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+					<span>Loading…</span>
+				</span>
+			</button>
 		</div>
 	}
 }
@@ -71,7 +107,19 @@ templ InstalledMods(i InstalledModsUI) {
 						<span class="font-pixel text-[11px] text-ink-faint">{ "v" + m.Version }</span>
 					}
 				</p>
-				<button type="button" data-on:click={ m.RemoveScript(i.Game, i.Num) } class={ components.ButtonClass(components.VariantDanger) }>Remove</button>
+				<button
+					type="button"
+					data-indicator={ "busy_inst_" + UpdateToken(m.Slug) }
+					data-attr:disabled={ "$busy_inst_" + UpdateToken(m.Slug) }
+					data-on:click={ m.RemoveScript(i.Game, i.Num) }
+					class={ components.ButtonClass(components.VariantDanger) }
+				>
+					<span data-show={ "!$busy_inst_" + UpdateToken(m.Slug) }>Remove</span>
+					<span class="inline-flex items-center gap-1.5" data-show={ "$busy_inst_" + UpdateToken(m.Slug) } style="display:none;">
+						<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+						<span>Removing…</span>
+					</span>
+				</button>
 			</div>
 		}
 		<p class="border-t border-seam px-6 py-3 font-pixel text-[11px] text-ink-faint">

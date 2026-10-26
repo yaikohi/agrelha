@@ -376,3 +376,32 @@ func TestGModPortDerivedFromHostAndNumber(t *testing.T) {
 GMod has PortStride 100 on Docker Hosts, so instance 02 must publish 27115, or it will collide with instance 01.`, port)
 	}
 }
+
+func TestInFlightVerb(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"Start", "Starting…"},
+		{"Stop", "Stopping…"},
+		{"Restart", "Restarting…"},
+		{"Restart now", "Restarting…"},
+		{"Delete", "Deleting…"},
+		{"Install", "Installing…"},
+		{"Remove", "Removing…"},
+		{"Check now", "Checking…"},
+		{"Update all", "Updating…"},
+		{"Update selected", "Updating…"},
+		{"Undo last update", "Restoring…"},
+		{"Load more", "Loading…"},
+		{"Custom", "Custom…"},
+	}
+
+	for _, tc := range cases {
+		got := inFlightVerb(tc.input)
+		if got != tc.want {
+			t.Fatalf("inFlightVerb(%q) = %q, want %q; at 2am an operator pressing restart or update receives zero visual feedback and repeatedly triggers operations during an incident", tc.input, got, tc.want)
+		}
+	}
+}
+

@@ -1,6 +1,8 @@
 package pages
 
 import (
+	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
@@ -245,3 +247,29 @@ page read like two products.`, m.Lede, m.CreateLabel)
 		})
 	}
 }
+
+func TestManagerActionButtonsCarryInFlightIndicator(t *testing.T) {
+	inst := valheimInstance()
+	inst.Number = 2
+	inst.CanStart = true
+	m := BuildValheimManager([]InstanceUI{inst}, BudgetUI{})
+	if len(m.Ports) == 0 {
+		t.Fatal("expected at least 1 port rendered")
+	}
+
+	var buf bytes.Buffer
+	if err := managerPort(m.Ports[0]).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "data-indicator=\"busy_2_Start\"") {
+		t.Fatalf("manager start button missing instance-scoped indicator busy_2_Start; at 2am an operator receives zero feedback when starting a world and double clicks, causing race conditions, got: %s", out)
+	}
+	if !strings.Contains(out, "data-attr:disabled=\"$busy_2_Start\"") {
+		t.Fatalf("manager start button missing data-attr:disabled binding; at 2am an operator repeatedly clicks the start button while the container boots, got: %s", out)
+	}
+	if !strings.Contains(out, "Starting…") {
+		t.Fatalf("manager start button missing in-flight verb 'Starting…'; at 2am an operator has no visual indication that the request is currently in-flight, got: %s", out)
+	}
+}
+

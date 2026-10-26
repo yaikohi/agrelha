@@ -162,7 +162,7 @@ func (o InstanceOverviewUI) CopyClick() string {
 }
 
 func (o InstanceOverviewUI) CopyLabelExpr() string {
-	return "$ocopied ? 'copied' : 'click to copy'"
+	return "$ocopied ? 'copied!' : 'copy'"
 }
 
 func noNotices(InstanceDetailUI) []InstanceNoticeUI { return nil }

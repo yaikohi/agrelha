@@ -338,5 +338,5 @@ func (p ManagerPortUI) CopyClick() string {
 }
 
 func (p ManagerPortUI) CopyLabelExpr() string {
-	return fmt.Sprintf("$%s ? 'copied' : 'click to copy'", p.CopySignal())
+	return fmt.Sprintf("$%s ? 'copied!' : 'copy'", p.CopySignal())
 }

@@ -49,25 +49,27 @@ templ panelPort(p PanelPortUI) {
 				}
 			</p>
 			if p.Row.OverviewURL != "" {
-				<a href={ templ.SafeURL(p.Row.OverviewURL) } class="focus-accent font-display text-2xl font-semibold text-ink transition-colors hover:text-accent">{ p.Row.Name }</a>
+				<a href={ templ.SafeURL(p.Row.OverviewURL) } class="focus-accent mt-0.5 block font-display text-3xl font-semibold tracking-tight text-ink transition-colors hover:text-accent">{ p.Row.Name }</a>
 			} else {
-				<h2 class="font-display text-2xl font-semibold text-ink">{ p.Row.Name }</h2>
+				<h2 class="mt-0.5 font-display text-3xl font-semibold tracking-tight text-ink">{ p.Row.Name }</h2>
 			}
-			<button
-				type="button"
-				data-signals={ p.CopyInit() }
-				data-on:click={ p.CopyClick() }
-				class="focus-accent group mt-4 block max-w-full text-left"
-			>
-				<span class="block truncate font-pixel text-[22px] leading-none text-ink transition-colors group-hover:text-accent sm:text-[30px]">{ p.Row.Address }</span>
-				<span class="mt-2 block font-pixel text-[11px] text-ink-muted transition-colors group-hover:text-accent" data-text={ p.CopyLabelExpr() }></span>
-			</button>
-			if p.Row.Password != "" {
-				<p class="mt-3 font-pixel text-xs text-ink-muted">
-					password <span class="text-ink">{ p.Row.Password }</span>
-				</p>
-			}
-			<p class="mt-5 font-pixel text-xs text-ink-muted">
+			<div class="mt-3 flex flex-wrap items-center gap-3">
+				<button
+					type="button"
+					data-signals={ p.CopyInit() }
+					data-on:click={ p.CopyClick() }
+					class="focus-accent group flex max-w-full items-center gap-3 rounded-control border border-edge bg-surface-raised/40 px-3.5 py-2 text-left transition-colors hover:border-accent/60"
+				>
+					<span class="truncate font-pixel text-base sm:text-lg text-ink transition-colors group-hover:text-accent">{ p.Row.Address }</span>
+					<span class="shrink-0 rounded-control border border-edge/80 bg-surface px-2 py-0.5 font-pixel text-[11px] text-ink-muted transition-colors group-hover:border-accent group-hover:text-accent" data-text={ p.CopyLabelExpr() }>copy</span>
+				</button>
+				if p.Row.Password != "" {
+					<span class="font-pixel text-xs text-ink-muted">
+						password <span class="text-ink">{ p.Row.Password }</span>
+					</span>
+				}
+			</div>
+			<p class="mt-4 flex items-center gap-2 font-pixel text-xs text-ink-muted">
 				if p.PresenceExpr() != "" {
 					<span data-text={ p.PresenceExpr() }>{ p.Presence() }</span>
 				} else {
@@ -75,12 +77,12 @@ templ panelPort(p PanelPortUI) {
 				}
 			</p>
 			if p.Row.JoinURL != "" || p.Row.DownloadURL != "" || p.Row.BrowseURL != "" {
-				<div class="mt-5 flex flex-wrap items-center gap-2">
+				<div class="mt-4 flex flex-wrap items-center gap-2">
 					if p.Row.JoinURL != "" {
-						<a href={ templ.SafeURL(p.Row.JoinURL) } class="focus-accent rounded-sm bg-accent px-3 py-1.5 font-pixel text-xs text-seam transition-colors hover:bg-ink">{ p.Row.JoinLabel }</a>
+						<a href={ templ.SafeURL(p.Row.JoinURL) } class="focus-accent rounded-control bg-accent px-3 py-1.5 font-pixel text-xs text-accent-ink transition-colors hover:bg-ink hover:text-ink">{ p.Row.JoinLabel }</a>
 					}
 					if p.Row.DownloadURL != "" {
-						<a href={ templ.SafeURL(p.Row.DownloadURL) } download class="focus-accent rounded-sm border border-edge px-3 py-1.5 font-pixel text-xs text-ink transition-colors hover:border-accent hover:text-accent">
+						<a href={ templ.SafeURL(p.Row.DownloadURL) } download class="focus-accent rounded-control border border-edge px-3 py-1.5 font-pixel text-xs text-ink transition-colors hover:border-accent hover:text-accent">
 							Get the mods
 							if p.Row.DownloadFmt != "" {
 								<span class="text-ink-muted"> { p.Row.DownloadFmt }</span>
@@ -88,7 +90,7 @@ templ panelPort(p PanelPortUI) {
 						</a>
 					}
 					if p.Row.BrowseURL != "" {
-						<a href={ templ.SafeURL(p.Row.BrowseURL) } target="_blank" rel="noopener" class="focus-accent rounded-sm border border-edge px-3 py-1.5 font-pixel text-xs text-ink transition-colors hover:border-accent hover:text-accent">{ p.Row.BrowseLabel }</a>
+						<a href={ templ.SafeURL(p.Row.BrowseURL) } target="_blank" rel="noopener" class="focus-accent rounded-control border border-edge px-3 py-1.5 font-pixel text-xs text-ink transition-colors hover:border-accent hover:text-accent">{ p.Row.BrowseLabel }</a>
 					}
 				</div>
 			}
@@ -96,7 +98,7 @@ templ panelPort(p PanelPortUI) {
 				<p class="mt-3 max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ p.ImportHint() }</p>
 			}
 			if p.AccessNote != "" {
-				<p class="mt-2 max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ p.AccessNote }</p>
+				<p class="mt-2 max-w-prose font-display text-sm leading-relaxed text-ink-faint">{ p.AccessNote }</p>
 			}
 		</div>
 	</article>

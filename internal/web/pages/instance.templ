@@ -37,7 +37,19 @@ templ instanceHead(h InstanceHeadUI) {
 					<span class="max-w-xs font-pixel text-[11px] text-ink-faint">{ h.Blocked }</span>
 				}
 				for _, a := range h.Actions {
-					<button type="button" data-on:click={ a.Script } class={ components.ButtonClass(instanceVariant(a.Kind)) }>{ a.Label }</button>
+					<button
+						type="button"
+						data-indicator={ actionIndicator(a.Label) }
+						data-attr:disabled={ "$" + actionIndicator(a.Label) }
+						data-on:click={ a.Script }
+						class={ components.ButtonClass(instanceVariant(a.Kind)) }
+					>
+						<span data-show={ "!" + "$" + actionIndicator(a.Label) }>{ a.Label }</span>
+						<span class="inline-flex items-center gap-1.5" data-show={ "$" + actionIndicator(a.Label) } style="display:none;">
+							<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+							<span>{ inFlightVerb(a.Label) }</span>
+						</span>
+					</button>
 				}
 			</div>
 		</div>
@@ -61,26 +73,41 @@ templ instanceOverview(o InstanceOverviewUI) {
 					}
 				</div>
 				if n.Action != nil {
-					<button type="button" data-on:click={ n.Action.Script } class="focus-accent shrink-0 rounded-control border border-accent px-3 py-1.5 font-pixel text-xs text-accent transition-colors hover:bg-accent hover:text-accent-ink">{ n.Action.Label }</button>
+					<button
+						type="button"
+						data-indicator={ actionIndicator(n.Action.Label) }
+						data-attr:disabled={ "$" + actionIndicator(n.Action.Label) }
+						data-on:click={ n.Action.Script }
+						class="focus-accent shrink-0 rounded-control border border-accent px-3 py-1.5 font-pixel text-xs text-accent transition-colors hover:bg-accent hover:text-accent-ink"
+					>
+						<span data-show={ "!" + "$" + actionIndicator(n.Action.Label) }>{ n.Action.Label }</span>
+						<span class="inline-flex items-center gap-1.5" data-show={ "$" + actionIndicator(n.Action.Label) } style="display:none;">
+							<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+							<span>{ inFlightVerb(n.Action.Label) }</span>
+						</span>
+					</button>
 				}
 			</div>
 		}
 		<div>
-			<button
-				type="button"
-				data-signals={ o.CopyInit() }
-				data-on:click={ o.CopyClick() }
-				class="focus-accent group block max-w-full text-left"
-			>
-				<span class="block truncate font-pixel text-[22px] leading-none text-ink transition-colors group-hover:text-accent sm:text-[30px]">{ o.Address }</span>
-				<span class="mt-2 block font-pixel text-[11px] text-ink-muted transition-colors group-hover:text-accent" data-text={ o.CopyLabelExpr() }>click to copy</span>
-			</button>
-			if o.Password != "" {
-				<p class="mt-3 font-pixel text-xs text-ink-muted">
-					password <span class="text-ink">{ o.Password }</span>
-				</p>
-			} else {
-				<p class="mt-3 font-pixel text-xs text-ink-faint">no password — anyone on the network can join</p>
+			<div class="flex flex-wrap items-center gap-3">
+				<button
+					type="button"
+					data-signals={ o.CopyInit() }
+					data-on:click={ o.CopyClick() }
+					class="focus-accent group flex max-w-full items-center gap-3 rounded-control border border-edge bg-surface-raised/40 px-3.5 py-2 text-left transition-colors hover:border-accent/60"
+				>
+					<span class="truncate font-pixel text-base sm:text-lg text-ink transition-colors group-hover:text-accent">{ o.Address }</span>
+					<span class="shrink-0 rounded-control border border-edge/80 bg-surface px-2 py-0.5 font-pixel text-[11px] text-ink-muted transition-colors group-hover:border-accent group-hover:text-accent" data-text={ o.CopyLabelExpr() }>copy</span>
+				</button>
+				if o.Password != "" {
+					<span class="font-pixel text-xs text-ink-muted">
+						password <span class="text-ink">{ o.Password }</span>
+					</span>
+				}
+			</div>
+			if o.Password == "" {
+				<p class="mt-2 font-pixel text-xs text-ink-faint">no password — anyone on the network can join</p>
 			}
 		</div>
 		if len(o.Actions) > 0 || o.JoinHint != "" {
@@ -124,6 +151,18 @@ templ overviewAction(a ActionUI) {
 	} else if a.Href != "" {
 		<a href={ templ.SafeURL(a.Href) } class="focus-accent rounded-control border border-accent px-3 py-1.5 font-pixel text-xs text-accent transition-colors hover:bg-accent hover:text-accent-ink">{ a.Label }</a>
 	} else {
-		<button type="button" data-on:click={ a.Script } class="focus-accent rounded-control border border-edge px-3 py-1.5 font-pixel text-xs text-ink-muted transition-colors hover:border-accent hover:text-accent">{ a.Label }</button>
+		<button
+			type="button"
+			data-indicator={ actionIndicator(a.Label) }
+			data-attr:disabled={ "$" + actionIndicator(a.Label) }
+			data-on:click={ a.Script }
+			class="focus-accent rounded-control border border-edge px-3 py-1.5 font-pixel text-xs text-ink-muted transition-colors hover:border-accent hover:text-accent"
+		>
+			<span data-show={ "!" + "$" + actionIndicator(a.Label) }>{ a.Label }</span>
+			<span class="inline-flex items-center gap-1.5" data-show={ "$" + actionIndicator(a.Label) } style="display:none;">
+				<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+				<span>{ inFlightVerb(a.Label) }</span>
+			</span>
+		</button>
 	}
 }

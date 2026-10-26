@@ -1,5 +1,6 @@
 package pages
 
+import "fmt"
 import "agrelha/internal/web/components"
 
 templ ValheimManager(instances []InstanceUI, budget BudgetUI, admin ...bool) {
@@ -94,7 +95,19 @@ templ managerPort(p ManagerPortUI) {
 						if a.Kind == "blocked" {
 							<span title={ a.Script } class={ components.ButtonClass(managerVariant(a.Kind)) }>{ a.Label }</span>
 						} else {
-							<button type="button" data-on:click={ a.Script } class={ components.ButtonClass(managerVariant(a.Kind)) }>{ a.Label }</button>
+							<button
+								type="button"
+								data-indicator={ fmt.Sprintf("busy_%d_%s", p.Number, UpdateToken(a.Label)) }
+								data-attr:disabled={ fmt.Sprintf("$busy_%d_%s", p.Number, UpdateToken(a.Label)) }
+								data-on:click={ a.Script }
+								class={ components.ButtonClass(managerVariant(a.Kind)) }
+							>
+								<span data-show={ fmt.Sprintf("!$busy_%d_%s", p.Number, UpdateToken(a.Label)) }>{ a.Label }</span>
+								<span class="inline-flex items-center gap-1.5" data-show={ fmt.Sprintf("$busy_%d_%s", p.Number, UpdateToken(a.Label)) } style="display:none;">
+									<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+									<span>{ inFlightVerb(a.Label) }</span>
+								</span>
+							</button>
 						}
 					}
 				</div>

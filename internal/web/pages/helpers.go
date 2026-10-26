@@ -637,6 +637,39 @@ type CardActionsUI struct {
 	Manager   ActionUI
 }
 
+func inFlightVerb(label string) string {
+	switch strings.ToLower(strings.TrimSpace(label)) {
+	case "start":
+		return "Starting…"
+	case "stop":
+		return "Stopping…"
+	case "restart", "restart now":
+		return "Restarting…"
+	case "delete":
+		return "Deleting…"
+	case "install":
+		return "Installing…"
+	case "remove":
+		return "Removing…"
+	case "check now":
+		return "Checking…"
+	case "update all":
+		return "Updating…"
+	case "update selected":
+		return "Updating…"
+	case "undo last update":
+		return "Restoring…"
+	case "load more":
+		return "Loading…"
+	default:
+		return label + "…"
+	}
+}
+
+func actionIndicator(label string) string {
+	return "busy_" + UpdateToken(label)
+}
+
 func actionStyle(kind string) string {
 	switch kind {
 	case "danger":
