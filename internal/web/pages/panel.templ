@@ -1,0 +1,124 @@
+package pages
+
+import "agrelha/internal/platform/build"
+
+templ Panel(games []DashboardGameUI, signedIn bool, flashKind, flashMsg string) {
+	{{ p := BuildPanel(games) }}
+	@LayoutHearth("Agrelha · Game Servers") {
+		@flashBanner(flashKind, flashMsg)
+		@panelMasthead(signedIn)
+		<div class="-mx-6 mt-10 border-t border-hearth-950">
+			for _, port := range p.Ports {
+				@panelPort(port)
+			}
+			for _, idle := range p.Idle {
+				@panelIdle(idle)
+			}
+		</div>
+		@panelColophon()
+	}
+}
+
+templ panelMasthead(signedIn bool) {
+	<header class="flex flex-wrap items-baseline justify-between gap-4">
+		<h1 class="font-display text-3xl font-semibold tracking-tight text-silk">agrelha</h1>
+		if !signedIn {
+			<a href="/auth/login" class="focus-ember font-pixel text-xs text-engrave transition-colors hover:text-ember">Sign in</a>
+		}
+		<p class="w-full max-w-prose font-display text-base leading-relaxed text-engrave">
+			These servers run on a machine at home. Copy an address, paste it into the game.
+		</p>
+	</header>
+}
+
+templ panelPort(p PanelPortUI) {
+	<article class="grid grid-cols-[1.75rem_1fr] gap-x-4 border-b border-hearth-950 px-6 py-8 sm:grid-cols-[2.5rem_1fr]">
+		<div class="pt-[0.35rem]">
+			if p.LampSignals() != "" {
+				<span class={ p.LampClass() } data-class={ p.LampSignals() }></span>
+			} else {
+				<span class={ p.LampClass() }></span>
+			}
+		</div>
+		<div class="min-w-0">
+			<p class="flex flex-wrap items-baseline gap-3">
+				<span class={ "font-pixel text-[11px] tracking-wide " + p.Tint }>{ p.Game }</span>
+				if p.Row.VersionBadge != "" {
+					<span class="font-pixel text-[11px] text-engrave/70">{ p.Row.VersionBadge }</span>
+				}
+			</p>
+			if p.Row.OverviewURL != "" {
+				<a href={ templ.SafeURL(p.Row.OverviewURL) } class="focus-ember font-display text-2xl font-semibold text-silk transition-colors hover:text-ember">{ p.Row.Name }</a>
+			} else {
+				<h2 class="font-display text-2xl font-semibold text-silk">{ p.Row.Name }</h2>
+			}
+			<button
+				type="button"
+				data-signals={ p.CopyInit() }
+				data-on:click={ p.CopyClick() }
+				class="focus-ember group mt-4 block max-w-full text-left"
+			>
+				<span class="block truncate font-pixel text-[22px] leading-none text-silk transition-colors group-hover:text-ember sm:text-[30px]">{ p.Row.Address }</span>
+				<span class="mt-2 block font-pixel text-[11px] text-engrave transition-colors group-hover:text-ember" data-text={ p.CopyLabelExpr() }></span>
+			</button>
+			if p.Row.Password != "" {
+				<p class="mt-3 font-pixel text-xs text-engrave">
+					password <span class="text-silk">{ p.Row.Password }</span>
+				</p>
+			}
+			<p class="mt-5 font-pixel text-xs text-engrave">
+				if p.PresenceExpr() != "" {
+					<span data-text={ p.PresenceExpr() }>{ p.Presence() }</span>
+				} else {
+					{ p.Presence() }
+				}
+			</p>
+			if p.Row.JoinURL != "" || p.Row.DownloadURL != "" || p.Row.BrowseURL != "" {
+				<div class="mt-5 flex flex-wrap items-center gap-2">
+					if p.Row.JoinURL != "" {
+						<a href={ templ.SafeURL(p.Row.JoinURL) } class="focus-ember rounded-sm bg-ember px-3 py-1.5 font-pixel text-xs text-hearth-950 transition-colors hover:bg-silk">{ p.Row.JoinLabel }</a>
+					}
+					if p.Row.DownloadURL != "" {
+						<a href={ templ.SafeURL(p.Row.DownloadURL) } download class="focus-ember rounded-sm border border-hearth-700 px-3 py-1.5 font-pixel text-xs text-silk transition-colors hover:border-ember hover:text-ember">
+							Get the mods
+							if p.Row.DownloadFmt != "" {
+								<span class="text-engrave"> { p.Row.DownloadFmt }</span>
+							}
+						</a>
+					}
+					if p.Row.BrowseURL != "" {
+						<a href={ templ.SafeURL(p.Row.BrowseURL) } target="_blank" rel="noopener" class="focus-ember rounded-sm border border-hearth-700 px-3 py-1.5 font-pixel text-xs text-silk transition-colors hover:border-ember hover:text-ember">{ p.Row.BrowseLabel }</a>
+					}
+				</div>
+			}
+			if p.ImportHint() != "" {
+				<p class="mt-3 max-w-prose font-display text-sm leading-relaxed text-engrave">{ p.ImportHint() }</p>
+			}
+			if p.AccessNote != "" {
+				<p class="mt-2 max-w-prose font-display text-sm leading-relaxed text-engrave">{ p.AccessNote }</p>
+			}
+		</div>
+	</article>
+}
+
+templ panelIdle(e PanelEmptyUI) {
+	<article class="grid grid-cols-[1.75rem_1fr] gap-x-4 border-b border-hearth-950 px-6 py-5 sm:grid-cols-[2.5rem_1fr]">
+		<div class="pt-[0.3rem]"><span class="lamp lamp-out"></span></div>
+		<div class="min-w-0">
+			<p class={ "font-pixel text-[11px] tracking-wide " + e.Tint }>{ e.Game }</p>
+			<p class="mt-1 max-w-prose font-display text-sm leading-relaxed text-engrave">
+				Nothing running.
+				if e.Hint != "" {
+					{ " " + e.Hint }
+				}
+			</p>
+		</div>
+	</article>
+}
+
+templ panelColophon() {
+	<footer class="mt-10 flex flex-wrap items-center justify-between gap-3 font-pixel text-[11px] text-hearth-700">
+		<span>agrelha { build.Version } · AGPL-3.0-only</span>
+		<a href={ templ.URL(build.SourceURL) } rel="noopener" target="_blank" class="focus-ember transition-colors hover:text-engrave">Source</a>
+	</footer>
+}

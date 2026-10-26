@@ -188,14 +188,14 @@ func TestGuestRootDashboardAndAuthProtection(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	content := string(body)
-	if !strings.Contains(content, "Community Game Servers") {
-		t.Errorf("expected 'Community Game Servers' in guest body")
+	if !strings.Contains(content, "Copy an address, paste it into the game.") {
+		t.Errorf("expected the public panel's orienting line in guest body")
 	}
 	if !strings.Contains(content, "Sign in") {
 		t.Errorf("expected a 'Sign in' button in guest nav")
 	}
-	if !strings.Contains(content, "Download Modpack") {
-		t.Errorf("expected 'Download Modpack' in guest view")
+	if !strings.Contains(content, "Get the mods") {
+		t.Errorf("expected a modpack download in guest view")
 	}
 	if strings.Contains(content, "Open Valheim Manager") {
 		t.Errorf("guest view should NOT have 'Open Valheim Manager'")

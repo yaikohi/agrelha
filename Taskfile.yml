@@ -5,6 +5,9 @@ vars:
   CSS_OUT: internal/web/assets/css/output.css
   DATASTAR_JS: internal/web/assets/js/datastar.js
   DATASTAR_VERSION: 1.0.2 # must match datastar-go protocol (PatchElements/PatchSignals)
+  FONT_DIR: internal/web/assets/fonts
+  DEPARTURE_VERSION: 1.500
+  FRAUNCES_VERSION: 5.2.6
   GO_MAIN: ./cmd/agrelha
   GO_BINARY: main
   VERSION: dev
@@ -50,7 +53,7 @@ tasks:
 
   go:build:
     desc: "Generate templ + compile the Go binary"
-    deps: [generate, tailwind:build, assets:datastar]
+    deps: [generate, tailwind:build, assets:datastar, assets:fonts]
     # Deliberately not fingerprinted with sources/generates. The stamped version
     # is an input that no source file records, so a fingerprint would report
     # "up to date" and hand back a binary labelled `dev` after you asked for a
@@ -93,6 +96,16 @@ tasks:
     status:
       # re-download if missing, still a placeholder, or the pinned version changed
       - grep -q "Datastar v{{.DATASTAR_VERSION}}" {{.DATASTAR_JS}}
+
+  assets:fonts:
+    desc: "Vendor the pinned display and pixel faces (no CDN at runtime)"
+    cmds:
+      - mkdir -p {{.FONT_DIR}}
+      - curl -fsSL "https://cdn.jsdelivr.net/gh/rektdeckard/departure-mono@v{{.DEPARTURE_VERSION}}/public/assets/DepartureMono-Regular.woff2" -o {{.FONT_DIR}}/DepartureMono-Regular.woff2
+      - curl -fsSL "https://cdn.jsdelivr.net/npm/@fontsource-variable/fraunces@{{.FRAUNCES_VERSION}}/files/fraunces-latin-wght-normal.woff2" -o {{.FONT_DIR}}/Fraunces-Variable.woff2
+    status:
+      - test -s {{.FONT_DIR}}/DepartureMono-Regular.woff2
+      - test -s {{.FONT_DIR}}/Fraunces-Variable.woff2
 
   # --- Run ---
   run:

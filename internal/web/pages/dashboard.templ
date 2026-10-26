@@ -1,6 +1,14 @@
 package pages
 
 templ Dashboard(grafanaURL string, games []DashboardGameUI, isAdmin, signedIn bool, flashKind, flashMsg string) {
+	if !isAdmin {
+		@Panel(games, signedIn, flashKind, flashMsg)
+	} else {
+		@adminHub(grafanaURL, games, isAdmin, signedIn, flashKind, flashMsg)
+	}
+}
+
+templ adminHub(grafanaURL string, games []DashboardGameUI, isAdmin, signedIn bool, flashKind, flashMsg string) {
 	@Layout("Agrelha · Game Server Portal") {
 		@nav(isAdmin, signedIn)
 		@flashBanner(flashKind, flashMsg)

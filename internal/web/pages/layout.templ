@@ -6,6 +6,20 @@ import "agrelha/internal/platform/build"
 // /assets/js/datastar.js — see Taskfile `assets:datastar`). Tailwind output at
 // /assets/css/output.css.
 templ Layout(title string) {
+	@layoutShell(title, "bg-zinc-950 text-zinc-100", "mx-auto max-w-5xl overflow-x-hidden px-6 py-8", false) {
+		{ children... }
+	}
+}
+
+// Hearth is the public face: warm panel ground, vendored display and pixel
+// faces, and a footer that matches it. Signed-in pages keep Layout.
+templ LayoutHearth(title string) {
+	@layoutShell(title, "bg-hearth-900 text-silk", "mx-auto max-w-3xl overflow-x-hidden px-6 pt-12 pb-10", true) {
+		{ children... }
+	}
+}
+
+templ layoutShell(title, bodyClass, mainClass string, hearth bool) {
 	<!DOCTYPE html>
 	<html lang="en" class="h-full">
 		<head>
@@ -13,17 +27,45 @@ templ Layout(title string) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title } · agrelha</title>
 			<link rel="stylesheet" href="/assets/css/output.css"/>
+			if hearth {
+				<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/Fraunces-Variable.woff2" crossorigin/>
+				<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/DepartureMono-Regular.woff2" crossorigin/>
+			}
 			<script type="module" src="/assets/js/datastar.js"></script>
+			if hearth {
+				<script>
+					window.agrelhaCopy = function (text) {
+						if (navigator.clipboard && window.isSecureContext) {
+							return navigator.clipboard.writeText(text);
+						}
+						var ta = document.createElement("textarea");
+						ta.value = text;
+						ta.setAttribute("readonly", "");
+						ta.style.position = "fixed";
+						ta.style.opacity = "0";
+						document.body.appendChild(ta);
+						ta.select();
+						try {
+							document.execCommand("copy");
+						} finally {
+							ta.remove();
+						}
+						return Promise.resolve();
+					};
+				</script>
+			}
 		</head>
 		<body
-			class="h-full bg-zinc-950 text-zinc-100 antialiased"
+			class={ "h-full antialiased " + bodyClass }
 			data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',online:false,backup:'—',backupinfo:'',updates:0,valheim_updates:0,mc_updates:0,selected:{},toast:'',toastkind:'',mc_players:'—',mc_cpu:'—',mc_mem:'—',mc_uptime:'—',mc_state:'unknown'}"
 			data-effect="@get('/sse')"
 		>
-			<main class="mx-auto max-w-5xl overflow-x-hidden px-6 py-8">
+			<main class={ mainClass }>
 				{ children... }
 			</main>
-			@siteFooter()
+			if !hearth {
+				@siteFooter()
+			}
 			<div
 				data-show="$toast != ''"
 				data-class="{'border-red-700 text-red-200': $toastkind == 'err', 'border-emerald-700 text-emerald-200': $toastkind != 'err'}"
