@@ -128,7 +128,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		MaxInstances:   budget.MaxInstances,
 	}
 
-	return shared.Render(c, pages.GModDashboard(uiInstances, budgetUI, shared.IsAdmin(c)))
+	return shared.Render(c, pages.GModManager(uiInstances, budgetUI, shared.IsAdmin(c)))
 }
 
 func (h *Handler) WizardPage(c *fiber.Ctx) error {

@@ -11,6 +11,12 @@ import (
 
 var migratedTemplates = []string{
 	"dashboard.templ",
+	"gmod_instance.templ",
+	"host_banner.templ",
+	"incident.templ",
+	"incidents.templ",
+	"instance.templ",
+	"log_pane.templ",
 	"manager.templ",
 	"nav_hearth.templ",
 	"panel.templ",

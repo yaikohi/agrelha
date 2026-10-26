@@ -218,8 +218,8 @@ func TestValheimWizardCreateAndDetail(t *testing.T) {
 	if !strings.Contains(html, "6 GiB") {
 		t.Errorf("overview missing '6 GiB' medium tier allocation")
 	}
-	if !strings.Contains(html, "Sign out") {
-		t.Errorf("overview nav missing 'Sign out' for authenticated admin")
+	if !strings.Contains(html, "sign out") {
+		t.Errorf("overview nav missing 'sign out' for authenticated admin")
 	}
 	if strings.Contains(html, "/auth/login") {
 		t.Errorf("overview nav should NOT have '/auth/login' for authenticated admin")

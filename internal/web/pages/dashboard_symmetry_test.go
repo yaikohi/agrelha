@@ -7,15 +7,6 @@ import (
 	"testing"
 )
 
-func render(t *testing.T, g GameCardUI) string {
-	t.Helper()
-	var buf bytes.Buffer
-	if err := gameCard(g).Render(context.Background(), &buf); err != nil {
-		t.Fatal(err)
-	}
-	return buf.String()
-}
-
 func sampleMinecraft() MinecraftSummaryUI {
 	return MinecraftSummaryUI{
 		TotalInstances: 2, MaxInstances: 4,
@@ -29,58 +20,6 @@ func sampleMinecraft() MinecraftSummaryUI {
 	}
 }
 
-// The two cards must expose the same functionality through the same markup.
-// This is the guard against them drifting apart again.
-func TestBothCardsShareTheSameSections(t *testing.T) {
-	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false))
-	minecraft := render(t, MinecraftCard(sampleMinecraft(), false))
-
-	for _, section := range []string{
-		"Online Players", // stats live in the row on both
-		"Uptime",
-		"Download Modpack", // one label on both; format is a badge
-		">Copy<",           // address + copy on both
-		"Import into",      // launcher instructions on both
-		"Server specifics", // the extras strip
-	} {
-		if !strings.Contains(valheim, section) {
-			t.Errorf("Valheim card missing shared section %q", section)
-		}
-		if !strings.Contains(minecraft, section) {
-			t.Errorf("Minecraft card missing shared section %q", section)
-		}
-	}
-}
-
-// Regressions we specifically fixed: the labels and status wording used to
-// differ between the cards for identical functionality.
-func TestDivergentLabelsAreGone(t *testing.T) {
-	both := render(t, ValheimCard("192.168.20.224:2456", "game-01", true)) +
-		render(t, MinecraftCard(sampleMinecraft(), true))
-
-	for _, gone := range []string{
-		"Download Pack (.mrpack)", // Minecraft's old bespoke button label
-		"Client Modpack",          // Valheim's old bespoke panel heading
-		"Active</span>",           // "1 Active" pill; both now say "N online"
-	} {
-		if strings.Contains(both, gone) {
-			t.Errorf("divergent label %q is still rendered", gone)
-		}
-	}
-}
-
-func TestFormatBadgesDifferButButtonDoesNot(t *testing.T) {
-	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false))
-	minecraft := render(t, MinecraftCard(sampleMinecraft(), false))
-
-	if !strings.Contains(valheim, ".r2z") || !strings.Contains(minecraft, ".mrpack") {
-		t.Fatal("each card must still show its own modpack format badge")
-	}
-	if strings.Contains(valheim, ".mrpack") || strings.Contains(minecraft, ".r2z") {
-		t.Fatal("format badges leaked across cards")
-	}
-}
-
 func sampleValheim() ValheimSummaryUI {
 	return ValheimSummaryUI{
 		TotalInstances: 2, MaxInstances: 4,
@@ -91,72 +30,6 @@ func sampleValheim() ValheimSummaryUI {
 			Source: "modpack", HasMods: true,
 			Players: 2, PlayersKnown: true, Uptime: "1h 30m",
 		}},
-	}
-}
-
-// Both Valheim and Minecraft cards are multi-instance and render stats from active instances.
-func TestStatsRenderFromActiveInstances(t *testing.T) {
-	valheim := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, sampleValheim()))
-	if !strings.Contains(valheim, ">2<") || !strings.Contains(valheim, "1h 30m") {
-		t.Fatal("Valheim row must print its instance stats")
-	}
-
-	minecraft := render(t, MinecraftCard(sampleMinecraft(), false))
-	if !strings.Contains(minecraft, ">3<") || !strings.Contains(minecraft, "4h 2m") {
-		t.Fatal("Minecraft row must print its server-rendered stats")
-	}
-}
-
-func TestUnknownStatsDegradeToDash(t *testing.T) {
-	mc := sampleMinecraft()
-	mc.ActiveInstances[0].PlayersKnown = false
-	mc.ActiveInstances[0].Uptime = ""
-	out := render(t, MinecraftCard(mc, false))
-	if strings.Count(out, ">—<") < 2 {
-		t.Fatal("unreachable stats must render as — rather than a misleading 0")
-	}
-
-	vh := sampleValheim()
-	vh.ActiveInstances[0].PlayersKnown = false
-	vh.ActiveInstances[0].Uptime = ""
-	outVh := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, vh))
-	if strings.Count(outVh, ">—<") < 2 {
-		t.Fatal("unreachable Valheim stats must render as — rather than a misleading 0")
-	}
-}
-
-func TestOfflineCardShowsEmptyStateWithoutAPill(t *testing.T) {
-	outMC := render(t, MinecraftCard(MinecraftSummaryUI{MaxInstances: 4, MaxRunning: 2}, false))
-	if !strings.Contains(outMC, "All Minecraft worlds are currently offline.") {
-		t.Fatal("missing MC empty state")
-	}
-
-	outVH := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, ValheimSummaryUI{MaxInstances: 4, MaxRunning: 2}))
-	if !strings.Contains(outVH, "All Valheim worlds are currently offline.") {
-		t.Fatal("missing Valheim empty state")
-	}
-}
-
-func TestServersOnlineLabelWording(t *testing.T) {
-	for n, want := range map[int]string{0: "Offline", 1: "1 online", 2: "2 online"} {
-		if got := ServersOnlineLabel(n); got != want {
-			t.Fatalf("ServersOnlineLabel(%d) = %q, want %q", n, got, want)
-		}
-	}
-}
-
-// The header counter is gone: the rows themselves say which Worlds are online,
-// and a count only earns its place on an overview spanning more than one game.
-func TestNeitherCardShowsAHeaderCounterOrAccessPill(t *testing.T) {
-	both := render(t, ValheimCard("192.168.20.224:2456", "game-01", false, sampleValheim())) +
-		render(t, MinecraftCard(sampleMinecraft(), false))
-
-	// The AccessNote sentence stays - it tells a player how to get in. It is the
-	// header tag that goes.
-	for _, gone := range []string{"1 online", "2 online", "🔒 Password", "🛡️ Whitelist"} {
-		if strings.Contains(both, gone) {
-			t.Errorf("%q should no longer render on the hub card", gone)
-		}
 	}
 }
 

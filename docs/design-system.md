@@ -72,10 +72,17 @@ The system is being adopted page by page. These templates are migrated and are
 checked by the ratchet:
 
 - `dashboard.templ` — the branch between the two landing views
-- `manager.templ` — the per-game manager (Valheim so far)
+- `manager.templ` — the per-game managers (Valheim, Minecraft, Garry's Mod)
+- `instance.templ` — the per-instance shell: breadcrumb, state, tabs, overview, console
+- `gmod_instance.templ` — fully migrated; its three tabs are all shared ones
+- `incident.templ`, `incidents.templ` — the last-failure panel and the crash backlog
+- `log_pane.templ`, `host_banner.templ` — the shared log viewer and the unreachable-Host banner
 - `nav_hearth.templ` — the signed-in navigation
 - `panel.templ` — the public landing panel and the admin hub
 
 `layout.templ` holds both shells and keeps `zinc` for `Layout` until the last
-legacy page is gone. The `.md` block at the top of `input.css` styles rendered
+legacy page is gone. Still unmigrated: the Mods, Configs, Backups and Settings tab bodies inside
+`valheim_instance.templ` and `mc_instance.templ` (their shells and shared tabs
+are done), both create wizards, and `history`, `accounts`, `requests` and
+`admins`. The `.md` block at the top of `input.css` styles rendered
 README markdown and still carries its own greys; it migrates with the mod pages.

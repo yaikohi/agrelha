@@ -2,27 +2,22 @@ package pages
 
 templ LogPane(id, placeholder string) {
 	<div data-log-pane-wrap class="space-y-2">
-		<div class="flex items-center justify-end gap-2">
-			<span
-				data-log-status
-				class="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-zinc-400"
-			>
-				Following
-			</span>
+		<div class="flex items-center justify-end gap-3 font-pixel text-[11px]">
+			<span data-log-status class="text-ink-faint">Following</span>
 			<button
 				type="button"
 				data-log-jump
-				class="hidden items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-200 transition hover:bg-zinc-700 hover:text-white"
+				class="focus-accent hidden items-center rounded-control border border-edge px-2.5 py-1 text-ink-muted transition-colors hover:border-accent hover:text-accent"
 			>
-				Jump to newest &darr;
+				Jump to newest
 			</button>
 		</div>
 		<div
 			id={ id }
 			data-log-pane
-			class="h-96 w-full space-y-1 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-relaxed text-zinc-300 shadow-inner"
+			class="h-96 w-full space-y-1 overflow-y-auto rounded-control border border-seam bg-seam p-4 font-pixel text-[11px] leading-relaxed text-ink-muted"
 		>
-			<p class="text-zinc-500">{ placeholder }</p>
+			<p class="text-ink-faint">{ placeholder }</p>
 		</div>
 	</div>
 }

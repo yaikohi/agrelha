@@ -1,0 +1,127 @@
+package pages
+
+templ instancePage(spec instanceSpec, d InstanceDetailUI) {
+	@LayoutHearth(d.Name + " · " + spec.label) {
+		@hearthNav(spec.game, d.IsAdmin, true, "")
+		if d.HostUnreachable {
+			@HostUnreachableBanner(d.Host)
+		}
+		@instanceHead(buildInstanceHead(spec, d))
+		{ children... }
+		@panelColophon()
+	}
+}
+
+templ instanceHead(h InstanceHeadUI) {
+	<header class="mt-8">
+		<div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+			<div class="min-w-0">
+				<p class="flex flex-wrap items-baseline gap-2 font-pixel text-[11px]">
+					<a href={ templ.SafeURL("/" + h.Game) } class={ "focus-accent transition-colors hover:text-accent " + h.Tint }>{ h.GameLabel }</a>
+					<span class="text-edge">/</span>
+					<span class="text-ink-faint">{ h.Slot }</span>
+				</p>
+				<h1 class="mt-0.5 font-display text-3xl font-semibold tracking-tight text-ink">{ h.Name }</h1>
+				<p class="mt-2 flex flex-wrap items-center gap-2 font-pixel text-xs text-ink-muted">
+					<span class={ h.Lamp }></span>
+					<span>{ h.StateLabel }</span>
+					if h.Presence != "" {
+						<span class="text-ink-faint">{ h.Presence }</span>
+					}
+				</p>
+			</div>
+			<div class="flex flex-wrap items-center gap-2">
+				if h.Blocked != "" {
+					<span class="max-w-xs font-pixel text-[11px] text-ink-faint">{ h.Blocked }</span>
+				}
+				for _, a := range h.Actions {
+					<button type="button" data-on:click={ a.Script } class={ "focus-accent rounded-control px-3 py-1.5 font-pixel text-xs transition-colors " + instanceActionStyle(a.Kind) }>{ a.Label }</button>
+				}
+			</div>
+		</div>
+		<nav class="-mx-6 mt-7 flex flex-wrap items-end gap-x-6 gap-y-2 border-b border-seam px-6 font-pixel text-xs">
+			for _, t := range h.Tabs {
+				<a href={ templ.SafeURL(t.Href) } class={ hearthTabClass(t.Active) }>{ t.Label }</a>
+			}
+		</nav>
+	</header>
+}
+
+templ instanceOverview(o InstanceOverviewUI) {
+	<div class="mt-8 space-y-8">
+		for _, n := range o.Notices {
+			<div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+				<div class="min-w-0">
+					<p class="font-pixel text-[11px] text-accent">{ n.Label }</p>
+					<p class="mt-1 max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ n.Body }</p>
+					if n.Note != "" {
+						<p class="mt-1 font-pixel text-[11px] text-ink-faint">{ n.Note }</p>
+					}
+				</div>
+				if n.Action != nil {
+					<button type="button" data-on:click={ n.Action.Script } class="focus-accent shrink-0 rounded-control border border-accent px-3 py-1.5 font-pixel text-xs text-accent transition-colors hover:bg-accent hover:text-accent-ink">{ n.Action.Label }</button>
+				}
+			</div>
+		}
+		<div>
+			<button
+				type="button"
+				data-signals={ o.CopyInit() }
+				data-on:click={ o.CopyClick() }
+				class="focus-accent group block max-w-full text-left"
+			>
+				<span class="block truncate font-pixel text-[22px] leading-none text-ink transition-colors group-hover:text-accent sm:text-[30px]">{ o.Address }</span>
+				<span class="mt-2 block font-pixel text-[11px] text-ink-muted transition-colors group-hover:text-accent" data-text={ o.CopyLabelExpr() }>click to copy</span>
+			</button>
+			if o.Password != "" {
+				<p class="mt-3 font-pixel text-xs text-ink-muted">
+					password <span class="text-ink">{ o.Password }</span>
+				</p>
+			} else {
+				<p class="mt-3 font-pixel text-xs text-ink-faint">no password — anyone on the network can join</p>
+			}
+		</div>
+		if len(o.Actions) > 0 || o.JoinHint != "" {
+			<div class="space-y-3">
+				if len(o.Actions) > 0 {
+					<div class="flex flex-wrap items-center gap-2">
+						for _, a := range o.Actions {
+							@overviewAction(a)
+						}
+					</div>
+				}
+				if o.JoinHint != "" {
+					<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ o.JoinHint }</p>
+				}
+			</div>
+		}
+		<dl class="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-3">
+			for _, f := range o.Facts {
+				<div>
+					<dt class="font-pixel text-[11px] text-ink-faint">{ f.Label }</dt>
+					<dd class="mt-1 font-pixel text-sm text-ink">{ f.Value }</dd>
+					if f.Note != "" {
+						<dd class="font-pixel text-[11px] text-ink-faint">{ f.Note }</dd>
+					}
+				</div>
+			}
+		</dl>
+	</div>
+}
+
+templ instanceConsole(game string, num int, note string, placeholder string) {
+	<div class="mt-8 space-y-4" data-effect={ logStreamExpr(game, num) }>
+		<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ note }</p>
+		@LogPane("console-logs", placeholder)
+	</div>
+}
+
+templ overviewAction(a ActionUI) {
+	if a.Kind == "download" {
+		<a href={ templ.SafeURL(a.Href) } download class="focus-accent rounded-control border border-accent px-3 py-1.5 font-pixel text-xs text-accent transition-colors hover:bg-accent hover:text-accent-ink">{ a.Label }</a>
+	} else if a.Href != "" {
+		<a href={ templ.SafeURL(a.Href) } class="focus-accent rounded-control border border-accent px-3 py-1.5 font-pixel text-xs text-accent transition-colors hover:bg-accent hover:text-accent-ink">{ a.Label }</a>
+	} else {
+		<button type="button" data-on:click={ a.Script } class="focus-accent rounded-control border border-edge px-3 py-1.5 font-pixel text-xs text-ink-muted transition-colors hover:border-accent hover:text-accent">{ a.Label }</button>
+	}
+}

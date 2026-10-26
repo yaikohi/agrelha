@@ -2,690 +2,506 @@ package pages
 
 import (
 	"fmt"
-	"agrelha/internal/web/components"
+
 	"agrelha/internal/web/shared"
 )
 
 templ MinecraftInstanceDetail(d InstanceDetailUI) {
-	@Layout(d.Name + " · Minecraft") {
-		@nav(d.IsAdmin, true)
-		<div class="space-y-6">
-			if d.HostUnreachable {
-				@HostUnreachableBanner(d.Host)
-			}
-			<!-- Breadcrumb & Top Bar -->
-			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-				<div>
-					<div class="flex items-center gap-2 text-xs text-zinc-500">
-						<a href="/minecraft" class="hover:text-zinc-300">Minecraft</a>
-						<span>/</span>
-						<span class="font-mono text-zinc-400">{ fmt.Sprintf("#%02d", d.Number) }</span>
-						<span>/</span>
-						<span class="font-semibold text-zinc-200">{ d.Name }</span>
-					</div>
-					<div class="mt-1 flex items-center gap-3">
-						<h1 class="text-xl font-bold text-zinc-100">{ d.Name }</h1>
-						@components.StatusPill(components.StatusPillProps{State: d.State, HostUnreachable: d.HostUnreachable, HostUnknown: d.HostUnknown})
-					</div>
-				</div>
-
-				<!-- Header quick controls -->
-				<div class="flex items-center gap-2">
-					if d.HostUnreachable {
-						<span class="text-xs text-rose-300/80">Lifecycle controls unavailable</span>
-					} else if d.State == "running" {
-						@components.Button(components.ButtonProps{
-							Variant: components.VariantWarning,
-							Size:    components.SizeSm,
-							OnClick: fmt.Sprintf("@post('/api/minecraft/instances/%d/stop')", d.Number),
-							Text:    "Stop Server",
-						})
-						@components.Button(components.ButtonProps{
-							Variant: components.VariantSecondary,
-							Size:    components.SizeSm,
-							OnClick: fmt.Sprintf("@post('/api/minecraft/instances/%d/restart')", d.Number),
-							Text:    "Restart",
-						})
-					} else {
-						@components.Button(components.ButtonProps{
-							Variant: components.VariantSuccess,
-							Size:    components.SizeSm,
-							OnClick: fmt.Sprintf("@post('/api/minecraft/instances/%d/start')", d.Number),
-							Text:    "Start Server",
-						})
-					}
-				</div>
-			</div>
-
-			<!-- Tabs Navigation -->
-			@components.TabBar(components.TabBarProps{
-				Tabs: InstanceTabs("minecraft", d.Number, d.ActiveTab, d.Vanilla),
-			})
-
-			<!-- TAB 1: OVERVIEW -->
-			if d.ActiveTab == "overview" {
-				<div class="space-y-6">
-					@IncidentPanel(d.LastIncident)
-					<!-- Connection address hero banner -->
-					<div class="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 sm:flex-row sm:items-center sm:justify-between">
-						<div>
-							<span class="text-xs font-medium text-zinc-400 uppercase tracking-wider">Server Connection</span>
-							<div class="mt-1 flex items-center gap-3">
-								<code class="font-mono text-lg font-bold text-white">{ ConnectAddress(d.LBIP, MinecraftPort(d.InstanceUI)) }</code>
-								<button
-									type="button"
-									data-on:click={ fmt.Sprintf("navigator.clipboard.writeText('%s:%d')", d.LBIP, MinecraftPort(d.InstanceUI)) }
-									class="rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1 text-[11px] text-zinc-300 hover:bg-zinc-700 hover:text-white"
-								>
-									Copy
-								</button>
-							</div>
-						</div>
-						<div class="flex items-center gap-2">
-							if d.Pack != "" && d.PackRef != "" {
-								<a
-									href={ templ.SafeURL(d.PackRef) }
-									target="_blank"
-									rel="noopener noreferrer"
-									class="rounded-xl border border-purple-700/80 bg-purple-900/60 px-4 py-2 text-xs font-medium text-purple-200 hover:bg-purple-800 hover:text-white"
-								>
-									CurseForge Page ↗
-								</a>
-							} else if d.Source != "vanilla" {
-								<a
-									href={ templ.SafeURL(fmt.Sprintf("/api/minecraft/%d/mods/export", d.Number)) }
-									class="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
-								>
-									Download Prism .mrpack
-								</a>
-							}
-						</div>
-					</div>
-
-					if d.Pack != "" {
-						<div class="rounded-2xl border border-purple-800/40 bg-purple-950/20 p-5">
-							<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-								<div>
-									<span class="text-xs font-semibold text-purple-300 uppercase tracking-wider">How to join with friends</span>
-									<p class="mt-1 text-xs text-purple-200/90 leading-relaxed">
-										This world runs the <strong>{ d.Pack }</strong> modpack. Players can install it directly in <strong>Prism Launcher</strong> (Add Instance → CurseForge tab → search <code class="rounded bg-purple-900/60 px-1.5 py-0.5 font-mono text-purple-100">{ d.Pack }</code>) or the <strong>CurseForge App</strong>.
-									</p>
-								</div>
-								if d.PackRef != "" {
-									<a
-										href={ templ.SafeURL(d.PackRef) }
-										target="_blank"
-										rel="noopener noreferrer"
-										class="shrink-0 rounded-xl bg-purple-800 px-4 py-2 text-xs font-medium text-white hover:bg-purple-700"
-									>
-										View Pack ↗
-									</a>
-								}
-							</div>
-						</div>
-					}
-
-					<!-- Details Grid -->
-					<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-						<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-							<span class="text-xs text-zinc-500">Engine / Loader</span>
-							<p class="mt-1 text-base font-semibold text-zinc-100 uppercase">{ d.Loader }</p>
-							<p class="text-xs font-mono text-zinc-400">Minecraft { d.MCVersion }</p>
-						</div>
-
-						<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-							<span class="text-xs text-zinc-500">Resource Tier</span>
-							<p class="mt-1 text-base font-semibold text-zinc-100 capitalize">{ d.Tier }</p>
-							<p class="text-xs text-zinc-400">{ fmt.Sprintf("%d GiB RAM limit", d.MemoryGiB) }</p>
-						</div>
-
-						<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-							<span class="text-xs text-zinc-500">Content Source</span>
-							<p class="mt-1 text-base font-semibold text-zinc-100 capitalize">{ d.Source }</p>
-							if d.Pack != "" {
-								<p class="truncate text-xs text-purple-300">{ d.Pack }</p>
-							} else {
-								<p class="text-xs text-zinc-400">{ fmt.Sprintf("%d installed mods", len(d.InstalledMods)) }</p>
-							}
-						</div>
-					</div>
-
-					if d.MOTD != "" {
-						<div class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-							<span class="text-xs text-zinc-500">MOTD Banner:</span>
-							<p class="mt-1 font-mono text-xs text-zinc-300">{ d.MOTD }</p>
-						</div>
-					}
-				</div>
-			}
-
-			<!-- TAB 2: MODS -->
-			if d.ActiveTab == "mods" {
-				<div class="space-y-6" data-signals="{addslug:'',modQuery:'',modSearchLoading:false}">
-					if !d.PackDefined() {
-						<!-- Adding a mod is not "changing what the Instance runs" (CONTEXT.md),
-						     so it must not require recreating the Instance. Pack-defined
-						     Instances are excluded: the Pack manages their mod set. -->
-						<form
-							class="flex flex-wrap items-end gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
-							data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/mods/install', {payload: {slug: $addslug}}); $addslug = ''", d.Number) }
-						>
-							<div class="min-w-0 flex-1">
-								<label class="block text-xs font-medium text-zinc-300">Search &amp; install mods</label>
-								<input
-									type="text"
-									data-bind="modQuery"
-									data-on:keydown={ fmt.Sprintf("if (evt.key === 'Enter') { evt.preventDefault(); @post('/api/minecraft/%d/mods/search', {payload: {modQuery: $modQuery}}) }", d.Number) }
-									placeholder="Search Modrinth by name, e.g. sodium, journeymap, create"
-									class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-								/>
-								<p class="mt-1 text-[11px] text-zinc-500">
-									Results are filtered to this instance&#39;s Minecraft version. Required dependencies are resolved automatically.
-								</p>
-							</div>
-							<button
-								type="button"
-								data-indicator="modSearchLoading"
-								data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/mods/search', {payload: {modQuery: $modQuery}})", d.Number) }
-								class="rounded-xl bg-zinc-100 px-4 py-2 text-xs font-semibold text-zinc-950 hover:bg-white"
-							>
-								<span data-show="!$modSearchLoading">Search</span>
-								<span data-show="$modSearchLoading" class="animate-pulse">Searching…</span>
-							</button>
-						</form>
-						<div id="mc-mod-results" class="grid grid-cols-1 gap-2 lg:grid-cols-2">
-							<p class="col-span-full py-6 text-center text-xs text-zinc-500">Search Modrinth to find mods by name.</p>
-						</div>
-						<details class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-							<summary class="cursor-pointer text-xs text-zinc-500 hover:text-zinc-300">Or install by exact Modrinth slug…</summary>
-							<form
-								class="mt-3 flex flex-wrap items-end gap-2"
-								data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/mods/install', {payload: {slug: $addslug}}); $addslug = ''", d.Number) }
-							>
-								<input
-									type="text"
-									data-bind="addslug"
-									placeholder="e.g. sodium or journeymap"
-									class="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-xs text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-								/>
-								<button
-									type="submit"
-									class="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
-								>Install</button>
-							</form>
-						</details>
-					}
-					if !d.PackDefined() {
-						<div id="mod-updates-panel">
-							@ModUpdatePanel(d)
-						</div>
-					}
-					<div class="flex items-center justify-between">
-						<div>
-							<h2 class="text-base font-semibold text-zinc-100">Installed Mods</h2>
-							<p class="mt-0.5 text-xs text-zinc-400">
-								if d.Pack != "" {
-									{ fmt.Sprintf("CurseForge modpack %s automatically manages its mod collection.", d.Pack) }
-								} else {
-									{ fmt.Sprintf("%d mods configured in mods.txt", len(d.InstalledMods)) }
-								}
-							</p>
-						</div>
-						if d.Pack != "" && d.PackRef != "" {
-							<a
-								href={ templ.SafeURL(d.PackRef) }
-								target="_blank"
-								rel="noopener noreferrer"
-								class="rounded-lg bg-purple-800 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-purple-700"
-							>
-								CurseForge Pack ↗
-							</a>
-						} else if d.Source != "vanilla" {
-							<a
-								href={ templ.SafeURL(fmt.Sprintf("/api/minecraft/%d/mods/export", d.Number)) }
-								class="rounded-lg border border-zinc-700 bg-zinc-800 px-3.5 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-white"
-							>
-								Export for Prism (.mrpack)
-							</a>
-						}
-					</div>
-
-					<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 overflow-hidden">
-						if len(d.InstalledMods) == 0 {
-							<div class="p-8 text-center text-xs text-zinc-500">
-								if d.Pack != "" {
-									{ fmt.Sprintf("Mods for %s are downloaded automatically on container launch from CurseForge.", d.Pack) }
-								} else {
-									No mods installed in this world.
-								}
-							</div>
-						} else {
-							<table class="w-full text-left text-xs">
-								<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400">
-									<tr>
-										<th class="px-4 py-2.5 font-medium">Mod Slug</th>
-										<th class="px-4 py-2.5 font-medium text-right">Actions</th>
-									</tr>
-								</thead>
-								<tbody class="divide-y divide-zinc-800/60">
-									for _, modSlug := range d.InstalledMods {
-										<tr class="hover:bg-zinc-800/30">
-											<td class="px-4 py-2.5 font-mono text-zinc-200">{ modSlug }</td>
-											<td class="px-4 py-2.5 text-right">
-												<a
-													href={ templ.SafeURL("https://modrinth.com/mod/" + modSlug) }
-													target="_blank"
-													class="text-zinc-400 hover:text-zinc-200 mr-3"
-												>Modrinth ↗</a>
-												<button
-													type="button"
-													data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/mods/remove?slug=%s', {payload: {slug: '%s'}})", d.Number, modSlug, modSlug) }
-													class="text-red-400 hover:text-red-300"
-												>Remove</button>
-											</td>
-										</tr>
-									}
-								</tbody>
-							</table>
-						}
-					</div>
-				</div>
-			}
-
-			<!-- TAB 3: CONFIGS -->
-			if d.ActiveTab == "configs" {
-				<div
-					class="space-y-6"
-					data-signals="{selectedFile: '', fileContent: '', isNew: false, saveLoading: false, showEditor: false}"
+	@instancePage(minecraftInstanceSpec, d) {
+		if d.ActiveTab == "overview" {
+			@IncidentPanel(d.LastIncident)
+			@instanceOverview(buildInstanceOverview(minecraftInstanceSpec, d))
+		}
+		if d.ActiveTab == "console" {
+			@instanceConsole("minecraft", d.Number, shared.LogSourceNote(d.Host), "Connecting to the Minecraft container logs…")
+		}
+		if d.ActiveTab == "crashes" {
+			@IncidentList(d)
+		}
+	if d.ActiveTab == "mods" {
+		<div class="space-y-6" data-signals="{addslug:'',modQuery:'',modSearchLoading:false}">
+			if !d.PackDefined() {
+				<!-- Adding a mod is not "changing what the Instance runs" (CONTEXT.md),
+				     so it must not require recreating the Instance. Pack-defined
+				     Instances are excluded: the Pack manages their mod set. -->
+				<form
+					class="flex flex-wrap items-end gap-2 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
+					data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/mods/install', {payload: {slug: $addslug}}); $addslug = ''", d.Number) }
 				>
-					<div class="flex items-center justify-between">
-						<div>
-							<h2 class="text-base font-semibold text-zinc-100">Mod Configurations</h2>
-							<p class="mt-0.5 text-xs text-zinc-400">Custom .toml, .json, .yaml, and .cfg files synced to /data/config on startup.</p>
-						</div>
-						<button
-							type="button"
-							data-on:click="$selectedFile = ''; $fileContent = ''; $isNew = true; $showEditor = true"
-							class="rounded-lg bg-zinc-100 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white"
-						>
-							+ New Config File
-						</button>
+					<div class="min-w-0 flex-1">
+						<label class="block text-xs font-medium text-zinc-300">Search &amp; install mods</label>
+						<input
+							type="text"
+							data-bind="modQuery"
+							data-on:keydown={ fmt.Sprintf("if (evt.key === 'Enter') { evt.preventDefault(); @post('/api/minecraft/%d/mods/search', {payload: {modQuery: $modQuery}}) }", d.Number) }
+							placeholder="Search Modrinth by name, e.g. sodium, journeymap, create"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+						/>
+						<p class="mt-1 text-[11px] text-zinc-500">
+							Results are filtered to this instance&#39;s Minecraft version. Required dependencies are resolved automatically.
+						</p>
 					</div>
-
-					<!-- Config Editor Modal / Panel -->
-					<div data-show="$showEditor" class="rounded-xl border border-zinc-800 bg-zinc-900/95 p-5 space-y-4 shadow-xl">
-						<div class="flex items-center justify-between border-b border-zinc-800 pb-3">
-							<h3 class="text-sm font-semibold text-zinc-200">
-								<span data-show="$isNew">Create New Config File</span>
-								<span data-show="!$isNew">Editing: <code class="font-mono text-zinc-300 font-semibold" data-text="$selectedFile"></code></span>
-							</h3>
-							<button
-								type="button"
-								data-on:click="$showEditor = false"
-								class="text-xs text-zinc-400 hover:text-zinc-200"
-							>
-								✕ Close
-							</button>
-						</div>
-
-						<div data-show="$isNew">
-							<label class="block text-xs font-medium text-zinc-300">File Name (.toml, .json, .yaml, .cfg, .snbt)</label>
-							<input
-								type="text"
-								data-bind="selectedFile"
-								placeholder="e.g. jei-client.ini, fabric-server.toml, config.json"
-								class="mt-1 w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-mono text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-							/>
-						</div>
-
-						<div>
-							<label class="block text-xs font-medium text-zinc-300">File Contents</label>
-							<textarea
-								data-bind="fileContent"
-								rows="16"
-								spellcheck="false"
-								placeholder="# Paste or type config contents here..."
-								class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs text-zinc-200 placeholder-zinc-600 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none leading-relaxed"
-							></textarea>
-						</div>
-
-						<div class="flex items-center justify-between pt-2">
-							<button
-								type="button"
-								data-on:click="$showEditor = false"
-								class="rounded-lg border border-zinc-700 px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-800"
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								data-indicator="saveLoading"
-								data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/configs/save', {payload: {file: $selectedFile, content: $fileContent}})", d.Number) }
-								class="rounded-lg bg-zinc-100 px-5 py-2 text-xs font-semibold text-zinc-950 shadow-md hover:bg-white"
-							>
-								<span data-show="!$saveLoading">Save & Apply on Restart</span>
-								<span data-show="$saveLoading" class="animate-pulse">Saving...</span>
-							</button>
-						</div>
-					</div>
-
-					<!-- Config Files List -->
-					<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 overflow-hidden">
-						if len(d.ConfigFiles) == 0 {
-							<div class="p-8 text-center text-xs text-zinc-500">
-								No custom mod configs configured for this world yet. Mods use default configurations.
-							</div>
-						} else {
-							<table class="w-full text-left text-xs">
-								<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400">
-									<tr>
-										<th class="px-4 py-2.5 font-medium">Config File</th>
-										<th class="px-4 py-2.5 font-medium text-right">Actions</th>
-									</tr>
-								</thead>
-								<tbody class="divide-y divide-zinc-800/60">
-									for _, cfgFile := range d.ConfigFiles {
-										<tr class="hover:bg-zinc-800/30">
-											<td class="px-4 py-2.5 font-mono text-zinc-200">{ cfgFile }</td>
-											<td class="px-4 py-2.5 text-right space-x-2">
-												<button
-													type="button"
-													data-on:click={ fmt.Sprintf("@get('/api/minecraft/%d/configs/file?f=%s')", d.Number, cfgFile) }
-													class="rounded bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-white"
-												>
-													Edit
-												</button>
-												<button
-													type="button"
-													data-on:click={ fmt.Sprintf("if (confirm('Delete %s?')) { @post('/api/minecraft/%d/configs/delete?file=%s', {payload: {file: '%s'}})", cfgFile, d.Number, cfgFile, cfgFile) }
-													class="rounded bg-red-950/50 px-2.5 py-1 text-xs text-red-400 hover:bg-red-900/80 hover:text-red-200"
-												>
-													Delete
-												</button>
-											</td>
-										</tr>
-									}
-								</tbody>
-							</table>
-						}
-					</div>
+					<button
+						type="button"
+						data-indicator="modSearchLoading"
+						data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/mods/search', {payload: {modQuery: $modQuery}})", d.Number) }
+						class="rounded-xl bg-zinc-100 px-4 py-2 text-xs font-semibold text-zinc-950 hover:bg-white"
+					>
+						<span data-show="!$modSearchLoading">Search</span>
+						<span data-show="$modSearchLoading" class="animate-pulse">Searching…</span>
+					</button>
+				</form>
+				<div id="mc-mod-results" class="grid grid-cols-1 gap-2 lg:grid-cols-2">
+					<p class="col-span-full py-6 text-center text-xs text-zinc-500">Search Modrinth to find mods by name.</p>
 				</div>
-			}
-
-			<!-- TAB 3: CONSOLE & LOGS -->
-			if d.ActiveTab == "console" {
-				<div
-					class="space-y-4"
-					data-signals={ fmt.Sprintf("{cmd:'',logs:''}") }
-					data-effect={ fmt.Sprintf("@get('/api/minecraft/%d/logs/stream')", d.Number) }
-				>
-					<div class="flex items-center justify-between">
-						<div>
-							<h2 class="text-base font-semibold text-zinc-100">Live Console & Logs</h2>
-							<p class="mt-0.5 text-xs text-zinc-400">{ shared.LogSourceNote(d.Host) + " + RCON execution" }</p>
-						</div>
-					</div>
-
-					@LogPane("console-logs", "Connected to container logs…")
-
-					<!-- Command input bar -->
+				<details class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+					<summary class="cursor-pointer text-xs text-zinc-500 hover:text-zinc-300">Or install by exact Modrinth slug…</summary>
 					<form
-						class="flex gap-2"
-						data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/rcon', {payload: {cmd: $cmd}}); $cmd = ''", d.Number) }
+						class="mt-3 flex flex-wrap items-end gap-2"
+						data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/mods/install', {payload: {slug: $addslug}}); $addslug = ''", d.Number) }
 					>
 						<input
 							type="text"
-							data-bind="cmd"
-							placeholder="Type an RCON command (e.g. /time set day, /weather clear, /whitelist list)..."
-							class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 font-mono text-xs text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+							data-bind="addslug"
+							placeholder="e.g. sodium or journeymap"
+							class="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-xs text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
 						/>
 						<button
 							type="submit"
-							class="rounded-xl bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 hover:bg-white"
-						>
-							Execute
-						</button>
+							class="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
+						>Install</button>
 					</form>
+				</details>
+			}
+			if !d.PackDefined() {
+				<div id="mod-updates-panel">
+					@ModUpdatePanel(d)
 				</div>
 			}
+			<div class="flex items-center justify-between">
+				<div>
+					<h2 class="text-base font-semibold text-zinc-100">Installed Mods</h2>
+					<p class="mt-0.5 text-xs text-zinc-400">
+						if d.Pack != "" {
+							{ fmt.Sprintf("CurseForge modpack %s automatically manages its mod collection.", d.Pack) }
+						} else {
+							{ fmt.Sprintf("%d mods configured in mods.txt", len(d.InstalledMods)) }
+						}
+					</p>
+				</div>
+				if d.Pack != "" && d.PackRef != "" {
+					<a
+						href={ templ.SafeURL(d.PackRef) }
+						target="_blank"
+						rel="noopener noreferrer"
+						class="rounded-lg bg-purple-800 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-purple-700"
+					>
+						CurseForge Pack ↗
+					</a>
+				} else if d.Source != "vanilla" {
+					<a
+						href={ templ.SafeURL(fmt.Sprintf("/api/minecraft/%d/mods/export", d.Number)) }
+						class="rounded-lg border border-zinc-700 bg-zinc-800 px-3.5 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 hover:text-white"
+					>
+						Export for Prism (.mrpack)
+					</a>
+				}
+			</div>
 
-			<!-- TAB 4: BACKUPS -->
-			if d.ActiveTab == "crashes" {
-				@IncidentList(d)
-			}
-
-			if d.ActiveTab == "backups" {
-				<div
-					class="space-y-6"
-					data-signals="{restoreModalOpen: false, selectedArchive: '', newWorldName: '', newWorldTier: 'medium'}"
-				>
-					<div class="flex items-center justify-between">
-						<div>
-							<h2 class="text-base font-semibold text-zinc-100">World Backups (NAS)</h2>
-							<p class="mt-0.5 text-xs text-zinc-400">Backups are stored on the redundant TrueNAS NFS share. Daily auto-backup runs at 04:00 AM UTC.</p>
-						</div>
-						<button
-							type="button"
-							data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/backups/create')", d.Number) }
-							class="rounded-lg bg-zinc-100 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white shadow-sm"
-						>
-							+ Create Backup Now
-						</button>
+			<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 overflow-hidden">
+				if len(d.InstalledMods) == 0 {
+					<div class="p-8 text-center text-xs text-zinc-500">
+						if d.Pack != "" {
+							{ fmt.Sprintf("Mods for %s are downloaded automatically on container launch from CurseForge.", d.Pack) }
+						} else {
+							No mods installed in this world.
+						}
 					</div>
+				} else {
+					<table class="w-full text-left text-xs">
+						<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400">
+							<tr>
+								<th class="px-4 py-2.5 font-medium">Mod Slug</th>
+								<th class="px-4 py-2.5 font-medium text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-zinc-800/60">
+							for _, modSlug := range d.InstalledMods {
+								<tr class="hover:bg-zinc-800/30">
+									<td class="px-4 py-2.5 font-mono text-zinc-200">{ modSlug }</td>
+									<td class="px-4 py-2.5 text-right">
+										<a
+											href={ templ.SafeURL("https://modrinth.com/mod/" + modSlug) }
+											target="_blank"
+											class="text-zinc-400 hover:text-zinc-200 mr-3"
+										>Modrinth ↗</a>
+										<button
+											type="button"
+											data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/mods/remove?slug=%s', {payload: {slug: '%s'}})", d.Number, modSlug, modSlug) }
+											class="text-red-400 hover:text-red-300"
+										>Remove</button>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				}
+			</div>
+		</div>
+	}
 
-					<!-- Restore as New World Modal -->
-					<div data-show="$restoreModalOpen" class="rounded-xl border border-zinc-800 bg-zinc-900/95 p-6 shadow-2xl space-y-4 max-w-xl">
-						<div class="flex items-center justify-between border-b border-zinc-800 pb-3">
-							<h3 class="text-sm font-semibold text-zinc-100">Restore as New World</h3>
-							<button type="button" data-on:click="$restoreModalOpen = false" class="text-xs text-zinc-400 hover:text-white">✕</button>
-						</div>
-						<div class="text-xs text-zinc-400">
-							Restoring snapshot: <code class="font-mono text-zinc-300 font-semibold" data-text="$selectedArchive"></code>
-						</div>
-						<div>
-							<label class="block text-xs font-medium text-zinc-300">New World Name</label>
+	<!-- TAB 3: CONFIGS -->
+	if d.ActiveTab == "configs" {
+		<div
+			class="space-y-6"
+			data-signals="{selectedFile: '', fileContent: '', isNew: false, saveLoading: false, showEditor: false}"
+		>
+			<div class="flex items-center justify-between">
+				<div>
+					<h2 class="text-base font-semibold text-zinc-100">Mod Configurations</h2>
+					<p class="mt-0.5 text-xs text-zinc-400">Custom .toml, .json, .yaml, and .cfg files synced to /data/config on startup.</p>
+				</div>
+				<button
+					type="button"
+					data-on:click="$selectedFile = ''; $fileContent = ''; $isNew = true; $showEditor = true"
+					class="rounded-lg bg-zinc-100 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white"
+				>
+					+ New Config File
+				</button>
+			</div>
+
+			<!-- Config Editor Modal / Panel -->
+			<div data-show="$showEditor" class="rounded-xl border border-zinc-800 bg-zinc-900/95 p-5 space-y-4 shadow-xl">
+				<div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+					<h3 class="text-sm font-semibold text-zinc-200">
+						<span data-show="$isNew">Create New Config File</span>
+						<span data-show="!$isNew">Editing: <code class="font-mono text-zinc-300 font-semibold" data-text="$selectedFile"></code></span>
+					</h3>
+					<button
+						type="button"
+						data-on:click="$showEditor = false"
+						class="text-xs text-zinc-400 hover:text-zinc-200"
+					>
+						✕ Close
+					</button>
+				</div>
+
+				<div data-show="$isNew">
+					<label class="block text-xs font-medium text-zinc-300">File Name (.toml, .json, .yaml, .cfg, .snbt)</label>
+					<input
+						type="text"
+						data-bind="selectedFile"
+						placeholder="e.g. jei-client.ini, fabric-server.toml, config.json"
+						class="mt-1 w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-mono text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+					/>
+				</div>
+
+				<div>
+					<label class="block text-xs font-medium text-zinc-300">File Contents</label>
+					<textarea
+						data-bind="fileContent"
+						rows="16"
+						spellcheck="false"
+						placeholder="# Paste or type config contents here..."
+						class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs text-zinc-200 placeholder-zinc-600 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none leading-relaxed"
+					></textarea>
+				</div>
+
+				<div class="flex items-center justify-between pt-2">
+					<button
+						type="button"
+						data-on:click="$showEditor = false"
+						class="rounded-lg border border-zinc-700 px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-800"
+					>
+						Cancel
+					</button>
+					<button
+						type="button"
+						data-indicator="saveLoading"
+						data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/configs/save', {payload: {file: $selectedFile, content: $fileContent}})", d.Number) }
+						class="rounded-lg bg-zinc-100 px-5 py-2 text-xs font-semibold text-zinc-950 shadow-md hover:bg-white"
+					>
+						<span data-show="!$saveLoading">Save & Apply on Restart</span>
+						<span data-show="$saveLoading" class="animate-pulse">Saving...</span>
+					</button>
+				</div>
+			</div>
+
+			<!-- Config Files List -->
+			<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 overflow-hidden">
+				if len(d.ConfigFiles) == 0 {
+					<div class="p-8 text-center text-xs text-zinc-500">
+						No custom mod configs configured for this world yet. Mods use default configurations.
+					</div>
+				} else {
+					<table class="w-full text-left text-xs">
+						<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400">
+							<tr>
+								<th class="px-4 py-2.5 font-medium">Config File</th>
+								<th class="px-4 py-2.5 font-medium text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-zinc-800/60">
+							for _, cfgFile := range d.ConfigFiles {
+								<tr class="hover:bg-zinc-800/30">
+									<td class="px-4 py-2.5 font-mono text-zinc-200">{ cfgFile }</td>
+									<td class="px-4 py-2.5 text-right space-x-2">
+										<button
+											type="button"
+											data-on:click={ fmt.Sprintf("@get('/api/minecraft/%d/configs/file?f=%s')", d.Number, cfgFile) }
+											class="rounded bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-white"
+										>
+											Edit
+										</button>
+										<button
+											type="button"
+											data-on:click={ fmt.Sprintf("if (confirm('Delete %s?')) { @post('/api/minecraft/%d/configs/delete?file=%s', {payload: {file: '%s'}})", cfgFile, d.Number, cfgFile, cfgFile) }
+											class="rounded bg-red-950/50 px-2.5 py-1 text-xs text-red-400 hover:bg-red-900/80 hover:text-red-200"
+										>
+											Delete
+										</button>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				}
+			</div>
+		</div>
+	}
+
+	<!-- TAB 3: CONSOLE & LOGS -->
+	if d.ActiveTab == "backups" {
+		<div
+			class="space-y-6"
+			data-signals="{restoreModalOpen: false, selectedArchive: '', newWorldName: '', newWorldTier: 'medium'}"
+		>
+			<div class="flex items-center justify-between">
+				<div>
+					<h2 class="text-base font-semibold text-zinc-100">World Backups (NAS)</h2>
+					<p class="mt-0.5 text-xs text-zinc-400">Backups are stored on the redundant TrueNAS NFS share. Daily auto-backup runs at 04:00 AM UTC.</p>
+				</div>
+				<button
+					type="button"
+					data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/backups/create')", d.Number) }
+					class="rounded-lg bg-zinc-100 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white shadow-sm"
+				>
+					+ Create Backup Now
+				</button>
+			</div>
+
+			<!-- Restore as New World Modal -->
+			<div data-show="$restoreModalOpen" class="rounded-xl border border-zinc-800 bg-zinc-900/95 p-6 shadow-2xl space-y-4 max-w-xl">
+				<div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+					<h3 class="text-sm font-semibold text-zinc-100">Restore as New World</h3>
+					<button type="button" data-on:click="$restoreModalOpen = false" class="text-xs text-zinc-400 hover:text-white">✕</button>
+				</div>
+				<div class="text-xs text-zinc-400">
+					Restoring snapshot: <code class="font-mono text-zinc-300 font-semibold" data-text="$selectedArchive"></code>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-zinc-300">New World Name</label>
+					<input
+						type="text"
+						data-bind="newWorldName"
+						class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+						placeholder="e.g. My World Restored"
+					/>
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-zinc-300">Resource Tier</label>
+					<select
+						data-bind="newWorldTier"
+						class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+					>
+						<option value="small">Small (4 GiB)</option>
+						<option value="medium" selected>Medium (8 GiB) - Recommended</option>
+						<option value="large">Large (12 GiB)</option>
+					</select>
+				</div>
+				<div class="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+					<button
+						type="button"
+						data-on:click="$restoreModalOpen = false"
+						class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+					>
+						Cancel
+					</button>
+					<button
+						type="button"
+						data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/backups/restore-new', {payload: {archive: $selectedArchive, name: $newWorldName, tier: $newWorldTier}})", d.Number) }
+						class="rounded-lg bg-zinc-100 px-4 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white"
+					>
+						Provision & Restore World
+					</button>
+				</div>
+			</div>
+
+			<!-- Backups Table -->
+			<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 overflow-hidden">
+				if len(d.Backups) == 0 {
+					<div class="p-8 text-center text-xs text-zinc-500">
+						No backups created for this instance yet. Snapshots will appear here after manual creation or daily schedule.
+					</div>
+				} else {
+					<table class="w-full text-left text-xs">
+						<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400">
+							<tr>
+								<th class="px-4 py-2.5 font-medium">Backup File</th>
+								<th class="px-4 py-2.5 font-medium">Size</th>
+								<th class="px-4 py-2.5 font-medium">Date</th>
+								<th class="px-4 py-2.5 font-medium text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-zinc-800/60">
+							for _, b := range d.Backups {
+								<tr class="hover:bg-zinc-800/30">
+									<td class="px-4 py-2.5 font-mono text-zinc-200">{ b.Name }</td>
+									<td class="px-4 py-2.5 text-zinc-400">{ fmt.Sprintf("%.1f MB", float64(b.SizeBytes)/(1024*1024)) }</td>
+									<td class="px-4 py-2.5 text-zinc-400">{ b.CreatedAt }</td>
+									<td class="px-4 py-2.5 text-right space-x-2">
+										if d.State == "running" {
+											<button
+												type="button"
+												disabled
+												title="Stop server first to restore in-place"
+												class="cursor-not-allowed rounded bg-zinc-800/50 px-2 py-1 text-[11px] text-zinc-500"
+											>
+												Restore In-Place
+											</button>
+										} else {
+											<button
+												type="button"
+												data-on:click={ fmt.Sprintf("if (confirm('Restore %s in-place over current world data? A pre-restore safety snapshot will be created automatically.')) @post('/api/minecraft/%d/backups/restore-inplace?archive=%s', {payload: {archive: '%s'}})", b.Name, d.Number, b.Name, b.Name) }
+												class="rounded bg-amber-950/50 border border-amber-800/60 px-2 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-900/60"
+											>
+												Restore In-Place
+											</button>
+										}
+
+										<button
+											type="button"
+											data-on:click={ fmt.Sprintf("$selectedArchive = '%s'; $newWorldName = '%s (Restored)'; $newWorldTier = '%s'; $restoreModalOpen = true", b.Name, d.Name, d.Tier) }
+											class="rounded bg-zinc-800 px-2 py-1 text-[11px] font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
+										>
+											Restore as New World
+										</button>
+
+										<a
+											href={ templ.SafeURL(fmt.Sprintf("/api/minecraft/%d/backups/download?f=%s", d.Number, b.Name)) }
+											class="inline-block rounded bg-zinc-800 px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-700 hover:text-white"
+										>
+											Download
+										</a>
+
+										<button
+											type="button"
+											data-on:click={ fmt.Sprintf("if (confirm('Permanently delete backup %s from NAS?')) @post('/api/minecraft/%d/backups/delete?file=%s', {payload: {file: '%s'}})", b.Name, d.Number, b.Name, b.Name) }
+											class="rounded px-1.5 py-1 text-[11px] text-red-400 hover:bg-red-950/40 hover:text-red-300"
+										>
+											Delete
+										</button>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				}
+			</div>
+		</div>
+	}
+
+	<!-- TAB 5: SETTINGS -->
+	if d.ActiveTab == "settings" {
+		<div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-sm max-w-xl">
+			<h2 class="text-base font-semibold text-zinc-100">Instance Settings</h2>
+			<p class="mt-0.5 text-xs text-zinc-400">Update configuration parameters for this world.</p>
+
+			<form
+				class="mt-6 space-y-4"
+				data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/settings', {contentType: 'form'})", d.Number) }
+			>
+				<div>
+					<label class="block text-xs font-medium text-zinc-300">World Name</label>
+					<input
+						type="text"
+						name="name"
+						value={ d.Name }
+						required
+						class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+					/>
+				</div>
+
+				<div>
+					<label class="block text-xs font-medium text-zinc-300">MOTD Banner</label>
+					<input
+						type="text"
+						name="motd"
+						value={ d.MOTD }
+						class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+					/>
+				</div>
+
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Resource Tier</label>
+						<select
+							name="tier"
+							class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+						>
+							if d.Tier == "small" {
+								<option value="small" selected>Small (4 GiB)</option>
+							} else {
+								<option value="small">Small (4 GiB)</option>
+							}
+							if d.Tier == "medium" {
+								<option value="medium" selected>Medium (8 GiB)</option>
+							} else {
+								<option value="medium">Medium (8 GiB)</option>
+							}
+							if d.Tier == "large" {
+								<option value="large" selected>Large (12 GiB)</option>
+							} else {
+								<option value="large">Large (12 GiB)</option>
+							}
+						</select>
+					</div>
+					<div>
+						<label class="block text-xs font-medium text-zinc-300">Minecraft Version</label>
+						if d.PackDefined() {
+							<!-- The Pack decides this. Rendering it editable would offer to
+							     break the instance, so it is shown as the fact it is. -->
 							<input
 								type="text"
-								data-bind="newWorldName"
-								class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-								placeholder="e.g. My World Restored"
+								value={ d.MCVersion }
+								readonly
+								disabled
+								class="mt-1 w-full cursor-not-allowed rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-400"
 							/>
-						</div>
-						<div>
-							<label class="block text-xs font-medium text-zinc-300">Resource Tier</label>
-							<select
-								data-bind="newWorldTier"
-								class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-							>
-								<option value="small">Small (4 GiB)</option>
-								<option value="medium" selected>Medium (8 GiB) - Recommended</option>
-								<option value="large">Large (12 GiB)</option>
-							</select>
-						</div>
-						<div class="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
-							<button
-								type="button"
-								data-on:click="$restoreModalOpen = false"
-								class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								data-on:click={ fmt.Sprintf("@post('/api/minecraft/%d/backups/restore-new', {payload: {archive: $selectedArchive, name: $newWorldName, tier: $newWorldTier}})", d.Number) }
-								class="rounded-lg bg-zinc-100 px-4 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white"
-							>
-								Provision & Restore World
-							</button>
-						</div>
-					</div>
-
-					<!-- Backups Table -->
-					<div class="rounded-xl border border-zinc-800 bg-zinc-900/80 overflow-hidden">
-						if len(d.Backups) == 0 {
-							<div class="p-8 text-center text-xs text-zinc-500">
-								No backups created for this instance yet. Snapshots will appear here after manual creation or daily schedule.
-							</div>
+							<p class="mt-1 text-[11px] text-zinc-500">
+								Set by the { d.PackProvider } pack <span class="text-zinc-300">{ d.Pack }</span>. To run a different version, create a new instance.
+							</p>
 						} else {
-							<table class="w-full text-left text-xs">
-								<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400">
-									<tr>
-										<th class="px-4 py-2.5 font-medium">Backup File</th>
-										<th class="px-4 py-2.5 font-medium">Size</th>
-										<th class="px-4 py-2.5 font-medium">Date</th>
-										<th class="px-4 py-2.5 font-medium text-right">Actions</th>
-									</tr>
-								</thead>
-								<tbody class="divide-y divide-zinc-800/60">
-									for _, b := range d.Backups {
-										<tr class="hover:bg-zinc-800/30">
-											<td class="px-4 py-2.5 font-mono text-zinc-200">{ b.Name }</td>
-											<td class="px-4 py-2.5 text-zinc-400">{ fmt.Sprintf("%.1f MB", float64(b.SizeBytes)/(1024*1024)) }</td>
-											<td class="px-4 py-2.5 text-zinc-400">{ b.CreatedAt }</td>
-											<td class="px-4 py-2.5 text-right space-x-2">
-												if d.State == "running" {
-													<button
-														type="button"
-														disabled
-														title="Stop server first to restore in-place"
-														class="cursor-not-allowed rounded bg-zinc-800/50 px-2 py-1 text-[11px] text-zinc-500"
-													>
-														Restore In-Place
-													</button>
-												} else {
-													<button
-														type="button"
-														data-on:click={ fmt.Sprintf("if (confirm('Restore %s in-place over current world data? A pre-restore safety snapshot will be created automatically.')) @post('/api/minecraft/%d/backups/restore-inplace?archive=%s', {payload: {archive: '%s'}})", b.Name, d.Number, b.Name, b.Name) }
-														class="rounded bg-amber-950/50 border border-amber-800/60 px-2 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-900/60"
-													>
-														Restore In-Place
-													</button>
-												}
-
-												<button
-													type="button"
-													data-on:click={ fmt.Sprintf("$selectedArchive = '%s'; $newWorldName = '%s (Restored)'; $newWorldTier = '%s'; $restoreModalOpen = true", b.Name, d.Name, d.Tier) }
-													class="rounded bg-zinc-800 px-2 py-1 text-[11px] font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white"
-												>
-													Restore as New World
-												</button>
-
-												<a
-													href={ templ.SafeURL(fmt.Sprintf("/api/minecraft/%d/backups/download?f=%s", d.Number, b.Name)) }
-													class="inline-block rounded bg-zinc-800 px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-700 hover:text-white"
-												>
-													Download
-												</a>
-
-												<button
-													type="button"
-													data-on:click={ fmt.Sprintf("if (confirm('Permanently delete backup %s from NAS?')) @post('/api/minecraft/%d/backups/delete?file=%s', {payload: {file: '%s'}})", b.Name, d.Number, b.Name, b.Name) }
-													class="rounded px-1.5 py-1 text-[11px] text-red-400 hover:bg-red-950/40 hover:text-red-300"
-												>
-													Delete
-												</button>
-											</td>
-										</tr>
-									}
-								</tbody>
-							</table>
+							<input
+								type="text"
+								name="mc_version"
+								value={ d.MCVersion }
+								class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+							/>
 						}
 					</div>
 				</div>
-			}
 
-			<!-- TAB 5: SETTINGS -->
-			if d.ActiveTab == "settings" {
-				<div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-sm max-w-xl">
-					<h2 class="text-base font-semibold text-zinc-100">Instance Settings</h2>
-					<p class="mt-0.5 text-xs text-zinc-400">Update configuration parameters for this world.</p>
-
-					<form
-						class="mt-6 space-y-4"
-						data-on:submit__prevent={ fmt.Sprintf("@post('/api/minecraft/%d/settings', {contentType: 'form'})", d.Number) }
+				<div class="pt-4 flex justify-end">
+					<button
+						type="submit"
+						class="rounded-xl bg-zinc-100 px-5 py-2 text-xs font-semibold text-zinc-950 hover:bg-white"
 					>
-						<div>
-							<label class="block text-xs font-medium text-zinc-300">World Name</label>
-							<input
-								type="text"
-								name="name"
-								value={ d.Name }
-								required
-								class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-							/>
-						</div>
-
-						<div>
-							<label class="block text-xs font-medium text-zinc-300">MOTD Banner</label>
-							<input
-								type="text"
-								name="motd"
-								value={ d.MOTD }
-								class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-							/>
-						</div>
-
-						<div class="grid grid-cols-2 gap-3">
-							<div>
-								<label class="block text-xs font-medium text-zinc-300">Resource Tier</label>
-								<select
-									name="tier"
-									class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-								>
-									if d.Tier == "small" {
-										<option value="small" selected>Small (4 GiB)</option>
-									} else {
-										<option value="small">Small (4 GiB)</option>
-									}
-									if d.Tier == "medium" {
-										<option value="medium" selected>Medium (8 GiB)</option>
-									} else {
-										<option value="medium">Medium (8 GiB)</option>
-									}
-									if d.Tier == "large" {
-										<option value="large" selected>Large (12 GiB)</option>
-									} else {
-										<option value="large">Large (12 GiB)</option>
-									}
-								</select>
-							</div>
-							<div>
-								<label class="block text-xs font-medium text-zinc-300">Minecraft Version</label>
-								if d.PackDefined() {
-									<!-- The Pack decides this. Rendering it editable would offer to
-									     break the instance, so it is shown as the fact it is. -->
-									<input
-										type="text"
-										value={ d.MCVersion }
-										readonly
-										disabled
-										class="mt-1 w-full cursor-not-allowed rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-400"
-									/>
-									<p class="mt-1 text-[11px] text-zinc-500">
-										Set by the { d.PackProvider } pack <span class="text-zinc-300">{ d.Pack }</span>. To run a different version, create a new instance.
-									</p>
-								} else {
-									<input
-										type="text"
-										name="mc_version"
-										value={ d.MCVersion }
-										class="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
-									/>
-								}
-							</div>
-						</div>
-
-						<div class="pt-4 flex justify-end">
-							<button
-								type="submit"
-								class="rounded-xl bg-zinc-100 px-5 py-2 text-xs font-semibold text-zinc-950 hover:bg-white"
-							>
-								Save Changes
-							</button>
-						</div>
-					</form>
+						Save Changes
+					</button>
 				</div>
-			}
+			</form>
 		</div>
+	}
 	}
 }

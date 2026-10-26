@@ -17,6 +17,7 @@ func readPage(t *testing.T, name string) string {
 }
 
 var logPages = []string{
+	"instance.templ",
 	"valheim_instance.templ",
 	"mc_instance.templ",
 	"gmod_instance.templ",
@@ -33,7 +34,7 @@ The auto-scroll script binds to [data-log-pane]. A hand-rolled box silently gets
 behaviour, which is exactly how three Console tabs ended up stuck at the oldest line while only the
 legacy page scrolled: the old script bound to id="logs" and the tabs used id="console-logs".`, name)
 		}
-		if !strings.Contains(body, "@LogPane(") {
+		if !strings.Contains(body, "@LogPane(") && !strings.Contains(body, "@instanceConsole(") {
 			t.Errorf("%s renders no log pane at all", name)
 		}
 	}

@@ -1,9 +1,20 @@
 package pages
 
 templ ValheimManager(instances []InstanceUI, budget BudgetUI, admin ...bool) {
-	{{ m := BuildValheimManager(instances, budget) }}
-	@LayoutHearth("Valheim") {
-		@hearthNav("valheim", isNavAdmin(admin), true, "")
+	@managerPage("Valheim", "valheim", BuildValheimManager(instances, budget), isNavAdmin(admin))
+}
+
+templ MinecraftManager(instances []InstanceUI, budget BudgetUI, admin ...bool) {
+	@managerPage("Minecraft", "minecraft", BuildMinecraftManager(instances, budget), isNavAdmin(admin))
+}
+
+templ GModManager(instances []InstanceUI, budget BudgetUI, admin ...bool) {
+	@managerPage("Garry's Mod", "gmod", BuildGModManager(instances, budget), isNavAdmin(admin))
+}
+
+templ managerPage(title, current string, m ManagerUI, admin bool) {
+	@LayoutHearth(title) {
+		@hearthNav(current, admin, true, "")
 		@managerPanel(m)
 		@panelColophon()
 	}
@@ -17,9 +28,7 @@ templ managerPanel(m ManagerUI) {
 		}
 		if len(m.Ports) == 0 {
 			<div class="border-b border-seam px-6 py-10">
-				<p class="max-w-prose font-display text-base leading-relaxed text-ink-muted">
-					No worlds yet. Creating one gives you a dedicated server with mod support, a seed of your choosing and storage that survives a restart.
-				</p>
+				<p class="max-w-prose font-display text-base leading-relaxed text-ink-muted">{ m.Empty }</p>
 			</div>
 		}
 		<div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 pt-5">

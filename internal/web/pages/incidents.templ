@@ -4,75 +4,66 @@ import "fmt"
 
 templ incidentBadges(in IncidentUI) {
 	if in.OOMKilled {
-		<span class="rounded border border-red-700/60 bg-red-950/60 px-2 py-0.5 text-[10px] font-medium text-red-200">Out of memory</span>
+		<span class="font-pixel text-[11px] text-danger">out of memory</span>
 	}
 	if in.RestartCount > 0 {
-		<span class="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
-			{ fmt.Sprintf("%d restarts", in.RestartCount) }
-		</span>
+		<span class="font-pixel text-[11px] text-ink-faint">{ fmt.Sprintf("%d restarts", in.RestartCount) }</span>
 	}
 	if in.ExitCode != 0 {
-		<span class="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
-			{ fmt.Sprintf("exit %d", in.ExitCode) }
-		</span>
+		<span class="font-pixel text-[11px] text-ink-faint">{ fmt.Sprintf("exit %d", in.ExitCode) }</span>
+	}
+}
+
+templ incidentLog(tail string) {
+	if tail != "" {
+		<details class="mt-3">
+			<summary class="focus-accent cursor-pointer font-pixel text-[11px] text-ink-muted transition-colors hover:text-accent">Show the log from the crashed container</summary>
+			<pre class="mt-2 max-h-80 overflow-auto rounded-control border border-seam bg-seam p-3 font-pixel text-[11px] leading-relaxed text-ink-muted">{ tail }</pre>
+		</details>
+	} else {
+		<p class="mt-2 font-pixel text-[11px] text-ink-faint">No log was captured — the container was replaced before agrelha could read it.</p>
 	}
 }
 
 templ IncidentList(d InstanceDetailUI) {
-	<div class="space-y-4">
-		<div class="flex flex-wrap items-end justify-between gap-3">
-			<div>
-				<h2 class="text-base font-semibold text-zinc-100">Crashes & failures</h2>
-				<p class="mt-0.5 text-xs text-zinc-400">
-					A permanent record of every failure agrelha has seen for this world. Nothing here can be deleted; dismissing a failure on the Overview only stops it appearing there.
-				</p>
-			</div>
+	<div class="mt-8">
+		<div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+			<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">
+				A permanent record of every failure agrelha has seen for this world. Nothing here can be deleted; dismissing a failure on the Overview only stops it appearing there.
+			</p>
 			if len(d.Incidents) > 0 {
 				@incidentSort(d)
 			}
 		</div>
 		if len(d.Incidents) == 0 {
-			<div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-8 text-center">
-				<p class="text-sm font-medium text-zinc-300">No failures recorded</p>
-				<p class="mt-1 text-xs text-zinc-500">This world has not crashed since agrelha started watching it.</p>
-			</div>
+			<p class="mt-8 max-w-prose font-display text-base leading-relaxed text-ink-muted">
+				Nothing has crashed. This world has not failed since agrelha started watching it.
+			</p>
 		} else {
-			<div class="space-y-3">
+			<div class="-mx-6 mt-8 border-t border-seam">
 				for _, in := range d.Incidents {
-					<div
-						id={ fmt.Sprintf("incident-%d", in.ID) }
-						class={ "rounded-xl border p-4 transition", templ.KV("border-red-900/60 bg-red-950/20", !in.Acknowledged), templ.KV("border-zinc-800 bg-zinc-900/40 opacity-60", in.Acknowledged) }
-					>
-						<div class="flex flex-wrap items-start justify-between gap-3">
+					<article id={ fmt.Sprintf("incident-%d", in.ID) } class="border-b border-seam px-6 py-6">
+						<div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
 							<div class="min-w-0">
-								<div class="flex items-center gap-2">
-									<p class={ "text-sm font-semibold", templ.KV("text-red-100", !in.Acknowledged), templ.KV("text-zinc-400", in.Acknowledged) }>
-										{ in.Summary }
-									</p>
-									if in.Acknowledged {
-										<span class="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">dismissed</span>
-									}
-								</div>
-								<p class="mt-0.5 text-xs text-zinc-500">
-									{ in.When }
+								<p class={ "font-display text-lg font-semibold", templ.KV("text-ink", !in.Acknowledged), templ.KV("text-ink-faint", in.Acknowledged) }>
+									{ in.Summary }
+								</p>
+								<p class="mt-1 flex flex-wrap items-baseline gap-x-3 font-pixel text-[11px] text-ink-faint">
+									<span>{ in.When }</span>
 									if in.Ago != "" {
-										<span class="text-zinc-600">{ " · " + in.Ago }</span>
+										<span>{ in.Ago }</span>
+									}
+									if in.Acknowledged {
+										<span>dismissed</span>
 									}
 								</p>
 							</div>
-							<div class="flex flex-wrap items-center gap-1.5">
+							<div class="flex flex-wrap items-baseline gap-x-3">
 								@incidentBadges(in)
 							</div>
 						</div>
-						if in.LogTail != "" {
-							<details class="mt-3">
-								<summary class="cursor-pointer text-xs text-zinc-400 hover:text-zinc-200">Show the log from the crashed container</summary>
-								<pre class="mt-2 max-h-80 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-300">{ in.LogTail }</pre>
-							</details>
-						} else {
-							<p class="mt-2 text-[11px] text-zinc-600">No log was captured — the container was replaced before agrelha could read it.</p>
-						}
-					</div>
+						@incidentLog(in.LogTail)
+					</article>
 				}
 			</div>
 		}
@@ -85,25 +76,25 @@ templ dismissIncidentButton(in IncidentUI) {
 		title="Dismiss this failure"
 		aria-label="Dismiss this failure"
 		data-on:click={ fmt.Sprintf("@post('/api/%s/%d/incidents/%d/dismiss')", in.GamePath, in.Number, in.ID) }
-		class="flex h-6 w-6 items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 text-xs text-zinc-400 transition hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100"
+		class="focus-accent rounded-control border border-edge px-2 py-0.5 font-pixel text-[11px] text-ink-muted transition-colors hover:border-accent hover:text-accent"
 	>
-		&times;
+		Dismiss
 	</button>
 }
 
 templ incidentSort(d InstanceDetailUI) {
-	<div class="flex shrink-0 items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5 text-xs">
+	<div class="flex shrink-0 items-baseline gap-4 font-pixel text-[11px]">
 		<a
 			href={ templ.SafeURL(fmt.Sprintf("/%s/%d/crashes?sort=newest", d.GamePath(), d.Number)) }
 			aria-current={ ariaCurrent(!d.IncidentsOldestFirst) }
-			class={ "rounded-md px-2.5 py-1 font-medium transition", templ.KV("bg-zinc-800 text-zinc-100", !d.IncidentsOldestFirst), templ.KV("text-zinc-400 hover:text-zinc-200", d.IncidentsOldestFirst) }
+			class={ sortLinkClass(!d.IncidentsOldestFirst) }
 		>
 			Newest first
 		</a>
 		<a
 			href={ templ.SafeURL(fmt.Sprintf("/%s/%d/crashes?sort=oldest", d.GamePath(), d.Number)) }
 			aria-current={ ariaCurrent(d.IncidentsOldestFirst) }
-			class={ "rounded-md px-2.5 py-1 font-medium transition", templ.KV("bg-zinc-800 text-zinc-100", d.IncidentsOldestFirst), templ.KV("text-zinc-400 hover:text-zinc-200", !d.IncidentsOldestFirst) }
+			class={ sortLinkClass(d.IncidentsOldestFirst) }
 		>
 			Oldest first
 		</a>

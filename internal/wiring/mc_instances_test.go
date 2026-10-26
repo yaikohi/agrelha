@@ -88,7 +88,7 @@ func TestMCDashboardEmpty(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	html := string(body)
 
-	for _, want := range []string{"Minecraft Instances", "24 GiB", "Create your first world"} {
+	for _, want := range []string{"Up to 4 worlds, 2 running at once.", "RAM 0 GiB of 24 GiB", "No worlds yet.", "Create world"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("dashboard missing %q", want)
 		}
@@ -188,8 +188,8 @@ func TestMCInstanceCreateAndDetail(t *testing.T) {
 	if !strings.Contains(string(body), "192.168.20.225:25565") {
 		t.Errorf("overview missing connection string")
 	}
-	if !strings.Contains(string(body), "Sign out") {
-		t.Errorf("overview nav missing 'Sign out' for authenticated admin")
+	if !strings.Contains(string(body), "sign out") {
+		t.Errorf("overview nav missing 'sign out' for authenticated admin")
 	}
 	if strings.Contains(string(body), "/auth/login") {
 		t.Errorf("overview nav should NOT have '/auth/login' for authenticated admin")
