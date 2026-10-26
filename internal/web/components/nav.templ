@@ -35,7 +35,7 @@ type NavItem struct {
 templ Nav(p NavProps) {
 	<header class="border-b border-seam pb-5">
 		<div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-			<a href="/" class="focus-accent font-display text-3xl font-semibold tracking-tight text-ink transition-colors hover:text-accent">agrelha</a>
+			<a href="/" class="focus-accent font-display text-3xl font-bold tracking-tight text-ink transition-colors hover:text-accent">Agrelha</a>
 			<div class="flex items-center gap-5 font-pixel text-xs">
 				if p.GrafanaURL != "" {
 					<a href={ templ.SafeURL(p.GrafanaURL) } target="_blank" rel="noopener noreferrer" class="focus-accent text-ink-faint transition-colors hover:text-accent">grafana</a>
