@@ -185,11 +185,15 @@ Tick an item only when it is fixed **and** a test fails with the fix reverted.
 
 Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
 
-- [ ] **The Access page is named `admins`.** `CONTEXT.md:252` — *"Avoid: admin (ambiguous with the
-      agrelha operator)"*. Now in route (`/admins`), type (`AdminsProps`) and function
-      (`renderAdminsPage`). Most invasive of the three: `/admins` is a live URL, and `admins`
-      already means in-game Valheim operators, so this needs a decision about which concept keeps
-      the word.
+- [x] **The Access page is named `admins`.** `CONTEXT.md:252` — *"Avoid: admin (ambiguous with the
+      agrelha operator)"*. Migrated page route to `/access`, template to `pages.Access`, props to
+      `AccessProps`, and tabs to `AccessTabs`. Provided 301 `MovedPermanently` redirect from `/admins`
+      (preserving query parameters) and backwards-compatible legacy delegations for `/admins/grant` and
+      `/admins/revoke`. Updated navigation and links across Valheim, Minecraft, and GMod cards. In-game
+      privilege commands retain `admin`/`op` semantics per `CONTEXT.md:252-257`.
+      Tests: `TestAccessAdminsUnconfigured` in `internal/web/handlers/access/access_test.go`,
+      `TestAccessTabs` in `internal/web/pages/admins_test.go`, `TestMinecraftEndpoints` and
+      `TestMinecraftWhitelistToggle` in `internal/wiring/minecraft_test.go` (all fail when reverted).
 - [x] **`Capabilities{ Modpacks bool }`** — `domain/game.go:36` + 3 uses, against `CONTEXT.md:111`
       *"Avoid: modpack (as a distinct concept)"*.
       Renamed field to `Packs bool` on `Capabilities` and updated `MinecraftProfile` and `GModProfile`

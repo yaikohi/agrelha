@@ -120,9 +120,16 @@ func TestMinecraftEndpoints(t *testing.T) {
 		{
 			name:       "minecraft access page whitelist enforcement",
 			method:     fiber.MethodGet,
-			path:       "/admins?game=minecraft",
+			path:       "/access?game=minecraft",
 			wantStatus: fiber.StatusOK,
 			wantBody:   "Whitelist Enforcement",
+		},
+		{
+			name:       "legacy admins page redirects to access page",
+			method:     fiber.MethodGet,
+			path:       "/admins?game=minecraft",
+			wantStatus: fiber.StatusMovedPermanently,
+			wantBody:   "",
 		},
 	}
 
@@ -156,16 +163,14 @@ func TestMinecraftWhitelistToggle(t *testing.T) {
 		Store: st,
 	})
 
-	// 1. Without mcAccess configured, API returns 503
 	resp, err := app.Test(httptest.NewRequest(fiber.MethodPost, "/api/minecraft/access/whitelist/toggle", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != fiber.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503", resp.StatusCode)
+		t.Fatalf("unconfigured whitelist toggle API must return 503 Service Unavailable so clients do not assume whitelist state changed: got %d", resp.StatusCode)
 	}
 
-	// 2. HTML form redirect when unconfigured
 	formReq := httptest.NewRequest(fiber.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
 	formReq.Header.Set("Accept", "text/html")
 	resp, err = app.Test(formReq)
@@ -173,9 +178,9 @@ func TestMinecraftWhitelistToggle(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != fiber.StatusSeeOther {
-		t.Fatalf("status = %d, want 303 redirect", resp.StatusCode)
+		t.Fatalf("unconfigured whitelist toggle HTML form must redirect 303 See Other so browser does not repeat POST on reload: got %d", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/admins?game=minecraft" {
-		t.Fatalf("location = %q, want /admins?game=minecraft", loc)
+	if loc := resp.Header.Get("Location"); loc != "/access?game=minecraft" {
+		t.Fatalf("unconfigured whitelist toggle HTML form must redirect to /access?game=minecraft so operator sees access status banner: got %q", loc)
 	}
 }

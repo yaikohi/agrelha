@@ -159,12 +159,11 @@ func TestValheimHandlerEdges(t *testing.T) {
 	// 2. Default ApplyValheimAfterSync
 	h.cfg.ApplyValheimAfterSync("cm", "dep", "key", func(string) bool { return true })
 
-	// 3. /valheim/access redirect to /admins
 	appRoutes := fiber.New()
 	h.RegisterProtected(appRoutes)
 	respAccess, _ := appRoutes.Test(httptest.NewRequest("GET", "/valheim/access", nil))
-	if respAccess.StatusCode != fiber.StatusTemporaryRedirect || respAccess.Header.Get("Location") != "/admins" {
-		t.Errorf("expected 307 to /admins, got status %d, loc: %s", respAccess.StatusCode, respAccess.Header.Get("Location"))
+	if respAccess.StatusCode != fiber.StatusTemporaryRedirect || respAccess.Header.Get("Location") != "/access" {
+		t.Errorf("valheim access route must redirect 307 to /access or operators navigating from valheim tabs reach wrong page: got status %d, loc: %s", respAccess.StatusCode, respAccess.Header.Get("Location"))
 	}
 
 	// 4. /valheim/:num redirect to /valheim/:num/overview

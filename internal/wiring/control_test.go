@@ -207,19 +207,18 @@ func TestGuestRootDashboardAndAuthProtection(t *testing.T) {
 		t.Errorf("guest view should NOT have 'Sign out'")
 	}
 
-	// 2. Protected admin routes require login -> redirect to /auth/login
-	for _, path := range []string{"/minecraft", "/mods", "/configs", "/admins", "/history"} {
+	for _, path := range []string{"/minecraft", "/mods", "/configs", "/access", "/admins", "/history"} {
 		req := httptest.NewRequest(fiber.MethodGet, path, nil)
 		r, err := app.Test(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if r.StatusCode != fiber.StatusFound {
-			t.Fatalf("GET %s status = %d, want 302", path, r.StatusCode)
+			t.Fatalf("unauthenticated GET %s must redirect 302 to login, got %d; unauthorized access permitted", path, r.StatusCode)
 		}
 		loc := r.Header.Get("Location")
 		if !strings.HasPrefix(loc, "/auth/login") {
-			t.Fatalf("GET %s redirect location = %q, want prefix /auth/login", path, loc)
+			t.Fatalf("unauthenticated GET %s redirect location %q does not have prefix /auth/login; user cannot authenticate", path, loc)
 		}
 	}
 

@@ -14,7 +14,7 @@ func isHTMLForm(c *fiber.Ctx) bool {
 	return strings.Contains(accept, "text/html") && !strings.Contains(accept, "application/json")
 }
 
-const mcRedirectTarget = "/admins?game=minecraft"
+const mcRedirectTarget = "/access?game=minecraft"
 
 func (h *Handler) MCAccessPage(c *fiber.Ctx) error {
 	return c.Redirect(mcRedirectTarget, fiber.StatusTemporaryRedirect)

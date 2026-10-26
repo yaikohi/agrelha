@@ -208,14 +208,14 @@ func TestBuildVariantsAndRoutes(t *testing.T) {
 	deps.Auth = testAdminAuth{}
 	app := wiring.BuildServer(context.Background(), cfg, deps)
 
-	for _, path := range []string{"/", "/valheim", "/minecraft", "/admins", "/valheim/create", "/minecraft/create", "/configs", "/mods"} {
+	for _, path := range []string{"/", "/valheim", "/minecraft", "/access", "/admins", "/valheim/create", "/minecraft/create", "/configs", "/mods"} {
 		req := httptest.NewRequest(fiber.MethodGet, path, nil)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("GET %s failed: %v", path, err)
 		}
-		if resp.StatusCode != fiber.StatusOK && resp.StatusCode != fiber.StatusTemporaryRedirect && resp.StatusCode != fiber.StatusFound {
-			t.Errorf("GET %s status = %d", path, resp.StatusCode)
+		if resp.StatusCode != fiber.StatusOK && resp.StatusCode != fiber.StatusTemporaryRedirect && resp.StatusCode != fiber.StatusFound && resp.StatusCode != fiber.StatusMovedPermanently {
+			t.Errorf("GET %s returned unexpected status %d, expected 200, 301, 302, or 307; routes are broken for operators", path, resp.StatusCode)
 		}
 	}
 }

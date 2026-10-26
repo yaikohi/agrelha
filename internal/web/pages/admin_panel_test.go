@@ -14,7 +14,7 @@ func adminSample() []DashboardGameUI {
 				{Name: "Ducktopia", Address: "10.0.0.1:2456", Online: true},
 			}},
 			Actions: CardActionsUI{
-				Links:   []ActionUI{{Label: "Access", Href: "/admins?game=valheim"}},
+				Links:   []ActionUI{{Label: "Access", Href: "/access?game=valheim"}},
 				Special: []ActionUI{{Label: "+ Create World", Href: "/valheim/create"}},
 				Manager: ActionUI{Label: "Open Valheim Manager →", Href: "/valheim"},
 			},

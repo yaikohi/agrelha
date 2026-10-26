@@ -99,36 +99,53 @@ func TestAccessAdminsUnconfigured(t *testing.T) {
 	app := fiber.New()
 	h.Register(app)
 
-	// 1. Admins page works even if k8s and store are nil
-	reqPage := httptest.NewRequest(http.MethodGet, "/admins", nil)
+	reqPage := httptest.NewRequest(http.MethodGet, "/access", nil)
 	respPage, err := app.Test(reqPage)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if respPage.StatusCode != http.StatusOK {
-		t.Errorf("GET /admins status = %d, want 200", respPage.StatusCode)
+		t.Errorf("unconfigured access page must render 200 OK so operators can view server access states when declarative plane is offline; got status %d", respPage.StatusCode)
 	}
 
-	// 2. Grant without admins configured redirects with flash
-	reqGrant := httptest.NewRequest(http.MethodPost, "/admins/grant", strings.NewReader("steam_id=76561198000000001"))
+	reqLegacy := httptest.NewRequest(http.MethodGet, "/admins", nil)
+	respLegacy, err := app.Test(reqLegacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if respLegacy.StatusCode != http.StatusMovedPermanently || respLegacy.Header.Get("Location") != "/access" {
+		t.Errorf("legacy /admins GET route must redirect 301 to /access so bookmarked admin URLs continue functioning without broken links; got status %d, loc = %q", respLegacy.StatusCode, respLegacy.Header.Get("Location"))
+	}
+
+	reqGrant := httptest.NewRequest(http.MethodPost, "/access/grant", strings.NewReader("steam_id=76561198000000001"))
 	reqGrant.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	respGrant, err := app.Test(reqGrant)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if respGrant.StatusCode != http.StatusSeeOther {
-		t.Errorf("POST /admins/grant status = %d, want 303", respGrant.StatusCode)
+	if respGrant.StatusCode != http.StatusSeeOther || respGrant.Header.Get("Location") != "/access?game=valheim" {
+		t.Errorf("unconfigured /access/grant POST must redirect 303 to /access?game=valheim so operator receives flash message without form resubmission; got status %d, loc = %q", respGrant.StatusCode, respGrant.Header.Get("Location"))
+	}
+
+	reqLegacyGrant := httptest.NewRequest(http.MethodPost, "/admins/grant", strings.NewReader("steam_id=76561198000000001"))
+	reqLegacyGrant.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	respLegacyGrant, err := app.Test(reqLegacyGrant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if respLegacyGrant.StatusCode != http.StatusSeeOther {
+		t.Errorf("legacy /admins/grant POST must redirect 303 so backwards-compatible clients do not break; got status %d", respLegacyGrant.StatusCode)
 	}
 
 	// 3. Revoke without admins configured redirects with flash
-	reqRevoke := httptest.NewRequest(http.MethodPost, "/admins/revoke", strings.NewReader("steam_id=76561198000000001"))
+	reqRevoke := httptest.NewRequest(http.MethodPost, "/access/revoke", strings.NewReader("steam_id=76561198000000001"))
 	reqRevoke.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	respRevoke, err := app.Test(reqRevoke)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if respRevoke.StatusCode != http.StatusSeeOther {
-		t.Errorf("POST /admins/revoke status = %d, want 303", respRevoke.StatusCode)
+	if respRevoke.StatusCode != http.StatusSeeOther || respRevoke.Header.Get("Location") != "/access?game=valheim" {
+		t.Errorf("POST /access/revoke status = %d, loc = %q, want 303 to /access?game=valheim", respRevoke.StatusCode, respRevoke.Header.Get("Location"))
 	}
 }
 
@@ -137,7 +154,7 @@ func TestAccessMinecraftUnconfigured(t *testing.T) {
 	app := fiber.New()
 	h.Register(app)
 
-	// 1. Minecraft access page redirects to /admins?game=minecraft
+	// 1. Minecraft access page redirects to /access?game=minecraft
 	reqPage := httptest.NewRequest(http.MethodGet, "/minecraft/access", nil)
 	respPage, err := app.Test(reqPage)
 	if err != nil {
@@ -146,8 +163,8 @@ func TestAccessMinecraftUnconfigured(t *testing.T) {
 	if respPage.StatusCode != http.StatusTemporaryRedirect {
 		t.Errorf("GET /minecraft/access status = %d, want 307", respPage.StatusCode)
 	}
-	if loc := respPage.Header.Get("Location"); loc != "/admins?game=minecraft" {
-		t.Errorf("GET /minecraft/access location = %q, want /admins?game=minecraft", loc)
+	if loc := respPage.Header.Get("Location"); loc != "/access?game=minecraft" {
+		t.Errorf("GET /minecraft/access location = %q, want /access?game=minecraft", loc)
 	}
 
 	// 2. JSON API returns 503 when MCAccess is nil
@@ -323,13 +340,13 @@ func TestAccessValheimPasswords(t *testing.T) {
 	app := fiber.New()
 	h.Register(app)
 
-	req := httptest.NewRequest(http.MethodGet, "/admins", nil)
+	req := httptest.NewRequest(http.MethodGet, "/access", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /admins status = %d, want 200", resp.StatusCode)
+		t.Fatalf("GET /access status = %d, want 200", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -399,7 +416,7 @@ func TestMCAccessHTMLFormsAndErrors(t *testing.T) {
 	h.Register(app)
 
 	// Page load
-	reqPage := httptest.NewRequest(http.MethodGet, "/admins?game=minecraft", nil)
+	reqPage := httptest.NewRequest(http.MethodGet, "/access?game=minecraft", nil)
 	respPage, err := app.Test(reqPage)
 	if err != nil || respPage.StatusCode != fiber.StatusOK {
 		t.Fatalf("access page failed: %v, status: %d", err, respPage.StatusCode)
@@ -596,9 +613,9 @@ func TestAccessRemainingEdges(t *testing.T) {
 	appFull := fiber.New()
 	hFull.Register(appFull)
 
-	respAdmins, err := appFull.Test(httptest.NewRequest(http.MethodGet, "/admins", nil))
+	respAdmins, err := appFull.Test(httptest.NewRequest(http.MethodGet, "/access", nil))
 	if err != nil || respAdmins.StatusCode != http.StatusOK {
-		t.Fatalf("GET /admins failed: %v, status: %d", err, respAdmins.StatusCode)
+		t.Fatalf("GET /access failed: %v, status: %d", err, respAdmins.StatusCode)
 	}
 
 	// 3. Valheim AdminsGrant and AdminsRevoke
@@ -829,30 +846,30 @@ func TestAccessMultiGameTabs(t *testing.T) {
 	app := fiber.New()
 	h.Register(app)
 
-	reqValheim := httptest.NewRequest(http.MethodGet, "/admins?game=valheim", nil)
+	reqValheim := httptest.NewRequest(http.MethodGet, "/access?game=valheim", nil)
 	respValheim, err := app.Test(reqValheim)
 	if err != nil || respValheim.StatusCode != fiber.StatusOK {
-		t.Fatalf("GET /admins?game=valheim failed: %v", err)
+		t.Fatalf("GET /access?game=valheim failed: %v", err)
 	}
 	bodyValheim, _ := io.ReadAll(respValheim.Body)
 	if !strings.Contains(string(bodyValheim), "Valheim Access &amp; Admins") && !strings.Contains(string(bodyValheim), "Valheim Access & Admins") {
 		t.Errorf("valheim tab missing title")
 	}
 
-	reqMC := httptest.NewRequest(http.MethodGet, "/admins?game=minecraft", nil)
+	reqMC := httptest.NewRequest(http.MethodGet, "/access?game=minecraft", nil)
 	respMC, err := app.Test(reqMC)
 	if err != nil || respMC.StatusCode != fiber.StatusOK {
-		t.Fatalf("GET /admins?game=minecraft failed: %v", err)
+		t.Fatalf("GET /access?game=minecraft failed: %v", err)
 	}
 	bodyMC, _ := io.ReadAll(respMC.Body)
 	if !strings.Contains(string(bodyMC), "Minecraft Access Management") {
 		t.Errorf("minecraft tab missing title")
 	}
 
-	reqGMod := httptest.NewRequest(http.MethodGet, "/admins?game=gmod", nil)
+	reqGMod := httptest.NewRequest(http.MethodGet, "/access?game=gmod", nil)
 	respGMod, err := app.Test(reqGMod)
 	if err != nil || respGMod.StatusCode != fiber.StatusOK {
-		t.Fatalf("GET /admins?game=gmod failed: %v", err)
+		t.Fatalf("GET /access?game=gmod failed: %v", err)
 	}
 	bodyGMod, _ := io.ReadAll(respGMod.Body)
 	if !strings.Contains(string(bodyGMod), "Garry&#39;s Mod Access") && !strings.Contains(string(bodyGMod), "Garry's Mod Access") {
@@ -862,12 +879,12 @@ func TestAccessMultiGameTabs(t *testing.T) {
 	reqReferer := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/op", strings.NewReader("username=test"))
 	reqReferer.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	reqReferer.Header.Set("Accept", "text/html")
-	reqReferer.Header.Set("Referer", "http://localhost/admins?game=minecraft")
+	reqReferer.Header.Set("Referer", "http://localhost/access?game=minecraft")
 	respReferer, _ := app.Test(reqReferer)
 	if respReferer.StatusCode != fiber.StatusSeeOther {
 		t.Errorf("referer redirect status = %d, want 303", respReferer.StatusCode)
 	}
-	if loc := respReferer.Header.Get("Location"); loc != "/admins?game=minecraft" {
-		t.Errorf("referer redirect location = %q, want /admins?game=minecraft", loc)
+	if loc := respReferer.Header.Get("Location"); loc != "/access?game=minecraft" {
+		t.Errorf("referer redirect location = %q, want /access?game=minecraft", loc)
 	}
 }

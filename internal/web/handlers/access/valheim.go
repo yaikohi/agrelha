@@ -11,12 +11,21 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func (h *Handler) AdminsPage(c *fiber.Ctx) error {
+func (h *Handler) AccessPage(c *fiber.Ctx) error {
 	game := c.Query("game", "valheim")
-	return h.renderAdminsPage(c, game)
+	return h.renderAccessPage(c, game)
 }
 
-func (h *Handler) renderAdminsPage(c *fiber.Ctx, activeGame string) error {
+func (h *Handler) AdminsPage(c *fiber.Ctx) error {
+	game := c.Query("game", "")
+	target := "/access"
+	if game != "" {
+		target += "?game=" + game
+	}
+	return c.Redirect(target, fiber.StatusMovedPermanently)
+}
+
+func (h *Handler) renderAccessPage(c *fiber.Ctx, activeGame string) error {
 	if activeGame != "minecraft" && activeGame != "gmod" && activeGame != "valheim" {
 		activeGame = "valheim"
 	}
@@ -97,7 +106,7 @@ func (h *Handler) renderAdminsPage(c *fiber.Ctx, activeGame string) error {
 	}
 
 	fk, fm := shared.TakeFlash(c)
-	return shared.Render(c, pages.Admins(pages.AdminsProps{
+	return shared.Render(c, pages.Access(pages.AccessProps{
 		ActiveGame: activeGame,
 		FlashKind:  fk,
 		FlashMsg:   fm,
@@ -120,20 +129,20 @@ func (h *Handler) renderAdminsPage(c *fiber.Ctx, activeGame string) error {
 	}))
 }
 
-func (h *Handler) AdminsGrant(c *fiber.Ctx) error {
+func (h *Handler) AccessGrant(c *fiber.Ctx) error {
 	if h.cfg.Admins == nil {
 		shared.SetFlash(c, "err", "Declarative plane disabled — no Git token configured.")
-		return c.Redirect("/admins?game=valheim", fiber.StatusSeeOther)
+		return c.Redirect("/access?game=valheim", fiber.StatusSeeOther)
 	}
 	id := c.FormValue("steam_id")
 	if id == "" {
 		shared.SetFlash(c, "err", "A Steam64 ID is required.")
-		return c.Redirect("/admins?game=valheim", fiber.StatusSeeOther)
+		return c.Redirect("/access?game=valheim", fiber.StatusSeeOther)
 	}
 	changed, err := h.cfg.Admins.Grant(c.UserContext(), id, h.cfg.Actor(c))
 	if err != nil {
 		shared.SetFlash(c, "err", "Grant commit failed: "+err.Error())
-		return c.Redirect("/admins?game=valheim", fiber.StatusSeeOther)
+		return c.Redirect("/access?game=valheim", fiber.StatusSeeOther)
 	}
 	if changed {
 		if h.cfg.ApplyAfterSync != nil {
@@ -145,23 +154,27 @@ func (h *Handler) AdminsGrant(c *fiber.Ctx) error {
 	} else {
 		shared.SetFlash(c, "ok", id+" is already an admin.")
 	}
-	return c.Redirect("/admins?game=valheim", fiber.StatusSeeOther)
+	return c.Redirect("/access?game=valheim", fiber.StatusSeeOther)
 }
 
-func (h *Handler) AdminsRevoke(c *fiber.Ctx) error {
+func (h *Handler) AdminsGrant(c *fiber.Ctx) error {
+	return h.AccessGrant(c)
+}
+
+func (h *Handler) AccessRevoke(c *fiber.Ctx) error {
 	if h.cfg.Admins == nil {
 		shared.SetFlash(c, "err", "Declarative plane disabled — no Git token configured.")
-		return c.Redirect("/admins?game=valheim", fiber.StatusSeeOther)
+		return c.Redirect("/access?game=valheim", fiber.StatusSeeOther)
 	}
 	id := c.FormValue("steam_id")
 	if id == "" {
 		shared.SetFlash(c, "err", "A Steam64 ID is required.")
-		return c.Redirect("/admins?game=valheim", fiber.StatusSeeOther)
+		return c.Redirect("/access?game=valheim", fiber.StatusSeeOther)
 	}
 	changed, err := h.cfg.Admins.Revoke(c.UserContext(), id, h.cfg.Actor(c))
 	if err != nil {
 		shared.SetFlash(c, "err", "Revoke commit failed: "+err.Error())
-		return c.Redirect("/admins?game=valheim", fiber.StatusSeeOther)
+		return c.Redirect("/access?game=valheim", fiber.StatusSeeOther)
 	}
 	if changed {
 		if h.cfg.ApplyAfterSync != nil {
@@ -173,5 +186,9 @@ func (h *Handler) AdminsRevoke(c *fiber.Ctx) error {
 	} else {
 		shared.SetFlash(c, "ok", id+" was not an admin.")
 	}
-	return c.Redirect("/admins?game=valheim", fiber.StatusSeeOther)
+	return c.Redirect("/access?game=valheim", fiber.StatusSeeOther)
+}
+
+func (h *Handler) AdminsRevoke(c *fiber.Ctx) error {
+	return h.AccessRevoke(c)
 }

@@ -658,7 +658,7 @@ func actionStyle(kind string) string {
 // no unambiguous target, and the buttons used to act on ActiveInstances[0].
 func ValheimActions(summary ...ValheimSummaryUI) CardActionsUI {
 	a := CardActionsUI{
-		Links:   []ActionUI{{Label: "Access", Href: "/admins?game=valheim", Kind: "link"}},
+		Links:   []ActionUI{{Label: "Access", Href: "/access?game=valheim", Kind: "link"}},
 		Manager: ActionUI{Label: "Open Valheim Manager →", Href: "/valheim"},
 	}
 	if len(summary) == 0 || len(summary[0].ActiveInstances) == 0 {
@@ -671,7 +671,7 @@ func ValheimActions(summary ...ValheimSummaryUI) CardActionsUI {
 // lifecycle belongs on the Manager, where the target is named.
 func MinecraftActions(summary ...MinecraftSummaryUI) CardActionsUI {
 	a := CardActionsUI{
-		Links:   []ActionUI{{Label: "Access", Href: "/admins?game=minecraft", Kind: "link"}},
+		Links:   []ActionUI{{Label: "Access", Href: "/access?game=minecraft", Kind: "link"}},
 		Manager: ActionUI{Label: "Open Minecraft Manager →", Href: "/minecraft"},
 	}
 	if len(summary) == 0 || len(summary[0].ActiveInstances) == 0 {
@@ -779,7 +779,7 @@ func GModCard(summary GameSummaryUI, isAdmin bool) GameCardUI {
 func GameActions(p domain.GameProfile, summary ...GameSummaryUI) CardActionsUI {
 	var links []ActionUI
 	if p.Capabilities.AdmissionPassword || p.Capabilities.AdmissionAllowlist || p.Capabilities.Operators {
-		links = append(links, ActionUI{Label: "Access", Href: fmt.Sprintf("/admins?game=%s", p.ID), Kind: "link"})
+		links = append(links, ActionUI{Label: "Access", Href: fmt.Sprintf("/access?game=%s", p.ID), Kind: "link"})
 	}
 	a := CardActionsUI{
 		Links:   links,

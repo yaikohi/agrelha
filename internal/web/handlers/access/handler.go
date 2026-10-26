@@ -43,9 +43,13 @@ func New(cfg Config) *Handler {
 
 // Register mounts all access routes onto the provided Fiber router.
 func (h *Handler) Register(router fiber.Router) {
+	router.Get("/access", h.AccessPage)
+	router.Post("/access/grant", h.AccessGrant)
+	router.Post("/access/revoke", h.AccessRevoke)
+
 	router.Get("/admins", h.AdminsPage)
-	router.Post("/admins/grant", h.AdminsGrant)
-	router.Post("/admins/revoke", h.AdminsRevoke)
+	router.Post("/admins/grant", h.AccessGrant)
+	router.Post("/admins/revoke", h.AccessRevoke)
 	router.Get("/history", h.HistoryPage)
 
 	router.Get("/minecraft/access", h.MCAccessPage)

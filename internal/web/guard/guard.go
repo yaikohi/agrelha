@@ -181,6 +181,7 @@ func Mounts() []Mount {
 	}
 
 	mounts = append(mounts,
+		Mount{Prefix: "/access", Admin: true},
 		Mount{Prefix: "/admins", Admin: true},
 		Mount{Prefix: "/history", Admin: true},
 		Mount{Prefix: "/accounts", Admin: true},

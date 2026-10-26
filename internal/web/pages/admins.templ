@@ -27,7 +27,7 @@ type GModAccessProps struct {
 	Passwords []GModWorldPasswordUI
 }
 
-type AdminsProps struct {
+type AccessProps struct {
 	ActiveGame string
 	FlashKind string
 	FlashMsg string
@@ -37,7 +37,9 @@ type AdminsProps struct {
 	GMod GModAccessProps
 }
 
-func AdminTabs(activeGame string) []components.TabItem {
+type AdminsProps = AccessProps
+
+func AccessTabs(activeGame string) []components.TabItem {
 	var tabs []components.TabItem
 	for _, p := range domain.Profiles() {
 		emoji := ""
@@ -51,19 +53,23 @@ func AdminTabs(activeGame string) []components.TabItem {
 		}
 		tabs = append(tabs, components.TabItem{
 			Label: emoji + p.Display.Name,
-			Href: "/admins?game=" + string(p.ID),
+			Href: "/access?game=" + string(p.ID),
 			Active: activeGame == string(p.ID),
 		})
 	}
 	return tabs
 }
 
-templ Admins(props AdminsProps) {
-	@Layout("Access & Admins") {
+func AdminTabs(activeGame string) []components.TabItem {
+	return AccessTabs(activeGame)
+}
+
+templ Access(props AccessProps) {
+	@Layout("Access") {
 		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
-				<h1 class="text-2xl font-semibold text-ink">Access & Administration</h1>
+				<h1 class="text-2xl font-semibold text-ink">Access</h1>
 				<p class="mt-1 text-xs text-ink-muted">Manage server passwords, operator privileges, and player whitelists across all game servers.</p>
 			</div>
 			<div class="flex items-center gap-2">
@@ -78,7 +84,7 @@ templ Admins(props AdminsProps) {
 
 		<div class="mb-6">
 			@components.TabBar(components.TabBarProps{
-				Tabs: AdminTabs(props.ActiveGame),
+				Tabs: AccessTabs(props.ActiveGame),
 			})
 		</div>
 
@@ -93,6 +99,11 @@ templ Admins(props AdminsProps) {
 		}
 	}
 }
+
+func Admins(props AccessProps) templ.Component {
+	return Access(props)
+}
+
 
 templ valheimAccessTab(props ValheimAccessProps) {
 	<div class="mb-6">
@@ -202,7 +213,7 @@ templ valheimAccessTab(props ValheimAccessProps) {
 	if !props.Enabled {
 		<p class="mb-4 rounded text-accent p-3 text-sm text-accent">Declarative plane disabled — set the Codeberg token to grant/revoke admin.</p>
 	}
-	<form method="post" action="/admins/grant" class="mb-6 flex gap-2">
+	<form method="post" action="/access/grant" class="mb-6 flex gap-2">
 		<input name="steam_id" placeholder="76561198…" class="w-64 rounded bg-surface-raised px-3 py-2 text-sm border border-edge focus-accent"/>
 		<button class="rounded text-accent px-4 py-2 text-sm hover:text-accent font-medium">Grant admin</button>
 	</form>
@@ -215,7 +226,7 @@ templ valheimAccessTab(props ValheimAccessProps) {
 		for _, id := range props.AdminIDs {
 			<li class="flex items-center justify-between px-4 py-2 text-sm">
 				<span class="font-pixel text-xs text-ink">{ id }</span>
-				<form method="post" action="/admins/revoke">
+				<form method="post" action="/access/revoke">
 					<input type="hidden" name="steam_id" value={ id }/>
 					<button class="rounded text-danger px-3 py-1 text-xs hover:text-danger font-medium text-ink">Revoke</button>
 				</form>
@@ -251,7 +262,7 @@ templ valheimAccessTab(props ValheimAccessProps) {
 							if Contains(props.AdminIDs, p.SteamID) {
 								<span class="text-xs text-accent">admin</span>
 							} else {
-								<form method="post" action="/admins/grant">
+								<form method="post" action="/access/grant">
 									<input type="hidden" name="steam_id" value={ p.SteamID }/>
 									<button class="rounded text-accent px-3 py-1 text-xs hover:text-accent">Grant</button>
 								</form>
