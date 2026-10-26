@@ -222,32 +222,3 @@ func BuildAdminPanel(games []DashboardGameUI) []AdminGameUI {
 	}
 	return out
 }
-
-func hearthNavLabel(name string) string {
-	return strings.ToLower(name)
-}
-
-func hearthNavClass(active bool) string {
-	base := "focus-accent inline-flex items-baseline gap-1.5 border-b-2 pb-1 transition-colors "
-	if active {
-		return base + "border-accent text-ink"
-	}
-	return base + "border-transparent text-ink-muted hover:text-accent"
-}
-
-func adminNavLinks() []ActionUI {
-	return []ActionUI{
-		{Label: "history", Href: "/history"},
-		{Label: "access", Href: "/admins"},
-		{Label: "overview", Href: "/overview"},
-		{Label: "accounts", Href: "/accounts"},
-		{Label: "requests", Href: "/requests"},
-	}
-}
-
-func hearthActionStyle(primary bool) string {
-	if primary {
-		return "border border-accent text-accent hover:bg-accent hover:text-accent-ink"
-	}
-	return "border border-edge text-ink hover:border-accent hover:text-accent"
-}

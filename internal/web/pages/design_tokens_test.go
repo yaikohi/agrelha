@@ -9,17 +9,20 @@ import (
 	"testing"
 )
 
-var migratedTemplates = []string{
-	"dashboard.templ",
-	"gmod_instance.templ",
-	"host_banner.templ",
-	"incident.templ",
-	"incidents.templ",
-	"instance.templ",
-	"log_pane.templ",
-	"manager.templ",
-	"nav_hearth.templ",
-	"panel.templ",
+func migratedTemplates(t *testing.T) []string {
+	t.Helper()
+	var out []string
+	for _, dir := range []string{".", filepath.Join("..", "components")} {
+		found, err := filepath.Glob(filepath.Join(dir, "*.templ"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, found...)
+	}
+	if len(out) == 0 {
+		t.Fatal("no templates found; has the layout changed?")
+	}
+	return out
 }
 
 var (
@@ -30,7 +33,7 @@ var (
 )
 
 func TestMigratedTemplatesNameRolesNotColours(t *testing.T) {
-	for _, name := range migratedTemplates {
+	for _, name := range migratedTemplates(t) {
 		t.Run(name, func(t *testing.T) {
 			body, err := os.ReadFile(name)
 			if err != nil {

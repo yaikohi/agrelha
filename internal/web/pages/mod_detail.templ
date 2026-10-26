@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"agrelha/internal/web/components"
 	"strconv"
 
 	"agrelha/internal/domain"
@@ -8,43 +9,43 @@ import (
 
 templ ModDetail(ns, name string, e domain.ModSearchResult, version string, deps []string, readmeHTML, tsURL string, admin ...bool) {
 	@Layout(ns + "/" + name) {
-		@nav(isNavAdmin(admin), true)
+		@components.Nav(components.NavProps{IsAdmin: isNavAdmin(admin), SignedIn: true})
 		<div class="mb-6 flex items-start gap-4">
 			@icon(e.Icon)
 			<div class="min-w-0 flex-1">
 				<h1 class="text-2xl font-semibold">{ ns }/{ name }</h1>
-				<div class="mt-1 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
+				<div class="mt-1 flex flex-wrap items-center gap-3 text-sm text-ink-muted">
 					if version != "" {
 						<span>v{ version }</span>
 					}
 					if e.Downloads > 0 {
 						<span>{ strconv.FormatInt(e.Downloads, 10) } downloads</span>
 					}
-					<a href={ templ.SafeURL(tsURL) } target="_blank" rel="noopener" class="text-emerald-400 hover:underline">View on Thunderstore ↗</a>
+					<a href={ templ.SafeURL(tsURL) } target="_blank" rel="noopener" class="text-accent hover:underline">View on Thunderstore ↗</a>
 				</div>
 				if e.IsDeprecated {
-					<p class="mt-2 rounded bg-red-900/50 px-3 py-2 text-sm text-red-200">⚠ This package is marked deprecated on Thunderstore.</p>
+					<p class="mt-2 rounded text-danger px-3 py-2 text-sm text-danger">⚠ This package is marked deprecated on Thunderstore.</p>
 				}
 			</div>
 		</div>
 		if len(deps) > 0 {
 			<section class="mb-6">
-				<h2 class="mb-2 text-sm font-medium text-zinc-400">Dependencies</h2>
+				<h2 class="mb-2 text-sm font-medium text-ink-muted">Dependencies</h2>
 				<ul class="flex flex-wrap gap-2">
 					for _, d := range deps {
-						<li class="rounded bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-300">{ d }</li>
+						<li class="rounded bg-surface-raised px-2 py-1 font-pixel text-xs text-ink">{ d }</li>
 					}
 				</ul>
 			</section>
 		}
 		<section>
-			<h2 class="mb-2 text-sm font-medium text-zinc-400">README</h2>
+			<h2 class="mb-2 text-sm font-medium text-ink-muted">README</h2>
 			if readmeHTML != "" {
-				<article class="md rounded bg-zinc-900 p-5">
+				<article class="md rounded bg-surface-raised p-5">
 					@templ.Raw(readmeHTML)
 				</article>
 			} else {
-				<p class="rounded bg-zinc-900 p-5 text-sm text-zinc-500">No README available.</p>
+				<p class="rounded bg-surface-raised p-5 text-sm text-ink-faint">No README available.</p>
 			}
 		</section>
 	}
@@ -52,8 +53,8 @@ templ ModDetail(ns, name string, e domain.ModSearchResult, version string, deps 
 
 templ icon(url string) {
 	if url != "" {
-		<img src={ url } alt="" class="h-10 w-10 flex-none rounded bg-zinc-800" loading="lazy"/>
+		<img src={ url } alt="" class="h-10 w-10 flex-none rounded bg-surface-raised" loading="lazy"/>
 	} else {
-		<div class="h-10 w-10 flex-none rounded bg-zinc-800"></div>
+		<div class="h-10 w-10 flex-none rounded bg-surface-raised"></div>
 	}
 }

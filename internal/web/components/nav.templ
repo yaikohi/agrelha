@@ -1,0 +1,77 @@
+package components
+
+import (
+	"strings"
+
+	"agrelha/internal/domain"
+)
+
+type NavProps struct {
+	Current    string
+	IsAdmin    bool
+	SignedIn   bool
+	GrafanaURL string
+}
+
+func GameNavLabel(name string) string {
+	return strings.ToLower(name)
+}
+
+func AdminNavLinks() []NavItem {
+	return []NavItem{
+		{Label: "history", Href: "/history"},
+		{Label: "access", Href: "/admins"},
+		{Label: "overview", Href: "/overview"},
+		{Label: "accounts", Href: "/accounts"},
+		{Label: "requests", Href: "/requests"},
+	}
+}
+
+type NavItem struct {
+	Label string
+	Href  string
+}
+
+templ Nav(p NavProps) {
+	<header class="border-b border-seam pb-5">
+		<div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+			<a href="/" class="focus-accent font-display text-3xl font-semibold tracking-tight text-ink transition-colors hover:text-accent">agrelha</a>
+			<div class="flex items-center gap-5 font-pixel text-xs">
+				if p.GrafanaURL != "" {
+					<a href={ templ.SafeURL(p.GrafanaURL) } target="_blank" rel="noopener noreferrer" class="focus-accent text-ink-faint transition-colors hover:text-accent">grafana</a>
+				}
+				if p.SignedIn {
+					<a href="/auth/logout" class="focus-accent text-ink-faint transition-colors hover:text-accent">sign out</a>
+				} else {
+					<a href="/auth/login" class="focus-accent text-ink-muted transition-colors hover:text-accent">sign in</a>
+				}
+			</div>
+		</div>
+		if p.SignedIn {
+			<nav class="mt-5 flex flex-wrap items-end justify-between gap-x-10 gap-y-4 font-pixel text-xs">
+				<div class="flex flex-wrap items-end gap-x-5 gap-y-3">
+					for _, g := range domain.Profiles() {
+						<a href={ templ.SafeURL("/" + string(g.ID)) } class={ NavLinkClass(p.Current == string(g.ID)) }>
+							{ GameNavLabel(g.Display.Name) }
+							if g.Capabilities.Mods {
+								<span
+									data-show={ "$" + g.Prefix + "_updates > 0" }
+									class="text-accent"
+									title="Mod updates available"
+									data-text={ "'(' + $" + g.Prefix + "_updates + ')'" }
+								></span>
+							}
+						</a>
+					}
+				</div>
+				if p.IsAdmin {
+					<div class="flex flex-wrap items-end gap-x-5 gap-y-3">
+						for _, l := range AdminNavLinks() {
+							<a href={ templ.SafeURL(l.Href) } class={ NavLinkClass(p.Current == l.Label) }>{ l.Label }</a>
+						}
+					</div>
+				}
+			</nav>
+		}
+	</header>
+}

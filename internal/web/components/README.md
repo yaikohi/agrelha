@@ -1,62 +1,44 @@
-# Web Components (`internal/web/components`)
+# Web components (`internal/web/components`)
 
-This package contains pure, reusable presentation primitives for Agrelha, built with Go and `a-h/templ`.
+The hearth design system's primitives. Every visual atom lives here, one component
+per file, and nothing in this package knows about a page's view model — components
+take plain strings, bools and small structs defined alongside them.
 
-## Architectural Role
-- **Design System Primitives**: Provides typed UI atoms (`Button`, `Input`, `Textarea`, `TabBar`, `StatusPill`, `OptionCard`, `Modal`).
-- **Strict Functional Color Language**:
-  - **Monochrome Zinc**: Navigation tabs, card outlines, form controls, primary CTA actions, and neutral elements.
-  - **Emerald (Green)**: Server running states and `Start Server` actions.
-  - **Amber (Orange)**: Server starting/booting states and `Stop Server` actions.
-  - **Red**: Error alerts and destructive actions (`Delete World`, remove mod).
-- **Zero Runtime Overhead**: Templates compile into streaming Go bytecode writing directly to an `io.Writer`.
+## The rule
 
-## Import Invariants
-- May import: stdlib (`fmt`, `strings`, `strconv`) and `github.com/a-h/templ`.
-- Must never import: `internal/infra`, `internal/app`, or `internal/ports`.
+Components name **roles**, never colours: `text-ink-muted`, not `text-zinc-400` and
+not `text-[#9a8b7b]`. The tokens are defined once in
+`internal/web/assets/css/input.css` and documented in
+[docs/design-system.md](../../../docs/design-system.md).
+`pages/design_tokens_test.go` globs every `.templ` in this package and in `pages`
+and fails the build on a Tailwind default-palette class or a raw hex.
 
-## Exported Components
+## Files
 
-### 1. `Button(props ButtonProps)`
-Polymorphic button / anchor tag with variants and sizes:
-- Variants: `VariantPrimary` (high-contrast monochrome), `VariantSecondary`, `VariantSuccess` (start), `VariantWarning` (stop), `VariantDanger` (delete), `VariantGhost`, `VariantLink`.
-- Sizes: `SizeXs`, `SizeSm`, `SizeMd`, `SizeLg`.
-- Supports Datastar actions (`OnClick`, `Indicator`), disabled states, and download links.
+| File | What it gives you |
+|---|---|
+| `button.templ` | `Button`, plus `ButtonClass` / `InputClass` for markup that cannot take a component |
+| `card.templ` | `SectionHead`, `Prose`, `RowList`, `Row`, `Band`, `Drawer` — the layout language |
+| `input.templ` | `Input`, `Textarea` with label, helper and error text |
+| `lamp.templ` | `Lamp`, `LampBound` — the one status indicator |
+| `log_pane.templ` | `LogPane`, the follow/pause log viewer |
+| `nav.templ` | `Nav`, the site navigation |
+| `nav_link.templ` | `NavLinkClass`, `TabLinkClass`, `QuietLinkClass` |
+| `option_card.templ` | `OptionCard` for wizard pickers |
+| `step_indicator.templ` | `StepIndicator` for wizard progress |
+| `tab_bar.templ` | `TabBar` |
+| `tag.templ` | `Tag` — quiet, accent and alarm text tags |
+| `toast.templ` | `Toast`, bound to the `$toast` / `$toastkind` signals |
 
-### 2. `Input(props InputProps)` & `Textarea(props TextareaProps)`
-Form controls with high-contrast neutral focus rings (`focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400`):
-- Supports label, helper text, error text, required indicator, and Datastar bindings (`Bind`, `OnKeyDown`, `OnChange`).
+## Variants
 
-### 3. `TabBar(props TabBarProps)`
-Standardized horizontal tab navigation bar:
-- Active tab renders with `border-b-2 border-zinc-100 text-zinc-100 font-semibold`.
-- Inactive tabs render with `text-zinc-400 hover:text-zinc-200`.
+`VariantPrimary` and `VariantSuccess` render the accent outline. `VariantSecondary`,
+`VariantGhost` and `VariantLink` stay quiet. **Only `VariantDanger` reads as
+destructive** — stopping a world is not destructive, and colouring it like Delete
+teaches people to ignore the warning. A test enforces this.
 
-### 4. `StatusPill(props StatusPillProps)`
-Standardized status badge with pulsating or static dot:
-- Supports static server-rendered states (`"running"`, `"stopped"`, `"starting"`, `"offline"`, `"active"`, `"disabled"`) and live Datastar signal-driven reactive states (`Signal: "online"`).
+## Import invariants
 
-### 5. `OptionCard(props OptionCardProps)`
-Selectable card for wizard and resource tier pickers:
-- Highlights selected item via Datastar: `border-zinc-300 ring-1 ring-zinc-300 bg-zinc-800/60`.
-- Supports icons, badges, titles, subtitles, and descriptions.
-
-### 6. `Modal(props ModalProps)`
-Structured dialog panel controlled by a Datastar boolean signal (`OpenSignal`):
-- Includes header with title, subtitle, and close button (`data-on:click="$signal = false"`).
-
-### 7. `BudgetBar(props BudgetBarProps)`
-Cluster capacity and quota visualization bar:
-- Displays RAM usage ratio (`UsedGiB / TotalBudgetGiB`) with proportional horizontal progress bar via `RAMPercent()`.
-- Displays running instance counts (`RunningCount / MaxRunning`) and saved instance counts (`TotalInstances / MaxInstances`).
-- Optional secondary action button (`ActionHref`, `ActionText`) for direct navigation to access or management settings.
-
-### 8. `EmptyState(props EmptyStateProps)`
-Dashed placeholder container when no records or instances exist:
-- Centered layout with optional icon/emoji badge, title heading, and description body.
-- Optional primary CTA `@Button` (`ActionHref` or `ActionClick`) and support for templ children blocks.
-
-### 9. `StepIndicator(props StepIndicatorProps)`
-Horizontal multi-step progression indicator for wizards:
-- Takes a slice of `StepItem{Number: int, Label: string}` separated by divider lines.
-- Dynamically highlights the active step using Datastar reactive signals (`data-class` binding against `$step`).
+May import: stdlib, `github.com/a-h/templ`, and `internal/domain` (the nav needs the
+registered game profiles). Must never import `internal/web/pages`, `internal/app`,
+`internal/ports` or `internal/infra`.

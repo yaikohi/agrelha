@@ -209,6 +209,10 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 				HasMods:   hasMods(ctx, mgr, inst.Number),
 				MCVersion: mcVersionOf(inst),
 				Loader:    mcLoaderOf(inst),
+
+				Pack:         mcPackName(inst),
+				PackRef:      mcPackRef(inst),
+				PackProvider: mcPackProvider(inst),
 			})
 			continue
 		}
@@ -232,6 +236,11 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 		if inst.Minecraft != nil {
 			uinst.Loader = string(inst.Minecraft.Loader)
 			uinst.MCVersion = inst.Minecraft.MCVersion
+			if p := inst.Minecraft.Pack; p != nil {
+				uinst.Pack = p.Name
+				uinst.PackRef = p.Ref
+				uinst.PackProvider = string(p.Provider)
+			}
 		}
 		if inst.Valheim != nil {
 			uinst.Password = inst.Valheim.Password
@@ -475,6 +484,27 @@ func mcVersionOf(inst domain.Instance) string {
 		return ""
 	}
 	return inst.Minecraft.MCVersion
+}
+
+func mcPackName(inst domain.Instance) string {
+	if inst.Minecraft == nil || inst.Minecraft.Pack == nil {
+		return ""
+	}
+	return inst.Minecraft.Pack.Name
+}
+
+func mcPackRef(inst domain.Instance) string {
+	if inst.Minecraft == nil || inst.Minecraft.Pack == nil {
+		return ""
+	}
+	return inst.Minecraft.Pack.Ref
+}
+
+func mcPackProvider(inst domain.Instance) string {
+	if inst.Minecraft == nil || inst.Minecraft.Pack == nil {
+		return ""
+	}
+	return string(inst.Minecraft.Pack.Provider)
 }
 
 func mcLoaderOf(inst domain.Instance) string {

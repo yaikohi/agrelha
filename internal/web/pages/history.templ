@@ -1,26 +1,27 @@
 package pages
 
 import "agrelha/internal/domain"
+import "agrelha/internal/web/components"
 
 import "fmt"
 
 templ History(entries []domain.HistoryEntry) {
 	@Layout("History") {
-		@nav(true)
+		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
 		<h1 class="mb-2 text-2xl font-semibold">History</h1>
-		<p class="mb-6 text-xs text-zinc-500">Recent actions (who did what) and server events (joins, backups, crashes). Times are UTC.</p>
+		<p class="mb-6 text-xs text-ink-faint">Recent actions (who did what) and server events (joins, backups, crashes). Times are UTC.</p>
 		if len(entries) == 0 {
-			<p class="rounded bg-zinc-900 p-4 text-sm text-zinc-500">No activity recorded yet.</p>
+			<p class="rounded bg-surface-raised p-4 text-sm text-ink-faint">No activity recorded yet.</p>
 		} else {
-			<ul class="divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900" data-signals="{openIncident: 0}">
+			<ul class="divide-y divide-seam overflow-hidden rounded bg-surface-raised" data-signals="{openIncident: 0}">
 				for i, h := range entries {
 					<li class="px-4 py-2.5 text-sm">
 						<div class="flex items-center gap-3">
-							<span class="w-24 flex-none text-xs text-zinc-500">{ h.At.Format("Jan 2 15:04") }</span>
+							<span class="w-24 flex-none text-xs text-ink-faint">{ h.At.Format("Jan 2 15:04") }</span>
 							<span class={ "flex-none rounded px-2 py-0.5 text-xs " + HistoryBadge(h.Source, h.Kind) }>{ HistoryLabel(h.Kind) }</span>
-							<span class="min-w-0 flex-1 truncate text-zinc-300">
+							<span class="min-w-0 flex-1 truncate text-ink">
 								if h.Incident != nil {
-									<span class="text-zinc-500">{ IncidentWorld(h.Incident) } · </span>
+									<span class="text-ink-faint">{ IncidentWorld(h.Incident) } · </span>
 								}
 								if h.Detail != "" {
 									{ h.Detail }
@@ -30,21 +31,21 @@ templ History(entries []domain.HistoryEntry) {
 								<button
 									type="button"
 									data-on:click={ fmt.Sprintf("$openIncident = $openIncident === %d ? 0 : %d", i+1, i+1) }
-									class="flex-none rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+									class="flex-none rounded border border-edge px-2 py-0.5 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink"
 								>
 									Logs
 								</button>
 							}
 							if h.Actor != "" {
-								<span class="flex-none text-xs text-zinc-500">{ h.Actor }</span>
+								<span class="flex-none text-xs text-ink-faint">{ h.Actor }</span>
 							}
 						</div>
 						if h.Incident != nil && h.Incident.LogTail != "" {
 							<div data-show={ fmt.Sprintf("$openIncident === %d", i+1) } class="mt-2">
-								<div class="mb-1 flex flex-wrap gap-3 text-[11px] text-zinc-500">
+								<div class="mb-1 flex flex-wrap gap-3 text-[11px] text-ink-faint">
 									<span>exit { fmt.Sprint(h.Incident.ExitCode) }</span>
 									if h.Incident.OOMKilled {
-										<span class="text-red-400">OOM killed</span>
+										<span class="text-danger">OOM killed</span>
 									}
 									if h.Incident.RestartCount > 0 {
 										<span>{ fmt.Sprint(h.Incident.RestartCount) } restarts</span>
@@ -53,7 +54,7 @@ templ History(entries []domain.HistoryEntry) {
 										<span>failed at { h.Incident.Step }</span>
 									}
 								</div>
-								<pre class="max-h-72 overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-400">{ h.Incident.LogTail }</pre>
+								<pre class="max-h-72 overflow-auto rounded-control border border-edge bg-seam p-3 font-pixel text-[11px] leading-relaxed text-ink-muted">{ h.Incident.LogTail }</pre>
 							</div>
 						}
 					</li>

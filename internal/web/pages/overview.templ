@@ -1,18 +1,19 @@
 package pages
 
 import "fmt"
+import "agrelha/internal/web/components"
 
 type OverviewWorldUI struct {
-	Game      string
-	Number    int
-	Name      string
-	State     string
-	Tier      string
-	MemReq    int
-	MemLimit  int
-	CPUReq    int
-	CPULimit  int
-	Drifts    bool
+	Game string
+	Number int
+	Name string
+	State string
+	Tier string
+	MemReq int
+	MemLimit int
+	CPUReq int
+	CPULimit int
+	Drifts bool
 	TierLabel string
 	CreatedBy string
 }
@@ -20,68 +21,68 @@ type OverviewWorldUI struct {
 func (w OverviewWorldUI) Target() string { return fmt.Sprintf("%s:%d", w.Game, w.Number) }
 
 type OverviewTierUI struct {
-	Key      string
-	Name     string
-	MemReq   int
+	Key string
+	Name string
+	MemReq int
 	MemLimit int
-	CPUReq   int
+	CPUReq int
 	CPULimit int
 	HeapInit int
-	InUse    int
+	InUse int
 }
 
 type OverviewGameUI struct {
-	Game           string
-	Display        string
+	Game string
+	Display string
 	TotalBudgetGiB int
-	UsedGiB        int
-	MaxInstances   int
-	MaxRunning     int
-	CeilingMemGiB  int
-	ShowHeap       bool
-	Tiers          []OverviewTierUI
+	UsedGiB int
+	MaxInstances int
+	MaxRunning int
+	CeilingMemGiB int
+	ShowHeap bool
+	Tiers []OverviewTierUI
 }
 
 templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, flashKind, flashMsg string) {
 	@Layout("Overview") {
-		@nav(true)
+		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
 		<div class="mb-6">
-			<h1 class="text-2xl font-semibold text-zinc-100">Overview</h1>
-			<p class="mt-1 text-xs text-zinc-400">
+			<h1 class="text-2xl font-semibold text-ink">Overview</h1>
+			<p class="mt-1 text-xs text-ink-muted">
 				Every world across every game, the hardware each one runs on, and the limits that apply.
 			</p>
 		</div>
 		@flashBanner(flashKind, flashMsg)
 
-		<div class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-			<div class="mb-4 border-b border-zinc-800/80 pb-3">
-				<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Worlds</h2>
-				<p class="text-xs text-zinc-400">
+		<div class="mb-8 rounded-control border border-edge bg-surface-raised p-5 ">
+			<div class="mb-4 border-b border-edge pb-3">
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">Worlds</h2>
+				<p class="text-xs text-ink-muted">
 					Saving a size rewrites the world's manifests and restarts it.
 				</p>
 			</div>
 
 			if len(worlds) == 0 {
-				<div class="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-4 text-center text-xs text-zinc-500">
+				<div class="rounded-control border border-edge bg-seam p-4 text-center text-xs text-ink-faint">
 					No worlds yet.
 				</div>
 			} else {
 				<div class="space-y-3">
 					for _, w := range worlds {
-						<div class="rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-4">
+						<div class="rounded-control border border-edge bg-seam/50 p-4">
 							<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
 								<div class="flex flex-wrap items-center gap-2">
-									<span class="rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-300">
+									<span class="rounded-full border border-edge bg-surface-raised px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink">
 										{ w.Game }
 									</span>
-									<span class="text-sm font-medium text-zinc-100">{ fmt.Sprintf("%02d  %s", w.Number, w.Name) }</span>
-									<span class="text-[11px] text-zinc-500">{ w.State }</span>
+									<span class="text-sm font-medium text-ink">{ fmt.Sprintf("%02d %s", w.Number, w.Name) }</span>
+									<span class="text-[11px] text-ink-faint">{ w.State }</span>
 									if w.Drifts {
-										<span class="rounded-full border border-amber-700/60 bg-amber-900/30 px-2 py-0.5 text-[10px] text-amber-300">
+										<span class="rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] text-accent">
 											off { w.Tier }
 										</span>
 									} else {
-										<span class="text-[11px] text-zinc-500">{ w.Tier }</span>
+										<span class="text-[11px] text-ink-faint">{ w.Tier }</span>
 									}
 								</div>
 								if w.Drifts && w.TierLabel != "" {
@@ -89,7 +90,7 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 										<input type="hidden" name="target" value={ w.Target() }/>
 										<button
 											type="submit"
-											class="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-400 hover:border-emerald-700 hover:text-emerald-300 transition"
+											class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs text-ink-muted hover:text-accent hover:text-accent transition"
 										>
 											Restore { w.TierLabel }
 										</button>
@@ -105,7 +106,7 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 								@numField("cpulimit", "CPU limit (m)", w.CPULimit)
 								<button
 									type="submit"
-									class="rounded-lg border border-emerald-800/60 bg-emerald-900/40 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:border-emerald-600 hover:text-emerald-100 transition"
+									class="rounded-control border text-accent text-accent px-3 py-1.5 text-xs font-medium text-accent hover:text-accent hover:text-accent transition"
 								>
 									Save &amp; restart
 								</button>
@@ -117,10 +118,10 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 		</div>
 
 		for _, g := range games {
-			<div class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-				<div class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
-					<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">{ g.Display }</h2>
-					<span class="text-[11px] text-zinc-500">
+			<div class="mb-8 rounded-control border border-edge bg-surface-raised p-5 ">
+				<div class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-edge pb-3">
+					<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">{ g.Display }</h2>
+					<span class="text-[11px] text-ink-faint">
 						{ fmt.Sprintf("%d of %d GiB in use", g.UsedGiB, g.TotalBudgetGiB) }
 					</span>
 				</div>
@@ -133,24 +134,24 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 					@numField("ceiling", "Ceiling (GiB)", g.CeilingMemGiB)
 					<button
 						type="submit"
-						class="rounded-lg border border-zinc-700 bg-zinc-800/70 px-3 py-1.5 text-xs text-zinc-200 hover:border-zinc-500 transition"
+						class="rounded-control border border-edge bg-surface-raised/70 px-3 py-1.5 text-xs text-ink hover:border-accent transition"
 					>
 						Save limits
 					</button>
 				</form>
 
-				<p class="mb-2 text-[11px] uppercase tracking-wider text-zinc-500">Tiers</p>
-				<p class="mb-3 text-xs text-zinc-400">
+				<p class="mb-2 text-[11px] uppercase tracking-wider text-ink-faint">Tiers</p>
+				<p class="mb-3 text-xs text-ink-muted">
 					Presets for new worlds. Editing one never resizes an existing world on its own.
 				</p>
 				<div class="space-y-2">
 					for _, tier := range g.Tiers {
-						<form method="POST" action="/overview/tier" class="flex flex-wrap items-end gap-3 rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-3">
+						<form method="POST" action="/overview/tier" class="flex flex-wrap items-end gap-3 rounded-control border border-edge bg-seam p-3">
 							<input type="hidden" name="game" value={ g.Game }/>
 							<input type="hidden" name="key" value={ tier.Key }/>
 							<div class="min-w-28">
-								<p class="text-xs font-medium text-zinc-200">{ tier.Name }</p>
-								<p class="text-[11px] text-zinc-500">{ fmt.Sprintf("%d world(s)", tier.InUse) }</p>
+								<p class="text-xs font-medium text-ink">{ tier.Name }</p>
+								<p class="text-[11px] text-ink-faint">{ fmt.Sprintf("%d world(s)", tier.InUse) }</p>
 							</div>
 							@numField("memreq", "RAM req", tier.MemReq)
 							@numField("memlimit", "RAM limit", tier.MemLimit)
@@ -160,7 +161,7 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 							}
 							<button
 								type="submit"
-								class="rounded-lg border border-zinc-700 bg-zinc-800/70 px-3 py-1.5 text-xs text-zinc-200 hover:border-zinc-500 transition"
+								class="rounded-control border border-edge bg-surface-raised/70 px-3 py-1.5 text-xs text-ink hover:border-accent transition"
 							>
 								Save tier
 							</button>
@@ -170,10 +171,10 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 			</div>
 		}
 
-		<div class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-			<div class="mb-4 border-b border-zinc-800/80 pb-3">
-				<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Creation allowance</h2>
-				<p class="text-xs text-zinc-400">
+		<div class="rounded-control border border-edge bg-surface-raised p-5 ">
+			<div class="mb-4 border-b border-edge pb-3">
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">Creation allowance</h2>
+				<p class="text-xs text-ink-muted">
 					How many worlds a non-admin may create before needing your approval. Counts across all games. Zero means every world is requested.
 				</p>
 			</div>
@@ -181,7 +182,7 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 				@numField("allowance", "Worlds per account", allowance)
 				<button
 					type="submit"
-					class="rounded-lg border border-zinc-700 bg-zinc-800/70 px-3 py-1.5 text-xs text-zinc-200 hover:border-zinc-500 transition"
+					class="rounded-control border border-edge bg-surface-raised/70 px-3 py-1.5 text-xs text-ink hover:border-accent transition"
 				>
 					Save
 				</button>
@@ -192,13 +193,13 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 
 templ numField(name, label string, value int) {
 	<label class="block">
-		<span class="mb-1 block text-[11px] text-zinc-500">{ label }</span>
+		<span class="mb-1 block text-[11px] text-ink-faint">{ label }</span>
 		<input
 			type="number"
 			name={ name }
 			value={ fmt.Sprintf("%d", value) }
 			min="0"
-			class="w-28 rounded-lg border border-zinc-800 bg-zinc-950/70 px-2.5 py-1.5 text-xs text-zinc-200 focus:border-emerald-700 focus:outline-none"
+			class="w-28 rounded-control border border-edge bg-seam/70 px-2.5 py-1.5 text-xs text-ink focus:text-accent "
 		/>
 	</label>
 }

@@ -1,0 +1,50 @@
+package components
+
+func RowClass() string {
+	return "flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-seam px-6 py-4"
+}
+
+templ RowList() {
+	<div class="-mx-6 mt-6 border-t border-seam">
+		{ children... }
+	</div>
+}
+
+templ Row() {
+	<div class={ RowClass() }>
+		{ children... }
+	</div>
+}
+
+templ Band() {
+	<div class="-mx-6 border-y border-seam px-6 py-5">
+		{ children... }
+	</div>
+}
+
+templ SectionHead(title, note string) {
+	<div class="mt-8">
+		<h2 class="font-display text-xl font-semibold text-ink">{ title }</h2>
+		if note != "" {
+			<p class="mt-1 max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ note }</p>
+		}
+	</div>
+}
+
+templ Prose(text string) {
+	<p class="mt-8 max-w-prose font-display text-base leading-relaxed text-ink-muted">{ text }</p>
+}
+
+templ Drawer(signal, id, placeholder string) {
+	<div data-show={ "$" + signal } class="fixed inset-0 z-50 flex justify-end bg-black/70" style="display: none;">
+		<div class="fixed inset-0" data-on:click={ "$" + signal + " = false" }></div>
+		<div class="relative z-10 flex h-full w-full max-w-2xl flex-col overflow-y-auto border-l border-seam bg-surface">
+			<div class="flex justify-end px-6 pt-5">
+				@Button(ButtonProps{Variant: VariantSecondary, Text: "Close", OnClick: "$" + signal + " = false"})
+			</div>
+			<div id={ id }>
+				<p class="px-6 py-10 font-pixel text-[11px] text-ink-faint">{ placeholder }</p>
+			</div>
+		</div>
+	</div>
+}

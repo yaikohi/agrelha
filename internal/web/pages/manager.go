@@ -340,14 +340,3 @@ func (p ManagerPortUI) CopyClick() string {
 func (p ManagerPortUI) CopyLabelExpr() string {
 	return fmt.Sprintf("$%s ? 'copied' : 'click to copy'", p.CopySignal())
 }
-
-func managerActionStyle(kind string) string {
-	switch kind {
-	case "danger":
-		return "border border-edge text-ink-muted hover:border-danger hover:text-danger"
-	case "blocked":
-		return "border border-edge text-ink-faint cursor-not-allowed"
-	default:
-		return "border border-accent text-accent hover:bg-accent hover:text-accent-ink"
-	}
-}

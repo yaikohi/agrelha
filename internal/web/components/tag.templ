@@ -1,0 +1,24 @@
+package components
+
+type TagTone string
+
+const (
+	TagQuiet  TagTone = "quiet"
+	TagAccent TagTone = "accent"
+	TagAlarm  TagTone = "alarm"
+)
+
+func TagClass(tone TagTone) string {
+	switch tone {
+	case TagAccent:
+		return "font-pixel text-[11px] text-accent"
+	case TagAlarm:
+		return "font-pixel text-[11px] text-danger"
+	default:
+		return "font-pixel text-[11px] text-ink-faint"
+	}
+}
+
+templ Tag(tone TagTone, text string) {
+	<span class={ TagClass(tone) }>{ text }</span>
+}

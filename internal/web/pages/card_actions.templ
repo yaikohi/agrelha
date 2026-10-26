@@ -1,13 +1,13 @@
 package pages
 
 templ cardActions(a CardActionsUI) {
-	<div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800/80 pt-4">
+	<div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-edge pt-4">
 		<div class="flex flex-wrap items-center gap-1.5">
 			for _, act := range a.Lifecycle {
 				<button
 					type="button"
 					data-on:click={ act.Script }
-					class={ "rounded-lg px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
+					class={ "rounded-control px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
 				>{ act.Label }</button>
 			}
 			for _, act := range a.Special {
@@ -15,23 +15,23 @@ templ cardActions(a CardActionsUI) {
 					<a
 						href={ templ.SafeURL(act.Href) }
 						title="Only available for this game"
-						class={ "rounded-lg px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
+						class={ "rounded-control px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
 					>{ act.Label }</a>
 				} else {
 					<button
 						type="button"
 						data-on:click={ act.Script }
 						title="Only available for this game"
-						class={ "rounded-lg px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
+						class={ "rounded-control px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
 					>{ act.Label }</button>
 				}
 			}
 			if len(a.Links) > 0 {
-				<span class="mx-1 h-4 w-px bg-zinc-800"></span>
+				<span class="mx-1 h-4 w-px bg-surface-raised"></span>
 				for _, l := range a.Links {
 					<a
 						href={ templ.SafeURL(l.Href) }
-						class={ "rounded-lg px-2.5 py-1 text-xs " + actionStyle(l.Kind) }
+						class={ "rounded-control px-2.5 py-1 text-xs " + actionStyle(l.Kind) }
 					>{ l.Label }</a>
 				}
 			}
@@ -39,7 +39,7 @@ templ cardActions(a CardActionsUI) {
 		if a.Manager.Href != "" {
 			<a
 				href={ templ.SafeURL(a.Manager.Href) }
-				class="rounded-xl bg-zinc-100 px-4 py-1.5 text-xs font-semibold text-zinc-950 shadow-md transition hover:bg-white"
+				class="rounded-control bg-accent px-4 py-1.5 text-xs font-semibold text-accent-ink transition hover:bg-ink"
 			>{ a.Manager.Label }</a>
 		}
 	</div>

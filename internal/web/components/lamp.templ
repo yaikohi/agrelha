@@ -1,0 +1,22 @@
+package components
+
+type LampState string
+
+const (
+	LampLit     LampState = "lamp-lit"
+	LampDim     LampState = "lamp-dim"
+	LampOut     LampState = "lamp-out"
+	LampUnknown LampState = "lamp-unknown"
+)
+
+func LampClass(s LampState) string {
+	return "lamp " + string(s)
+}
+
+templ Lamp(s LampState) {
+	<span class={ LampClass(s) }></span>
+}
+
+templ LampBound(expr string) {
+	<span class="lamp" data-class={ expr }></span>
+}

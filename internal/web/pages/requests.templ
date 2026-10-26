@@ -1,37 +1,39 @@
 package pages
 
+import "agrelha/internal/web/components"
+
 type RequestUI struct {
-	ID        string
+	ID string
 	Requester string
-	Game      string
-	Name      string
-	Tier      string
-	Mods      int
-	Created   string
-	Status    string
-	Note      string
-	Decided   string
+	Game string
+	Name string
+	Tier string
+	Mods int
+	Created string
+	Status string
+	Note string
+	Decided string
 	DecidedBy string
-	Number    int
+	Number int
 }
 
 templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg string) {
 	@Layout("World requests") {
-		@nav(true)
+		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
 		<div class="mb-6">
-			<h1 class="text-2xl font-semibold text-zinc-100">World requests</h1>
-			<p class="mt-1 text-xs text-zinc-400">
+			<h1 class="text-2xl font-semibold text-ink">World requests</h1>
+			<p class="mt-1 text-xs text-ink-muted">
 				An account that already runs a world must ask before creating another. Approving one creates the world and grants them access to it.
 			</p>
 		</div>
 		@flashBanner(flashKind, flashMsg)
 
-		<div class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-			<div class="mb-4 border-b border-zinc-800/80 pb-3">
-				<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">
+		<div class="mb-8 rounded-control border border-edge bg-surface-raised p-5 ">
+			<div class="mb-4 border-b border-edge pb-3">
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">
 					Awaiting your decision
 					if len(pending) > 0 {
-						<span class="ml-2 rounded-full border border-amber-700/60 bg-amber-900/40 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+						<span class="ml-2 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
 							{ len(pending) }
 						</span>
 					}
@@ -39,25 +41,25 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 			</div>
 
 			if len(pending) == 0 {
-				<div class="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-4 text-center text-xs text-zinc-500">
+				<div class="rounded-control border border-edge bg-seam p-4 text-center text-xs text-ink-faint">
 					Nothing waiting.
 				</div>
 			} else {
 				<div class="space-y-3">
 					for _, r := range pending {
-						<div class="rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-4">
+						<div class="rounded-control border border-edge bg-seam/50 p-4">
 							<div class="flex flex-wrap items-start justify-between gap-3">
 								<div>
 									<div class="flex items-center gap-2">
-										<span class="rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-300">
+										<span class="rounded-full border border-edge bg-surface-raised px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink">
 											{ r.Game }
 										</span>
-										<span class="text-sm font-medium text-zinc-100">{ r.Name }</span>
+										<span class="text-sm font-medium text-ink">{ r.Name }</span>
 									</div>
-									<p class="mt-1 text-[11px] text-zinc-500">
+									<p class="mt-1 text-[11px] text-ink-faint">
 										requested by { r.Requester } on { r.Created }
 									</p>
-									<p class="mt-1 text-[11px] text-zinc-500">
+									<p class="mt-1 text-[11px] text-ink-faint">
 										tier { r.Tier } &middot; { r.Mods } mods
 									</p>
 								</div>
@@ -66,7 +68,7 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 										<input type="hidden" name="id" value={ r.ID }/>
 										<button
 											type="submit"
-											class="rounded-lg border border-emerald-800/60 bg-emerald-900/40 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:border-emerald-600 hover:text-emerald-100 transition"
+											class="rounded-control border text-accent text-accent px-3 py-1.5 text-xs font-medium text-accent hover:text-accent hover:text-accent transition"
 										>
 											Approve &amp; create
 										</button>
@@ -77,11 +79,11 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 											type="text"
 											name="note"
 											placeholder="reason (optional)"
-											class="w-44 rounded-lg border border-zinc-800 bg-zinc-950/70 px-2.5 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
+											class="w-44 rounded-control border border-edge bg-seam/70 px-2.5 py-1.5 text-xs text-ink placeholder:text-ink-faint focus-accent "
 										/>
 										<button
 											type="submit"
-											class="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-400 hover:border-red-800 hover:text-red-300 transition"
+											class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs text-ink-muted hover:text-danger hover:text-danger transition"
 										>
 											Deny
 										</button>
@@ -95,27 +97,27 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 		</div>
 
 		if len(decided) > 0 {
-			<div class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-				<div class="mb-4 border-b border-zinc-800/80 pb-3">
-					<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Already decided</h2>
+			<div class="rounded-control border border-edge bg-surface-raised p-5 ">
+				<div class="mb-4 border-b border-edge pb-3">
+					<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">Already decided</h2>
 				</div>
-				<div class="divide-y divide-zinc-800/80 overflow-hidden rounded-lg border border-zinc-800/80 bg-zinc-950/50">
+				<div class="divide-y divide-seam overflow-hidden rounded-control border border-edge bg-seam/50">
 					for _, r := range decided {
 						<div class="flex flex-wrap items-center justify-between gap-2 p-3 text-xs">
 							<div>
-								<span class="text-zinc-300">{ r.Game } &middot; { r.Name }</span>
-								<span class="ml-2 text-zinc-500">{ r.Requester }</span>
+								<span class="text-ink">{ r.Game } &middot; { r.Name }</span>
+								<span class="ml-2 text-ink-faint">{ r.Requester }</span>
 								if r.Note != "" {
-									<p class="mt-1 text-[11px] text-zinc-500">{ r.Note }</p>
+									<p class="mt-1 text-[11px] text-ink-faint">{ r.Note }</p>
 								}
 							</div>
 							<div class="flex items-center gap-3">
 								if r.Status == "approved" {
-									<span class="rounded-full border border-emerald-800/60 bg-emerald-900/30 px-2 py-0.5 text-[10px] text-emerald-300">approved</span>
+									<span class="rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] text-accent">approved</span>
 								} else {
-									<span class="rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2 py-0.5 text-[10px] text-zinc-400">denied</span>
+									<span class="rounded-full border border-edge bg-surface-raised px-2 py-0.5 text-[10px] text-ink-muted">denied</span>
 								}
-								<span class="text-[11px] text-zinc-600">{ r.Decided }</span>
+								<span class="text-[11px] text-ink-faint">{ r.Decided }</span>
 							</div>
 						</div>
 					}

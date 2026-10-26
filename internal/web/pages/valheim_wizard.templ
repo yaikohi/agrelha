@@ -7,7 +7,7 @@ import (
 
 templ ValheimWizard(budget BudgetUI) {
 	@Layout("Create Valheim World") {
-		@nav(true)
+		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
 		<div
 			class="space-y-6"
 			data-signals="{step:1,name:'',password:'',seed:'',source:'vanilla',tier:'medium',cart:[],wizardModSearch:'',wizardModSearchLoading:false,showWizardModDetail:false,manualSlug:'',raw_mods:'',importError:'',importLoading:false,creating:false,redirect:''}"
@@ -23,69 +23,69 @@ templ ValheimWizard(budget BudgetUI) {
 			})
 
 			<!-- STEP 1: IDENTITY -->
-			<div data-show="$step == 1" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
-				<h2 class="text-lg font-bold text-zinc-100">Step 1: Name Your Valheim Server</h2>
-				<p class="mt-1 text-xs text-zinc-400">Give your world a title, an optional join password, and a world seed.</p>
+			<div data-show="$step == 1" class="rounded-control border border-edge bg-surface-raised p-8 ">
+				<h2 class="text-lg font-bold text-ink">Step 1: Name Your Valheim Server</h2>
+				<p class="mt-1 text-xs text-ink-muted">Give your world a title, an optional join password, and a world seed.</p>
 
 				<div class="mt-6 max-w-md space-y-4">
 					@components.Input(components.InputProps{
-						Label:       "World / Server Name",
-						Required:    true,
+						Label: "World / Server Name",
+						Required: true,
 						Placeholder: "e.g. Valheim Legends",
-						Bind:        "name",
+						Bind: "name",
 					})
 
 					@components.Input(components.InputProps{
-						Label:       "Server Password (Optional)",
+						Label: "Server Password (Optional)",
 						Placeholder: "e.g. secret123 (minimum 5 characters if set)",
-						Bind:        "password",
-						HelperText:  "Required: at least 5 characters. Valheim will not start a server without a password.",
+						Bind: "password",
+						HelperText: "Required: at least 5 characters. Valheim will not start a server without a password.",
 					})
 
 					@components.Input(components.InputProps{
-						Label:       "World Seed (Optional)",
+						Label: "World Seed (Optional)",
 						Placeholder: "e.g. OdinRealm (random if blank)",
-						Bind:        "seed",
-						Class:       "font-mono",
+						Bind: "seed",
+						Class: "font-pixel",
 					})
 
 					<div class="pt-4 flex justify-end">
 						@components.Button(components.ButtonProps{
 							Variant: components.VariantPrimary,
-							Size:    components.SizeMd,
+							Size: components.SizeMd,
 							OnClick: "if ($name.trim()) { $step = 2 } else { alert('Please enter a world name') }",
-							Text:    "Next: Choose Content →",
+							Text: "Next: Choose Content →",
 						})
 					</div>
 				</div>
 			</div>
 
 			<!-- STEP 2: CONTENT & MODS -->
-			<div data-show="$step == 2" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
-				<h2 class="text-lg font-bold text-zinc-100">Step 2: Content & Modding</h2>
-				<p class="mt-1 text-xs text-zinc-400">BepInEx disables Steam achievements, and cannot be added to a world later — so this choice is permanent.</p>
+			<div data-show="$step == 2" class="rounded-control border border-edge bg-surface-raised p-8 ">
+				<h2 class="text-lg font-bold text-ink">Step 2: Content & Modding</h2>
+				<p class="mt-1 text-xs text-ink-muted">BepInEx disables Steam achievements, and cannot be added to a world later — so this choice is permanent.</p>
 
 				<div class="mt-6 space-y-6 max-w-3xl">
 					<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 						@components.OptionCard(components.OptionCardProps{
-							Name:        "source",
-							Value:       "vanilla",
-							BindSignal:  "source",
-							Title:       "Vanilla",
+							Name: "source",
+							Value: "vanilla",
+							BindSignal: "source",
+							Title: "Vanilla",
 							Description: "No BepInEx. Steam achievements stay earnable. Mods can never be added — duplicate the world instead.",
 						})
 						@components.OptionCard(components.OptionCardProps{
-							Name:        "source",
-							Value:       "scratch",
-							BindSignal:  "source",
-							Title:       "Modded (BepInEx)",
+							Name: "source",
+							Value: "scratch",
+							BindSignal: "source",
+							Title: "Modded (BepInEx)",
 							Description: "Browse Thunderstore mods or add packages by slug. Disables Steam achievements.",
 						})
 						@components.OptionCard(components.OptionCardProps{
-							Name:        "source",
-							Value:       "modpack",
-							BindSignal:  "source",
-							Title:       "Import Profile (BepInEx)",
+							Name: "source",
+							Value: "modpack",
+							BindSignal: "source",
+							Title: "Import Profile (BepInEx)",
 							Description: "Start from an existing .r2z or export.r2x profile. Disables Steam achievements.",
 						})
 					</div>
@@ -99,13 +99,13 @@ templ ValheimWizard(budget BudgetUI) {
 								data-bind="wizardModSearch"
 								data-on:keydown="if (evt.key === 'Enter') { evt.preventDefault(); @post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: $wizardModSearch}}) }"
 								placeholder="Search Thunderstore mods (e.g. Mining, Jotunn, Equipment, PlantEasily)..."
-								class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none"
+								class="flex-1 rounded-control border border-edge bg-surface-raised px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint focus-accent "
 							/>
 							<button
 								type="button"
 								data-indicator="wizardModSearchLoading"
 								data-on:click="@post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: $wizardModSearch}})"
-								class="rounded-xl bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 hover:bg-white transition"
+								class="rounded-control bg-accent px-5 py-2.5 text-xs font-semibold text-accent-ink hover:bg-ink transition"
 							>
 								<span data-show="!$wizardModSearchLoading">Search</span>
 								<span data-show="$wizardModSearchLoading" class="animate-pulse">Searching...</span>
@@ -113,23 +113,23 @@ templ ValheimWizard(budget BudgetUI) {
 						</div>
 
 						<!-- Selected Mods Cart Tray -->
-						<div class="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-							<div class="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+						<div class="rounded-control border border-edge bg-seam p-4">
+							<div class="flex items-center justify-between pb-2 border-b border-edge">
 								<div class="flex items-center gap-2">
-									<h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Selected Mods</h4>
-									<span class="rounded-full bg-zinc-800 border border-zinc-700 px-2 py-0.5 text-[11px] font-mono font-medium text-zinc-300" data-text="$cart.length"></span>
+									<h4 class="text-xs font-semibold uppercase tracking-wider text-ink">Selected Mods</h4>
+									<span class="rounded-full bg-surface-raised border border-edge px-2 py-0.5 text-[11px] font-pixel font-medium text-ink" data-text="$cart.length"></span>
 								</div>
 								<button
 									type="button"
 									data-show="$cart.length > 0"
 									data-on:click="$cart = []; @post('/api/valheim/wizard/cart/sync')"
-									class="text-xs text-zinc-500 hover:text-red-400 transition"
+									class="text-xs text-ink-faint hover:text-danger transition"
 								>
 									Clear All
 								</button>
 							</div>
 							<div id="wizard-valheim-cart-items" class="mt-3">
-								<span class="text-xs text-zinc-500 py-1">No mods added yet. Search or click "+ Add" on popular mods below.</span>
+								<span class="text-xs text-ink-faint py-1">No mods added yet. Search or click "+ Add" on popular mods below.</span>
 							</div>
 						</div>
 
@@ -139,14 +139,14 @@ templ ValheimWizard(budget BudgetUI) {
 							class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1"
 							data-effect="@post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: ''}})"
 						>
-							<div class="col-span-full py-12 text-center text-xs text-zinc-500 animate-pulse">
+							<div class="col-span-full py-12 text-center text-xs text-ink-faint animate-pulse">
 								Loading popular Thunderstore mods...
 							</div>
 						</div>
 
 						<!-- Collapsible exact slug / manual package entry -->
-						<details class="pt-2 border-t border-zinc-800/80">
-							<summary class="text-xs text-zinc-500 cursor-pointer hover:text-zinc-300">Or add custom package slugs manually...</summary>
+						<details class="pt-2 border-t border-edge">
+							<summary class="text-xs text-ink-faint cursor-pointer hover:text-ink">Or add custom package slugs manually...</summary>
 							<div class="mt-3 space-y-3">
 								<div class="flex items-center gap-2">
 									<input
@@ -154,135 +154,135 @@ templ ValheimWizard(budget BudgetUI) {
 										data-bind="manualSlug"
 										data-on:keydown="if (evt.key === 'Enter') { evt.preventDefault(); if ($manualSlug.trim()) { if (!$cart.includes($manualSlug.trim())) { $cart = [...$cart, $manualSlug.trim()] }; $manualSlug = ''; @post('/api/valheim/wizard/cart/sync') } }"
 										placeholder="e.g. denikson-BepInExPack_Valheim or ValheimModding-Jotunn"
-										class="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none font-mono"
+										class="flex-1 rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs text-ink placeholder:text-ink-faint focus-accent font-pixel"
 									/>
 									<button
 										type="button"
 										data-on:click="if ($manualSlug.trim()) { if (!$cart.includes($manualSlug.trim())) { $cart = [...$cart, $manualSlug.trim()] }; $manualSlug = ''; @post('/api/valheim/wizard/cart/sync') }"
-										class="rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition"
+										class="rounded-control bg-surface-raised border border-edge px-3 py-1.5 text-xs font-medium text-ink hover:text-accent transition"
 									>
 										+ Add Slug
 									</button>
 								</div>
 								@components.Textarea(components.TextareaProps{
-									Label:       "Bulk package identifiers (one per line)",
-									Rows:        3,
+									Label: "Bulk package identifiers (one per line)",
+									Rows: 3,
 									Placeholder: "denikson-BepInExPack_Valheim\nValheimModding-Jotunn",
-									Bind:        "raw_mods",
-									HelperText:  "You can paste multiple identifiers here. They will be merged with your selected mods on creation.",
+									Bind: "raw_mods",
+									HelperText: "You can paste multiple identifiers here. They will be merged with your selected mods on creation.",
 								})
 							</div>
 						</details>
 					</div>
 
 					<!-- Import modpack file -->
-					<div data-show="$source == 'modpack'" class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
-						<label class="block text-xs font-medium text-zinc-300">Upload Modpack Profile (.r2z or export.r2x)</label>
+					<div data-show="$source == 'modpack'" class="rounded-control border border-edge bg-surface-raised p-4 space-y-3">
+						<label class="block text-xs font-medium text-ink">Upload Modpack Profile (.r2z or export.r2x)</label>
 						<input
 							type="file"
 							accept=".r2z,.r2x,.zip"
 							data-on:change="@post('/api/valheim/wizard/import', {contentType: 'form'})"
-							class="block w-full text-xs text-zinc-400 file:mr-4 file:rounded-xl file:border-0 file:bg-zinc-800 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-zinc-200 hover:file:bg-zinc-700"
+							class="block w-full text-xs text-ink-muted file:mr-4 file:rounded-control file:border-0 file:bg-surface-raised file:px-4 file:py-2 file:text-xs file:font-semibold file:text-ink hover:file:text-accent"
 						/>
-						<div data-show="$importError" class="text-xs text-red-400" data-text="$importError"></div>
+						<div data-show="$importError" class="text-xs text-danger" data-text="$importError"></div>
 					</div>
 
 					<div class="pt-4 flex justify-between">
 						@components.Button(components.ButtonProps{
 							Variant: components.VariantSecondary,
-							Size:    components.SizeMd,
+							Size: components.SizeMd,
 							OnClick: "$step = 1",
-							Text:    "← Back",
+							Text: "← Back",
 						})
 						@components.Button(components.ButtonProps{
 							Variant: components.VariantPrimary,
-							Size:    components.SizeMd,
+							Size: components.SizeMd,
 							OnClick: "$step = 3",
-							Text:    "Next: Resource Tier →",
+							Text: "Next: Resource Tier →",
 						})
 					</div>
 				</div>
 			</div>
 
 			<!-- STEP 3: TIER & REVIEW -->
-			<div data-show="$step == 3" class="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-8 shadow-sm">
-				<h2 class="text-lg font-bold text-zinc-100">Step 3: Resource Tier & Review</h2>
-				<p class="mt-1 text-xs text-zinc-400">Select memory allocation and verify server details.</p>
+			<div data-show="$step == 3" class="rounded-control border border-edge bg-surface-raised p-8 ">
+				<h2 class="text-lg font-bold text-ink">Step 3: Resource Tier & Review</h2>
+				<p class="mt-1 text-xs text-ink-muted">Select memory allocation and verify server details.</p>
 
 				<div class="mt-6 space-y-6 max-w-md">
 					<div>
-						<label class="block text-xs font-medium text-zinc-300">Memory Tier</label>
+						<label class="block text-xs font-medium text-ink">Memory Tier</label>
 						<div class="mt-2 space-y-2">
 							@components.OptionCard(components.OptionCardProps{
-								Name:        "tier",
-								Value:       "small",
-								BindSignal:  "tier",
-								Title:       "Small",
-								Subtitle:    "Lightweight vanilla / minimal mods, up to 4 players",
-								Badge:       "4 GiB",
+								Name: "tier",
+								Value: "small",
+								BindSignal: "tier",
+								Title: "Small",
+								Subtitle: "Lightweight vanilla / minimal mods, up to 4 players",
+								Badge: "4 GiB",
 							})
 							@components.OptionCard(components.OptionCardProps{
-								Name:        "tier",
-								Value:       "medium",
-								BindSignal:  "tier",
-								Title:       "Medium - Standard",
-								Subtitle:    "Standard modded Valheim gameplay, up to 10 players",
-								Badge:       "6 GiB",
+								Name: "tier",
+								Value: "medium",
+								BindSignal: "tier",
+								Title: "Medium - Standard",
+								Subtitle: "Standard modded Valheim gameplay, up to 10 players",
+								Badge: "6 GiB",
 							})
 							@components.OptionCard(components.OptionCardProps{
-								Name:        "tier",
-								Value:       "large",
-								BindSignal:  "tier",
-								Title:       "Large",
-								Subtitle:    "Heavy modpacks with extensive assets, up to 10 players",
-								Badge:       "8 GiB",
+								Name: "tier",
+								Value: "large",
+								BindSignal: "tier",
+								Title: "Large",
+								Subtitle: "Heavy modpacks with extensive assets, up to 10 players",
+								Badge: "8 GiB",
 							})
 						</div>
 					</div>
 
 					<!-- Review Summary Card -->
-					<div class="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4 space-y-2 text-xs">
+					<div class="rounded-control border border-edge bg-seam/80 p-4 space-y-2 text-xs">
 						<div class="flex justify-between">
-							<span class="text-zinc-500">Server Name:</span>
-							<span class="font-semibold text-zinc-200" data-text="$name"></span>
+							<span class="text-ink-faint">Server Name:</span>
+							<span class="font-semibold text-ink" data-text="$name"></span>
 						</div>
 						<div class="flex justify-between">
-							<span class="text-zinc-500">Password:</span>
-							<span class="font-mono text-zinc-200" data-text="$password ? $password : 'Required — Valheim will not start without one'"></span>
+							<span class="text-ink-faint">Password:</span>
+							<span class="font-pixel text-ink" data-text="$password ? $password : 'Required — Valheim will not start without one'"></span>
 						</div>
 						<div class="flex justify-between">
-							<span class="text-zinc-500">Seed:</span>
-							<span class="font-mono text-zinc-200" data-text="$seed ? $seed : 'Random'"></span>
+							<span class="text-ink-faint">Seed:</span>
+							<span class="font-pixel text-ink" data-text="$seed ? $seed : 'Random'"></span>
 						</div>
 						<div class="flex justify-between">
-							<span class="text-zinc-500">Content Mode:</span>
-							<span class="capitalize text-zinc-200" data-text="$source"></span>
+							<span class="text-ink-faint">Content Mode:</span>
+							<span class="capitalize text-ink" data-text="$source"></span>
 						</div>
 						<div data-show="$source == 'scratch'" class="flex justify-between">
-							<span class="text-zinc-500">Selected Mods:</span>
-							<span class="font-mono text-zinc-200" data-text="$cart.length + ' mods'"></span>
+							<span class="text-ink-faint">Selected Mods:</span>
+							<span class="font-pixel text-ink" data-text="$cart.length + ' mods'"></span>
 						</div>
 						<div class="flex justify-between">
-							<span class="text-zinc-500">Memory Budget:</span>
-							<span class="font-mono text-zinc-200">{ fmt.Sprintf("%d / %d GiB used", budget.UsedGiB, budget.TotalBudgetGiB) }</span>
+							<span class="text-ink-faint">Memory Budget:</span>
+							<span class="font-pixel text-ink">{ fmt.Sprintf("%d / %d GiB used", budget.UsedGiB, budget.TotalBudgetGiB) }</span>
 						</div>
 					</div>
 
 					<div class="pt-4 flex justify-between">
 						@components.Button(components.ButtonProps{
-							Variant:   components.VariantSecondary,
-							Size:      components.SizeMd,
-							OnClick:   "if (!$creating) $step = 2",
+							Variant: components.VariantSecondary,
+							Size: components.SizeMd,
+							OnClick: "if (!$creating) $step = 2",
 							Indicator: "creating",
-							Text:      "← Back",
+							Text: "← Back",
 						})
 						@components.Button(components.ButtonProps{
-							Variant:     components.VariantPrimary,
-							Size:        components.SizeMd,
-							Indicator:   "creating",
+							Variant: components.VariantPrimary,
+							Size: components.SizeMd,
+							Indicator: "creating",
 							LoadingText: "Provisioning & Launching Server...",
-							OnClick:     "if ($creating) return; @post('/api/valheim/wizard/create', {contentType: 'json'})",
-							Text:        "Provision & Launch Server 🚀",
+							OnClick: "if ($creating) return; @post('/api/valheim/wizard/create', {contentType: 'json'})",
+							Text: "Provision & Launch Server 🚀",
 						})
 					</div>
 				</div>
@@ -297,9 +297,9 @@ templ ValheimWizard(budget BudgetUI) {
 				<!-- Backdrop dismiss click -->
 				<div class="fixed inset-0" data-on:click="$showWizardModDetail = false"></div>
 				<!-- Drawer Panel -->
-				<div class="relative z-10 w-full max-w-2xl bg-zinc-900 border-l border-zinc-800 shadow-2xl overflow-y-auto h-full flex flex-col">
+				<div class="relative z-10 w-full max-w-2xl bg-surface-raised border-l border-edge overflow-y-auto h-full flex flex-col">
 					<div id="wizard-valheim-mod-detail-content">
-						<div class="p-8 text-center text-zinc-500 text-sm animate-pulse">Loading mod details...</div>
+						<div class="p-8 text-center text-ink-faint text-sm animate-pulse">Loading mod details...</div>
 					</div>
 				</div>
 			</div>

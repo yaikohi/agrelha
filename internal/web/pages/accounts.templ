@@ -1,35 +1,36 @@
 package pages
 
 import "fmt"
+import "agrelha/internal/web/components"
 
 type AccountGrantUI struct {
 	Target string
-	Label  string
+	Label string
 }
 
 type AccountUI struct {
-	Subject   string
-	Email     string
-	Name      string
-	Label     string
-	Admin     bool
+	Subject string
+	Email string
+	Name string
+	Label string
+	Admin bool
 	FirstSeen string
-	LastSeen  string
-	Grants    []AccountGrantUI
+	LastSeen string
+	Grants []AccountGrantUI
 }
 
 type InstanceOptionUI struct {
 	Target string
-	Label  string
+	Label string
 }
 
 templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady bool, registryNote string, flashKind, flashMsg string) {
 	@Layout("Accounts") {
-		@nav(true)
+		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
-				<h1 class="text-2xl font-semibold text-zinc-100">Accounts & Grants</h1>
-				<p class="mt-1 text-xs text-zinc-400">
+				<h1 class="text-2xl font-semibold text-ink">Accounts & Grants</h1>
+				<p class="mt-1 text-xs text-ink-muted">
 					Who can sign in to agrelha, and which worlds each of them may operate.
 				</p>
 			</div>
@@ -37,40 +38,40 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 		@flashBanner(flashKind, flashMsg)
 
 		if !registryReady {
-			<div class="mb-6 rounded-xl border border-amber-800/60 bg-amber-950/30 p-4 text-xs text-amber-200">
+			<div class="mb-6 rounded-control border text-accent text-accent p-4 text-xs text-accent">
 				<p class="font-semibold">Granting is unavailable.</p>
-				<p class="mt-1 text-amber-300/80">{ registryNote }</p>
+				<p class="mt-1 text-accent">{ registryNote }</p>
 			</div>
 		}
 
-		<div class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-			<div class="mb-4 border-b border-zinc-800/80 pb-3">
-				<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Accounts</h2>
-				<p class="text-xs text-zinc-400">
+		<div class="mb-8 rounded-control border border-edge bg-surface-raised p-5 ">
+			<div class="mb-4 border-b border-edge pb-3">
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">Accounts</h2>
+				<p class="text-xs text-ink-muted">
 					An account appears here the first time it signs in. You cannot grant access to someone who has never signed in.
 				</p>
 			</div>
 
 			if len(accounts) == 0 {
-				<div class="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-4 text-center text-xs text-zinc-500">
+				<div class="rounded-control border border-edge bg-seam p-4 text-center text-xs text-ink-faint">
 					Nobody has signed in yet. Ask them to open agrelha and sign in once, then grant them a world here.
 				</div>
 			} else {
 				<div class="space-y-4">
 					for _, a := range accounts {
-						<div class="rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-4">
+						<div class="rounded-control border border-edge bg-seam/50 p-4">
 							<div class="flex flex-wrap items-start justify-between gap-3">
 								<div>
 									<div class="flex items-center gap-2">
-										<span class="text-sm font-medium text-zinc-100">{ a.Label }</span>
+										<span class="text-sm font-medium text-ink">{ a.Label }</span>
 										if a.Admin {
-											<span class="rounded-full border border-emerald-700/60 bg-emerald-900/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300">
+											<span class="rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
 												Admin
 											</span>
 										}
 									</div>
-									<p class="mt-1 font-mono text-[11px] text-zinc-500">{ a.Subject }</p>
-									<p class="mt-1 text-[11px] text-zinc-500">
+									<p class="mt-1 font-pixel text-[11px] text-ink-faint">{ a.Subject }</p>
+									<p class="mt-1 text-[11px] text-ink-faint">
 										{ fmt.Sprintf("first seen %s · last seen %s", a.FirstSeen, a.LastSeen) }
 									</p>
 								</div>
@@ -78,18 +79,18 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 									<input type="hidden" name="subject" value={ a.Subject }/>
 									<button
 										type="submit"
-										class="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-400 hover:border-red-800 hover:text-red-300 transition"
+										class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs text-ink-muted hover:text-danger hover:text-danger transition"
 									>
 										Sign out everywhere
 									</button>
 								</form>
 							</div>
 
-							<div class="mt-4 border-t border-zinc-800/60 pt-3">
+							<div class="mt-4 border-t border-edge pt-3">
 								if a.Admin {
-									<p class="text-xs text-zinc-500">Administrators can operate every world; per-world grants are not needed.</p>
+									<p class="text-xs text-ink-faint">Administrators can operate every world; per-world grants are not needed.</p>
 								} else if len(a.Grants) == 0 {
-									<p class="text-xs text-zinc-500">No worlds granted.</p>
+									<p class="text-xs text-ink-faint">No worlds granted.</p>
 								} else {
 									<div class="flex flex-wrap gap-2">
 										for _, g := range a.Grants {
@@ -99,10 +100,10 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 												<button
 													type="submit"
 													title="Revoke this grant"
-													class="inline-flex items-center gap-1.5 rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1 text-xs text-zinc-300 hover:border-red-800 hover:text-red-300 transition"
+													class="inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface-raised px-2.5 py-1 text-xs text-ink hover:text-danger hover:text-danger transition"
 												>
 													<span>{ g.Label }</span>
-													<span class="text-zinc-500">&times;</span>
+													<span class="text-ink-faint">&times;</span>
 												</button>
 											</form>
 										}
@@ -114,7 +115,7 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 										<input type="hidden" name="subject" value={ a.Subject }/>
 										<select
 											name="target"
-											class="rounded-lg border border-zinc-800 bg-zinc-950/70 px-2.5 py-1.5 text-xs text-zinc-200 focus:border-emerald-700 focus:outline-none"
+											class="rounded-control border border-edge bg-seam/70 px-2.5 py-1.5 text-xs text-ink focus:text-accent "
 										>
 											for _, o := range instances {
 												<option value={ o.Target }>{ o.Label }</option>
@@ -122,7 +123,7 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 										</select>
 										<button
 											type="submit"
-											class="rounded-lg border border-emerald-800/60 bg-emerald-900/40 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:border-emerald-600 hover:text-emerald-100 transition"
+											class="rounded-control border text-accent text-accent px-3 py-1.5 text-xs font-medium text-accent hover:text-accent hover:text-accent transition"
 										>
 											Grant access
 										</button>

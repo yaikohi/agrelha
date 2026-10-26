@@ -66,3 +66,40 @@ func TestOfflineWorldsDoNotLeakAnAdminLink(t *testing.T) {
 		t.Error("the public card linked an anonymous visitor into the admin overview")
 	}
 }
+
+func TestAModpackWorldOffersItsPackEvenWithNoModList(t *testing.T) {
+	mc := MinecraftSummaryUI{
+		TotalInstances: 1, MaxInstances: 4,
+		ActiveInstances: []InstanceUI{{
+			Number: 1, Name: "Create Live", LBIP: "10.0.0.2",
+			Source: "modpack", Pack: "Create: Arcane Engineering",
+			MCVersion: "1.21.1", Loader: "neoforge",
+			HasMods: false,
+		}},
+	}
+
+	row := MinecraftCard(mc, false).Rows[0]
+	if row.DownloadURL == "" {
+		t.Error(`a modpack world offered no download.
+
+Its mods come from the pack, so GetInstalledMods returns nothing and HasMods is
+false — but the .mrpack is exactly what a player needs to join. Gating the
+download on an explicit mod list hides it on every pack-based world.`)
+	}
+	if row.DownloadFmt != ".mrpack" {
+		t.Errorf("download format = %q, want .mrpack", row.DownloadFmt)
+	}
+}
+
+func TestAVanillaWorldStillOffersNoDownload(t *testing.T) {
+	mc := MinecraftSummaryUI{
+		TotalInstances: 1, MaxInstances: 4,
+		ActiveInstances: []InstanceUI{{
+			Number: 1, Name: "Vanilla Survival", LBIP: "10.0.0.3",
+			MCVersion: "1.21.4", Loader: "vanilla",
+		}},
+	}
+	if url := MinecraftCard(mc, false).Rows[0].DownloadURL; url != "" {
+		t.Errorf("a vanilla world offered a modpack download at %q", url)
+	}
+}

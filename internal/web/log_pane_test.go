@@ -9,7 +9,7 @@ import (
 
 func readPage(t *testing.T, name string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("pages", name))
+	b, err := os.ReadFile(filepath.Join(".", name))
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
 	}
@@ -17,11 +17,11 @@ func readPage(t *testing.T, name string) string {
 }
 
 var logPages = []string{
-	"instance.templ",
-	"valheim_instance.templ",
-	"mc_instance.templ",
-	"gmod_instance.templ",
-	"valheim_console.templ",
+	"pages/instance.templ",
+	"pages/valheim_instance.templ",
+	"pages/mc_instance.templ",
+	"pages/gmod_instance.templ",
+	"pages/valheim_console.templ",
 }
 
 func TestEveryLogViewerUsesTheSharedPane(t *testing.T) {
@@ -34,14 +34,14 @@ The auto-scroll script binds to [data-log-pane]. A hand-rolled box silently gets
 behaviour, which is exactly how three Console tabs ended up stuck at the oldest line while only the
 legacy page scrolled: the old script bound to id="logs" and the tabs used id="console-logs".`, name)
 		}
-		if !strings.Contains(body, "@LogPane(") && !strings.Contains(body, "@instanceConsole(") {
+		if !strings.Contains(body, "components.LogPane(") && !strings.Contains(body, "@instanceConsole(") {
 			t.Errorf("%s renders no log pane at all", name)
 		}
 	}
 }
 
 func TestTheScrollScriptBindsToTheSharedPaneNotAnID(t *testing.T) {
-	layout := readPage(t, "layout.templ")
+	layout := readPage(t, "pages/layout.templ")
 	if !strings.Contains(layout, "[data-log-pane]") {
 		t.Error("the scroll script no longer selects log panes by attribute; binding by id is what broke this before")
 	}
@@ -51,7 +51,7 @@ func TestTheScrollScriptBindsToTheSharedPaneNotAnID(t *testing.T) {
 }
 
 func TestThePaneOffersAWayBackToTheNewestLines(t *testing.T) {
-	pane := readPage(t, "log_pane.templ")
+	pane := readPage(t, "components/log_pane.templ")
 	for _, want := range []string{"data-log-jump", "data-log-status", "Jump to newest"} {
 		if !strings.Contains(pane, want) {
 			t.Errorf(`the log pane is missing %q.
@@ -63,7 +63,7 @@ them on every incoming line - so there must be a visible way back to the newest 
 }
 
 func TestTrimmingOnlyHappensWhileFollowing(t *testing.T) {
-	layout := readPage(t, "layout.templ")
+	layout := readPage(t, "pages/layout.templ")
 	idx := strings.Index(layout, "removeChild")
 	if idx < 0 {
 		t.Fatal("the pane no longer caps its line count; a long-running stream would grow the DOM without bound")

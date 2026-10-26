@@ -1,6 +1,7 @@
 package pages
 
 import "fmt"
+import "agrelha/internal/web/components"
 
 templ incidentBadges(in IncidentUI) {
 	if in.OOMKilled {
@@ -87,14 +88,14 @@ templ incidentSort(d InstanceDetailUI) {
 		<a
 			href={ templ.SafeURL(fmt.Sprintf("/%s/%d/crashes?sort=newest", d.GamePath(), d.Number)) }
 			aria-current={ ariaCurrent(!d.IncidentsOldestFirst) }
-			class={ sortLinkClass(!d.IncidentsOldestFirst) }
+			class={ components.QuietLinkClass(!d.IncidentsOldestFirst) }
 		>
 			Newest first
 		</a>
 		<a
 			href={ templ.SafeURL(fmt.Sprintf("/%s/%d/crashes?sort=oldest", d.GamePath(), d.Number)) }
 			aria-current={ ariaCurrent(d.IncidentsOldestFirst) }
-			class={ sortLinkClass(d.IncidentsOldestFirst) }
+			class={ components.QuietLinkClass(d.IncidentsOldestFirst) }
 		>
 			Oldest first
 		</a>

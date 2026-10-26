@@ -1,8 +1,10 @@
 package pages
 
+import "agrelha/internal/web/components"
+
 templ instancePage(spec instanceSpec, d InstanceDetailUI) {
 	@LayoutHearth(d.Name + " · " + spec.label) {
-		@hearthNav(spec.game, d.IsAdmin, true, "")
+		@components.Nav(components.NavProps{Current: spec.game, IsAdmin: d.IsAdmin, SignedIn: true, GrafanaURL: ""})
 		if d.HostUnreachable {
 			@HostUnreachableBanner(d.Host)
 		}
@@ -35,13 +37,13 @@ templ instanceHead(h InstanceHeadUI) {
 					<span class="max-w-xs font-pixel text-[11px] text-ink-faint">{ h.Blocked }</span>
 				}
 				for _, a := range h.Actions {
-					<button type="button" data-on:click={ a.Script } class={ "focus-accent rounded-control px-3 py-1.5 font-pixel text-xs transition-colors " + instanceActionStyle(a.Kind) }>{ a.Label }</button>
+					<button type="button" data-on:click={ a.Script } class={ components.ButtonClass(instanceVariant(a.Kind)) }>{ a.Label }</button>
 				}
 			</div>
 		</div>
 		<nav class="-mx-6 mt-7 flex flex-wrap items-end gap-x-6 gap-y-2 border-b border-seam px-6 font-pixel text-xs">
 			for _, t := range h.Tabs {
-				<a href={ templ.SafeURL(t.Href) } class={ hearthTabClass(t.Active) }>{ t.Label }</a>
+				<a href={ templ.SafeURL(t.Href) } class={ components.TabLinkClass(t.Active) }>{ t.Label }</a>
 			}
 		</nav>
 	</header>
@@ -112,7 +114,7 @@ templ instanceOverview(o InstanceOverviewUI) {
 templ instanceConsole(game string, num int, note string, placeholder string) {
 	<div class="mt-8 space-y-4" data-effect={ logStreamExpr(game, num) }>
 		<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ note }</p>
-		@LogPane("console-logs", placeholder)
+		@components.LogPane("console-logs", placeholder)
 	</div>
 }
 

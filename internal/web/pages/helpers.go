@@ -545,7 +545,7 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 		if isAdmin && inst.Number > 0 {
 			row.OverviewURL = fmt.Sprintf("/valheim/%d/overview", inst.Number)
 		}
-		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number), inst.HasMods))
+		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number), offersClientBundle(inst)))
 	}
 
 	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", vh.TotalInstances, vh.MaxInstances)}
@@ -589,7 +589,7 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 		if isAdmin && inst.Number > 0 {
 			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
 		}
-		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), inst.HasMods))
+		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), offersClientBundle(inst)))
 	}
 
 	for _, inst := range mc.SavedInstances {
@@ -605,7 +605,7 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 		if isAdmin && inst.Number > 0 {
 			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
 		}
-		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), inst.HasMods))
+		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), offersClientBundle(inst)))
 	}
 
 	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", mc.TotalInstances, mc.MaxInstances)}
@@ -704,7 +704,7 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 			row.OverviewURL = fmt.Sprintf("/%s/%d/overview", p.ID, inst.Number)
 		}
 		if p.Capabilities.Mods {
-			row = withModpack(row, fmt.Sprintf("/api/%s/%d/mods/export", p.ID, inst.Number), inst.HasMods)
+			row = withModpack(row, fmt.Sprintf("/api/%s/%d/mods/export", p.ID, inst.Number), offersClientBundle(inst))
 		}
 		g.Rows = append(g.Rows, row)
 	}
@@ -862,6 +862,10 @@ func withModpack(row ServerRowUI, url string, hasMods bool) ServerRowUI {
 		row.DownloadURL = url
 	}
 	return row
+}
+
+func offersClientBundle(inst InstanceUI) bool {
+	return inst.HasMods || inst.Source == "modpack"
 }
 
 // InstanceTabs lists an instance's tabs, omitting Mods for a Vanilla World.

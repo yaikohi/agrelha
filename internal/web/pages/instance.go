@@ -301,28 +301,6 @@ var gmodInstanceSpec = instanceSpec{
 	},
 }
 
-func instanceActionStyle(kind string) string {
-	if kind == "quiet" {
-		return "border border-edge text-ink-muted hover:border-accent hover:text-accent"
-	}
-	return "border border-accent text-accent hover:bg-accent hover:text-accent-ink"
-}
-
-func hearthTabClass(active bool) string {
-	base := "focus-accent -mb-px border-b-2 pb-2 transition-colors "
-	if active {
-		return base + "border-accent text-ink"
-	}
-	return base + "border-transparent text-ink-muted hover:text-accent"
-}
-
-func sortLinkClass(active bool) string {
-	if active {
-		return "focus-accent text-ink"
-	}
-	return "focus-accent text-ink-faint transition-colors hover:text-accent"
-}
-
 func logStreamExpr(game string, num int) string {
 	return fmt.Sprintf("@get('/api/%s/%d/logs/stream')", game, num)
 }

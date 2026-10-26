@@ -1,0 +1,28 @@
+package components
+
+func NavLinkClass(active bool) string {
+	base := "focus-accent inline-flex items-baseline gap-1.5 border-b-2 pb-1 transition-colors "
+	if active {
+		return base + "border-accent text-ink"
+	}
+	return base + "border-transparent text-ink-muted hover:text-accent"
+}
+
+func TabLinkClass(active bool) string {
+	base := "focus-accent -mb-px border-b-2 pb-2 transition-colors "
+	if active {
+		return base + "border-accent text-ink"
+	}
+	return base + "border-transparent text-ink-muted hover:text-accent"
+}
+
+func QuietLinkClass(active bool) string {
+	if active {
+		return "focus-accent text-ink"
+	}
+	return "focus-accent text-ink-faint transition-colors hover:text-accent"
+}
+
+templ NavLink(href, label string, active bool) {
+	<a href={ templ.SafeURL(href) } class={ NavLinkClass(active) }>{ label }</a>
+}

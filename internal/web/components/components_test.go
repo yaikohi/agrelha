@@ -1,6 +1,7 @@
 package components
 
 import (
+	"agrelha/internal/domain"
 	"bytes"
 	"context"
 	"strings"
@@ -28,8 +29,8 @@ func TestButton(t *testing.T) {
 		if !strings.Contains(out, "data-on:click=\"@post(&#39;/api/action&#39;)\"") && !strings.Contains(out, "data-on:click=\"@post('/api/action')\"") {
 			t.Errorf("expected data-on:click, got %q", out)
 		}
-		if !strings.Contains(out, "bg-zinc-100") {
-			t.Errorf("expected bg-zinc-100 for primary variant, got %q", out)
+		if !strings.Contains(out, "border-accent") {
+			t.Errorf("expected the accent outline for the primary variant, got %q", out)
 		}
 	})
 
@@ -49,17 +50,22 @@ func TestButton(t *testing.T) {
 		}
 	})
 
-	t.Run("renders success and warning variants", func(t *testing.T) {
-		var bufSuccess bytes.Buffer
-		_ = Button(ButtonProps{Variant: VariantSuccess, Text: "Start"}).Render(ctx, &bufSuccess)
-		if !strings.Contains(bufSuccess.String(), "bg-emerald-600") {
-			t.Errorf("expected bg-emerald-600 for VariantSuccess, got %q", bufSuccess.String())
+	t.Run("only the danger variant reads as destructive", func(t *testing.T) {
+		for _, v := range []Variant{VariantPrimary, VariantSuccess, VariantWarning} {
+			var buf bytes.Buffer
+			_ = Button(ButtonProps{Variant: v, Text: "Go"}).Render(ctx, &buf)
+			if strings.Contains(buf.String(), "danger") {
+				t.Errorf(`variant %q renders in the danger colour.
+
+docs/design-system.md reserves danger for destructive actions. Stopping a world is
+not destructive, and colouring it like Delete teaches people to ignore the warning.`, v)
+			}
 		}
 
-		var bufWarn bytes.Buffer
-		_ = Button(ButtonProps{Variant: VariantWarning, Text: "Stop"}).Render(ctx, &bufWarn)
-		if !strings.Contains(bufWarn.String(), "bg-amber-950/30") {
-			t.Errorf("expected bg-amber-950/30 for VariantWarning, got %q", bufWarn.String())
+		var buf bytes.Buffer
+		_ = Button(ButtonProps{Variant: VariantDanger, Text: "Delete"}).Render(ctx, &buf)
+		if !strings.Contains(buf.String(), "hover:text-danger") {
+			t.Errorf("expected the danger variant to read as destructive, got %q", buf.String())
 		}
 	})
 }
@@ -91,8 +97,8 @@ func TestInputAndTextarea(t *testing.T) {
 		if !strings.Contains(out, "data-bind=\"worldName\"") {
 			t.Errorf("expected data-bind, got %q", out)
 		}
-		if !strings.Contains(out, "focus:border-zinc-400") {
-			t.Errorf("expected neutral focus border, got %q", out)
+		if !strings.Contains(out, "focus-accent") {
+			t.Errorf("expected the shared focus ring, got %q", out)
 		}
 	})
 
@@ -133,46 +139,15 @@ func TestTabBar(t *testing.T) {
 		t.Fatalf("render error: %v", err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "border-b-2 border-zinc-100 text-zinc-100 font-semibold") {
-		t.Errorf("expected active tab classes, got %q", out)
+	if !strings.Contains(out, "border-accent text-ink") {
+		t.Errorf("expected the active tab to carry the accent rule, got %q", out)
 	}
-	if !strings.Contains(out, "border-b-2 border-transparent text-zinc-400") {
-		t.Errorf("expected inactive tab classes, got %q", out)
+	if !strings.Contains(out, "border-transparent text-ink-muted") {
+		t.Errorf("expected inactive tabs to stay quiet, got %q", out)
 	}
 	if !strings.Contains(out, "3") {
 		t.Errorf("expected badge '3', got %q", out)
 	}
-}
-
-func TestStatusPill(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("renders running status pill with emerald dot", func(t *testing.T) {
-		var buf bytes.Buffer
-		comp := StatusPill(StatusPillProps{State: "running"})
-		if err := comp.Render(ctx, &buf); err != nil {
-			t.Fatalf("render error: %v", err)
-		}
-		out := buf.String()
-		if !strings.Contains(out, "bg-emerald-950/80") || !strings.Contains(out, "bg-emerald-400 animate-pulse") {
-			t.Errorf("expected emerald pulse dot, got %q", out)
-		}
-		if !strings.Contains(out, "Running") {
-			t.Errorf("expected 'Running' label, got %q", out)
-		}
-	})
-
-	t.Run("renders signal-driven pill", func(t *testing.T) {
-		var buf bytes.Buffer
-		comp := StatusPill(StatusPillProps{Signal: "online", State: "online"})
-		if err := comp.Render(ctx, &buf); err != nil {
-			t.Fatalf("render error: %v", err)
-		}
-		out := buf.String()
-		if !strings.Contains(out, "data-class=") || !strings.Contains(out, "$online") {
-			t.Errorf("expected signal binding on pill, got %q", out)
-		}
-	})
 }
 
 func TestOptionCard(t *testing.T) {
@@ -198,88 +173,6 @@ func TestOptionCard(t *testing.T) {
 	}
 }
 
-func TestModal(t *testing.T) {
-	ctx := context.Background()
-	var buf bytes.Buffer
-	comp := Modal(ModalProps{
-		OpenSignal: "showModal",
-		Title:      "Confirm Action",
-		Subtitle:   "This action is permanent",
-	})
-	if err := comp.Render(ctx, &buf); err != nil {
-		t.Fatalf("render error: %v", err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "data-show=\"$showModal\"") {
-		t.Errorf("expected data-show for modal, got %q", out)
-	}
-	if !strings.Contains(out, "Confirm Action") {
-		t.Errorf("expected modal title, got %q", out)
-	}
-	if !strings.Contains(out, "$showModal = false") {
-		t.Errorf("expected close button handler, got %q", out)
-	}
-}
-
-func TestBudgetBar(t *testing.T) {
-	ctx := context.Background()
-	var buf bytes.Buffer
-	comp := BudgetBar(BudgetBarProps{
-		UsedGiB:        6,
-		TotalBudgetGiB: 16,
-		RunningCount:   1,
-		MaxRunning:     2,
-		TotalInstances: 3,
-		MaxInstances:   4,
-		ActionHref:     "/admins",
-		ActionText:     "Access (Admins)",
-	})
-	if err := comp.Render(ctx, &buf); err != nil {
-		t.Fatalf("render error: %v", err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "6 / 16 GiB") {
-		t.Errorf("expected RAM display, got %q", out)
-	}
-	if !strings.Contains(out, "1 / 2") {
-		t.Errorf("expected running ratio, got %q", out)
-	}
-	if !strings.Contains(out, "3 / 4") {
-		t.Errorf("expected saved ratio, got %q", out)
-	}
-	if !strings.Contains(out, "Access (Admins)") || !strings.Contains(out, "href=\"/admins\"") {
-		t.Errorf("expected access action button, got %q", out)
-	}
-}
-
-func TestEmptyState(t *testing.T) {
-	ctx := context.Background()
-	var buf bytes.Buffer
-	comp := EmptyState(EmptyStateProps{
-		Icon:        "⚔️",
-		Title:       "No Worlds Yet",
-		Description: "Create a world to start playing.",
-		ActionHref:  "/valheim/create",
-		ActionText:  "+ Create World",
-	})
-	if err := comp.Render(ctx, &buf); err != nil {
-		t.Fatalf("render error: %v", err)
-	}
-	out := buf.String()
-	if !strings.Contains(out, "⚔️") {
-		t.Errorf("expected icon, got %q", out)
-	}
-	if !strings.Contains(out, "No Worlds Yet") {
-		t.Errorf("expected title, got %q", out)
-	}
-	if !strings.Contains(out, "Create a world to start playing.") {
-		t.Errorf("expected description, got %q", out)
-	}
-	if !strings.Contains(out, "+ Create World") || !strings.Contains(out, "href=\"/valheim/create\"") {
-		t.Errorf("expected action button, got %q", out)
-	}
-}
-
 func TestStepIndicator(t *testing.T) {
 	ctx := context.Background()
 	var buf bytes.Buffer
@@ -300,5 +193,35 @@ func TestStepIndicator(t *testing.T) {
 	}
 	if !strings.Contains(out, "$step == 1") || !strings.Contains(out, "$step == 2") {
 		t.Errorf("expected signal data-class bindings, got %q", out)
+	}
+}
+
+func TestNavLeadsToEveryRegisteredGame(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Nav(NavProps{SignedIn: true, IsAdmin: true}).Render(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	for _, p := range domain.Profiles() {
+		href := `href="/` + string(p.ID) + `"`
+		if !strings.Contains(out, href) {
+			t.Errorf(`the nav has no entry for %s.
+
+A registered game that the nav never links to is one nobody can reach.`, p.ID)
+		}
+	}
+	for _, l := range AdminNavLinks() {
+		if !strings.Contains(out, `href="`+l.Href+`"`) {
+			t.Errorf("admin nav is missing %s", l.Href)
+		}
+	}
+}
+
+func TestNavHidesAdminToolsFromNonAdmins(t *testing.T) {
+	var buf bytes.Buffer
+	_ = Nav(NavProps{SignedIn: true}).Render(context.Background(), &buf)
+	if strings.Contains(buf.String(), `href="/accounts"`) {
+		t.Error("a signed-in non-admin was shown the admin tools")
 	}
 }

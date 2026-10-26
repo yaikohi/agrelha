@@ -1,5 +1,7 @@
 package pages
 
+import "agrelha/internal/web/components"
+
 templ ValheimManager(instances []InstanceUI, budget BudgetUI, admin ...bool) {
 	@managerPage("Valheim", "valheim", BuildValheimManager(instances, budget), isNavAdmin(admin))
 }
@@ -14,7 +16,7 @@ templ GModManager(instances []InstanceUI, budget BudgetUI, admin ...bool) {
 
 templ managerPage(title, current string, m ManagerUI, admin bool) {
 	@LayoutHearth(title) {
-		@hearthNav(current, admin, true, "")
+		@components.Nav(components.NavProps{Current: current, IsAdmin: admin, SignedIn: true, GrafanaURL: ""})
 		@managerPanel(m)
 		@panelColophon()
 	}
@@ -90,9 +92,9 @@ templ managerPort(p ManagerPortUI) {
 				<div class="flex flex-wrap items-center gap-2">
 					for _, a := range p.Actions {
 						if a.Kind == "blocked" {
-							<span title={ a.Script } class={ "rounded-control px-3 py-1.5 font-pixel text-xs " + managerActionStyle(a.Kind) }>{ a.Label }</span>
+							<span title={ a.Script } class={ components.ButtonClass(managerVariant(a.Kind)) }>{ a.Label }</span>
 						} else {
-							<button type="button" data-on:click={ a.Script } class={ "focus-accent rounded-control px-3 py-1.5 font-pixel text-xs transition-colors " + managerActionStyle(a.Kind) }>{ a.Label }</button>
+							<button type="button" data-on:click={ a.Script } class={ components.ButtonClass(managerVariant(a.Kind)) }>{ a.Label }</button>
 						}
 					}
 				</div>

@@ -25,12 +25,12 @@ type InputProps struct {
 }
 
 func (p InputProps) inputClasses() string {
-	base := "w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none transition"
+	base := "focus-accent w-full rounded-control border border-edge bg-seam px-3 py-2 font-pixel text-xs text-ink placeholder:text-ink-faint"
 	if p.Mono {
-		base += " font-mono"
+		base += ""
 	}
 	if p.Disabled {
-		base += " cursor-not-allowed opacity-60 bg-zinc-900 border-zinc-800 text-zinc-400"
+		base += " cursor-not-allowed text-ink-faint"
 	}
 	if p.Class != "" {
 		base = strings.Join([]string{base, p.Class}, " ")
@@ -41,10 +41,10 @@ func (p InputProps) inputClasses() string {
 templ Input(props InputProps) {
 	<div class="space-y-1">
 		if props.Label != "" {
-			<label class="block text-xs font-medium text-zinc-300">
+			<label class="block font-pixel text-[11px] text-ink-faint">
 				{ props.Label }
 				if props.Required {
-					<span class="text-red-400 ml-0.5">*</span>
+					<span class="ml-0.5 text-danger">*</span>
 				}
 			</label>
 		}
@@ -87,10 +87,10 @@ templ Input(props InputProps) {
 			class={ props.inputClasses() }
 		/>
 		if props.HelperText != "" {
-			<p class="text-[11px] text-zinc-500 leading-relaxed">{ props.HelperText }</p>
+			<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ props.HelperText }</p>
 		}
 		if props.ErrorText != "" {
-			<p class="text-xs text-red-400">{ props.ErrorText }</p>
+			<p class="font-pixel text-[11px] text-danger">{ props.ErrorText }</p>
 		}
 	</div>
 }
@@ -115,12 +115,12 @@ type TextareaProps struct {
 }
 
 func (p TextareaProps) textareaClasses() string {
-	base := "w-full rounded-xl border border-zinc-700 bg-zinc-800 p-3 text-sm text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400 focus:outline-none leading-relaxed transition"
+	base := "focus-accent w-full rounded-control border border-edge bg-seam p-3 font-pixel text-xs leading-relaxed text-ink placeholder:text-ink-faint"
 	if p.Mono {
 		base += " font-mono text-xs"
 	}
 	if p.Disabled {
-		base += " cursor-not-allowed opacity-60 bg-zinc-900 border-zinc-800 text-zinc-400"
+		base += " cursor-not-allowed text-ink-faint"
 	}
 	if p.Class != "" {
 		base = strings.Join([]string{base, p.Class}, " ")
@@ -131,10 +131,10 @@ func (p TextareaProps) textareaClasses() string {
 templ Textarea(props TextareaProps) {
 	<div class="space-y-1">
 		if props.Label != "" {
-			<label class="block text-xs font-medium text-zinc-300">
+			<label class="block font-pixel text-[11px] text-ink-faint">
 				{ props.Label }
 				if props.Required {
-					<span class="text-red-400 ml-0.5">*</span>
+					<span class="ml-0.5 text-danger">*</span>
 				}
 			</label>
 		}
@@ -174,10 +174,10 @@ templ Textarea(props TextareaProps) {
 			class={ props.textareaClasses() }
 		>{ props.Value }</textarea>
 		if props.HelperText != "" {
-			<p class="text-[11px] text-zinc-500 leading-relaxed">{ props.HelperText }</p>
+			<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ props.HelperText }</p>
 		}
 		if props.ErrorText != "" {
-			<p class="text-xs text-red-400">{ props.ErrorText }</p>
+			<p class="font-pixel text-[11px] text-danger">{ props.ErrorText }</p>
 		}
 	</div>
 }

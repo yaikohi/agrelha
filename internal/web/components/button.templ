@@ -1,164 +1,123 @@
 package components
 
-import (
-	"fmt"
-	"strings"
-)
-
-type ButtonVariant string
+type Variant string
+type Size string
 
 const (
-	VariantPrimary   ButtonVariant = "primary"
-	VariantSecondary ButtonVariant = "secondary"
-	VariantSuccess   ButtonVariant = "success"
-	VariantWarning   ButtonVariant = "warning"
-	VariantDanger    ButtonVariant = "danger"
-	VariantGhost     ButtonVariant = "ghost"
-	VariantLink      ButtonVariant = "link"
-)
+	VariantPrimary   Variant = "primary"
+	VariantSecondary Variant = "secondary"
+	VariantSuccess   Variant = "success"
+	VariantWarning   Variant = "warning"
+	VariantDanger    Variant = "danger"
+	VariantGhost     Variant = "ghost"
+	VariantLink      Variant = "link"
+	VariantDisabled  Variant = "disabled"
 
-type ButtonSize string
-
-const (
-	SizeXs ButtonSize = "xs"
-	SizeSm ButtonSize = "sm"
-	SizeMd ButtonSize = "md"
-	SizeLg ButtonSize = "lg"
+	SizeXs Size = "xs"
+	SizeSm Size = "sm"
+	SizeMd Size = "md"
+	SizeLg Size = "lg"
 )
 
 type ButtonProps struct {
-	Variant       ButtonVariant
-	Size          ButtonSize
-	Type          string // "button", "submit" (default "button")
-	Href          string // If non-empty, renders an <a> tag
-	Target        string
-	Rel           string
-	Download      bool
-	OnClick       string // Evaluated by Datastar (data-on:click)
-	Indicator     string // Evaluated by Datastar (data-indicator)
+	Variant       Variant
+	Size          Size
+	Text          string
+	Href          string
+	OnClick       string
+	Indicator     string
 	LoadingText   string
+	Type          string
+	ID            string
 	Disabled      bool
 	DisabledTitle string
+	Download      bool
+	Title         string
 	Class         string
-	ID            string
-	Text          string // Optional direct text if not passing children
 }
 
-func (p ButtonProps) variantClasses() string {
-	switch p.Variant {
-	case VariantPrimary:
-		return "bg-zinc-100 text-zinc-950 font-semibold shadow hover:bg-white"
-	case VariantSuccess:
-		return "bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-sm"
-	case VariantWarning:
-		return "border border-amber-800/60 bg-amber-950/30 text-amber-200 hover:bg-amber-900/50 font-medium"
+func ButtonClass(v Variant) string {
+	base := "focus-accent inline-flex items-center gap-2 rounded-control px-3 py-1.5 font-pixel text-xs transition-colors "
+	if v == VariantDisabled {
+		return base + "border border-edge text-ink-faint cursor-not-allowed"
+	}
+	return base + variantClass(v)
+}
+
+func InputClass() string {
+	return "focus-accent w-full rounded-control border border-edge bg-seam px-3 py-2 font-pixel text-xs text-ink placeholder:text-ink-faint"
+}
+
+func variantClass(v Variant) string {
+	switch v {
 	case VariantDanger:
-		return "text-red-400 hover:bg-red-950/40 hover:text-red-300 font-medium"
-	case VariantGhost:
-		return "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 font-medium"
+		return "border border-edge text-ink-muted hover:border-danger hover:text-danger"
+	case VariantSecondary, VariantGhost:
+		return "border border-edge text-ink-muted hover:border-accent hover:text-accent"
 	case VariantLink:
-		return "border border-zinc-800 bg-zinc-800/50 text-zinc-300 hover:bg-zinc-700 font-medium"
-	case VariantSecondary:
-		fallthrough
+		return "text-ink-muted hover:text-accent"
 	default:
-		return "border border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white font-medium"
+		return "border border-accent text-accent hover:bg-accent hover:text-accent-ink"
 	}
 }
 
-func (p ButtonProps) sizeClasses() string {
-	switch p.Size {
-	case SizeXs:
-		return "px-2.5 py-1 text-xs rounded-lg"
-	case SizeSm:
-		return "px-3 py-1.5 text-xs rounded-lg"
+func sizeClass(s Size) string {
+	switch s {
 	case SizeLg:
-		return "px-5 py-2.5 text-sm rounded-xl"
+		return "px-4 py-2 text-sm"
 	case SizeMd:
-		fallthrough
+		return "px-3.5 py-2 text-xs"
 	default:
-		return "px-4 py-2 text-xs rounded-xl"
+		return "px-3 py-1.5 text-xs"
 	}
 }
 
 func (p ButtonProps) classes() string {
-	base := "inline-flex items-center justify-center transition select-none"
+	base := "focus-accent inline-flex items-center gap-2 rounded-control font-pixel transition-colors "
 	if p.Disabled {
-		base += " cursor-not-allowed opacity-50"
+		base += "border border-edge text-ink-faint cursor-not-allowed "
 	} else {
-		base += " cursor-pointer"
+		base += variantClass(p.Variant) + " "
 	}
-	parts := []string{base, p.sizeClasses(), p.variantClasses()}
+	base += sizeClass(p.Size)
 	if p.Class != "" {
-		parts = append(parts, p.Class)
+		base += " " + p.Class
 	}
-	return strings.Join(parts, " ")
+	return base
 }
 
-templ Button(props ButtonProps) {
-	if props.Href != "" {
-		<a
-			if props.ID != "" {
-				id={ props.ID }
-			}
-			href={ templ.SafeURL(props.Href) }
-			if props.Target != "" {
-				target={ props.Target }
-			}
-			if props.Rel != "" {
-				rel={ props.Rel }
-			}
-			if props.Download {
-				download
-			}
-			if props.OnClick != "" {
-				data-on:click={ props.OnClick }
-			}
-			class={ props.classes() }
-		>
-			if props.Text != "" {
-				{ props.Text }
-			}
-			{ children... }
-		</a>
+func (p ButtonProps) buttonType() string {
+	if p.Type != "" {
+		return p.Type
+	}
+	return "button"
+}
+
+func (p ButtonProps) title() string {
+	if p.Disabled && p.DisabledTitle != "" {
+		return p.DisabledTitle
+	}
+	return p.Title
+}
+
+templ Button(p ButtonProps) {
+	if p.Href != "" && !p.Disabled {
+		<a href={ templ.SafeURL(p.Href) } download?={ p.Download } title={ p.title() } class={ p.classes() }>{ p.Text }</a>
 	} else {
 		<button
-			if props.ID != "" {
-				id={ props.ID }
-			}
-			if props.Type != "" {
-				type={ props.Type }
-			} else {
-				type="button"
-			}
-			if props.Disabled {
-				disabled
-			}
-			if props.DisabledTitle != "" {
-				title={ props.DisabledTitle }
-			}
-			if props.OnClick != "" {
-				data-on:click={ props.OnClick }
-			}
-			if props.Indicator != "" {
-				data-indicator={ props.Indicator }
-				data-attr:disabled={ "$" + props.Indicator }
-				data-class={ fmt.Sprintf("{'opacity-50 cursor-not-allowed pointer-events-none': $%s}", props.Indicator) }
-			}
-			class={ props.classes() }
+			type={ p.buttonType() }
+			disabled?={ p.Disabled }
+			title={ p.title() }
+			data-on:click={ p.OnClick }
+			data-indicator={ p.Indicator }
+			class={ p.classes() }
 		>
-			if props.Indicator != "" && props.LoadingText != "" {
-				<span data-show={ "!" + "$" + props.Indicator }>{ props.Text }</span>
-				<span data-show={ "$" + props.Indicator } class="inline-flex items-center gap-2">
-					<svg class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-					</svg>
-					<span>{ props.LoadingText }</span>
-				</span>
-			} else if props.Text != "" {
-				{ props.Text }
+			if p.Indicator != "" && p.LoadingText != "" {
+				<span data-show={ "!$" + p.Indicator }>{ p.Text }</span>
+				<span data-show={ "$" + p.Indicator }>{ p.LoadingText }</span>
+			} else {
+				{ p.Text }
 			}
-			{ children... }
 		</button>
 	}
 }

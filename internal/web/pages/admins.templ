@@ -9,18 +9,18 @@ import (
 )
 
 type ValheimAccessProps struct {
-	Players   []domain.Player
-	AdminIDs  []string
+	Players []domain.Player
+	AdminIDs []string
 	Passwords []ValheimWorldPasswordUI
-	Enabled   bool
+	Enabled bool
 }
 
 type MCAccessProps struct {
-	Ops             []string
-	Whitelist       []string
-	OnlinePlayers   []string
+	Ops []string
+	Whitelist []string
+	OnlinePlayers []string
 	WhitelistActive bool
-	Enabled         bool
+	Enabled bool
 }
 
 type GModAccessProps struct {
@@ -29,12 +29,12 @@ type GModAccessProps struct {
 
 type AdminsProps struct {
 	ActiveGame string
-	FlashKind  string
-	FlashMsg   string
+	FlashKind string
+	FlashMsg string
 
-	Valheim   ValheimAccessProps
+	Valheim ValheimAccessProps
 	Minecraft MCAccessProps
-	GMod      GModAccessProps
+	GMod GModAccessProps
 }
 
 func AdminTabs(activeGame string) []components.TabItem {
@@ -50,8 +50,8 @@ func AdminTabs(activeGame string) []components.TabItem {
 			emoji = "🔧 "
 		}
 		tabs = append(tabs, components.TabItem{
-			Label:  emoji + p.Display.Name,
-			Href:   "/admins?game=" + string(p.ID),
+			Label: emoji + p.Display.Name,
+			Href: "/admins?game=" + string(p.ID),
 			Active: activeGame == string(p.ID),
 		})
 	}
@@ -60,16 +60,16 @@ func AdminTabs(activeGame string) []components.TabItem {
 
 templ Admins(props AdminsProps) {
 	@Layout("Access & Admins") {
-		@nav(true)
+		@components.Nav(components.NavProps{IsAdmin: true, SignedIn: true})
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
-				<h1 class="text-2xl font-semibold text-zinc-100">Access & Administration</h1>
-				<p class="mt-1 text-xs text-zinc-400">Manage server passwords, operator privileges, and player whitelists across all game servers.</p>
+				<h1 class="text-2xl font-semibold text-ink">Access & Administration</h1>
+				<p class="mt-1 text-xs text-ink-muted">Manage server passwords, operator privileges, and player whitelists across all game servers.</p>
 			</div>
 			<div class="flex items-center gap-2">
 				<a
 					href={ templ.SafeURL("/" + props.ActiveGame) }
-					class="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 transition"
+					class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs text-ink-muted hover:border-edge hover:text-ink transition"
 				>
 					&larr; Back to Dashboard
 				</a>
@@ -96,84 +96,84 @@ templ Admins(props AdminsProps) {
 
 templ valheimAccessTab(props ValheimAccessProps) {
 	<div class="mb-6">
-		<h2 class="text-xl font-semibold text-zinc-100">Valheim Access & Admins</h2>
-		<p class="mt-0.5 text-xs text-zinc-400">Manage server passwords, operator privileges, and player roster.</p>
+		<h2 class="text-xl font-semibold text-ink">Valheim Access & Admins</h2>
+		<p class="mt-0.5 text-xs text-ink-muted">Manage server passwords, operator privileges, and player roster.</p>
 	</div>
-	<div class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-		<div class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+	<div class="mb-8 rounded-control border border-edge bg-surface-raised p-5 ">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-edge pb-3">
 			<div>
-				<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Server Passwords</h2>
-				<p class="text-xs text-zinc-400">Join passwords configured for Valheim worlds. Share these with trusted players.</p>
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">Server Passwords</h2>
+				<p class="text-xs text-ink-muted">Join passwords configured for Valheim worlds. Share these with trusted players.</p>
 			</div>
-			<span class="rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-0.5 text-xs font-medium text-zinc-300">
+			<span class="rounded-full border border-edge bg-surface-raised px-2.5 py-0.5 text-xs font-medium text-ink">
 				🔒 Password Enforced
 			</span>
 		</div>
 		if len(props.Passwords) == 0 {
-			<div class="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-4 text-center text-xs text-zinc-500">
+			<div class="rounded-control border border-edge bg-seam p-4 text-center text-xs text-ink-faint">
 				No Valheim worlds configured yet.
 			</div>
 		} else {
-			<div class="divide-y divide-zinc-800/80 overflow-hidden rounded-lg border border-zinc-800/80 bg-zinc-950/50">
+			<div class="divide-y divide-seam overflow-hidden rounded-control border border-edge bg-seam/50">
 				for _, w := range props.Passwords {
 					<div
 						class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
 						data-signals={ fmt.Sprintf("{showPass%d: false}", w.Number) }
 					>
 						<div class="flex items-center gap-3">
-							<span class="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-800 font-mono text-xs font-semibold text-zinc-300 ring-1 ring-zinc-700/50">
+							<span class="flex h-7 w-7 items-center justify-center rounded-control bg-surface-raised font-pixel text-xs font-semibold text-ink ring-1 ring-edge">
 								{ fmt.Sprintf("#%02d", w.Number) }
 							</span>
 							<div>
 								<div class="flex items-center gap-2">
 									<a
 										href={ templ.SafeURL(fmt.Sprintf("/valheim/%d/overview", w.Number)) }
-										class="text-sm font-medium text-zinc-200 hover:text-zinc-100 transition"
+										class="text-sm font-medium text-ink hover:text-ink transition"
 									>
 										{ w.Name }
 									</a>
 									if w.State == "running" {
-										<span class="inline-flex items-center gap-1 rounded-full border border-emerald-800/60 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-											<span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+										<span class="inline-flex items-center gap-1 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
+											<span class="h-1.5 w-1.5 rounded-full text-accent"></span>
 											running
 										</span>
 									} else if w.State == "stopped" {
-										<span class="inline-flex items-center gap-1 rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
-											<span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
+										<span class="inline-flex items-center gap-1 rounded-full border border-edge bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-ink-muted">
+											<span class="h-1.5 w-1.5 rounded-full bg-edge"></span>
 											stopped
 										</span>
 									} else {
-										<span class="inline-flex items-center gap-1 rounded-full border border-amber-800/60 bg-amber-950/60 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+										<span class="inline-flex items-center gap-1 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
 											{ w.State }
 										</span>
 									}
 								</div>
 								if w.Address != "" {
-									<span class="font-mono text-xs text-zinc-500">{ w.Address }</span>
+									<span class="font-pixel text-xs text-ink-faint">{ w.Address }</span>
 								}
 							</div>
 						</div>
 
 						<div class="flex items-center gap-2 sm:self-auto">
 							if w.Password != "" {
-								<div class="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5">
-									<span class="text-xs text-zinc-500">Password:</span>
+								<div class="flex items-center gap-2 rounded-control border border-edge bg-surface-raised px-3 py-1.5">
+									<span class="text-xs text-ink-faint">Password:</span>
 									<span
 										data-show={ fmt.Sprintf("!$showPass%d", w.Number) }
-										class="font-mono text-xs tracking-widest text-zinc-400 select-none"
+										class="font-pixel text-xs tracking-widest text-ink-muted select-none"
 									>
 										••••••••
 									</span>
 									<span
 										data-show={ fmt.Sprintf("$showPass%d", w.Number) }
-										class="font-mono text-xs font-semibold text-zinc-100 select-all"
+										class="font-pixel text-xs font-semibold text-ink select-all"
 									>
 										{ w.Password }
 									</span>
 									<button
 										type="button"
 										data-on:click={ fmt.Sprintf("$showPass%d = !$showPass%d", w.Number, w.Number) }
-										class="ml-1 rounded border border-zinc-700/60 bg-zinc-800/80 px-2 py-0.5 text-[10px] font-medium text-zinc-300 hover:bg-zinc-700 hover:text-white transition"
+										class="ml-1 rounded border border-edge bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-ink hover:text-accent transition"
 										title="Toggle password visibility"
 									>
 										<span data-show={ fmt.Sprintf("!$showPass%d", w.Number) }>Show</span>
@@ -183,12 +183,12 @@ templ valheimAccessTab(props ValheimAccessProps) {
 								<button
 									type="button"
 									data-on:click={ w.CopyScript() }
-									class="rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition"
+									class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs font-medium text-ink hover:text-accent transition"
 								>
 									Copy
 								</button>
 							} else {
-								<span class="rounded-lg border border-zinc-800/60 bg-zinc-900/50 px-3 py-1.5 text-xs italic text-zinc-500">
+								<span class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs italic text-ink-faint">
 									No password required (public access)
 								</span>
 							}
@@ -200,60 +200,60 @@ templ valheimAccessTab(props ValheimAccessProps) {
 	</div>
 
 	if !props.Enabled {
-		<p class="mb-4 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to grant/revoke admin.</p>
+		<p class="mb-4 rounded text-accent p-3 text-sm text-accent">Declarative plane disabled — set the Codeberg token to grant/revoke admin.</p>
 	}
 	<form method="post" action="/admins/grant" class="mb-6 flex gap-2">
-		<input name="steam_id" placeholder="76561198…" class="w-64 rounded bg-zinc-900 px-3 py-2 text-sm border border-zinc-800 focus:border-zinc-600"/>
-		<button class="rounded bg-emerald-700 px-4 py-2 text-sm hover:bg-emerald-600 font-medium">Grant admin</button>
+		<input name="steam_id" placeholder="76561198…" class="w-64 rounded bg-surface-raised px-3 py-2 text-sm border border-edge focus-accent"/>
+		<button class="rounded text-accent px-4 py-2 text-sm hover:text-accent font-medium">Grant admin</button>
 	</form>
-	<p class="mb-6 text-xs text-zinc-500">Admin changes commit to git; they apply on the next server restart (ADMINLIST_IDS is rendered on start).</p>
-	<h2 class="mb-2 text-sm font-medium text-zinc-400">Current admins ({ strconv.Itoa(len(props.AdminIDs)) })</h2>
-	<ul class="mb-8 divide-y divide-zinc-800 overflow-hidden rounded bg-zinc-900 border border-zinc-800">
+	<p class="mb-6 text-xs text-ink-faint">Admin changes commit to git; they apply on the next server restart (ADMINLIST_IDS is rendered on start).</p>
+	<h2 class="mb-2 text-sm font-medium text-ink-muted">Current admins ({ strconv.Itoa(len(props.AdminIDs)) })</h2>
+	<ul class="mb-8 divide-y divide-seam overflow-hidden rounded bg-surface-raised border border-edge">
 		if len(props.AdminIDs) == 0 {
-			<li class="px-4 py-3 text-xs text-zinc-500">No admins configured.</li>
+			<li class="px-4 py-3 text-xs text-ink-faint">No admins configured.</li>
 		}
 		for _, id := range props.AdminIDs {
 			<li class="flex items-center justify-between px-4 py-2 text-sm">
-				<span class="font-mono text-xs text-zinc-300">{ id }</span>
+				<span class="font-pixel text-xs text-ink">{ id }</span>
 				<form method="post" action="/admins/revoke">
 					<input type="hidden" name="steam_id" value={ id }/>
-					<button class="rounded bg-red-800 px-3 py-1 text-xs hover:bg-red-700 font-medium text-zinc-200">Revoke</button>
+					<button class="rounded text-danger px-3 py-1 text-xs hover:text-danger font-medium text-ink">Revoke</button>
 				</form>
 			</li>
 		}
 	</ul>
-	<h2 class="mb-2 text-sm font-medium text-zinc-400">Roster</h2>
-	<div class="overflow-x-auto rounded border border-zinc-800 bg-zinc-950/40">
+	<h2 class="mb-2 text-sm font-medium text-ink-muted">Roster</h2>
+	<div class="overflow-x-auto rounded border border-edge bg-seam">
 		<table class="w-full text-left text-sm">
-			<thead class="text-xs uppercase text-zinc-500 border-b border-zinc-800 bg-zinc-900/60">
+			<thead class="text-xs uppercase text-ink-faint border-b border-edge bg-surface-raised">
 				<tr><th class="px-4 py-2">Character</th><th>Steam ID</th><th>Sessions</th><th>Last seen</th><th></th></tr>
 			</thead>
-			<tbody class="divide-y divide-zinc-800">
+			<tbody class="divide-y divide-seam">
 				if len(props.Players) == 0 {
-					<tr><td colspan="5" class="px-4 py-3 text-xs text-zinc-500">No players recorded yet.</td></tr>
+					<tr><td colspan="5" class="px-4 py-3 text-xs text-ink-faint">No players recorded yet.</td></tr>
 				}
 				for _, p := range props.Players {
 					<tr>
 						<td class="px-4 py-2">
 							if p.Online {
-								<span class="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-500 align-middle" title="online now"></span>
+								<span class="mr-2 inline-block h-2 w-2 rounded-full text-accent align-middle" title="online now"></span>
 							}
 							if p.Character != "" {
 								{ p.Character }
 							} else {
-								<span class="text-zinc-600">—</span>
+								<span class="text-ink-faint">—</span>
 							}
 						</td>
-						<td class="font-mono text-xs text-zinc-300">{ p.SteamID }</td>
+						<td class="font-pixel text-xs text-ink">{ p.SteamID }</td>
 						<td>{ strconv.Itoa(p.Sessions) }</td>
-						<td class="text-zinc-500">{ p.LastSeen.Format("Jan 2 15:04") }</td>
+						<td class="text-ink-faint">{ p.LastSeen.Format("Jan 2 15:04") }</td>
 						<td class="px-4 text-right">
 							if Contains(props.AdminIDs, p.SteamID) {
-								<span class="text-xs text-emerald-400">admin</span>
+								<span class="text-xs text-accent">admin</span>
 							} else {
 								<form method="post" action="/admins/grant">
 									<input type="hidden" name="steam_id" value={ p.SteamID }/>
-									<button class="rounded bg-emerald-800 px-3 py-1 text-xs hover:bg-emerald-700">Grant</button>
+									<button class="rounded text-accent px-3 py-1 text-xs hover:text-accent">Grant</button>
 								</form>
 							}
 						</td>
@@ -266,24 +266,24 @@ templ valheimAccessTab(props ValheimAccessProps) {
 
 templ minecraftAccessTab(props MCAccessProps) {
 	<div class="mb-6">
-		<h2 class="text-xl font-semibold text-zinc-100">Minecraft Access Management</h2>
-		<p class="mt-0.5 text-xs text-zinc-400">Configure operator privileges, connection whitelist, and live in-game admission.</p>
+		<h2 class="text-xl font-semibold text-ink">Minecraft Access Management</h2>
+		<p class="mt-0.5 text-xs text-ink-muted">Configure operator privileges, connection whitelist, and live in-game admission.</p>
 	</div>
 	if !props.Enabled {
-		<p class="mb-6 rounded bg-amber-900/40 p-3 text-sm text-amber-200">Declarative plane disabled — set the Codeberg token to manage ops or whitelist.</p>
+		<p class="mb-6 rounded text-accent p-3 text-sm text-accent">Declarative plane disabled — set the Codeberg token to manage ops or whitelist.</p>
 	}
 
-	<div class="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
+	<div class="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-control border border-edge bg-surface-raised p-5 ">
 		<div>
 			<div class="flex items-center gap-3">
-				<h2 class="text-base font-medium text-zinc-100">Whitelist Enforcement</h2>
+				<h2 class="text-base font-medium text-ink">Whitelist Enforcement</h2>
 				if props.WhitelistActive {
-					<span class="rounded bg-emerald-950 border border-emerald-800 px-2.5 py-0.5 text-xs font-medium text-emerald-400">ACTIVE (Enforced)</span>
+					<span class="rounded text-accent border text-accent px-2.5 py-0.5 text-xs font-medium text-accent">ACTIVE (Enforced)</span>
 				} else {
-					<span class="rounded bg-amber-950 border border-amber-800 px-2.5 py-0.5 text-xs font-medium text-amber-400">DISABLED (Public)</span>
+					<span class="rounded text-accent border text-accent px-2.5 py-0.5 text-xs font-medium text-accent">DISABLED (Public)</span>
 				}
 			</div>
-			<p class="mt-1 text-xs text-zinc-400">
+			<p class="mt-1 text-xs text-ink-muted">
 				if props.WhitelistActive {
 					Only players in the whitelist are permitted to join. Non-whitelisted players are rejected.
 				} else {
@@ -293,58 +293,58 @@ templ minecraftAccessTab(props MCAccessProps) {
 		</div>
 		<form method="post" action="/api/minecraft/access/whitelist/toggle">
 			if props.WhitelistActive {
-				<button class="rounded bg-amber-700 px-4 py-2 text-xs font-medium hover:bg-amber-600 text-white">Disable Whitelist</button>
+				<button class="rounded text-accent px-4 py-2 text-xs font-medium hover:text-accent text-ink">Disable Whitelist</button>
 			} else {
-				<button class="rounded bg-emerald-700 px-4 py-2 text-xs font-medium hover:bg-emerald-600 text-white">Enforce Whitelist</button>
+				<button class="rounded text-accent px-4 py-2 text-xs font-medium hover:text-accent text-ink">Enforce Whitelist</button>
 			}
 		</form>
 	</div>
 
 	<div class="grid grid-cols-1 gap-8 md:grid-cols-2">
-		<section class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
+		<section class="rounded-control border border-edge bg-surface-raised p-5 ">
 			<div class="mb-4">
-				<h2 class="text-lg font-medium text-zinc-100">Server Operators ({ strconv.Itoa(len(props.Ops)) })</h2>
-				<p class="text-xs text-zinc-400">Operators hold in-game level-4 admin permissions. Synced live via RCON and stored in Git.</p>
+				<h2 class="text-lg font-medium text-ink">Server Operators ({ strconv.Itoa(len(props.Ops)) })</h2>
+				<p class="text-xs text-ink-muted">Operators hold in-game level-4 admin permissions. Synced live via RCON and stored in Git.</p>
 			</div>
 			<form method="post" action="/api/minecraft/access/op" class="mb-4 flex gap-2">
-				<input name="username" placeholder="Mojang username…" class="w-full rounded bg-zinc-950 px-3 py-2 text-sm border border-zinc-800 focus:border-zinc-600"/>
-				<button class="shrink-0 rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Op Player</button>
+				<input name="username" placeholder="Mojang username…" class="w-full rounded bg-seam px-3 py-2 text-sm border border-edge focus-accent"/>
+				<button class="shrink-0 rounded text-accent px-4 py-2 text-sm font-medium hover:text-accent">Op Player</button>
 			</form>
-			<ul class="divide-y divide-zinc-800 rounded border border-zinc-800 bg-zinc-950 overflow-hidden">
+			<ul class="divide-y divide-seam rounded border border-edge bg-seam overflow-hidden">
 				if len(props.Ops) == 0 {
-					<li class="px-4 py-3 text-xs text-zinc-500">No server operators defined.</li>
+					<li class="px-4 py-3 text-xs text-ink-faint">No server operators defined.</li>
 				}
 				for _, op := range props.Ops {
 					<li class="flex items-center justify-between px-4 py-2.5 text-sm">
-						<span class="font-mono text-zinc-200">{ op }</span>
+						<span class="font-pixel text-ink">{ op }</span>
 						<form method="post" action="/api/minecraft/access/deop">
 							<input type="hidden" name="username" value={ op }/>
-							<button class="rounded bg-red-900/60 px-2.5 py-1 text-xs text-red-200 hover:bg-red-800">Deop</button>
+							<button class="rounded text-danger px-2.5 py-1 text-xs text-danger hover:text-danger">Deop</button>
 						</form>
 					</li>
 				}
 			</ul>
 		</section>
 
-		<section class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
+		<section class="rounded-control border border-edge bg-surface-raised p-5 ">
 			<div class="mb-4">
-				<h2 class="text-lg font-medium text-zinc-100">Whitelist ({ strconv.Itoa(len(props.Whitelist)) })</h2>
-				<p class="text-xs text-zinc-400">Players permitted to connect. Synced live via RCON and stored in Git.</p>
+				<h2 class="text-lg font-medium text-ink">Whitelist ({ strconv.Itoa(len(props.Whitelist)) })</h2>
+				<p class="text-xs text-ink-muted">Players permitted to connect. Synced live via RCON and stored in Git.</p>
 			</div>
 			<form method="post" action="/api/minecraft/access/whitelist/add" class="mb-4 flex gap-2">
-				<input name="username" placeholder="Mojang username…" class="w-full rounded bg-zinc-950 px-3 py-2 text-sm border border-zinc-800 focus:border-zinc-600"/>
-				<button class="shrink-0 rounded bg-emerald-700 px-4 py-2 text-sm font-medium hover:bg-emerald-600">Add to Whitelist</button>
+				<input name="username" placeholder="Mojang username…" class="w-full rounded bg-seam px-3 py-2 text-sm border border-edge focus-accent"/>
+				<button class="shrink-0 rounded text-accent px-4 py-2 text-sm font-medium hover:text-accent">Add to Whitelist</button>
 			</form>
-			<ul class="divide-y divide-zinc-800 rounded border border-zinc-800 bg-zinc-950 overflow-hidden">
+			<ul class="divide-y divide-seam rounded border border-edge bg-seam overflow-hidden">
 				if len(props.Whitelist) == 0 {
-					<li class="px-4 py-3 text-xs text-zinc-500">Whitelist is empty.</li>
+					<li class="px-4 py-3 text-xs text-ink-faint">Whitelist is empty.</li>
 				}
 				for _, user := range props.Whitelist {
 					<li class="flex items-center justify-between px-4 py-2.5 text-sm">
-						<span class="font-mono text-zinc-200">{ user }</span>
+						<span class="font-pixel text-ink">{ user }</span>
 						<form method="post" action="/api/minecraft/access/whitelist/remove">
 							<input type="hidden" name="username" value={ user }/>
-							<button class="rounded bg-red-900/60 px-2.5 py-1 text-xs text-red-200 hover:bg-red-800">Remove</button>
+							<button class="rounded text-danger px-2.5 py-1 text-xs text-danger hover:text-danger">Remove</button>
 						</form>
 					</li>
 				}
@@ -352,34 +352,34 @@ templ minecraftAccessTab(props MCAccessProps) {
 		</section>
 	</div>
 
-	<section class="mt-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-		<h2 class="mb-1 text-sm font-medium text-zinc-300">Online Players Now ({ strconv.Itoa(len(props.OnlinePlayers)) })</h2>
-		<p class="mb-4 text-xs text-zinc-400">Players currently connected in-game. Live query via RCON.</p>
+	<section class="mt-8 rounded-control border border-edge bg-surface-raised p-5 ">
+		<h2 class="mb-1 text-sm font-medium text-ink">Online Players Now ({ strconv.Itoa(len(props.OnlinePlayers)) })</h2>
+		<p class="mb-4 text-xs text-ink-muted">Players currently connected in-game. Live query via RCON.</p>
 		if len(props.OnlinePlayers) == 0 {
-			<p class="rounded-lg bg-zinc-950/60 border border-zinc-800/60 p-4 text-xs text-zinc-500">No players currently connected to the server.</p>
+			<p class="rounded-control bg-seam border border-edge p-4 text-xs text-ink-faint">No players currently connected to the server.</p>
 		} else {
 			<div class="flex flex-wrap gap-3">
 				for _, player := range props.OnlinePlayers {
-					<div class="flex items-center gap-3 rounded-lg bg-zinc-950 px-3.5 py-2 border border-zinc-800">
+					<div class="flex items-center gap-3 rounded-control bg-seam px-3.5 py-2 border border-edge">
 						<div class="flex items-center gap-2">
-							<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-							<span class="font-mono text-sm text-zinc-200">{ player }</span>
+							<span class="h-2 w-2 rounded-full text-accent"></span>
+							<span class="font-pixel text-sm text-ink">{ player }</span>
 						</div>
-						<div class="flex items-center gap-1.5 border-l border-zinc-800 pl-3">
+						<div class="flex items-center gap-1.5 border-l border-edge pl-3">
 							if Contains(props.Ops, player) {
-								<span class="rounded bg-amber-950/80 border border-amber-800/40 px-2 py-0.5 text-[10px] text-amber-400 font-mono">OP</span>
+								<span class="rounded text-accent border text-accent px-2 py-0.5 text-[10px] text-accent font-pixel">OP</span>
 							} else {
 								<form method="post" action="/api/minecraft/access/op" class="inline">
 									<input type="hidden" name="username" value={ player }/>
-									<button class="rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-1 text-[11px] text-zinc-300">Make Op</button>
+									<button class="rounded bg-surface-raised hover:text-accent px-2 py-1 text-[11px] text-ink">Make Op</button>
 								</form>
 							}
 							if Contains(props.Whitelist, player) {
-								<span class="rounded bg-emerald-950/80 border border-emerald-800/40 px-2 py-0.5 text-[10px] text-emerald-400 font-mono">Whitelisted</span>
+								<span class="rounded text-accent border text-accent px-2 py-0.5 text-[10px] text-accent font-pixel">Whitelisted</span>
 							} else {
 								<form method="post" action="/api/minecraft/access/whitelist/add" class="inline">
 									<input type="hidden" name="username" value={ player }/>
-									<button class="rounded bg-zinc-800 hover:bg-zinc-700 px-2 py-1 text-[11px] text-zinc-300">Whitelist</button>
+									<button class="rounded bg-surface-raised hover:text-accent px-2 py-1 text-[11px] text-ink">Whitelist</button>
 								</form>
 							}
 						</div>
@@ -392,84 +392,84 @@ templ minecraftAccessTab(props MCAccessProps) {
 
 templ gmodAccessTab(props GModAccessProps) {
 	<div class="mb-6">
-		<h2 class="text-xl font-semibold text-zinc-100">Garry's Mod Access & Connection</h2>
-		<p class="mt-0.5 text-xs text-zinc-400">Manage world admission passwords, direct connect endpoints, and Steam join links.</p>
+		<h2 class="text-xl font-semibold text-ink">Garry's Mod Access & Connection</h2>
+		<p class="mt-0.5 text-xs text-ink-muted">Manage world admission passwords, direct connect endpoints, and Steam join links.</p>
 	</div>
-	<div class="mb-8 rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-		<div class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+	<div class="mb-8 rounded-control border border-edge bg-surface-raised p-5 ">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-edge pb-3">
 			<div>
-				<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200">Server Passwords & Connection</h2>
-				<p class="text-xs text-zinc-400">Join passwords and direct connect endpoints configured for Garry's Mod worlds.</p>
+				<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">Server Passwords & Connection</h2>
+				<p class="text-xs text-ink-muted">Join passwords and direct connect endpoints configured for Garry's Mod worlds.</p>
 			</div>
-			<span class="rounded-full border border-sky-800/60 bg-sky-950/60 px-2.5 py-0.5 text-xs font-medium text-sky-300">
+			<span class="rounded-full border text-ink-muted text-ink-muted px-2.5 py-0.5 text-xs font-medium text-ink-muted">
 				Source Engine
 			</span>
 		</div>
 		if len(props.Passwords) == 0 {
-			<div class="rounded-lg border border-zinc-800/60 bg-zinc-950/40 p-4 text-center text-xs text-zinc-500">
+			<div class="rounded-control border border-edge bg-seam p-4 text-center text-xs text-ink-faint">
 				No Garry's Mod worlds configured yet.
 			</div>
 		} else {
-			<div class="divide-y divide-zinc-800/80 overflow-hidden rounded-lg border border-zinc-800/80 bg-zinc-950/50">
+			<div class="divide-y divide-seam overflow-hidden rounded-control border border-edge bg-seam/50">
 				for _, w := range props.Passwords {
 					<div
 						class="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between"
 						data-signals={ fmt.Sprintf("{showGModPass%d: false}", w.Number) }
 					>
 						<div class="flex items-center gap-3">
-							<span class="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-800 font-mono text-xs font-semibold text-zinc-300 ring-1 ring-zinc-700/50">
+							<span class="flex h-7 w-7 items-center justify-center rounded-control bg-surface-raised font-pixel text-xs font-semibold text-ink ring-1 ring-edge">
 								{ fmt.Sprintf("#%02d", w.Number) }
 							</span>
 							<div>
 								<div class="flex items-center gap-2">
 									<a
 										href={ templ.SafeURL(fmt.Sprintf("/gmod/%d/overview", w.Number)) }
-										class="text-sm font-medium text-zinc-200 hover:text-zinc-100 transition"
+										class="text-sm font-medium text-ink hover:text-ink transition"
 									>
 										{ w.Name }
 									</a>
 									if w.State == "running" {
-										<span class="inline-flex items-center gap-1 rounded-full border border-emerald-800/60 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-											<span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+										<span class="inline-flex items-center gap-1 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
+											<span class="h-1.5 w-1.5 rounded-full text-accent"></span>
 											running
 										</span>
 									} else if w.State == "stopped" {
-										<span class="inline-flex items-center gap-1 rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
-											<span class="h-1.5 w-1.5 rounded-full bg-zinc-500"></span>
+										<span class="inline-flex items-center gap-1 rounded-full border border-edge bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-ink-muted">
+											<span class="h-1.5 w-1.5 rounded-full bg-edge"></span>
 											stopped
 										</span>
 									} else {
-										<span class="inline-flex items-center gap-1 rounded-full border border-amber-800/60 bg-amber-950/60 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+										<span class="inline-flex items-center gap-1 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
 											{ w.State }
 										</span>
 									}
 								</div>
 								if w.Address != "" {
-									<span class="font-mono text-xs text-zinc-500">{ w.Address }</span>
+									<span class="font-pixel text-xs text-ink-faint">{ w.Address }</span>
 								}
 							</div>
 						</div>
 
 						<div class="flex flex-wrap items-center gap-2">
 							if w.Password != "" {
-								<div class="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5">
-									<span class="text-xs text-zinc-500">Password:</span>
+								<div class="flex items-center gap-2 rounded-control border border-edge bg-surface-raised px-3 py-1.5">
+									<span class="text-xs text-ink-faint">Password:</span>
 									<span
 										data-show={ fmt.Sprintf("!$showGModPass%d", w.Number) }
-										class="font-mono text-xs tracking-widest text-zinc-400 select-none"
+										class="font-pixel text-xs tracking-widest text-ink-muted select-none"
 									>
 										••••••••
 									</span>
 									<span
 										data-show={ fmt.Sprintf("$showGModPass%d", w.Number) }
-										class="font-mono text-xs font-semibold text-zinc-100 select-all"
+										class="font-pixel text-xs font-semibold text-ink select-all"
 									>
 										{ w.Password }
 									</span>
 									<button
 										type="button"
 										data-on:click={ fmt.Sprintf("$showGModPass%d = !$showGModPass%d", w.Number, w.Number) }
-										class="ml-1 rounded border border-zinc-700/60 bg-zinc-800/80 px-2 py-0.5 text-[10px] font-medium text-zinc-300 hover:bg-zinc-700 hover:text-white transition"
+										class="ml-1 rounded border border-edge bg-surface-raised px-2 py-0.5 text-[10px] font-medium text-ink hover:text-accent transition"
 										title="Toggle password visibility"
 									>
 										<span data-show={ fmt.Sprintf("!$showGModPass%d", w.Number) }>Show</span>
@@ -479,12 +479,12 @@ templ gmodAccessTab(props GModAccessProps) {
 								<button
 									type="button"
 									data-on:click={ w.CopyPasswordScript() }
-									class="rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition"
+									class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs font-medium text-ink hover:text-accent transition"
 								>
 									Copy
 								</button>
 							} else {
-								<span class="rounded-lg border border-zinc-800/60 bg-zinc-900/50 px-3 py-1.5 text-xs italic text-zinc-500">
+								<span class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs italic text-ink-faint">
 									No password (public)
 								</span>
 							}
@@ -493,13 +493,13 @@ templ gmodAccessTab(props GModAccessProps) {
 								<button
 									type="button"
 									data-on:click={ w.CopyCommandScript() }
-									class="rounded-lg border border-zinc-700 bg-zinc-800/80 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition"
+									class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs font-medium text-ink hover:text-accent transition"
 								>
 									Copy Connect Cmd
 								</button>
 								<a
 									href={ templ.SafeURL(w.SteamURL()) }
-									class="rounded-lg bg-zinc-100 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 shadow hover:bg-white transition inline-flex items-center gap-1"
+									class="rounded-control bg-accent px-3.5 py-1.5 text-xs font-semibold text-accent-ink shadow hover:bg-ink transition inline-flex items-center gap-1"
 								>
 									Join via Steam 🚀
 								</a>
@@ -511,21 +511,21 @@ templ gmodAccessTab(props GModAccessProps) {
 		}
 	</div>
 
-	<div class="rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-sm">
-		<h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-200 mb-2">Garry's Mod Administration Architecture</h2>
-		<p class="text-xs text-zinc-400 mb-4">How admission gating, remote administration, and in-game operator permissions operate on Source Engine:</p>
+	<div class="rounded-control border border-edge bg-surface-raised p-5 ">
+		<h2 class="text-sm font-semibold uppercase tracking-wider text-ink mb-2">Garry's Mod Administration Architecture</h2>
+		<p class="text-xs text-ink-muted mb-4">How admission gating, remote administration, and in-game operator permissions operate on Source Engine:</p>
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-3 text-xs">
-			<div class="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-				<span class="font-semibold text-zinc-200 block mb-1">🔐 Password Admission</span>
-				<p class="text-zinc-400">Server admission is gated at connection time via <code class="font-mono text-zinc-300">+sv_password</code>. Players connecting without the correct password are rejected by the engine.</p>
+			<div class="rounded-control border border-edge bg-seam p-4">
+				<span class="font-semibold text-ink block mb-1">🔐 Password Admission</span>
+				<p class="text-ink-muted">Server admission is gated at connection time via <code class="font-pixel text-ink">+sv_password</code>. Players connecting without the correct password are rejected by the engine.</p>
 			</div>
-			<div class="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-				<span class="font-semibold text-zinc-200 block mb-1">⚡ In-Game Roles (Lua)</span>
-				<p class="text-zinc-400">GMod has no static ops file. In-game admin powers (noclip, kick, ban, godmode) are managed through Workshop addons such as <span class="text-zinc-200 font-medium">ULX / ULib</span> or <span class="text-zinc-200 font-medium">SAM</span> configured inside the collection.</p>
+			<div class="rounded-control border border-edge bg-seam p-4">
+				<span class="font-semibold text-ink block mb-1">⚡ In-Game Roles (Lua)</span>
+				<p class="text-ink-muted">GMod has no static ops file. In-game admin powers (noclip, kick, ban, godmode) are managed through Workshop addons such as <span class="text-ink font-medium">ULX / ULib</span> or <span class="text-ink font-medium">SAM</span> configured inside the collection.</p>
 			</div>
-			<div class="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-				<span class="font-semibold text-zinc-200 block mb-1">📡 Remote RCON</span>
-				<p class="text-zinc-400">Source RCON protocol runs on TCP port <code class="font-mono text-zinc-300">27015</code>, authenticated via the cluster RCON secret, enabling direct console commands and remote management.</p>
+			<div class="rounded-control border border-edge bg-seam p-4">
+				<span class="font-semibold text-ink block mb-1">📡 Remote RCON</span>
+				<p class="text-ink-muted">Source RCON protocol runs on TCP port <code class="font-pixel text-ink">27015</code>, authenticated via the cluster RCON secret, enabling direct console commands and remote management.</p>
 			</div>
 		</div>
 	</div>

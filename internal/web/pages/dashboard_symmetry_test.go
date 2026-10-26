@@ -102,28 +102,3 @@ func TestActionRolesStyleIdentically(t *testing.T) {
 		}
 	}
 }
-
-func renderNav(t *testing.T, g NavGroupUI) string {
-	t.Helper()
-	var buf bytes.Buffer
-	if err := navGroup(g).Render(context.Background(), &buf); err != nil {
-		t.Fatal(err)
-	}
-	return buf.String()
-}
-
-// The game entries lead directly to each game's world instances dashboard.
-func TestNavGameEntriesLeadToServerDashboards(t *testing.T) {
-	if got := ValheimNav().Href; got != "/valheim" {
-		t.Fatalf("Valheim nav entry = %q, want /valheim", got)
-	}
-	if got := MinecraftNav().Href; got != "/minecraft" {
-		t.Fatalf("Minecraft nav entry = %q, want /minecraft", got)
-	}
-	if got := ValheimNav().Label; got != "Valheim" {
-		t.Fatalf("Valheim label = %q, want Valheim", got)
-	}
-	if got := MinecraftNav().Label; got != "Minecraft" {
-		t.Fatalf("Minecraft label = %q, want Minecraft", got)
-	}
-}

@@ -376,4 +376,3 @@ func TestGModPortDerivedFromHostAndNumber(t *testing.T) {
 GMod has PortStride 100 on Docker Hosts, so instance 02 must publish 27115, or it will collide with instance 01.`, port)
 	}
 }
-

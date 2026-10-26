@@ -1,0 +1,13 @@
+package components
+
+templ Toast() {
+	<div
+		data-show="$toast != ''"
+		data-class="{'text-danger': $toastkind == 'err', 'text-accent': $toastkind != 'err'}"
+		style="display: none;"
+		class="fixed bottom-4 left-4 z-30 flex items-center gap-3 rounded-control border border-edge bg-surface-raised px-4 py-3 font-pixel text-xs"
+	>
+		<span data-text="$toast"></span>
+		<button type="button" data-on:click="$toast = ''" class="focus-accent text-ink-faint transition-colors hover:text-accent">Dismiss</button>
+	</div>
+}
