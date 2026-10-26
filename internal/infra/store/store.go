@@ -50,6 +50,14 @@ func (s *Store) migrate() error {
 		online       INTEGER NOT NULL DEFAULT 0,
 		online_since TIMESTAMP
 	);
+	CREATE TABLE IF NOT EXISTS instance_presence (
+		instance_number INTEGER NOT NULL,
+		steam_id        TEXT NOT NULL,
+		online          INTEGER NOT NULL DEFAULT 1,
+		online_since    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (instance_number, steam_id)
+	);
+	CREATE INDEX IF NOT EXISTS idx_instance_presence_online ON instance_presence(instance_number, online);
 	CREATE TABLE IF NOT EXISTS audit (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,
 		at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

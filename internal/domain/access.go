@@ -24,6 +24,7 @@ type Player struct {
 	Sessions    int
 	Online      bool
 	OnlineSince time.Time
+	Instance    int
 }
 
 // ParseUsers extracts clean usernames from ops.txt or whitelist.txt.

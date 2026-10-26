@@ -368,7 +368,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	if st != nil {
 		valheimInstOpts = append(valheimInstOpts,
 			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
-				count, err := st.CountOnline()
+				count, err := st.CountOnlineForInstance(inst.Number)
 				return count, err == nil
 			}),
 		)
@@ -481,25 +481,10 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		valheimInstOpts...,
 	)
 
-	go ingest.Run(ctx, ingest.NewInstanceSource(
-		d.ValheimInstances.InstanceLogs,
-		func(ctx context.Context) (int, error) {
-			insts, err := d.ValheimInstances.ListInstances(ctx)
-			if err != nil {
-				return 0, err
-			}
-			target := 0
-			for _, inst := range insts {
-				if target == 0 || inst.Number < target {
-					target = inst.Number
-				}
-			}
-			if target == 0 {
-				return 0, fmt.Errorf("no valheim instance to ingest logs from")
-			}
-			return target, nil
-		},
-	), st)
+	if st != nil && d.ValheimInstances != nil {
+		sup := ingest.NewSupervisor(d.ValheimInstances, d.ValheimInstances, st, 3*time.Second)
+		go sup.Run(ctx)
+	}
 
 	d.MCRuntime = rt
 	d.MCRef = ports.ServerRef{Name: cfg.MinecraftDeployment, Scope: cfg.MinecraftNamespace}

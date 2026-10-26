@@ -247,7 +247,11 @@ templ valheimAccessTab(props ValheimAccessProps) {
 					<tr>
 						<td class="px-4 py-2">
 							if p.Online {
-								<span class="mr-2 inline-block h-2 w-2 rounded-full text-accent align-middle" title="online now"></span>
+								if p.Instance > 0 {
+									<span class="mr-2 inline-block h-2 w-2 rounded-full text-accent align-middle" title={ fmt.Sprintf("online now on world #%02d", p.Instance) }></span>
+								} else {
+									<span class="mr-2 inline-block h-2 w-2 rounded-full text-accent align-middle" title="online now"></span>
+								}
 							}
 							if p.Character != "" {
 								{ p.Character }

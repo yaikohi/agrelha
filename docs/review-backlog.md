@@ -163,10 +163,15 @@ Tick an item only when it is fixed **and** a test fails with the fix reverted.
       on the wall clock. Original text: while Valheim and Minecraft both set `Europe/Amsterdam`. In-game times
       and ULX logs are UTC, which is why `ulx thetime` reads two hours off. One line in the
       `GameGMod` branch of `Instance.EnvWith`.
-- [ ] **Presence is single-world.** Found while fixing the ingester: `presenceStore` has no
-      Instance key (`UpsertSeen(id, character, joined)`), so one stream serves the whole roster and
-      the source resolves the lowest-numbered Valheim Instance. With three worlds the roster
-      conflates them. Pre-existing, not a regression.
+- [x] **Presence is single-world.** Isolated active player presence per Valheim world via an
+      `instance_presence` table keyed by `(instance_number, steam_id)` while preserving a global player
+      registry in `players` for operator admin management. Extended `presenceStore` with `instance int`
+      keys across `UpsertSeen`, `SetOnline`, and `ClearPresence`. Added `CountOnlineForInstance(instance int)`
+      wired into `WithTelemetryProvider(inst.Number)` so each instance card reflects its actual players.
+      Introduced dynamic `ingest.Supervisor` running independent log streaming workers per running Valheim
+      world.
+      Tests: `TestMultiInstancePresence` in `internal/infra/store/store_test.go` and
+      `TestSupervisorReconciliationAndWorkerLifecycle` in `internal/app/ingest/ingest_test.go` (both fail when reverted).
 
 ## Layering
 

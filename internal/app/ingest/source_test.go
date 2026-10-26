@@ -52,19 +52,19 @@ func TestTheIngestSourceRefusesWhenUnconfigured(t *testing.T) {
 }
 
 func TestRetryBackoffIsCappedAndClimbs(t *testing.T) {
-	if maxRetryDelay <= retryDelay {
-		t.Fatalf("maxRetryDelay %v must exceed retryDelay %v", maxRetryDelay, retryDelay)
+	if MaxRetryDelay <= RetryDelay {
+		t.Fatalf("MaxRetryDelay %v must exceed RetryDelay %v", MaxRetryDelay, RetryDelay)
 	}
-	delay := retryDelay
+	delay := RetryDelay
 	for range 20 {
-		if delay *= 2; delay > maxRetryDelay {
-			delay = maxRetryDelay
+		if delay *= 2; delay > MaxRetryDelay {
+			delay = MaxRetryDelay
 		}
 	}
-	if delay != maxRetryDelay {
-		t.Errorf("backoff settled at %v, not the %v cap", delay, maxRetryDelay)
+	if delay != MaxRetryDelay {
+		t.Errorf("backoff settled at %v, not the %v cap", delay, MaxRetryDelay)
 	}
-	if retryDelay*2 > maxRetryDelay {
+	if RetryDelay*2 > MaxRetryDelay {
 		t.Errorf("the first backoff step already hits the cap, so a failing stream never slows down")
 	}
 }

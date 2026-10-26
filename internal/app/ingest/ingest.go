@@ -25,44 +25,55 @@ var (
 )
 
 type presenceStore interface {
-	ClearPresence() error
-	UpsertSeen(id, character string, joined bool) error
-	SetOnline(id string, online bool) error
+	ClearPresence(instance int) error
+	UpsertSeen(instance int, id, character string, joined bool) error
+	SetOnline(instance int, id string, online bool) error
 	RecordEvent(kind, id string) error
 }
 
-var (
-	retryDelay    = 3 * time.Second
-	maxRetryDelay = 5 * time.Minute
+const (
+	RetryDelay    = 3 * time.Second
+	MaxRetryDelay = 5 * time.Minute
 )
 
-func Run(ctx context.Context, k logStreamer, st presenceStore) {
-	_ = st.ClearPresence()
-	delay := retryDelay
+func Run(ctx context.Context, instance int, k logStreamer, st presenceStore, delays ...time.Duration) {
+	_ = st.ClearPresence(instance)
+	defer func() {
+		_ = st.ClearPresence(instance)
+	}()
+	delay := RetryDelay
+	maxDelay := MaxRetryDelay
+	if len(delays) > 0 && delays[0] > 0 {
+		delay = delays[0]
+	}
+	if len(delays) > 1 && delays[1] > 0 {
+		maxDelay = delays[1]
+	}
+	initialDelay := delay
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		err := consume(ctx, k, st)
+		err := consume(ctx, instance, k, st)
 		if err == nil {
-			delay = retryDelay
+			delay = initialDelay
 		} else if ctx.Err() == nil {
-			slog.Warn("ingest: log stream ended, retrying", "err", err, "retry_in", delay)
+			slog.Warn("ingest: log stream ended, retrying", "instance", instance, "err", err, "retry_in", delay)
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(delay): // the server may be restarting
+		case <-time.After(delay):
 		}
 		if err != nil {
-			if delay *= 2; delay > maxRetryDelay {
-				delay = maxRetryDelay
+			if delay *= 2; delay > maxDelay {
+				delay = maxDelay
 			}
 		}
 	}
 }
 
-func consume(ctx context.Context, k logStreamer, st presenceStore) error {
+func consume(ctx context.Context, instance int, k logStreamer, st presenceStore) error {
 	rc, err := k.StreamLogs(ctx, 200)
 	if err != nil {
 		return err
@@ -77,16 +88,16 @@ func consume(ctx context.Context, k logStreamer, st presenceStore) error {
 		switch {
 		case steamRe.MatchString(line):
 			lastSteam = steamRe.FindStringSubmatch(line)[1]
-			_ = st.UpsertSeen(lastSteam, "", true)
-			_ = st.SetOnline(lastSteam, true)
+			_ = st.UpsertSeen(instance, lastSteam, "", true)
+			_ = st.SetOnline(instance, lastSteam, true)
 			_ = st.RecordEvent("join", lastSteam)
 		case charRe.MatchString(line):
 			if lastSteam != "" {
-				_ = st.UpsertSeen(lastSteam, charRe.FindStringSubmatch(line)[1], false)
+				_ = st.UpsertSeen(instance, lastSteam, charRe.FindStringSubmatch(line)[1], false)
 			}
 		case dcRe.MatchString(line):
 			id := dcRe.FindStringSubmatch(line)[1]
-			_ = st.SetOnline(id, false)
+			_ = st.SetOnline(instance, id, false)
 			_ = st.RecordEvent("leave", id)
 		}
 	}

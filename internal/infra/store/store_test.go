@@ -36,8 +36,7 @@ func TestOpenAndMigrateIdempotency(t *testing.T) {
 func TestUpsertSeenAndPlayerRoster(t *testing.T) {
 	s := newTestStore(t)
 
-	// 1. First seen with a character name
-	if err := s.UpsertSeen("76561198000000001", "Thor", true); err != nil {
+	if err := s.UpsertSeen(1, "76561198000000001", "Thor", true); err != nil {
 		t.Fatalf("UpsertSeen initial failed: %v", err)
 	}
 
@@ -52,10 +51,7 @@ func TestUpsertSeenAndPlayerRoster(t *testing.T) {
 		t.Fatalf("expected Thor with 1 session, got %+v", players[0])
 	}
 
-	// 2. Critical test: second seen with an EMPTY character name.
-	// COALESCE(NULLIF(excluded.character, ''), players.character) must preserve "Thor",
-	// not wipe it to empty string.
-	if err := s.UpsertSeen("76561198000000001", "", true); err != nil {
+	if err := s.UpsertSeen(1, "76561198000000001", "", true); err != nil {
 		t.Fatalf("UpsertSeen empty character failed: %v", err)
 	}
 
@@ -70,8 +66,7 @@ func TestUpsertSeenAndPlayerRoster(t *testing.T) {
 		t.Fatalf("expected 2 sessions after bump, got %d", players[0].Sessions)
 	}
 
-	// 3. Update with a new non-empty character name without session bump
-	if err := s.UpsertSeen("76561198000000001", "Odin", false); err != nil {
+	if err := s.UpsertSeen(1, "76561198000000001", "Odin", false); err != nil {
 		t.Fatalf("UpsertSeen update character failed: %v", err)
 	}
 
@@ -98,11 +93,10 @@ func TestPresence(t *testing.T) {
 		t.Fatalf("expected 0 online, got %d", count)
 	}
 
-	// Set online
-	if err := s.SetOnline("steam1", true); err != nil {
+	if err := s.SetOnline(1, "steam1", true); err != nil {
 		t.Fatalf("SetOnline(steam1, true) failed: %v", err)
 	}
-	if err := s.SetOnline("steam2", true); err != nil {
+	if err := s.SetOnline(1, "steam2", true); err != nil {
 		t.Fatalf("SetOnline(steam2, true) failed: %v", err)
 	}
 	count, _ = s.CountOnline()
@@ -110,8 +104,7 @@ func TestPresence(t *testing.T) {
 		t.Fatalf("expected 2 online, got %d", count)
 	}
 
-	// Set steam1 offline
-	if err := s.SetOnline("steam1", false); err != nil {
+	if err := s.SetOnline(1, "steam1", false); err != nil {
 		t.Fatalf("SetOnline(steam1, false) failed: %v", err)
 	}
 	count, _ = s.CountOnline()
@@ -119,13 +112,64 @@ func TestPresence(t *testing.T) {
 		t.Fatalf("expected 1 online, got %d", count)
 	}
 
-	// Clear presence
-	if err := s.ClearPresence(); err != nil {
+	if err := s.ClearPresence(0); err != nil {
 		t.Fatalf("ClearPresence failed: %v", err)
 	}
 	count, _ = s.CountOnline()
 	if count != 0 {
 		t.Fatalf("expected 0 online after ClearPresence, got %d", count)
+	}
+}
+
+func TestMultiInstancePresence(t *testing.T) {
+	s := newTestStore(t)
+
+	if err := s.UpsertSeen(1, "steam1", "Thor", true); err != nil {
+		t.Fatalf("UpsertSeen instance 1 failed: %v", err)
+	}
+	if err := s.UpsertSeen(2, "steam2", "Loki", true); err != nil {
+		t.Fatalf("UpsertSeen instance 2 failed: %v", err)
+	}
+
+	c1, err := s.CountOnlineForInstance(1)
+	if err != nil || c1 != 1 {
+		t.Fatalf("instance 1 online count must be 1, got %d (err: %v); instance player counts are conflated", c1, err)
+	}
+	c2, err := s.CountOnlineForInstance(2)
+	if err != nil || c2 != 1 {
+		t.Fatalf("instance 2 online count must be 1, got %d (err: %v); instance player counts are conflated", c2, err)
+	}
+	c3, err := s.CountOnlineForInstance(3)
+	if err != nil || c3 != 0 {
+		t.Fatalf("empty instance 3 online count must be 0, got %d (err: %v); inactive worlds appear populated", c3, err)
+	}
+	total, err := s.CountOnline()
+	if err != nil || total != 2 {
+		t.Fatalf("total online count across instances must be 2, got %d (err: %v); global telemetry reports wrong active player count", total, err)
+	}
+
+	players, err := s.ListPlayers()
+	if err != nil {
+		t.Fatalf("ListPlayers failed: %v", err)
+	}
+	if len(players) != 2 {
+		t.Fatalf("expected 2 players in global roster, got %d", len(players))
+	}
+
+	if err := s.ClearPresence(1); err != nil {
+		t.Fatalf("ClearPresence(1) failed: %v", err)
+	}
+	c1After, _ := s.CountOnlineForInstance(1)
+	if c1After != 0 {
+		t.Fatalf("instance 1 online count must be 0 after restart/clear, got %d; stale players remain on restarted instance", c1After)
+	}
+	c2After, _ := s.CountOnlineForInstance(2)
+	if c2After != 1 {
+		t.Fatalf("instance 2 online count must remain 1 after instance 1 clear, got %d; clearing one instance incorrectly purged another instance's presence", c2After)
+	}
+	totalAfter, _ := s.CountOnline()
+	if totalAfter != 1 {
+		t.Fatalf("total online count must be 1 after clearing instance 1, got %d; global count out of sync with instance presence", totalAfter)
 	}
 }
 
