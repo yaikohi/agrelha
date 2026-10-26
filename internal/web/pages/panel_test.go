@@ -10,7 +10,7 @@ func TestBuildPanelFlattensRowsAndKeepsIdleGamesSeparate(t *testing.T) {
 		{Card: GameCardUI{Title: "Valheim Worlds", Accent: "orange", AccessNote: "ask the host", Rows: []ServerRowUI{
 			{Name: "Ducktopia", Address: "10.0.0.1:2456"},
 		}}},
-		{Card: GameCardUI{Title: "Minecraft Worlds", Accent: "emerald", EmptyText: "none", EmptyHint: "ask"}},
+		{Card: GameCardUI{Title: "Minecraft Worlds", Accent: "emerald", EmptyHint: "ask"}},
 		{Card: GameCardUI{Title: "Garry's Mod Worlds", Accent: "sky", Rows: []ServerRowUI{
 			{Name: "Sandbox", Address: "10.0.0.2:27015"},
 			{Name: "TTT", Address: "10.0.0.3:27015"},

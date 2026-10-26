@@ -9,56 +9,5 @@ templ Dashboard(grafanaURL string, games []DashboardGameUI, isAdmin, signedIn bo
 }
 
 templ adminHub(grafanaURL string, games []DashboardGameUI, isAdmin, signedIn bool, flashKind, flashMsg string) {
-	@Layout("Agrelha · Game Server Portal") {
-		@nav(isAdmin, signedIn)
-		@flashBanner(flashKind, flashMsg)
-		<div class="space-y-8">
-			<!-- Header Banner -->
-			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800 pb-5">
-				<div>
-					<h1 class="text-2xl font-bold tracking-tight text-zinc-100">
-						if isAdmin {
-							Game Server Hub
-						} else {
-							Community Game Servers
-						}
-					</h1>
-					<p class="mt-1 text-xs text-zinc-400">
-						if isAdmin {
-							Manage dedicated game servers.
-						} else {
-							Direct-connect addresses and client modpack downloads for dedicated servers on the network.
-						}
-					</p>
-				</div>
-				<div class="flex items-center gap-2 text-xs">
-					<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/70 border border-emerald-800/50 px-3 py-1 font-medium text-emerald-300">
-						<span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-						Cluster Online
-					</span>
-					if isAdmin && grafanaURL != "" {
-						<a
-							href={ templ.SafeURL(grafanaURL) }
-							target="_blank"
-							rel="noopener noreferrer"
-							class="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1 font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
-						>
-							Grafana ↗
-						</a>
-					}
-				</div>
-			</div>
-
-			<!-- Dynamic registered game cards driven by the list -->
-			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				for _, g := range games {
-					@gameCard(g.Card) {
-						if isAdmin {
-							@cardActions(g.Actions)
-						}
-					}
-				}
-			</div>
-		</div>
-	}
+	@AdminHub(grafanaURL, games, signedIn, flashKind, flashMsg)
 }

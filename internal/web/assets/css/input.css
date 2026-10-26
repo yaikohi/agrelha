@@ -71,6 +71,7 @@
 .md th { background: #27272a; font-weight: 600; color: #fafafa; }
 .md tbody tr:nth-child(even) td { background: #1c1c1f; }
 
+
 @font-face {
 	font-family: "Fraunces";
 	src: url("/assets/fonts/Fraunces-Variable.woff2") format("woff2");
@@ -87,45 +88,59 @@
 	font-display: swap;
 }
 
+/* The hearth design system. Every token here is semantic: markup names the role
+   it wants, never a colour. Changing the palette means editing this block and
+   nothing else. See docs/design-system.md. */
 @theme {
 	--font-display: "Fraunces", Iowan Old Style, Georgia, serif;
 	--font-pixel: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-	--color-hearth-950: #120e0b;
-	--color-hearth-900: #1e1713;
-	--color-hearth-800: #2a211b;
-	--color-hearth-700: #3a2e26;
-	--color-silk: #ede3d4;
-	--color-engrave: #9a8b7b;
-	--color-ember: #ffa62b;
-	--color-ember-dim: #8a5a1e;
+	--color-surface: #1e1713;
+	--color-surface-raised: #2a211b;
+	--color-seam: #120e0b;
+	--color-edge: #3a2e26;
+
+	--color-ink: #ede3d4;
+	--color-ink-muted: #9a8b7b;
+	--color-ink-faint: #6b5d51;
+
+	--color-accent: #ffa62b;
+	--color-accent-muted: #8a5a1e;
+	--color-accent-ink: #120e0b;
+
+	--color-danger: #d9594c;
+
 	--color-tint-sky: #7fa6b8;
 	--color-tint-moss: #8fa860;
 	--color-tint-flame: #d9733a;
+
+	--radius-control: 2px;
 }
 
+/* A port's lamp: one accent at three brightnesses carries every state, so no
+   badge or pill has to repeat it. */
 .lamp {
 	display: block;
 	width: 0.7rem;
 	height: 0.7rem;
 	border-radius: 9999px;
-	background: #3a2e26;
+	background: var(--color-edge);
 	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
 }
 .lamp-out {
-	background: #3a2e26;
+	background: var(--color-edge);
 }
 .lamp-dim {
-	background: #8a5a1e;
+	background: var(--color-accent-muted);
 	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 10px 0 rgba(255, 166, 43, 0.14);
 }
 .lamp-lit {
-	background: #ffa62b;
+	background: var(--color-accent);
 	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3), 0 0 0 4px rgba(255, 166, 43, 0.1), 0 0 20px 2px rgba(255, 166, 43, 0.38);
 }
 
-.focus-ember:focus-visible {
-	outline: 2px solid #ffa62b;
+.focus-accent:focus-visible {
+	outline: 2px solid var(--color-accent);
 	outline-offset: 3px;
-	border-radius: 2px;
+	border-radius: var(--radius-control);
 }

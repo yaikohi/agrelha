@@ -14,7 +14,7 @@ templ Layout(title string) {
 // Hearth is the public face: warm panel ground, vendored display and pixel
 // faces, and a footer that matches it. Signed-in pages keep Layout.
 templ LayoutHearth(title string) {
-	@layoutShell(title, "bg-hearth-900 text-silk", "mx-auto max-w-3xl overflow-x-hidden px-6 pt-12 pb-10", true) {
+	@layoutShell(title, "bg-surface text-ink", "mx-auto max-w-3xl overflow-x-hidden px-6 pt-12 pb-10", true) {
 		{ children... }
 	}
 }

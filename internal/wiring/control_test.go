@@ -152,17 +152,17 @@ func TestRootDashboard(t *testing.T) {
 	if !strings.Contains(content, "Game Server Hub") {
 		t.Errorf("expected 'Game Server Hub' in body")
 	}
-	if !strings.Contains(content, "Valheim Worlds") {
-		t.Errorf("expected 'Valheim Worlds' in body")
+	if !strings.Contains(content, "Open Valheim manager") {
+		t.Errorf("expected a way into the Valheim manager")
 	}
-	if !strings.Contains(content, "Open Valheim Manager") {
-		t.Errorf("expected 'Open Valheim Manager' in body")
+	if !strings.Contains(content, `href="/valheim"`) {
+		t.Errorf("expected the Valheim manager link")
 	}
-	if !strings.Contains(content, "Minecraft Worlds") {
-		t.Errorf("expected 'Minecraft Worlds' in body")
+	if !strings.Contains(content, "Open Minecraft manager") {
+		t.Errorf("expected a way into the Minecraft manager")
 	}
-	if !strings.Contains(content, "Open Minecraft Manager") {
-		t.Errorf("expected 'Open Minecraft Manager' in body")
+	if !strings.Contains(content, `href="/minecraft"`) {
+		t.Errorf("expected the Minecraft manager link")
 	}
 }
 

@@ -16,7 +16,6 @@ type PanelPortUI struct {
 type PanelEmptyUI struct {
 	Game string
 	Tint string
-	Text string
 	Hint string
 }
 
@@ -34,7 +33,7 @@ func tintClass(accent string) string {
 	case "orange":
 		return "text-tint-flame"
 	default:
-		return "text-engrave"
+		return "text-ink-muted"
 	}
 }
 
@@ -47,7 +46,6 @@ func BuildPanel(games []DashboardGameUI) PanelUI {
 			p.Idle = append(p.Idle, PanelEmptyUI{
 				Game: label,
 				Tint: tint,
-				Text: g.Card.EmptyText,
 				Hint: g.Card.EmptyHint,
 			})
 			continue
@@ -155,4 +153,93 @@ func (p PanelPortUI) ImportHint() string {
 		hint += " (" + p.Row.ImportSteps + ")"
 	}
 	return hint
+}
+
+type AdminGameUI struct {
+	Ports   []PanelPortUI
+	Idle    *PanelEmptyUI
+	Budget  []string
+	Actions CardActionsUI
+}
+
+func cleanActionLabel(s string) string {
+	s = strings.TrimSuffix(s, " →")
+	s = strings.TrimPrefix(s, "+ ")
+	s = strings.ReplaceAll(s, " Manager", " manager")
+	s = strings.ReplaceAll(s, " World", " world")
+	return s
+}
+
+func cleanAction(a ActionUI) ActionUI {
+	a.Label = cleanActionLabel(a.Label)
+	return a
+}
+
+func cleanActions(in []ActionUI) []ActionUI {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]ActionUI, 0, len(in))
+	for _, a := range in {
+		out = append(out, cleanAction(a))
+	}
+	return out
+}
+
+func BuildAdminPanel(games []DashboardGameUI) []AdminGameUI {
+	var out []AdminGameUI
+	n := 0
+	for _, g := range games {
+		label := strings.TrimSuffix(strings.ToLower(g.Card.Title), " worlds")
+		tint := tintClass(g.Card.Accent)
+
+		section := AdminGameUI{
+			Budget: g.Card.Extras,
+			Actions: CardActionsUI{
+				Lifecycle: cleanActions(g.Actions.Lifecycle),
+				Special:   cleanActions(g.Actions.Special),
+				Links:     cleanActions(g.Actions.Links),
+				Manager:   cleanAction(g.Actions.Manager),
+			},
+		}
+
+		if len(g.Card.Rows) == 0 {
+			section.Idle = &PanelEmptyUI{Game: label, Tint: tint}
+			out = append(out, section)
+			continue
+		}
+		for _, r := range g.Card.Rows {
+			section.Ports = append(section.Ports, PanelPortUI{
+				Game:       label,
+				Tint:       tint,
+				Index:      n,
+				Row:        r,
+				AccessNote: g.Card.AccessNote,
+			})
+			n++
+		}
+		out = append(out, section)
+	}
+	return out
+}
+
+func hearthNavLabel(name string) string {
+	return strings.ToLower(name)
+}
+
+func adminNavLinks() []ActionUI {
+	return []ActionUI{
+		{Label: "history", Href: "/history"},
+		{Label: "access", Href: "/admins"},
+		{Label: "overview", Href: "/overview"},
+		{Label: "accounts", Href: "/accounts"},
+		{Label: "requests", Href: "/requests"},
+	}
+}
+
+func hearthActionStyle(primary bool) string {
+	if primary {
+		return "border border-accent text-accent hover:bg-accent hover:text-accent-ink"
+	}
+	return "border border-edge text-ink hover:border-accent hover:text-accent"
 }

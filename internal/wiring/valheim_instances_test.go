@@ -347,10 +347,10 @@ func TestValheimHubCardSymmetry(t *testing.T) {
 	body0, _ := io.ReadAll(resp0.Body)
 	html0 := string(body0)
 	for _, want := range []string{
-		"Valheim Worlds",
+		"valheim",
 		"0 of 4 worlds saved",
-		"All Valheim worlds are currently offline.",
-		"+ Create World",
+		"Nothing running.",
+		"Create world",
 	} {
 		if !strings.Contains(html0, want) {
 			t.Errorf("Hub page (0 worlds) missing %q", want)
@@ -381,15 +381,12 @@ func TestValheimHubCardSymmetry(t *testing.T) {
 	html := string(body)
 
 	for _, want := range []string{
-		"Valheim Worlds",
-		"Dedicated multi-world cluster",
 		"1 of 4 worlds saved",
 		"1 of 2 running",
 		"RAM 6G of 16G",
-		"Open Valheim Manager →",
+		"Open Valheim manager",
 		`href="/valheim"`,
-		"Minecraft Worlds",
-		"Open Minecraft Manager →",
+		"Open Minecraft manager",
 		`href="/minecraft"`,
 	} {
 		if !strings.Contains(html, want) {
