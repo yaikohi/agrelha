@@ -840,8 +840,8 @@ func TestMCModsSearchAllBranches(t *testing.T) {
 	// 6. Hits found: "jei" is installed, "appleskin" is not -> shows Installed and + Install
 	respHits, _ := app.Test(httptest.NewRequest("GET", "/api/minecraft/1/mods/search?q=jei", nil))
 	bHits, _ := io.ReadAll(respHits.Body)
-	if !strings.Contains(string(bHits), "Installed") || !strings.Contains(string(bHits), "+ Install") {
-		t.Errorf("expected installed badge and install button, got: %s", bHits)
+	if !strings.Contains(string(bHits), ">installed<") || !strings.Contains(string(bHits), ">Install<") {
+		t.Errorf("expected the installed marker on one hit and an Install action on the other, got: %s", bHits)
 	}
 
 	// 7. innerElement error seam in patchModResults

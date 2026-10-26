@@ -836,7 +836,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 	mockTS.results = nil
 	respEmptyResults, _ := app.Test(httptest.NewRequest("GET", "/test/search/1?q=notfound", nil))
 	bEmptyResults, _ := io.ReadAll(respEmptyResults.Body)
-	if !strings.Contains(string(bEmptyResults), "No Thunderstore mods found matching your search") {
+	if !strings.Contains(string(bEmptyResults), "No Thunderstore mods match that search") {
 		t.Errorf("expected no mods found, got: %s", string(bEmptyResults))
 	}
 
@@ -856,7 +856,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 		reqQ.Header.Set("Content-Type", "application/json")
 		respQ, _ := app.Test(reqQ)
 		bQ, _ := io.ReadAll(respQ.Body)
-		if !strings.Contains(string(bQ), "Load more mods...") {
+		if !strings.Contains(string(bQ), "Load more") {
 			t.Errorf("expected Load more mods button for %s, got: %s", bodyJSON, string(bQ))
 		}
 	}
@@ -874,8 +874,8 @@ func TestValheimDetailAllEdges(t *testing.T) {
 	}
 	respSearchInstalled, _ := app.Test(httptest.NewRequest("GET", "/test/search/1", nil))
 	bSearchInstalled, _ := io.ReadAll(respSearchInstalled.Body)
-	if !strings.Contains(string(bSearchInstalled), "Installed") || !strings.Contains(string(bSearchInstalled), "Popular Community Mods") {
-		t.Errorf("expected Installed badge and Popular header in search results, got: %s", string(bSearchInstalled))
+	if !strings.Contains(string(bSearchInstalled), ">installed<") || !strings.Contains(string(bSearchInstalled), "Popular on Thunderstore") {
+		t.Errorf("expected the installed marker and the popular heading, got: %s", string(bSearchInstalled))
 	}
 
 	// 5. ValheimModDetail edges
@@ -1029,8 +1029,8 @@ func TestValheimDetailAllEdges(t *testing.T) {
 
 	// renderInstalledModsHTML
 	emptyModsHTML := renderInstalledModsHTML(1, nil)
-	if !strings.Contains(emptyModsHTML, "No custom mods installed") {
-		t.Errorf("expected No custom mods installed, got %s", emptyModsHTML)
+	if !strings.Contains(emptyModsHTML, "No mods installed") {
+		t.Errorf("expected the empty-state line, got %s", emptyModsHTML)
 	}
 
 	filledModsHTML := renderInstalledModsHTML(1, []string{"Author-Mod", "Author-Pinned-1.0.0"})
@@ -1192,7 +1192,7 @@ func TestValheimWizardAllEdges(t *testing.T) {
 		reqP.Header.Set("Content-Type", "application/json")
 		respP, _ := app.Test(reqP)
 		bP, _ := io.ReadAll(respP.Body)
-		if !strings.Contains(string(bP), "Load more mods...") {
+		if !strings.Contains(string(bP), "Load more") {
 			t.Errorf("expected Load more mods for %s, got: %s", payload, string(bP))
 		}
 	}

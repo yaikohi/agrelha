@@ -11,6 +11,7 @@ import (
 	"agrelha/internal/app/instances"
 	"agrelha/internal/domain"
 	"agrelha/internal/infra/store"
+	"agrelha/internal/web/pages"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -77,9 +78,15 @@ func TestModsSearchSurvivesUnconfiguredProvider(t *testing.T) {
 }
 
 func TestModCardEscapesQuotesInSlug(t *testing.T) {
-	card := modCardHTML(2, ModHit{Slug: "it's-a-mod", Title: "X"}, false)
+	card := renderComponent(pages.ModSearchResults(pages.ModResultsUI{
+		Game: "minecraft", Num: 2,
+		Results: []pages.ModResultUI{{Slug: "it's-a-mod", Title: "X"}},
+	}))
 	if strings.Contains(card, "{slug: 'it's") {
 		t.Error("an unescaped quote would break the Datastar expression")
+	}
+	if !strings.Contains(card, `it\&#39;s-a-mod`) && !strings.Contains(card, `it\&#39;s-a-mod`) {
+		t.Errorf("the slug was not escaped for the Datastar expression: %s", card)
 	}
 }
 

@@ -3,12 +3,14 @@ package valheim
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"html"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/gofiber/fiber/v2"
 
 	"agrelha/internal/domain"
@@ -298,15 +300,15 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 	}
 
 	if h.cfg.TS == nil {
-		return ssePatchElements(c, "#valheim-mod-results", `<div class="col-span-full py-8 text-center text-xs text-red-400">Thunderstore catalog unconfigured.</div>`)
+		return ssePatchElements(c, "#valheim-mod-results", `<p class="px-6 py-8 font-pixel text-[11px] text-danger">Thunderstore catalog unconfigured.</p>`)
 	}
 
 	results, err := h.cfg.TS.Search(c.UserContext(), q, limit)
 	if err != nil {
-		return ssePatchElements(c, "#valheim-mod-results", fmt.Sprintf(`<div class="col-span-full py-8 text-center text-xs text-red-400">Search failed: %s</div>`, html.EscapeString(err.Error())))
+		return ssePatchElements(c, "#valheim-mod-results", fmt.Sprintf(`<p class="px-6 py-8 font-pixel text-[11px] text-danger">Search failed: %s</p>`, html.EscapeString(err.Error())))
 	}
 	if len(results) == 0 {
-		return ssePatchElements(c, "#valheim-mod-results", `<div class="col-span-full py-12 text-center text-xs text-zinc-500">No Thunderstore mods found matching your search.</div>`)
+		return ssePatchElements(c, "#valheim-mod-results", `<p class="px-6 py-10 font-pixel text-[11px] text-ink-faint">No Thunderstore mods match that search.</p>`)
 	}
 
 	installedMap := make(map[string]bool)
@@ -322,75 +324,32 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 		}
 	}
 
-	var sb strings.Builder
+	ui := pages.ModResultsUI{Game: "valheim", Num: num, Query: q}
 	if q == "" {
-		sb.WriteString(`<div class="col-span-full flex items-center justify-between pb-1 text-xs text-zinc-400 font-medium"><span>Popular Community Mods on Thunderstore</span><span class="text-zinc-500">Ranked by downloads</span></div>`)
+		ui.Heading = "Popular on Thunderstore"
+		ui.Note = "ranked by downloads"
 	} else {
-		sb.WriteString(fmt.Sprintf(`<div class="col-span-full flex items-center justify-between pb-1 text-xs text-zinc-400 font-medium"><span>Search Results for "%s" (%d)</span></div>`, html.EscapeString(q), len(results)))
+		ui.Heading = fmt.Sprintf("%d results for %q", len(results), q)
 	}
-
 	for _, r := range results {
 		fullName := fmt.Sprintf("%s-%s", r.Owner, r.Name)
-		cleanSlug := strings.ReplaceAll(fullName, "'", "\\'")
-		cleanIcon := r.Icon
-		if cleanIcon == "" {
-			cleanIcon = "/assets/img/valheim-icon.png"
-		}
 		ref, _ := domain.ParseModRef(fullName, domain.GameValheim)
-		isInstalled := installedMap[ref.Key()]
-
-		var statusBadge string
-		var actionBtn string
-		if isInstalled {
-			statusBadge = `<span class="rounded bg-emerald-950/70 border border-emerald-800/60 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">Installed</span>`
-			actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/remove?slug=%s', {payload: {slug: '%s'}})" class="rounded-lg bg-red-950/50 border border-red-800/60 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-900/60 transition">Remove</button>`, num, cleanSlug, cleanSlug)
-		} else {
-			actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/install?slug=%s', {payload: {slug: '%s'}})" class="rounded-lg bg-zinc-100 px-3.5 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white transition shadow-sm">+ Install</button>`, num, cleanSlug, cleanSlug)
-		}
-
-		sb.WriteString(fmt.Sprintf(`
-			<div class="flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-4 hover:border-zinc-700 transition shadow-sm">
-				<div>
-					<div class="flex items-start gap-3">
-						<img src="%s" alt="" class="h-10 w-10 rounded-lg bg-zinc-800 object-cover shrink-0 mt-0.5" onerror="this.style.display='none'"/>
-						<div class="min-w-0 flex-1 truncate">
-							<div class="flex items-center gap-1.5 flex-wrap">
-								<span class="text-sm font-semibold text-zinc-100 truncate">%s</span>
-								<span class="font-mono text-[10px] text-zinc-400 bg-zinc-800/80 border border-zinc-700/60 rounded px-1.5 py-0.5">%s</span>
-								<span class="font-mono text-[10px] text-zinc-500">v%s</span>
-							</div>
-							<div class="flex items-center gap-2 mt-1 text-[11px] text-zinc-400">
-								<span>%s downloads</span>
-								%s
-							</div>
-						</div>
-					</div>
-					<p class="mt-3 line-clamp-2 text-xs text-zinc-400 leading-relaxed">%s</p>
-				</div>
-				<div class="mt-4 flex items-center justify-between border-t border-zinc-800/60 pt-3">
-					<button type="button"
-						data-on:click="@post('/api/valheim/%d/mods/detail', {payload: {slug: '%s'}})"
-						class="rounded-lg bg-zinc-800 border border-zinc-700/80 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700 hover:text-white transition">
-						📖 Details
-					</button>
-					%s
-				</div>
-			</div>
-		`, html.EscapeString(cleanIcon), html.EscapeString(r.Name), html.EscapeString(r.Owner), html.EscapeString(r.Version), formatDownloads(r.Downloads), statusBadge, html.EscapeString(r.Description), num, cleanSlug, actionBtn))
+		ui.Results = append(ui.Results, pages.ModResultUI{
+			Title:       r.Name,
+			Slug:        fullName,
+			Author:      r.Owner,
+			Version:     r.Version,
+			IconURL:     r.Icon,
+			Description: r.Description,
+			Downloads:   formatDownloads(r.Downloads),
+			Installed:   installedMap[ref.Key()],
+			Detailable:  true,
+		})
 	}
-
 	if len(results) >= limit {
-		cleanQ := strings.ReplaceAll(q, "'", "\\'")
-		sb.WriteString(fmt.Sprintf(`
-			<div class="col-span-full pt-2 pb-2 text-center">
-				<button type="button" data-on:click="@post('/api/valheim/%d/mods/search', {payload: {q: '%s', limit: %d}})" class="rounded-xl border border-zinc-700 bg-zinc-800 px-5 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition shadow-sm">
-					Load more mods...
-				</button>
-			</div>
-		`, num, cleanQ, limit+24))
+		ui.NextN = limit + 24
 	}
-
-	return ssePatchElements(c, "#valheim-mod-results", sb.String())
+	return ssePatchElements(c, "#valheim-mod-results", renderComponent(pages.ModSearchResults(ui)))
 }
 
 // ValheimModDetail renders the slide-over detail drawer with README, versions, and dependencies via SSE.
@@ -632,24 +591,27 @@ func ssePatchElements(c *fiber.Ctx, selector, content string) error {
 }
 
 func renderInstalledModsHTML(num int, mods []string) string {
-	if len(mods) == 0 {
-		return `<div class="p-8 text-center text-xs text-zinc-500">No custom mods installed in this world. Server runs clean BepInEx.</div>`
+	ui := pages.InstalledModsUI{
+		Game:  "valheim",
+		Num:   num,
+		Empty: "No mods installed. This world runs clean BepInEx.",
 	}
+	for _, slug := range mods {
+		ref, _ := domain.ParseModRef(slug, domain.GameValheim)
+		ui.Mods = append(ui.Mods, pages.InstalledModUI{
+			Label:   ref.FullName(),
+			Slug:    ref.FullName(),
+			Version: ref.Version,
+		})
+	}
+	return renderComponent(pages.InstalledMods(ui))
+}
+
+func renderComponent(c templ.Component) string {
 	var sb strings.Builder
-	sb.WriteString(`<table class="w-full text-left text-xs">`)
-	sb.WriteString(`<thead class="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400"><tr><th class="px-4 py-2.5 font-medium">Mod Package</th><th class="px-4 py-2.5 font-medium text-right">Actions</th></tr></thead>`)
-	sb.WriteString(`<tbody class="divide-y divide-zinc-800/60">`)
-	for _, modSlug := range mods {
-		ref, _ := domain.ParseModRef(modSlug, domain.GameValheim)
-		label := ref.FullName()
-		if ref.Version != "" {
-			label += "  v" + ref.Version
-		}
-		cleanSlug := html.EscapeString(label)
-		jsSlug := strings.ReplaceAll(ref.FullName(), "'", "\\'")
-		sb.WriteString(fmt.Sprintf(`<tr class="hover:bg-zinc-800/30"><td class="px-4 py-2.5 font-mono text-zinc-200">%s</td><td class="px-4 py-2.5 text-right"><button type="button" data-on:click="@post('/api/valheim/%d/mods/remove?slug=%s', {payload: {slug: '%s'}})" class="text-red-400 hover:text-red-300">Remove</button></td></tr>`, cleanSlug, num, jsSlug, jsSlug))
+	if err := c.Render(context.Background(), &sb); err != nil {
+		return ""
 	}
-	sb.WriteString(`</tbody></table>`)
 	return sb.String()
 }
 

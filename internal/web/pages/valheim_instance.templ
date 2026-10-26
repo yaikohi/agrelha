@@ -36,72 +36,65 @@ templ ValheimInstanceDetail(d InstanceDetailUI) {
 
 templ valheimModsTab(d InstanceDetailUI) {
 	<div
-		data-signals="{modQuery: '', modSearchLoading: false, addslug: '', showModDetail: false}"
+		data-signals="{modQuery: '', modSearchLoading: false, addslug: '', showModDetail: false, modFilter: ''}"
 		data-effect={ fmt.Sprintf("@post('/api/valheim/%d/mods/search', {payload: {q: ''}})", d.Number) }
 	>
-		@components.SectionHead("Search Thunderstore", "Search Valheim mods by name, author or keyword — mining, build, equipment, jotunn.")
-		<div class="mt-4 flex flex-wrap gap-2">
-			<input
-				type="text"
-				data-bind="modQuery"
-				data-on:keydown={ fmt.Sprintf("if (evt.key === 'Enter') { evt.preventDefault(); @post('/api/valheim/%d/mods/search', {payload: {q: $modQuery}}) }", d.Number) }
-				placeholder="Mining, Jotunn, EquipmentAndQuickSlots, PlantEasily…"
-				class={ "flex-1 " + components.InputClass() }
-			/>
-			<button
-				type="button"
-				data-indicator="modSearchLoading"
-				data-on:click={ fmt.Sprintf("@post('/api/valheim/%d/mods/search', {payload: {q: $modQuery}})", d.Number) }
-				class={ components.ButtonClass(components.VariantPrimary) }
-			>
-				<span data-show="!$modSearchLoading">Search</span>
-				<span data-show="$modSearchLoading">Searching…</span>
-			</button>
-			<a href="https://thunderstore.io/c/valheim/" target="_blank" rel="noopener noreferrer" class={ components.ButtonClass(components.VariantSecondary) }>Browse Thunderstore</a>
-		</div>
-		<div id="valheim-mod-results" class="mt-6 grid max-h-[640px] grid-cols-1 gap-3 overflow-y-auto pr-1 md:grid-cols-2">
-			<p class="col-span-full py-12 text-center font-pixel text-xs text-ink-faint">Loading popular Thunderstore mods…</p>
-		</div>
-		<details class="mt-6 border-t border-seam pt-4">
-			<summary class="focus-accent cursor-pointer font-pixel text-[11px] text-ink-muted transition-colors hover:text-accent">Install by exact package slug</summary>
-			<p class="mt-2 max-w-prose font-display text-sm leading-relaxed text-ink-muted">
-				Add a version to pin it exactly — Namespace-Name-1.2.3. That overwrites the pin of a mod that is already installed, which is how you go back to a version that worked.
-			</p>
-			<form
-				class="mt-3 flex flex-wrap items-center gap-2"
-				data-on:submit__prevent={ fmt.Sprintf("@post('/api/valheim/%d/mods/install', {payload: {slug: $addslug}}); $addslug = ''", d.Number) }
-			>
-				<input
-					type="text"
-					data-bind="addslug"
-					placeholder="ValheimModding-Jotunn or Skarif-AutoRepairBuilding-1.2.15"
-					class={ "flex-1 " + components.InputClass() }
-				/>
-				<button type="submit" class={ components.ButtonClass(components.VariantSecondary) }>Install</button>
-			</form>
-		</details>
 		<div id="mod-updates-panel">
 			@ModUpdatePanel(d)
 		</div>
-		@components.SectionHead("Installed mods", fmt.Sprintf("%d mods configured in mods.txt.", len(d.InstalledMods)))
-		if len(d.InstalledMods) == 0 {
-			@components.Prose("No mods installed. This world runs clean BepInEx.")
-		} else {
-			<div id="installed-mods-container">
-				@components.RowList() {
-					for _, modSlug := range d.InstalledMods {
-						<div class={ components.RowClass() }>
-							<span class="min-w-0 break-all font-pixel text-xs text-ink">{ modSlug }</span>
-							<button
-								type="button"
-								data-on:click={ fmt.Sprintf("@post('/api/valheim/%d/mods/remove?slug=%s', {payload: {slug: '%s'}})", d.Number, modSlug, modSlug) }
-								class={ components.ButtonClass(components.VariantDanger) }
-							>Remove</button>
-						</div>
-					}
-				}
+		<div class="mt-10 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+			<div class="min-w-0">
+				<h2 class="font-display text-xl font-semibold text-ink">Installed</h2>
+				<p class="mt-1 max-w-prose font-display text-sm leading-relaxed text-ink-muted">
+					Everything in this world's mods.txt. Removing one takes effect on the next restart.
+				</p>
 			</div>
-		}
+			<div class="flex flex-wrap items-center gap-2">
+				<div class="w-48"><input type="text" data-bind="modFilter" placeholder="Filter installed" class={ components.InputClass() }/></div>
+				<a href={ templ.SafeURL(fmt.Sprintf("/api/valheim/%d/mods/export", d.Number)) } download class={ components.ButtonClass(components.VariantSecondary) }>Export .r2z</a>
+			</div>
+		</div>
+		<div id="installed-mods-container" class="-mx-6 mt-5 border-b border-seam">
+			@InstalledMods(ValheimInstalledMods(d))
+		</div>
+		<div class="mt-12">
+			<h2 class="font-display text-xl font-semibold text-ink">Add a mod</h2>
+			<div class="mt-4 flex flex-wrap gap-2">
+				<input
+					type="text"
+					data-bind="modQuery"
+					data-on:keydown={ fmt.Sprintf("if (evt.key === 'Enter') { evt.preventDefault(); @post('/api/valheim/%d/mods/search', {payload: {q: $modQuery}}) }", d.Number) }
+					placeholder="Mining, Jotunn, EquipmentAndQuickSlots…"
+					class={ "flex-1 " + components.InputClass() }
+				/>
+				<button
+					type="button"
+					data-indicator="modSearchLoading"
+					data-on:click={ fmt.Sprintf("@post('/api/valheim/%d/mods/search', {payload: {q: $modQuery}})", d.Number) }
+					class={ components.ButtonClass(components.VariantPrimary) }
+				>
+					<span data-show="!$modSearchLoading">Search</span>
+					<span data-show="$modSearchLoading">Searching…</span>
+				</button>
+				<a href="https://thunderstore.io/c/valheim/" target="_blank" rel="noopener noreferrer" class={ components.ButtonClass(components.VariantSecondary) }>Thunderstore</a>
+			</div>
+			<div id="valheim-mod-results" class="-mx-6 mt-5 border-b border-seam">
+				<p class="px-6 py-10 font-pixel text-[11px] text-ink-faint">Loading popular Thunderstore mods…</p>
+			</div>
+			<details class="mt-6">
+				<summary class="focus-accent cursor-pointer font-pixel text-[11px] text-ink-muted transition-colors hover:text-accent">Install by exact package slug</summary>
+				<p class="mt-2 max-w-prose font-display text-sm leading-relaxed text-ink-muted">
+					Add a version to pin it exactly — Namespace-Name-1.2.3. That overwrites the pin of a mod that is already installed, which is how you go back to a version that worked.
+				</p>
+				<form
+					class="mt-3 flex flex-wrap items-center gap-2"
+					data-on:submit__prevent={ fmt.Sprintf("@post('/api/valheim/%d/mods/install', {payload: {slug: $addslug}}); $addslug = ''", d.Number) }
+				>
+					<input type="text" data-bind="addslug" placeholder="ValheimModding-Jotunn or Skarif-AutoRepairBuilding-1.2.15" class={ "flex-1 " + components.InputClass() }/>
+					<button type="submit" class={ components.ButtonClass(components.VariantSecondary) }>Install</button>
+				</form>
+			</details>
+		</div>
 		@components.Drawer("showModDetail", "valheim-mod-detail-content", "Loading mod details…")
 	</div>
 }

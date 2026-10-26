@@ -1,0 +1,81 @@
+package pages
+
+import (
+	"fmt"
+
+	"agrelha/internal/web/components"
+)
+
+templ ModSearchResults(m ModResultsUI) {
+	if m.Heading != "" {
+		<p class="flex flex-wrap items-baseline justify-between gap-x-4 px-6 pb-3 font-pixel text-[11px] text-ink-faint">
+			<span>{ m.Heading }</span>
+			if m.Note != "" {
+				<span>{ m.Note }</span>
+			}
+		</p>
+	}
+	for _, r := range m.Results {
+		<article class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-t border-seam px-6 py-4">
+			<div class="flex min-w-0 flex-1 items-start gap-3">
+				if r.IconURL != "" {
+					<img src={ r.IconURL } alt="" loading="lazy" class="mt-0.5 h-9 w-9 shrink-0 rounded-control bg-surface-raised object-cover" onerror="this.style.display='none'"/>
+				}
+				<div class="min-w-0">
+					<p class="flex flex-wrap items-baseline gap-x-3">
+						<span class="font-display text-base font-semibold text-ink">{ r.Title }</span>
+						if r.Installed {
+							<span class="font-pixel text-[11px] text-accent">installed</span>
+						}
+					</p>
+					<p class="mt-1 flex flex-wrap gap-x-3 font-pixel text-[11px] text-ink-faint">
+						for _, meta := range r.Meta() {
+							<span>{ meta }</span>
+						}
+					</p>
+					if r.Description != "" {
+						<p class="mt-2 max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ r.Description }</p>
+					}
+				</div>
+			</div>
+			<div class="flex shrink-0 flex-wrap items-center gap-2">
+				if r.Detailable {
+					<button type="button" data-on:click={ r.DetailScript(m.Game, m.Num) } class={ components.ButtonClass(components.VariantSecondary) }>Details</button>
+				}
+				if r.Restricted {
+					<span title="This mod's author does not allow third-party downloads. No API key changes this." class={ components.ButtonClass(components.VariantDisabled) }>Not downloadable</span>
+				} else if r.Installed {
+					<button type="button" data-on:click={ r.RemoveScript(m.Game, m.Num) } class={ components.ButtonClass(components.VariantDanger) }>Remove</button>
+				} else {
+					<button type="button" data-on:click={ r.InstallScript(m.Game, m.Num) } class={ components.ButtonClass(components.VariantPrimary) }>Install</button>
+				}
+			</div>
+		</article>
+	}
+	if m.NextN > 0 {
+		<div class="border-t border-seam px-6 py-4">
+			<button type="button" data-on:click={ m.MoreScript() } class={ components.ButtonClass(components.VariantSecondary) }>Load more</button>
+		</div>
+	}
+}
+
+templ InstalledMods(i InstalledModsUI) {
+	if len(i.Mods) == 0 {
+		<p class="px-6 py-8 max-w-prose font-display text-base leading-relaxed text-ink-muted">{ i.Empty }</p>
+	} else {
+		for _, m := range i.Mods {
+			<div data-show={ m.FilterExpr() } class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t border-seam px-6 py-3">
+				<p class="min-w-0 flex flex-wrap items-baseline gap-x-3">
+					<span class="break-all font-pixel text-xs text-ink">{ m.Label }</span>
+					if m.Version != "" {
+						<span class="font-pixel text-[11px] text-ink-faint">{ "v" + m.Version }</span>
+					}
+				</p>
+				<button type="button" data-on:click={ m.RemoveScript(i.Game, i.Num) } class={ components.ButtonClass(components.VariantDanger) }>Remove</button>
+			</div>
+		}
+		<p class="border-t border-seam px-6 py-3 font-pixel text-[11px] text-ink-faint">
+			{ fmt.Sprintf("%d installed", len(i.Mods)) }
+		</p>
+	}
+}
