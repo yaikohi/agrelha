@@ -107,12 +107,31 @@ tasks:
       - test -s {{.FONT_DIR}}/DepartureMono-Regular.woff2
       - test -s {{.FONT_DIR}}/Fraunces-Variable.woff2
 
-  # --- Run ---
   run:
-    desc: "Run the compiled binary"
-    deps: [build]
+    desc: "Run the full live-reload dev loop"
+    deps: [assets:datastar, assets:fonts, tailwind:build, generate]
     cmds:
-      - ./{{.GO_BINARY}}
+      - task: dev
+
+  dev:
+    desc: "Run Tailwind, Templ, and Air concurrently"
+    deps:
+      - tailwind:watch
+      - templ:watch
+      - watch
+
+  tailwind:watch:
+      desc: "Watch and build Tailwind CSS"
+      deps: [setup, tailwind:deps]
+      cmds:
+        - bunx @tailwindcss/cli -i {{.CSS_IN}} -o {{.CSS_OUT}} --watch --poll
+
+  templ:watch:
+      desc: "Watch templ files and proxy backend for browser auto-reload"
+      deps: [setup]
+      cmds:
+        - templ generate --watch --proxy="http://localhost:8080" --proxyport="7331" --open-browser=false
+
 
   watch:
     desc: "Live-reload dev loop (air)"
