@@ -99,7 +99,7 @@ templ managerPort(p ManagerPortUI) {
 								type="button"
 								data-indicator={ fmt.Sprintf("busy_%d_%s", p.Number, UpdateToken(a.Label)) }
 								data-attr:disabled={ fmt.Sprintf("$busy_%d_%s", p.Number, UpdateToken(a.Label)) }
-								data-on:click={ a.Script }
+								data-on:click={ toastActionClick(a.Script) }
 								class={ components.ButtonClass(managerVariant(a.Kind)) }
 							>
 								<span data-show={ fmt.Sprintf("!$busy_%d_%s", p.Number, UpdateToken(a.Label)) }>{ a.Label }</span>

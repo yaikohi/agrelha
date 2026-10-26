@@ -8,7 +8,7 @@ templ cardActions(a CardActionsUI) {
 					type="button"
 					data-indicator={ actionIndicator(act.Label) }
 					data-attr:disabled={ "$" + actionIndicator(act.Label) }
-					data-on:click={ act.Script }
+					data-on:click={ toastActionClick(act.Script) }
 					class={ "rounded-control px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
 				>
 					<span data-show={ "!" + "$" + actionIndicator(act.Label) }>{ act.Label }</span>
@@ -30,7 +30,7 @@ templ cardActions(a CardActionsUI) {
 						type="button"
 						data-indicator={ actionIndicator(act.Label) }
 						data-attr:disabled={ "$" + actionIndicator(act.Label) }
-						data-on:click={ act.Script }
+						data-on:click={ toastActionClick(act.Script) }
 						title="Only available for this game"
 						class={ "rounded-control px-2.5 py-1 text-xs font-medium " + actionStyle(act.Kind) }
 					>

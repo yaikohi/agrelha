@@ -670,6 +670,22 @@ func actionIndicator(label string) string {
 	return "busy_" + UpdateToken(label)
 }
 
+func toastActionClick(script string) string {
+	script = strings.TrimSpace(script)
+	if script == "" || strings.Contains(script, "$toast =") {
+		return script
+	}
+	if strings.HasPrefix(script, "if (confirm(") || strings.HasPrefix(script, "if (") {
+		idx := strings.Index(script, ")) ")
+		if idx != -1 {
+			cond := script[:idx+2]
+			action := strings.TrimSpace(script[idx+2:])
+			return fmt.Sprintf("%s { $toast = 'Sending request…'; $toastkind = 'loading'; %s; }", cond, action)
+		}
+	}
+	return "$toast = 'Sending request…'; $toastkind = 'loading'; " + script
+}
+
 func actionStyle(kind string) string {
 	switch kind {
 	case "danger":

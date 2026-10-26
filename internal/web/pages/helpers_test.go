@@ -405,3 +405,35 @@ func TestInFlightVerb(t *testing.T) {
 	}
 }
 
+func TestToastActionClick(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{
+			input: "@post('/api/valheim/instances/1/start')",
+			want:  "$toast = 'Sending request…'; $toastkind = 'loading'; @post('/api/valheim/instances/1/start')",
+		},
+		{
+			input: "if (confirm('Delete?')) @delete('/api/valheim/instances/1')",
+			want:  "if (confirm('Delete?')) { $toast = 'Sending request…'; $toastkind = 'loading'; @delete('/api/valheim/instances/1'); }",
+		},
+		{
+			input: "navigator.clipboard.writeText('abc'); $toast = 'Copied!'; $toastkind = 'ok'",
+			want:  "navigator.clipboard.writeText('abc'); $toast = 'Copied!'; $toastkind = 'ok'",
+		},
+		{
+			input: "",
+			want:  "",
+		},
+	}
+
+	for _, tc := range cases {
+		got := toastActionClick(tc.input)
+		if got != tc.want {
+			t.Fatalf("toastActionClick(%q) = %q, want %q; at 2am an operator clicking start experiences zero optimistic toast feedback before network latency completes, leading to double-clicks and confusion", tc.input, got, tc.want)
+		}
+	}
+}
+
+

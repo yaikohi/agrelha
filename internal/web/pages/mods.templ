@@ -49,7 +49,7 @@ templ ModSearchResults(m ModResultsUI) {
 						type="button"
 						data-indicator={ "busy_mod_" + UpdateToken(r.Slug) }
 						data-attr:disabled={ "$busy_mod_" + UpdateToken(r.Slug) }
-						data-on:click={ r.RemoveScript(m.Game, m.Num) }
+						data-on:click={ toastActionClick(r.RemoveScript(m.Game, m.Num)) }
 						class={ components.ButtonClass(components.VariantDanger) }
 					>
 						<span data-show={ "!$busy_mod_" + UpdateToken(r.Slug) }>Remove</span>
@@ -63,7 +63,7 @@ templ ModSearchResults(m ModResultsUI) {
 						type="button"
 						data-indicator={ "busy_mod_" + UpdateToken(r.Slug) }
 						data-attr:disabled={ "$busy_mod_" + UpdateToken(r.Slug) }
-						data-on:click={ r.InstallScript(m.Game, m.Num) }
+						data-on:click={ toastActionClick(r.InstallScript(m.Game, m.Num)) }
 						class={ components.ButtonClass(components.VariantPrimary) }
 					>
 						<span data-show={ "!$busy_mod_" + UpdateToken(r.Slug) }>Install</span>
@@ -82,7 +82,7 @@ templ ModSearchResults(m ModResultsUI) {
 				type="button"
 				data-indicator="busy_load_more"
 				data-attr:disabled="$busy_load_more"
-				data-on:click={ m.MoreScript() }
+				data-on:click={ toastActionClick(m.MoreScript()) }
 				class={ components.ButtonClass(components.VariantSecondary) }
 			>
 				<span data-show="!$busy_load_more">Load more</span>
@@ -111,7 +111,7 @@ templ InstalledMods(i InstalledModsUI) {
 					type="button"
 					data-indicator={ "busy_inst_" + UpdateToken(m.Slug) }
 					data-attr:disabled={ "$busy_inst_" + UpdateToken(m.Slug) }
-					data-on:click={ m.RemoveScript(i.Game, i.Num) }
+					data-on:click={ toastActionClick(m.RemoveScript(i.Game, i.Num)) }
 					class={ components.ButtonClass(components.VariantDanger) }
 				>
 					<span data-show={ "!$busy_inst_" + UpdateToken(m.Slug) }>Remove</span>

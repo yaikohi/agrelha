@@ -33,7 +33,7 @@ templ ModUpdatePanel(d InstanceDetailUI) {
 						type="button"
 						data-indicator="busy_undo_mods"
 						data-attr:disabled="$busy_undo_mods"
-						data-on:click={ undoClick(d) }
+						data-on:click={ toastActionClick(undoClick(d)) }
 						class={ components.ButtonClass(components.VariantSecondary) }
 						title={ "Restore the mod list from before the update applied " + d.UndoWhen }
 					>
@@ -48,7 +48,7 @@ templ ModUpdatePanel(d InstanceDetailUI) {
 					type="button"
 					data-indicator="busy_check_mods"
 					data-attr:disabled="$busy_check_mods"
-					data-on:click={ fmt.Sprintf("@post('/api/%s/%d/mods/updates/check')", d.GamePath(), d.Number) }
+					data-on:click={ toastActionClick(fmt.Sprintf("@post('/api/%s/%d/mods/updates/check')", d.GamePath(), d.Number)) }
 					class={ components.ButtonClass(components.VariantSecondary) }
 				>
 					<span data-show="!$busy_check_mods">Check now</span>
@@ -88,7 +88,7 @@ templ ModUpdatePanel(d InstanceDetailUI) {
 					type="button"
 					data-indicator="busy_update_selected"
 					data-attr:disabled="$busy_update_selected"
-					data-on:click={ updateClick(d, "@post('/api/"+d.GamePath()+"/%d/mods/updates/apply', {payload: {selected: $selected}})") }
+					data-on:click={ toastActionClick(updateClick(d, "@post('/api/"+d.GamePath()+"/%d/mods/updates/apply', {payload: {selected: $selected}})")) }
 					disabled?={ d.UpdatesPending }
 					class={ components.ButtonClass(components.VariantSecondary) + " disabled:opacity-40" }
 				>
@@ -102,7 +102,7 @@ templ ModUpdatePanel(d InstanceDetailUI) {
 					type="button"
 					data-indicator="busy_update_all"
 					data-attr:disabled="$busy_update_all"
-					data-on:click={ updateClick(d, "@post('/api/"+d.GamePath()+"/%d/mods/updates/apply', {payload: {all: true}})") }
+					data-on:click={ toastActionClick(updateClick(d, "@post('/api/"+d.GamePath()+"/%d/mods/updates/apply', {payload: {all: true}})")) }
 					disabled?={ d.UpdatesPending }
 					class={ components.ButtonClass(components.VariantPrimary) + " disabled:opacity-40" }
 				>

@@ -225,3 +225,21 @@ func TestNavHidesAdminToolsFromNonAdmins(t *testing.T) {
 		t.Error("a signed-in non-admin was shown the admin tools")
 	}
 }
+
+func TestToast(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Toast().Render(context.Background(), &buf); err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "data-show=\"$toast != ''\"") {
+		t.Fatalf("Toast component missing data-show binding for $toast; at 2am operators receive zero notifications when servers fail or boot, got: %s", out)
+	}
+	if !strings.Contains(out, "$toastkind == 'loading'") {
+		t.Fatalf("Toast component missing $toastkind == 'loading' indicator; at 2am an operator triggering a lifecycle action has no visual feedback during the network delay, got: %s", out)
+	}
+	if !strings.Contains(out, "data-effect=") || !strings.Contains(out, "setTimeout") {
+		t.Fatalf("Toast component missing auto-dismiss data-effect; at 2am stale success toasts linger on-screen indefinitely obscuring controls, got: %s", out)
+	}
+}
+
