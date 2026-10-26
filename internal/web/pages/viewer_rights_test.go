@@ -9,7 +9,6 @@ import (
 
 var dashboards = []string{
 	"gmod_dashboard.templ",
-	"valheim_dashboard.templ",
 	"mc_dashboard.templ",
 }
 

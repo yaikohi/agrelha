@@ -1,0 +1,93 @@
+package pages
+
+templ ValheimManager(instances []InstanceUI, budget BudgetUI, admin ...bool) {
+	{{ m := BuildValheimManager(instances, budget) }}
+	@LayoutHearth("Valheim") {
+		@hearthNav("valheim", isNavAdmin(admin), true, "")
+		@managerPanel(m)
+		@panelColophon()
+	}
+}
+
+templ managerPanel(m ManagerUI) {
+	<p class="mt-8 max-w-prose font-display text-base leading-relaxed text-ink-muted">{ m.Lede }</p>
+	<div class="-mx-6 mt-8 border-t border-seam">
+		for _, port := range m.Ports {
+			@managerPort(port)
+		}
+		if len(m.Ports) == 0 {
+			<div class="border-b border-seam px-6 py-10">
+				<p class="max-w-prose font-display text-base leading-relaxed text-ink-muted">
+					No worlds yet. Creating one gives you a dedicated server with mod support, a seed of your choosing and storage that survives a restart.
+				</p>
+			</div>
+		}
+		<div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 pt-5">
+			<div class="flex flex-wrap items-center gap-x-4 gap-y-1 font-pixel text-[11px] text-ink-faint">
+				for _, b := range m.Budget {
+					<span>{ b }</span>
+				}
+			</div>
+			if m.SlotsLeft > 0 {
+				<a href={ templ.SafeURL(m.CreateHref) } class="focus-accent rounded-control border border-accent px-3 py-1.5 font-pixel text-xs text-accent transition-colors hover:bg-accent hover:text-accent-ink">
+					{ m.CreateLabel }
+				</a>
+			}
+		</div>
+	</div>
+}
+
+templ managerPort(p ManagerPortUI) {
+	<article class="grid grid-cols-[1.75rem_1fr] gap-x-4 border-b border-seam px-6 py-6 sm:grid-cols-[2.5rem_1fr]">
+		<div class="pt-[0.3rem]"><span class={ p.Lamp }></span></div>
+		<div class="min-w-0">
+			<p class="flex flex-wrap items-baseline gap-3">
+				<span class={ "font-pixel text-[11px] tracking-wide " + p.Tint }>{ p.Slot() }</span>
+				<span class="font-pixel text-[11px] text-ink-faint">{ p.StateLabel }</span>
+			</p>
+			<a href={ templ.SafeURL(p.Href) } class="focus-accent mt-0.5 block font-display text-2xl font-semibold text-ink transition-colors hover:text-accent">{ p.Name }</a>
+			<button
+				type="button"
+				data-signals={ p.CopyInit() }
+				data-on:click={ p.CopyClick() }
+				class="focus-accent group mt-2 flex max-w-full items-baseline gap-3 text-left"
+			>
+				<span class="truncate font-pixel text-base text-ink-muted transition-colors group-hover:text-accent">{ p.Address }</span>
+				<span class="shrink-0 font-pixel text-[11px] text-ink-faint transition-colors group-hover:text-accent" data-text={ p.CopyLabelExpr() }>copy</span>
+			</button>
+			<div class="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 font-pixel text-[11px]">
+				if p.Presence != "" {
+					<span class="text-ink-muted">{ p.Presence }</span>
+				}
+				for _, f := range p.Facts {
+					<span class="text-ink-faint">{ f }</span>
+				}
+			</div>
+			for _, n := range p.Notices {
+				if n.Href != "" {
+					<p class="mt-2 font-pixel text-[11px]">
+						<a href={ templ.SafeURL(n.Href) } title={ n.Title } class="focus-accent text-accent underline underline-offset-4 transition-colors hover:text-ink">{ n.Label }</a>
+					</p>
+				} else {
+					<p class="mt-2 font-pixel text-[11px] text-ink-muted" title={ n.Title }>{ n.Label }</p>
+				}
+			}
+			<div class="mt-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+				<div class="flex flex-wrap items-center gap-x-5 gap-y-2 font-pixel text-xs">
+					for _, l := range p.Links {
+						<a href={ templ.SafeURL(l.Href) } class="focus-accent text-ink-muted transition-colors hover:text-accent">{ l.Label }</a>
+					}
+				</div>
+				<div class="flex flex-wrap items-center gap-2">
+					for _, a := range p.Actions {
+						if a.Kind == "blocked" {
+							<span title={ a.Script } class={ "rounded-control px-3 py-1.5 font-pixel text-xs " + managerActionStyle(a.Kind) }>{ a.Label }</span>
+						} else {
+							<button type="button" data-on:click={ a.Script } class={ "focus-accent rounded-control px-3 py-1.5 font-pixel text-xs transition-colors " + managerActionStyle(a.Kind) }>{ a.Label }</button>
+						}
+					}
+				</div>
+			</div>
+		</div>
+	</article>
+}

@@ -552,7 +552,7 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 	if isAdmin {
 		g.Extras = append(g.Extras,
 			fmt.Sprintf("%d of %d running", vh.RunningCount, vh.MaxRunning),
-			fmt.Sprintf("RAM %dG of %dG", vh.UsedGiB, vh.TotalBudgetGiB),
+			fmt.Sprintf("RAM %d GiB of %d GiB", vh.UsedGiB, vh.TotalBudgetGiB),
 		)
 		if nodeName != "" {
 			g.Extras = append(g.Extras, "Node "+nodeName)
@@ -612,7 +612,7 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 	if isAdmin {
 		g.Extras = append(g.Extras,
 			fmt.Sprintf("%d of %d running", mc.RunningCount, mc.MaxRunning),
-			fmt.Sprintf("RAM %dG of %dG", mc.UsedGiB, mc.TotalBudgetGiB),
+			fmt.Sprintf("RAM %d GiB of %d GiB", mc.UsedGiB, mc.TotalBudgetGiB),
 		)
 	}
 	return g
@@ -713,7 +713,7 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 	if isAdmin {
 		g.Extras = append(g.Extras,
 			fmt.Sprintf("%d of %d running", summary.RunningCount, summary.MaxRunning),
-			fmt.Sprintf("RAM %dG of %dG", summary.UsedGiB, summary.TotalBudgetGiB),
+			fmt.Sprintf("RAM %d GiB of %d GiB", summary.UsedGiB, summary.TotalBudgetGiB),
 		)
 	}
 	return g
@@ -769,7 +769,7 @@ func GModCard(summary GameSummaryUI, isAdmin bool) GameCardUI {
 	if isAdmin {
 		g.Extras = append(g.Extras,
 			fmt.Sprintf("%d of %d running", summary.RunningCount, summary.MaxRunning),
-			fmt.Sprintf("RAM %dG of %dG", summary.UsedGiB, summary.TotalBudgetGiB),
+			fmt.Sprintf("RAM %d GiB of %d GiB", summary.UsedGiB, summary.TotalBudgetGiB),
 		)
 	}
 	return g

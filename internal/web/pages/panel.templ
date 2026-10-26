@@ -125,7 +125,7 @@ templ panelColophon() {
 
 templ AdminHub(grafanaURL string, games []DashboardGameUI, signedIn bool, flashKind, flashMsg string) {
 	@LayoutHearth("Agrelha · Game Server Hub") {
-		@hearthNav(true, signedIn, grafanaURL)
+		@hearthNav("", true, signedIn, grafanaURL)
 		@flashBanner(flashKind, flashMsg)
 		for _, section := range BuildAdminPanel(games) {
 			@adminGameSection(section)

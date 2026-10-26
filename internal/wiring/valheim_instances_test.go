@@ -89,7 +89,7 @@ func TestValheimDashboardEmpty(t *testing.T) {
 	html := string(body)
 
 	// Without active deployment in runtime, no instance is adopted and dashboard is empty
-	for _, want := range []string{"Valheim Instances", "16 GiB", "Create your first Valheim world"} {
+	for _, want := range []string{"Up to 4 worlds, 2 running at once.", "RAM 0 GiB of 16 GiB", "No worlds yet.", "Create world"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("dashboard missing %q", want)
 		}
@@ -383,7 +383,7 @@ func TestValheimHubCardSymmetry(t *testing.T) {
 	for _, want := range []string{
 		"1 of 4 worlds saved",
 		"1 of 2 running",
-		"RAM 6G of 16G",
+		"RAM 6 GiB of 16 GiB",
 		"Open Valheim manager",
 		`href="/valheim"`,
 		"Open Minecraft manager",

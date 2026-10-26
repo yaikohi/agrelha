@@ -227,6 +227,14 @@ func hearthNavLabel(name string) string {
 	return strings.ToLower(name)
 }
 
+func hearthNavClass(active bool) string {
+	base := "focus-accent inline-flex items-baseline gap-1.5 border-b-2 pb-1 transition-colors "
+	if active {
+		return base + "border-accent text-ink"
+	}
+	return base + "border-transparent text-ink-muted hover:text-accent"
+}
+
 func adminNavLinks() []ActionUI {
 	return []ActionUI{
 		{Label: "history", Href: "/history"},

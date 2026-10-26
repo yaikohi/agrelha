@@ -44,9 +44,11 @@ template and fails the build on a Tailwind default-palette class or a raw hex.
 Two things are CSS classes rather than utilities, because they carry a glow that
 utilities express badly:
 
-- `.lamp` with `.lamp-lit` / `.lamp-dim` / `.lamp-out` — a port's state. **Lit**
-  means people are playing, **dim** means it is up and empty, **out** means it
-  is not running. The lamp is the entire status system: nothing else repeats it.
+- `.lamp` with `.lamp-lit` / `.lamp-dim` / `.lamp-out` / `.lamp-unknown` — a
+  port's state. **Lit** means people are playing, **dim** means it is up and
+  empty, **out** means it is not running, and **unknown** is an empty socket:
+  the Host could not be reached, so agrelha is not claiming either way. The lamp
+  is the entire status system; nothing else repeats it.
 - `.focus-accent` — the visible keyboard focus ring. Every interactive element
   carries it.
 
@@ -70,6 +72,7 @@ The system is being adopted page by page. These templates are migrated and are
 checked by the ratchet:
 
 - `dashboard.templ` — the branch between the two landing views
+- `manager.templ` — the per-game manager (Valheim so far)
 - `nav_hearth.templ` — the signed-in navigation
 - `panel.templ` — the public landing panel and the admin hub
 

@@ -90,9 +90,6 @@ func TestAdminPanelCleansEveryActionGroup(t *testing.T) {
 	}
 }
 
-// The old gameCard pair was kept identical by TestBothCardsShareTheSameSections.
-// A port renders through one component for every game, so the guarantee is now
-// structural — this proves it rather than assuming it.
 func TestEveryGameRendersThroughTheSamePort(t *testing.T) {
 	row := ServerRowUI{Name: "World", Address: "10.0.0.1:2456", Online: true, PlayersKnown: true, Players: 2, Uptime: "4h"}
 	render := func(p PanelPortUI) string {

@@ -11,6 +11,7 @@ import (
 
 var migratedTemplates = []string{
 	"dashboard.templ",
+	"manager.templ",
 	"nav_hearth.templ",
 	"panel.templ",
 }

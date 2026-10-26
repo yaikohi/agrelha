@@ -9,7 +9,7 @@ import (
 func renderVDash(t *testing.T, inst InstanceUI) string {
 	t.Helper()
 	var b strings.Builder
-	if err := ValheimDashboard([]InstanceUI{inst}, BudgetUI{MaxInstances: 4}).Render(context.Background(), &b); err != nil {
+	if err := ValheimManager([]InstanceUI{inst}, BudgetUI{MaxInstances: 4}, true).Render(context.Background(), &b); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	return b.String()
@@ -31,8 +31,6 @@ func TestServerUpdateBadgeAppearsOnlyWhenBehind(t *testing.T) {
 	}
 }
 
-// CONTEXT.md defines Mod update and Server update as different things. The card
-// must be able to show both at once without either being mistaken for the other.
 func TestServerUpdateAndModUpdateAreDistinct(t *testing.T) {
 	both := InstanceUI{
 		Number: 1, Name: "lareira-V2", Slug: "lareira-v2", State: "running", Tier: "medium",
@@ -42,7 +40,7 @@ func TestServerUpdateAndModUpdateAreDistinct(t *testing.T) {
 	if !strings.Contains(got, "Server update") {
 		t.Error("want the server-update badge")
 	}
-	if !strings.Contains(got, "3 mod update(s)") {
+	if !strings.Contains(got, "3 mod updates") {
 		t.Error("want the mod-update badge alongside it")
 	}
 }

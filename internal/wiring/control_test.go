@@ -326,8 +326,8 @@ func TestDevAuthenticatorLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	adminBody, _ := io.ReadAll(adminResp.Body)
-	if !strings.Contains(string(adminBody), "Sign out") {
-		t.Fatalf("expected Sign out in admin dashboard")
+	if !strings.Contains(string(adminBody), "sign out") {
+		t.Fatalf("expected a sign-out link in the admin dashboard")
 	}
 
 	// 5. Sign out
