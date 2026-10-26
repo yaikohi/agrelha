@@ -7,7 +7,7 @@ take plain strings, bools and small structs defined alongside them.
 ## The rule
 
 Components name **roles**, never colours: `text-ink-muted`, not `text-zinc-400` and
-not `text-[#9a8b7b]`. The tokens are defined once in
+not `text-[#c2b1a0]`. The tokens are defined once in
 `internal/web/assets/css/input.css` and documented in
 [docs/design-system.md](../../../docs/design-system.md).
 `pages/design_tokens_test.go` globs every `.templ` in this package and in `pages`

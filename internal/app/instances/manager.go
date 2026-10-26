@@ -396,7 +396,7 @@ func (m *InstanceManager) ListInstances(ctx context.Context) ([]domain.Instance,
 	instances := make([]domain.Instance, 0, len(records))
 	for _, r := range records {
 		inst := r
-		if m.sourceReconciler != nil {
+		if m.sourceReconciler != nil && inst.EffectiveHost().IsCluster() {
 			if changed, err := m.sourceReconciler(ctx, &inst); err == nil && changed {
 				_ = m.repo.Upsert(inst)
 			}
@@ -451,7 +451,7 @@ func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*domain.Ins
 		return nil, nil
 	}
 	inst := *rec
-	if m.sourceReconciler != nil {
+	if m.sourceReconciler != nil && inst.EffectiveHost().IsCluster() {
 		if changed, err := m.sourceReconciler(ctx, &inst); err == nil && changed {
 			_ = m.repo.Upsert(inst)
 		}

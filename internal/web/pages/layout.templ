@@ -127,7 +127,7 @@ templ layoutShell(title, bodyClass, mainClass string, hearth bool) {
 // AGPL section 13: anyone running a modified agrelha over a network owes its
 // users the corresponding source. SOURCE_URL lets a fork point at its own.
 templ siteFooter() {
-	<footer class="mx-auto max-w-5xl px-6 pb-8 font-pixel text-[11px] text-edge">
+	<footer class="mx-auto max-w-5xl px-6 pb-8 font-pixel text-xs text-ink-faint">
 		<div class="flex items-center justify-between border-t border-seam pt-4">
 			<span>agrelha { build.Version } · AGPL-3.0-only</span>
 			<a href={ templ.URL(build.SourceURL) } rel="noopener" target="_blank" class="focus-accent transition-colors hover:text-ink-muted">Source</a>

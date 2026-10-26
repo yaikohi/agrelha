@@ -409,7 +409,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				return lines, nil
 			}),
 			instances.WithSourceReconciler(func(ctx context.Context, inst *domain.Instance) (bool, error) {
-				if inst == nil || d.K8s == nil {
+				if inst == nil || d.K8s == nil || !inst.EffectiveHost().IsCluster() {
 					return false, nil
 				}
 				depName := inst.DeploymentName(domain.ValheimProfile)
@@ -1121,6 +1121,9 @@ func backfillValheimSource(ctx context.Context, d *Deps, cfgs ...*config.Config)
 		inst, err := d.ValheimInstances.GetInstance(ctx, rec.Number)
 		if err != nil || inst == nil {
 			slog.Warn("valheim source backfill: cannot load instance", "instance", rec.Number, "err", err)
+			continue
+		}
+		if !inst.EffectiveHost().IsCluster() {
 			continue
 		}
 		expectedSource := inst.Source

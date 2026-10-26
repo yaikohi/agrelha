@@ -829,3 +829,47 @@ func TestInstanceManager_SourceReconciler(t *testing.T) {
 		}
 	}
 }
+
+func TestDockerHostWorldDoesNotInvokeSourceReconciler(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "docker-reconcile.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer st.Close()
+
+	repo := store.NewValheimInstanceRepo(st)
+	_ = repo.Upsert(domain.Instance{
+		Number: 10,
+		Name:   "DockerValheim",
+		Slug:   "docker-valheim",
+		GameID: domain.GameValheim,
+		Source: domain.SourceVanilla,
+		Host:   domain.Host("game-01"),
+	})
+
+	invoked := false
+	mgr := NewInstanceManager(repo, nil, nil, 10, 2, 1, "", "", nil, "valheim",
+		WithSourceReconciler(func(ctx context.Context, inst *domain.Instance) (bool, error) {
+			invoked = true
+			return false, nil
+		}),
+	)
+
+	inst, err := mgr.GetInstance(ctx, 10)
+	if err != nil {
+		t.Fatalf("GetInstance failed: %v", err)
+	}
+	if invoked {
+		t.Fatalf("sourceReconciler was invoked for Docker-Host instance %d on GetInstance; at 2am an outage causes stale cluster deployment env vars to overwrite local compose state files", inst.Number)
+	}
+
+	_, err = mgr.ListInstances(ctx)
+	if err != nil {
+		t.Fatalf("ListInstances failed: %v", err)
+	}
+	if invoked {
+		t.Fatalf("sourceReconciler was invoked for Docker-Host instance %d on ListInstances; at 2am an outage causes stale cluster deployment env vars to overwrite local compose state files", inst.Number)
+	}
+}
+

@@ -10,7 +10,7 @@ Changing the palette means editing that block and nothing else.
 ## The rule
 
 **Markup names the role it wants, never a colour.** Write `text-ink-muted`, not
-`text-zinc-400` and not `text-[#9a8b7b]`. A token says what a thing *is* for, so
+`text-zinc-400` and not `text-[#c2b1a0]`. A token says what a thing *is* for, so
 a later palette change does not have to guess which `zinc-800` meant "divider"
 and which meant "raised surface".
 
@@ -26,10 +26,10 @@ template and fails the build on a Tailwind default-palette class or a raw hex.
 | `--color-surface` | `#1e1713` | The page ground |
 | `--color-surface-raised` | `#2a211b` | Anything sitting above the ground: inputs, wells, menus |
 | `--color-seam` | `#120e0b` | The line between two ports; recessed areas |
-| `--color-edge` | `#3a2e26` | A visible border on a raised element; an unlit lamp |
+| `--color-edge` | `#42352c` | A visible border on a raised element; an unlit lamp |
 | `--color-ink` | `#ede3d4` | Primary text |
-| `--color-ink-muted` | `#9a8b7b` | Captions, secondary lines, quiet links |
-| `--color-ink-faint` | `#6b5d51` | Present but incidental: version tags, colophon |
+| `--color-ink-muted` | `#c2b1a0` | Captions, secondary lines, quiet links |
+| `--color-ink-faint` | `#9c8b7c` | Present but incidental: version tags, colophon |
 | `--color-accent` | `#ffa62b` | The ember. Live state, hover, focus, the primary action |
 | `--color-accent-muted` | `#8a5a1e` | A banked ember: reachable but nobody there |
 | `--color-accent-ink` | `#120e0b` | Text printed on an accent fill |

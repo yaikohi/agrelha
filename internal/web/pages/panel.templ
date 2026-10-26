@@ -118,7 +118,7 @@ templ panelIdle(e PanelEmptyUI) {
 }
 
 templ panelColophon() {
-	<footer class="mt-10 flex flex-wrap items-center justify-between gap-3 font-pixel text-[11px] text-edge">
+	<footer class="mt-10 flex flex-wrap items-center justify-between gap-3 font-pixel text-xs text-ink-faint">
 		<span>agrelha { build.Version } · AGPL-3.0-only</span>
 		<a href={ templ.URL(build.SourceURL) } rel="noopener" target="_blank" class="focus-accent transition-colors hover:text-ink-muted">Source</a>
 	</footer>

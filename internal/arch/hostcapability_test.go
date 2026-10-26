@@ -48,8 +48,8 @@ var clusterBackedCapabilities = map[string]hostCapability{
 		reason: "ports.JobRunner has no Compose implementation; a Docker Host has no backup Job path and uses the host's own timer units instead",
 	},
 	"WithSourceReconciler": {
-		scope:  clusterOnly,
-		reason: "reads BEPINEX from a Deployment env var; a Docker Host has no Deployment and where its BepInEx version comes from is an open design question",
+		field: "sourceReconciler",
+		scope: hostScoped,
 	},
 }
 

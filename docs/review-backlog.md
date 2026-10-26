@@ -299,9 +299,13 @@ Nothing machine-enforces `CONTEXT.md`, which is how all three landed.
       `mods.yaml.tmpl` in both `manifests/templates/` and `manifests/valheim/templates/`, eliminating
       malformed empty `namespace:` lines when rendered without a Kubernetes namespace.
       Tested via `TestComposeStateFilesDoNotRenderEmptyNamespace` (fails when reverted).
-- [ ] `WithSourceReconciler` reads `BEPINEX` from a Deployment env var and is classified
-      `cluster-only` in the ratchet ledger. Where a Docker-Host world's BepInEx version comes from is
-      an open design question.
+- [x] `WithSourceReconciler` reads `BEPINEX` from a Deployment env var and is classified
+      `cluster-only` in the ratchet ledger. Reclassified as `hostScoped` with `field: "sourceReconciler"`
+      in `hostcapability_test.go` and gated in `manager.go` via `inst.EffectiveHost().IsCluster()` across
+      both `ListInstances` and `GetInstance`, plus in `wiring.go` (`WithSourceReconciler` callback and
+      `backfillValheimSource`). On a Docker Host, `Source` is declarative state stored in the instance
+      record and rendered into compose; resolving against a cluster Deployment is strictly cluster-scoped.
+      Tested via `TestDockerHostWorldDoesNotInvokeSourceReconciler` (fails when reverted).
 - [x] Delete the `GetInstalledMods` legacy-path fallback. Removed fallback from
       `manager.go:GetInstalledMods` and verified with `TestADockerHostWorldDoesNotFallBackToStaleClusterManifestsForMods`
       (fails when reverted). No stale `manifests/` file can answer a question about a Docker-Host world.
