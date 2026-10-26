@@ -156,6 +156,10 @@ func (p PanelPortUI) ImportHint() string {
 }
 
 type AdminGameUI struct {
+	Title   string
+	Icon    string
+	Accent  string
+	Tint    string
 	Ports   []PanelPortUI
 	Idle    *PanelEmptyUI
 	Budget  []string
@@ -193,7 +197,16 @@ func BuildAdminPanel(games []DashboardGameUI) []AdminGameUI {
 		label := strings.TrimSuffix(strings.ToLower(g.Card.Title), " worlds")
 		tint := tintClass(g.Card.Accent)
 
+		title := g.Card.Title
+		if title == "" {
+			title = label
+		}
+
 		section := AdminGameUI{
+			Title:  title,
+			Icon:   g.Card.Icon,
+			Accent: g.Card.Accent,
+			Tint:   tint,
 			Budget: g.Card.Extras,
 			Actions: CardActionsUI{
 				Lifecycle: cleanActions(g.Actions.Lifecycle),

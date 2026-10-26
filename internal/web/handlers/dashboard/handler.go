@@ -196,27 +196,6 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 	summary.TotalBudgetGiB = budget.TotalBudgetGiB
 
 	for _, inst := range insts {
-		if inst.State != domain.StateRunning {
-			summary.SavedInstances = append(summary.SavedInstances, pages.InstanceUI{
-				GameID:    string(inst.GameID),
-				Number:    inst.Number,
-				Name:      inst.Name,
-				Slug:      inst.Slug,
-				Host:      inst.EffectiveHost(),
-				LBIP:      inst.LBIP,
-				Source:    string(inst.Source),
-				State:     string(inst.State),
-				HasMods:   hasMods(ctx, mgr, inst.Number),
-				MCVersion: mcVersionOf(inst),
-				Loader:    mcLoaderOf(inst),
-
-				Pack:         mcPackName(inst),
-				PackRef:      mcPackRef(inst),
-				PackProvider: mcPackProvider(inst),
-			})
-			continue
-		}
-
 		uinst := pages.InstanceUI{
 			Host:            inst.EffectiveHost(),
 			HostUnreachable: inst.HostUnreachable,
@@ -254,6 +233,11 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 				uinst.CollectionID = inst.GMod.Pack.Ref
 				uinst.Pack = inst.GMod.Pack.Name
 			}
+		}
+
+		if inst.State != domain.StateRunning {
+			summary.SavedInstances = append(summary.SavedInstances, uinst)
+			continue
 		}
 
 		if stats != nil {

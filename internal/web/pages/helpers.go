@@ -553,6 +553,27 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number), offersClientBundle(inst)))
 	}
 
+	for _, inst := range vh.SavedInstances {
+		row := ServerRowUI{
+			Name:         inst.Name,
+			Address:      valheimAddress(inst),
+			VersionBadge: modBadge(inst.Source, "BepInEx · Modded"),
+			DownloadFmt:  ".r2z",
+			Launchers:    []string{"r2modman", "Thunderstore Mod Manager"},
+			ImportSteps:  "Import → From file",
+			Online:       false,
+		}
+		if inst.Number > 0 {
+			row.OnlineSignal = fmt.Sprintf("inst_valheim_%d_online", inst.Number)
+			row.PlayersSignal = fmt.Sprintf("inst_valheim_%d_players", inst.Number)
+			row.UptimeSignal = fmt.Sprintf("inst_valheim_%d_uptime", inst.Number)
+		}
+		if isAdmin && inst.Number > 0 {
+			row.OverviewURL = fmt.Sprintf("/valheim/%d/overview", inst.Number)
+		}
+		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number), offersClientBundle(inst)))
+	}
+
 	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", vh.TotalInstances, vh.MaxInstances)}
 	if isAdmin {
 		g.Extras = append(g.Extras,
@@ -566,7 +587,6 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 	return g
 }
 
-// MinecraftCard builds the Minecraft card from the running instances.
 func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 	g := GameCardUI{
 		Icon:       "⛏️",
@@ -611,6 +631,11 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 			Launchers:    []string{"Prism Launcher", "Modrinth App"},
 			ImportSteps:  "Add Instance → Import from zip",
 			Online:       false,
+		}
+		if inst.Number > 0 {
+			row.OnlineSignal = fmt.Sprintf("inst_minecraft_%d_online", inst.Number)
+			row.PlayersSignal = fmt.Sprintf("inst_minecraft_%d_players", inst.Number)
+			row.UptimeSignal = fmt.Sprintf("inst_minecraft_%d_uptime", inst.Number)
 		}
 		if isAdmin && inst.Number > 0 {
 			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
@@ -773,6 +798,26 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 		g.Rows = append(g.Rows, row)
 	}
 
+	for _, inst := range summary.SavedInstances {
+		row := ServerRowUI{
+			Name:    inst.Name,
+			Address: inst.LBIP,
+			Online:  false,
+		}
+		if inst.Number > 0 {
+			row.OnlineSignal = fmt.Sprintf("inst_%s_%d_online", p.ID, inst.Number)
+			row.PlayersSignal = fmt.Sprintf("inst_%s_%d_players", p.ID, inst.Number)
+			row.UptimeSignal = fmt.Sprintf("inst_%s_%d_uptime", p.ID, inst.Number)
+		}
+		if isAdmin && inst.Number > 0 {
+			row.OverviewURL = fmt.Sprintf("/%s/%d/overview", p.ID, inst.Number)
+		}
+		if p.Capabilities.Mods {
+			row = withModpack(row, fmt.Sprintf("/api/%s/%d/mods/export", p.ID, inst.Number), offersClientBundle(inst))
+		}
+		g.Rows = append(g.Rows, row)
+	}
+
 	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", summary.TotalInstances, summary.MaxInstances)}
 	if isAdmin {
 		g.Extras = append(g.Extras,
@@ -805,6 +850,43 @@ func GModCard(summary GameSummaryUI, isAdmin bool) GameCardUI {
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
 			Uptime:       inst.Uptime,
+		}
+		if inst.Number > 0 {
+			row.OnlineSignal = fmt.Sprintf("inst_gmod_%d_online", inst.Number)
+			row.PlayersSignal = fmt.Sprintf("inst_gmod_%d_players", inst.Number)
+			row.UptimeSignal = fmt.Sprintf("inst_gmod_%d_uptime", inst.Number)
+		}
+		if inst.LBIP != "" {
+			if inst.Password != "" {
+				row.JoinURL = fmt.Sprintf("steam://connect/%s:%d/%s", inst.LBIP, port, inst.Password)
+			} else {
+				row.JoinURL = fmt.Sprintf("steam://connect/%s:%d", inst.LBIP, port)
+			}
+		}
+		if inst.Gamemode != "" && inst.Map != "" {
+			row.VersionBadge = fmt.Sprintf("%s · %s", inst.Gamemode, inst.Map)
+		}
+		if inst.CollectionID != "" {
+			row.BrowseURL = fmt.Sprintf("https://steamcommunity.com/sharedfiles/filedetails/?id=%s", inst.CollectionID)
+			row.BrowseLabel = "Browse addons"
+			if inst.CollectionItems > 0 {
+				row.BrowseLabel = fmt.Sprintf("Browse %d addons", inst.CollectionItems)
+			}
+		}
+		if isAdmin && inst.Number > 0 {
+			row.OverviewURL = fmt.Sprintf("/gmod/%d/overview", inst.Number)
+		}
+		g.Rows = append(g.Rows, row)
+	}
+
+	for _, inst := range summary.SavedInstances {
+		port := GModPort(inst)
+		row := ServerRowUI{
+			Name:         inst.Name,
+			Address:      fmt.Sprintf("%s:%d", inst.LBIP, port),
+			Password:     inst.Password,
+			JoinLabel:    "Join via Steam",
+			Online:       false,
 		}
 		if inst.Number > 0 {
 			row.OnlineSignal = fmt.Sprintf("inst_gmod_%d_online", inst.Number)

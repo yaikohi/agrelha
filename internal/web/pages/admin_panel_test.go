@@ -112,3 +112,33 @@ Every port goes through panelPort so the games cannot drift apart; a difference
 here means something game-specific leaked into the shared component.`)
 	}
 }
+
+func TestAdminGameSectionRendersElevatedCardWithHeaderActions(t *testing.T) {
+	sections := BuildAdminPanel(adminSample())
+	if len(sections) == 0 {
+		t.Fatal("expected at least one admin section")
+	}
+
+	var buf bytes.Buffer
+	if err := adminGameSection(sections[0]).Render(context.Background(), &buf); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+
+	if !strings.Contains(html, "rounded-control") || !strings.Contains(html, "border-edge") || !strings.Contains(html, "bg-surface-raised") {
+		t.Fatalf("admin game section is not rendered as an elevated card: %s. At 2am an admin hub lacks visual boundaries and blurs all game servers together.", html)
+	}
+
+	headerStart := strings.Index(html, "<header")
+	headerEnd := strings.Index(html, "</header>")
+	if headerStart == -1 || headerEnd == -1 || headerEnd <= headerStart {
+		t.Fatalf("admin game section missing header: %s. At 2am game title and actions are detached from the card container.", html)
+	}
+	header := html[headerStart:headerEnd]
+
+	for _, want := range []string{"Valheim Worlds", "Access", "Create world", "Open Valheim manager"} {
+		if !strings.Contains(header, want) {
+			t.Fatalf("card header missing expected text or action %q: header was %s. At 2am the host cannot find critical game controls in the elevated card header.", want, header)
+		}
+	}
+}

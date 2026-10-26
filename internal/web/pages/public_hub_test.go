@@ -103,3 +103,42 @@ func TestAVanillaWorldStillOffersNoDownload(t *testing.T) {
 		t.Errorf("a vanilla world offered a modpack download at %q", url)
 	}
 }
+
+func TestAnOfflineValheimWorldIsStillDescribed(t *testing.T) {
+	vh := GameSummaryUI{
+		TotalInstances: 2, MaxInstances: 4,
+		SavedInstances: []InstanceUI{
+			{Number: 1, Name: "Ducktopia", Host: "game-01", LBIP: "192.168.20.224", HasMods: true, Source: "modpack"},
+			{Number: 2, Name: "Vikingland", Host: "game-01", LBIP: "192.168.20.224", HasMods: true, Source: "modpack"},
+		},
+	}
+	card := ValheimCard("192.168.20.224:2456", "game-01", false, vh)
+	if len(card.Rows) != 2 {
+		t.Fatalf("offline Valheim worlds produced %d rows, want 2. At 2am users see 'Nothing running' on the hub and think their saved Valheim worlds were deleted.", len(card.Rows))
+	}
+	if card.Rows[0].Online || card.Rows[1].Online {
+		t.Fatal("saved Valheim worlds were marked Online; at 2am players try to join servers that are stopped")
+	}
+	if card.Rows[0].DownloadURL == "" || card.Rows[1].DownloadURL == "" {
+		t.Fatal("saved modded Valheim worlds offered no modpack download link; at 2am players cannot fetch mods ahead of game time")
+	}
+}
+
+func TestAnOfflineGModWorldIsStillDescribed(t *testing.T) {
+	gmod := GameSummaryUI{
+		TotalInstances: 1, MaxInstances: 4,
+		SavedInstances: []InstanceUI{
+			{Number: 1, Name: "Sandbox", Host: "game-01", LBIP: "192.168.20.226", Gamemode: "sandbox", Map: "gm_construct"},
+		},
+	}
+	card := GModCard(gmod, false)
+	if len(card.Rows) != 1 {
+		t.Fatalf("offline GMod world produced %d rows, want 1. At 2am visitors see 'Nothing running' and assume the server is wiped.", len(card.Rows))
+	}
+	if card.Rows[0].Online {
+		t.Fatal("saved GMod world was marked Online; at 2am players connect to a closed port")
+	}
+	if !strings.Contains(card.Rows[0].VersionBadge, "sandbox") || !strings.Contains(card.Rows[0].VersionBadge, "gm_construct") {
+		t.Fatalf("saved GMod world missing gamemode/map badge: got %q. At 2am players cannot see what mode this world runs.", card.Rows[0].VersionBadge)
+	}
+}

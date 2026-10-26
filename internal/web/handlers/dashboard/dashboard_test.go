@@ -472,3 +472,76 @@ func TestTileSignalsWithPerInstanceStreams(t *testing.T) {
 		t.Fatalf("expected inst_valheim_1_mods to contain 'bepinex', got %v; at 2am Valheim mod catalog reports stale state", sig["inst_valheim_1_mods"])
 	}
 }
+
+func TestDashboardRendersSavedInstancesForValheimAndGMod(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "dash_saved.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	vhRepo := store.NewValheimInstanceRepo(st)
+	_ = vhRepo.Upsert(domain.Instance{
+		Number:  1,
+		Slug:    "viking-haven",
+		Name:    "Viking Haven",
+		State:   domain.StateStopped,
+		GameID:  domain.GameValheim,
+		Tier:    domain.TierMedium,
+		Valheim: &domain.ValheimConfig{Password: "secret"},
+	})
+	vhMgr := instances.NewInstanceManager(
+		vhRepo, nil, nil, 16, 4, 2,
+		"manifests/valheim", "192.168.20.224", nil, "valheim",
+		instances.WithGameID(domain.GameValheim),
+	)
+
+	gmodRepo := store.NewGameInstanceRepo(st, domain.GModProfile)
+	_ = gmodRepo.Upsert(domain.Instance{
+		Number: 1,
+		Slug:   "prop-hunt",
+		Name:   "Prop Hunt",
+		State:  domain.StateStopped,
+		GameID: domain.GameGMod,
+		Tier:   domain.TierMedium,
+		GMod:   &domain.GModConfig{Gamemode: "prop_hunt", Map: "ph_office"},
+	})
+	gmodMgr := instances.NewInstanceManager(
+		gmodRepo, nil, nil, 16, 4, 2,
+		"manifests/gmod", "192.168.20.226", nil, "gmod",
+		instances.WithGameID(domain.GameGMod),
+	)
+
+	h := New(Config{
+		GameNodeName:   "game-01",
+		ValheimAddress: "192.168.20.224:2456",
+		InstanceManagers: map[domain.GameID]*instances.InstanceManager{
+			domain.GameValheim: vhMgr,
+			domain.GameGMod:    gmodMgr,
+		},
+	})
+
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals(shared.PrincipalKey, domain.NewPrincipal(domain.Identity{
+			Subject: "admin", Roles: []domain.Role{domain.RoleAdmin},
+		}))
+		return c.Next()
+	})
+	h.Register(app)
+
+	req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	html := string(body)
+
+	if !strings.Contains(html, "Viking Haven") {
+		t.Fatalf("Dashboard did not render saved Valheim instance 'Viking Haven': body was %s. At 2am an admin sees 'Nothing running' and assumes their saved Valheim worlds were deleted.", html)
+	}
+	if !strings.Contains(html, "Prop Hunt") {
+		t.Fatalf("Dashboard did not render saved GMod instance 'Prop Hunt': body was %s. At 2am an admin sees 'Nothing running' and assumes their saved GMod worlds were deleted.", html)
+	}
+}
