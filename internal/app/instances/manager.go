@@ -41,6 +41,7 @@ type InstanceManager struct {
 	renderer          ports.SpecRenderer
 	namespace         string
 	gameID            domain.GameID
+	installed         ports.InstalledBuilds
 	profile           domain.GameProfile
 	backupsPVC        string
 	serverRefResolver func(inst domain.Instance) ports.ServerRef
@@ -68,6 +69,12 @@ type InstanceManager struct {
 }
 
 type Option func(*InstanceManager)
+
+// WithInstalledBuilds lets the manager correct what it records a Pack Instance
+// as running from what the server actually installed.
+func WithInstalledBuilds(r ports.InstalledBuilds) Option {
+	return func(m *InstanceManager) { m.installed = r }
+}
 
 func WithGameID(id domain.GameID) Option {
 	return func(m *InstanceManager) {
@@ -380,6 +387,35 @@ func (m *InstanceManager) serverRef(inst domain.Instance) ports.ServerRef {
 // A crash loop is checked first and deliberately does not read Lifecycle: the
 // operator asked for running in that case too, so Lifecycle cannot tell a
 // server that is up from one that has never once started.
+
+// reconcileInstalledBuild corrects the Loader and Minecraft version recorded for
+// a Pack Instance from the manifest the installer left on disk.
+//
+// CONTEXT.md: a Pack owns these, so they are never operator settings. They were
+// still written once at create time from whatever the Pack index claimed, and an
+// index that lags leaves the record describing a different server from the one
+// running. What is installed cannot be wrong.
+func (m *InstanceManager) reconcileInstalledBuild(ctx context.Context, inst *domain.Instance) {
+	if m.installed == nil || inst.Minecraft == nil || !inst.PackDefined() {
+		return
+	}
+	got, err := m.installed.InstalledBuild(ctx, domain.NewInstanceID(m.profileFor(*inst).ID, inst.Number))
+	if err != nil {
+		return
+	}
+	loader, version := got.Resolve(inst.Minecraft.Loader, inst.Minecraft.MCVersion)
+	if loader == inst.Minecraft.Loader && version == inst.Minecraft.MCVersion {
+		return
+	}
+	slog.Info("instances: corrected the recorded build from what is installed",
+		"instance", inst.Number,
+		"was_version", inst.Minecraft.MCVersion, "installed_version", version,
+		"was_loader", inst.Minecraft.Loader, "installed_loader", loader)
+	inst.Minecraft.Loader = loader
+	inst.Minecraft.MCVersion = version
+	_ = m.repo.Upsert(*inst)
+}
+
 func stateFromStatus(st ports.Status) domain.InstanceState {
 	switch {
 	case st.Failure.CrashLooping():
@@ -425,6 +461,7 @@ func (m *InstanceManager) ListInstances(ctx context.Context) ([]domain.Instance,
 				}
 			}
 		}
+		m.reconcileInstalledBuild(ctx, &inst)
 		instances = append(instances, inst)
 	}
 
@@ -480,6 +517,7 @@ func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*domain.Ins
 			}
 		}
 	}
+	m.reconcileInstalledBuild(ctx, &inst)
 	return &inst, nil
 }
 

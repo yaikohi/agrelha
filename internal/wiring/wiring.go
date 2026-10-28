@@ -42,6 +42,7 @@ import (
 	"agrelha/internal/infra/content/thunderstore"
 	"agrelha/internal/infra/gitops"
 	hostrouter "agrelha/internal/infra/hostrouter"
+	"agrelha/internal/infra/installed"
 	"agrelha/internal/infra/kube"
 	"agrelha/internal/infra/manifests"
 	composemanifests "agrelha/internal/infra/manifests/compose"
@@ -305,6 +306,9 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 
 	instOpts = append(instOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(defaultHostFor(cfg, "minecraft")))
+	if cfg.DataDir != "" {
+		instOpts = append(instOpts, instances.WithInstalledBuilds(installed.New(cfg.DataDir)))
+	}
 	d.MCInstances = instances.NewInstanceManager(
 		store.NewInstanceRepo(st), d.StateStore, rt,
 		cfg.MCTotalBudgetGiB, cfg.MCMaxInstances, cfg.MCMaxRunning,

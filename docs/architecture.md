@@ -350,6 +350,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/manifests/compose` | `ports.SpecRenderer` producing a Compose file from a game's RuntimeSpec. Refuses games whose worlds need more than one container. |
 | `infra/rcon` | Minecraft RCON client and connection pool. |
 | `infra/reconcile/argocd` | `ports.Reconciler` for ArgoCD: converge and report sync status. |
+| `infra/installed` | `ports.InstalledBuilds`: reads the Loader and Minecraft version a server actually installed, from the manifest the installer leaves beside the world. |
 | `infra/reconcile/compose` | `ports.Reconciler` for Docker Compose. |
 | `infra/runtime/docker` | `ports.Runtime` over the Docker engine API. |
 | `infra/runtime/k8s` | `ports.Runtime` over Kubernetes, via `infra/kube`. |
