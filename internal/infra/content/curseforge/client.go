@@ -249,6 +249,41 @@ func (c *Client) latestFile(ctx context.Context, modID int, mcVersion string, lo
 	return &files[0], nil
 }
 
+// PackFacts reads what a Pack actually runs from its newest published file.
+// CurseForge is authoritative here: modpackindex mirrors it and lags, so a Pack
+// released on a new Minecraft version still reads as the previous one there.
+//
+// A file's gameVersions mixes both answers into one list - ["26.3", "Fabric"] -
+// so the Minecraft version and the Loader come out of the same call. The files
+// are fetched unfiltered on purpose: latestFile runs an empty Loader through
+// NormalizeLoader, which guesses NeoForge and would hide a Fabric Pack's files.
+func (c *Client) PackFacts(ctx context.Context, modID int) (domain.PackFacts, error) {
+	if !c.Ready() {
+		return domain.PackFacts{}, ports.ErrNotImplemented
+	}
+	var body struct {
+		Data []fileDTO `json:"data"`
+	}
+	if err := c.getJSON(ctx, fmt.Sprintf("/mods/%d/files?pageSize=50", modID), &body); err != nil {
+		return domain.PackFacts{}, err
+	}
+	if len(body.Data) == 0 {
+		return domain.PackFacts{}, fmt.Errorf("modpack %d has no published files: %w", modID, ports.ErrPackageNotFound)
+	}
+	files := body.Data
+	sort.SliceStable(files, func(i, j int) bool { return files[i].FileDate > files[j].FileDate })
+	f := files[0]
+
+	facts := domain.PackFacts{MCVersion: domain.HighestMCVersion(f.GameVersions)}
+	for _, v := range f.GameVersions {
+		if l := domain.ParseLoader(v); l != "" {
+			facts.Loader = l
+			break
+		}
+	}
+	return facts, nil
+}
+
 // Resolve turns a slug into its own pinned entry plus a pinned entry per
 // required dependency, depth-first and de-duplicated.
 //

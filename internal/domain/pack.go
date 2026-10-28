@@ -64,6 +64,14 @@ func (f PackFacts) Resolve(loader Loader, mcVersion string) (Loader, string) {
 	return loader, mcVersion
 }
 
+// Over layers one source of Pack facts on another: f wins where it speaks, and
+// base fills in the rest. Used where a lagging index is the fallback for an
+// authoritative source.
+func (f PackFacts) Over(base PackFacts) PackFacts {
+	loader, version := f.Resolve(base.Loader, base.MCVersion)
+	return PackFacts{Loader: loader, MCVersion: version}
+}
+
 func (f PackFacts) Empty() bool { return f.Loader == "" && f.MCVersion == "" }
 
 // CompareMCVersions orders Minecraft versions numerically, component by
@@ -89,12 +97,34 @@ func CompareMCVersions(a, b string) int {
 	return 0
 }
 
-// HighestMCVersion returns the newest of the versions given, ignoring blanks.
+// ParseLoader names a Loader only when the text actually names one. Unlike
+// NormalizeLoader it does not guess: an unrecognised word leaves the Loader
+// unknown, so a caller can tell "the Pack says Fabric" from "the Pack did not
+// say".
+func ParseLoader(s string) Loader {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case string(LoaderFabric):
+		return LoaderFabric
+	case string(LoaderNeoForge):
+		return LoaderNeoForge
+	case string(LoaderVanilla):
+		return LoaderVanilla
+	}
+	return ""
+}
+
+// IsMCVersion reports whether the text looks like a Minecraft version at all.
+// CurseForge mixes loader names into the same list as versions, so "Fabric"
+// has to be told apart from "26.3".
+func IsMCVersion(v string) bool { return len(mcVersionParts(v)) > 0 }
+
+// HighestMCVersion returns the newest of the versions given, ignoring blanks
+// and anything that is not a version.
 func HighestMCVersion(versions []string) string {
 	best := ""
 	for _, v := range versions {
 		v = strings.TrimSpace(v)
-		if v == "" {
+		if v == "" || !IsMCVersion(v) {
 			continue
 		}
 		if best == "" || CompareMCVersions(v, best) > 0 {

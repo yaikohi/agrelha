@@ -658,16 +658,36 @@ func buildWizardHandler(d Deps) *wizardhttp.Handler {
 	if d.MPI != nil {
 		resolvePackFacts = func(ctx context.Context, packID int, packName string) (domain.PackFacts, bool) {
 			var facts domain.PackFacts
+			var curseID int
 			if detail, err := d.MPI.GetModpack(ctx, packID); err == nil && detail != nil {
+				curseID = detail.CurseID()
 				names := make([]string, 0, len(detail.MinecraftVersions))
 				for _, v := range detail.MinecraftVersions {
 					names = append(names, v.Name)
 				}
 				facts.MCVersion = domain.HighestMCVersion(names)
 			}
-			if mods, err := d.MPI.GetModpackMods(ctx, packID); err == nil && len(mods) > 0 {
-				if best := modpackindex.BestLoader(mods); best != "" {
-					facts.Loader = domain.Loader(best)
+
+			if curseID > 0 && d.CF.Ready() {
+				cf, err := d.CF.PackFacts(ctx, curseID)
+				switch {
+				case err != nil:
+					slog.Warn("wizard: CurseForge could not describe this pack, falling back to the index",
+						"pack", packName, "curse_id", curseID, "err", err)
+				default:
+					if cf.MCVersion != "" && cf.MCVersion != facts.MCVersion {
+						slog.Info("wizard: the index lags CurseForge on this pack",
+							"pack", packName, "index", facts.MCVersion, "curseforge", cf.MCVersion)
+					}
+					facts = cf.Over(facts)
+				}
+			}
+
+			if facts.Loader == "" {
+				if mods, err := d.MPI.GetModpackMods(ctx, packID); err == nil && len(mods) > 0 {
+					if best := modpackindex.BestLoader(mods); best != "" {
+						facts.Loader = domain.Loader(best)
+					}
 				}
 			}
 			if facts.Empty() {

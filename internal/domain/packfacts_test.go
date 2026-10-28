@@ -12,6 +12,9 @@ func TestHighestMCVersionSpansBothNumberingSchemes(t *testing.T) {
 		{"within the old scheme", []string{"1.20.1", "1.21.1", "1.9"}, "1.21.1"},
 		{"within the new scheme", []string{"26.1.2", "26.3", "26.2"}, "26.3"},
 		{"blanks ignored", []string{"", "  ", "1.21.1"}, "1.21.1"},
+		{"loader names are not versions", []string{"26.3", "Fabric"}, "26.3"},
+		{"nothing but a loader name", []string{"Fabric"}, ""},
+		{"the stale index case", []string{"1.21.11", "26.1", "26.1.2"}, "26.1.2"},
 		{"nothing declared", nil, ""},
 		{"single entry", []string{"26.3"}, "26.3"},
 	}
@@ -91,6 +94,41 @@ func TestPackFactsResolve(t *testing.T) {
 				t.Errorf("version = %q, want %q", gotVersion, c.wantVersion)
 			}
 		})
+	}
+}
+
+func TestPackFactsOverLayersAnAuthorityOnAFallback(t *testing.T) {
+	index := PackFacts{Loader: LoaderFabric, MCVersion: "26.1.2"}
+	curseforge := PackFacts{MCVersion: "26.3"}
+
+	got := curseforge.Over(index)
+	if got.MCVersion != "26.3" {
+		t.Errorf("version = %q; the authority must win where it speaks", got.MCVersion)
+	}
+	if got.Loader != LoaderFabric {
+		t.Errorf("loader = %q; the fallback must fill in what the authority omits", got.Loader)
+	}
+
+	if silent := (PackFacts{}).Over(index); silent != index {
+		t.Errorf("a silent authority must change nothing, got %+v", silent)
+	}
+}
+
+func TestParseLoaderDoesNotGuess(t *testing.T) {
+	if got := ParseLoader("Fabric"); got != LoaderFabric {
+		t.Errorf("ParseLoader(Fabric) = %q", got)
+	}
+	if got := ParseLoader("NeoForge"); got != LoaderNeoForge {
+		t.Errorf("ParseLoader(NeoForge) = %q", got)
+	}
+	if got := ParseLoader("Forge"); got != "" {
+		t.Errorf("ParseLoader(Forge) = %q; agrelha cannot create a Forge Instance, so it must not claim one", got)
+	}
+	if got := ParseLoader(""); got != "" {
+		t.Errorf("ParseLoader(\"\") = %q; silence is not NeoForge", got)
+	}
+	if got := NormalizeLoader(""); got != LoaderNeoForge {
+		t.Errorf("NormalizeLoader still guesses for the operator path, got %q", got)
 	}
 }
 

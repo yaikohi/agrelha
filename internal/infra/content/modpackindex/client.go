@@ -90,6 +90,15 @@ type ModpackDetail struct {
 	ModrinthInfo      any               `json:"modrinth_info"`
 }
 
+// CurseID is the CurseForge project this Pack mirrors, or 0 when modpackindex
+// does not know of one.
+func (d ModpackDetail) CurseID() int {
+	if v, ok := d.CurseInfo["curse_id"].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
 type ModrinthProjectRef struct {
 	ProjectID string   `json:"project_id"`
 	Slug      string   `json:"slug"`
