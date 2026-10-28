@@ -137,13 +137,13 @@ func (h *Handler) MCWizardModpacksSearch(c *fiber.Ctx) error {
 				</div>
 				<div class="mt-4 flex justify-end">
 					<button type="button"
-						data-on:click="$pack_name = '%s'; $pack_id = '%d'; $pack_ref = '%s'; $pack_provider = 'curseforge'; $step = 4"
+						data-on:click="$pack_name = '%s'; $pack_id = '%d'; $pack_ref = '%s'; $pack_provider = 'curseforge'; $step = 4; @get('/api/minecraft/wizard/pack/facts?id=%d')"
 						class="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600">
 						Select Pack
 					</button>
 				</div>
 			</div>
-		`, html.EscapeString(p.ThumbnailURL), html.EscapeString(p.Name), p.DownloadCount, html.EscapeString(p.Summary), cleanJSName, p.ID, cleanRefURL))
+		`, html.EscapeString(p.ThumbnailURL), html.EscapeString(p.Name), p.DownloadCount, html.EscapeString(p.Summary), cleanJSName, p.ID, cleanRefURL, p.ID))
 	}
 
 	return ssePatchElements(c, "#wizard-pack-results", sb.String())
@@ -364,13 +364,22 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		packRef = h.cfg.ResolvePackRef(c.UserContext(), packRef)
 	}
 
-	if source == "modpack" && h.cfg.VerifyPackLoader != nil {
+	if source == "modpack" && h.cfg.ResolvePackFacts != nil {
 		packID := strings.TrimSpace(req.PackID)
 		if packID == "" {
 			packID = strings.TrimSpace(c.FormValue("pack_id"))
 		}
 		if id, err := strconv.Atoi(packID); err == nil && id > 0 {
-			loader = h.cfg.VerifyPackLoader(c.UserContext(), id, packName, loader)
+			if facts, ok := h.cfg.ResolvePackFacts(c.UserContext(), id, packName); ok {
+				gotLoader, gotVersion := facts.Resolve(domain.Loader(loader), mcVersion)
+				if string(gotLoader) != loader || gotVersion != mcVersion {
+					slog.Warn("wizard: pack overrode the requested build",
+						"pack", packName,
+						"loader", loader, "pack_loader", string(gotLoader),
+						"mc_version", mcVersion, "pack_mc_version", gotVersion)
+				}
+				loader, mcVersion = string(gotLoader), gotVersion
+			}
 		}
 	}
 
@@ -610,6 +619,31 @@ func ssePatch(c *fiber.Ctx, signals map[string]any, fragments map[string]string)
 	}
 
 	return c.Send(buf.Bytes())
+}
+
+// MCWizardPackFacts reports the Loader and Minecraft version a Pack decides, so
+// the review step shows what will actually be built. Without it the wizard
+// displays its own defaults and the server silently overrules them at create.
+func (h *Handler) MCWizardPackFacts(c *fiber.Ctx) error {
+	if h.cfg.ResolvePackFacts == nil {
+		return ssePatch(c, nil, nil)
+	}
+	id, err := strconv.Atoi(strings.TrimSpace(c.Query("id")))
+	if err != nil || id <= 0 {
+		return ssePatch(c, nil, nil)
+	}
+	facts, ok := h.cfg.ResolvePackFacts(c.UserContext(), id, strings.TrimSpace(c.Query("name")))
+	if !ok {
+		return ssePatch(c, nil, nil)
+	}
+	signals := map[string]any{}
+	if facts.Loader != "" {
+		signals["loader"] = string(facts.Loader)
+	}
+	if facts.MCVersion != "" {
+		signals["mc_version"] = facts.MCVersion
+	}
+	return ssePatch(c, signals, nil)
 }
 
 // MCWizardImport handles importing a Minecraft modpack archive (.mrpack, .zip, .txt).

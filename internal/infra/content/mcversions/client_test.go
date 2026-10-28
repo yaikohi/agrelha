@@ -169,12 +169,12 @@ func TestMCVersions_EdgeCases(t *testing.T) {
 func TestMCVersions_AdditionalBranches(t *testing.T) {
 	ctx := context.Background()
 
-	// 1. splitVersion with suffix
-	if parts := splitVersion("1.21.1-rc1"); len(parts) != 3 || parts[2] != 1 {
-		t.Errorf("splitVersion with dash failed: %v", parts)
+	// 1. suffixes do not change ordering
+	if Compare("1.21.1-rc1", "1.21.1") != 0 {
+		t.Error("a pre-release suffix should not change ordering")
 	}
-	if parts := splitVersion("1.21.1+build"); len(parts) != 3 {
-		t.Errorf("splitVersion with plus failed: %v", parts)
+	if Compare("1.21.1+build", "1.21.1") != 0 {
+		t.Error("a build suffix should not change ordering")
 	}
 
 	// 2. Manifest with no release versions

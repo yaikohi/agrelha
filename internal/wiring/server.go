@@ -654,22 +654,28 @@ func buildWizardHandler(d Deps) *wizardhttp.Handler {
 		}
 	}
 
-	var verifyPackLoader func(ctx context.Context, packID int, packName, requestedLoader string) string
+	var resolvePackFacts func(ctx context.Context, packID int, packName string) (domain.PackFacts, bool)
 	if d.MPI != nil {
-		verifyPackLoader = func(ctx context.Context, packID int, packName, requestedLoader string) string {
-			mods, err := d.MPI.GetModpackMods(ctx, packID)
-			if err != nil || len(mods) == 0 {
-				return requestedLoader
+		resolvePackFacts = func(ctx context.Context, packID int, packName string) (domain.PackFacts, bool) {
+			var facts domain.PackFacts
+			if detail, err := d.MPI.GetModpack(ctx, packID); err == nil && detail != nil {
+				names := make([]string, 0, len(detail.MinecraftVersions))
+				for _, v := range detail.MinecraftVersions {
+					names = append(names, v.Name)
+				}
+				facts.MCVersion = domain.HighestMCVersion(names)
 			}
-			best := modpackindex.BestLoader(mods)
-			if best != "" && best != requestedLoader {
-				fit := modpackindex.AnalyzeLoader(mods, requestedLoader)
-				slog.Warn("wizard: loader corrected from pack contents",
-					"pack", packName, "requested", requestedLoader, "derived", best,
-					"would_not_load", len(fit.Blocking))
-				return best
+			if mods, err := d.MPI.GetModpackMods(ctx, packID); err == nil && len(mods) > 0 {
+				if best := modpackindex.BestLoader(mods); best != "" {
+					facts.Loader = domain.Loader(best)
+				}
 			}
-			return requestedLoader
+			if facts.Empty() {
+				slog.Warn("wizard: pack declares no loader or Minecraft version",
+					"pack", packName, "pack_id", packID)
+				return facts, false
+			}
+			return facts, true
 		}
 	}
 
@@ -707,7 +713,7 @@ func buildWizardHandler(d Deps) *wizardhttp.Handler {
 		VersionReleases:  releases,
 		SearchModpacks:   searchModpacks,
 		ResolvePackRef:   resolvePackRef,
-		VerifyPackLoader: verifyPackLoader,
+		ResolvePackFacts: resolvePackFacts,
 		SearchMods:       searchMods,
 		CheckCartCompat:  checkCartCompat,
 	})

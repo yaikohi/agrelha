@@ -8,6 +8,8 @@ import (
 	mccontent "agrelha/internal/app/content"
 	"agrelha/internal/app/instances"
 	"github.com/gofiber/fiber/v2"
+
+	"agrelha/internal/domain"
 )
 
 // ModpackHit represents a search result from an external modpack index.
@@ -36,7 +38,7 @@ type Config struct {
 	VersionReleases  func(ctx context.Context, limit int) []string
 	SearchModpacks   func(ctx context.Context, query string) ([]ModpackHit, error)
 	ResolvePackRef   func(ctx context.Context, packRef string) string
-	VerifyPackLoader func(ctx context.Context, packID int, packName, requestedLoader string) string
+	ResolvePackFacts func(ctx context.Context, packID int, packName string) (domain.PackFacts, bool)
 	SearchMods       func(ctx context.Context, query, mcVersion string) ([]ModHit, error)
 	CheckCartCompat  func(ctx context.Context, slugs []string, mcVersion string) mccontent.CartCompatibility
 }
@@ -61,6 +63,7 @@ func (h *Handler) Register(router fiber.Router) {
 	router.Post("/api/minecraft/wizard/modpacks/search", h.MCWizardModpacksSearch)
 	router.Get("/api/minecraft/wizard/mods/search", h.MCWizardModsSearch)
 	router.Post("/api/minecraft/wizard/mods/search", h.MCWizardModsSearch)
+	router.Get("/api/minecraft/wizard/pack/facts", h.MCWizardPackFacts)
 	router.Post("/api/minecraft/wizard/cart/check", h.MCWizardCartCheck)
 	router.Post("/api/minecraft/wizard/create", h.MCWizardCreate)
 	router.Post("/api/minecraft/wizard/import", h.MCWizardImport)

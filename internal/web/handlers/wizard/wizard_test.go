@@ -284,8 +284,8 @@ func TestMCWizardCreateValidationAndCreation(t *testing.T) {
 		ResolvePackRef: func(ctx context.Context, packRef string) string {
 			return "https://curseforge.com/resolved/" + packRef
 		},
-		VerifyPackLoader: func(ctx context.Context, packID int, packName, requestedLoader string) string {
-			return "fabric"
+		ResolvePackFacts: func(ctx context.Context, packID int, packName string) (domain.PackFacts, bool) {
+			return domain.PackFacts{Loader: domain.LoaderFabric}, true
 		},
 	})
 
@@ -573,9 +573,9 @@ func TestMCWizardCreateFormAndVariants(t *testing.T) {
 			resolvedRef = "https://resolved.com/" + packRef
 			return resolvedRef
 		},
-		VerifyPackLoader: func(ctx context.Context, packID int, packName, requestedLoader string) string {
+		ResolvePackFacts: func(ctx context.Context, packID int, packName string) (domain.PackFacts, bool) {
 			verifiedID = packID
-			return "neoforge"
+			return domain.PackFacts{Loader: domain.LoaderNeoForge}, true
 		},
 	})
 
@@ -1001,4 +1001,83 @@ func TestMCWizardImportVariants(t *testing.T) {
 		t.Errorf("expected 400 for nil world, got: %d, body: %s", codeNilWorld, bNilWorld)
 	}
 	parseMrpack = origParseMr
+}
+
+// The Pack owns the Instance's Loader and Minecraft version (CONTEXT.md). The
+// wizard's own signals default to 1.21.1 and the modpack step never offers a
+// version picker, so without this the operator silently got 1.21.1 whatever the
+// Pack needed.
+func TestMCWizardCreateTakesTheBuildFromThePackNotTheWizardDefaults(t *testing.T) {
+	app, instMgr := setupWizardApp(t, Config{
+		ResolvePackFacts: func(ctx context.Context, packID int, packName string) (domain.PackFacts, bool) {
+			return domain.PackFacts{Loader: domain.LoaderNeoForge, MCVersion: "26.3"}, true
+		},
+	})
+
+	body := `{"name":"Chillcraft","source":"modpack","loader":"fabric","mc_version":"1.21.1",` +
+		`"tier":"medium","pack_name":"ChillCraft","pack_id":"4242","pack_provider":"curseforge","pack_ref":"cc01"}`
+	req := httptest.NewRequest("POST", "/api/minecraft/wizard/create", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	if err != nil || resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("create failed: status=%v err=%v", resp.StatusCode, err)
+	}
+
+	inst, err := instMgr.GetInstance(context.Background(), 1)
+	if err != nil || inst == nil || inst.Minecraft == nil {
+		t.Fatalf("instance 1 not created: %v", err)
+	}
+	if inst.Minecraft.MCVersion != "26.3" {
+		t.Errorf("Minecraft version = %q, want 26.3 from the Pack", inst.Minecraft.MCVersion)
+	}
+	if inst.Minecraft.Loader != domain.LoaderNeoForge {
+		t.Errorf("loader = %q, want neoforge from the Pack", inst.Minecraft.Loader)
+	}
+}
+
+func TestMCWizardCreateKeepsTheRequestWhenThePackDeclaresNothing(t *testing.T) {
+	app, instMgr := setupWizardApp(t, Config{
+		ResolvePackFacts: func(ctx context.Context, packID int, packName string) (domain.PackFacts, bool) {
+			return domain.PackFacts{}, false
+		},
+	})
+
+	body := `{"name":"Unknown","source":"modpack","loader":"fabric","mc_version":"1.20.1",` +
+		`"tier":"medium","pack_name":"Mystery","pack_id":"7","pack_provider":"curseforge","pack_ref":"m"}`
+	req := httptest.NewRequest("POST", "/api/minecraft/wizard/create", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if _, err := app.Test(req); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+
+	inst, err := instMgr.GetInstance(context.Background(), 1)
+	if err != nil || inst == nil || inst.Minecraft == nil {
+		t.Fatalf("instance 1 not created: %v", err)
+	}
+	if inst.Minecraft.MCVersion != "1.20.1" {
+		t.Errorf("Minecraft version = %q; a silent Pack must not overwrite the request", inst.Minecraft.MCVersion)
+	}
+}
+
+func TestMCWizardPackFactsTellsTheReviewStepWhatWillBeBuilt(t *testing.T) {
+	app, _ := setupWizardApp(t, Config{
+		ResolvePackFacts: func(ctx context.Context, packID int, packName string) (domain.PackFacts, bool) {
+			if packID != 4242 {
+				t.Errorf("pack id = %d, want 4242", packID)
+			}
+			return domain.PackFacts{Loader: domain.LoaderNeoForge, MCVersion: "26.3"}, true
+		},
+	})
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/minecraft/wizard/pack/facts?id=4242&name=ChillCraft", nil))
+	if err != nil {
+		t.Fatalf("pack facts failed: %v", err)
+	}
+	got, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(got), "26.3") {
+		t.Errorf("the Minecraft version must reach the signals, got: %s", got)
+	}
+	if !strings.Contains(string(got), "neoforge") {
+		t.Errorf("the loader must reach the signals, got: %s", got)
+	}
 }

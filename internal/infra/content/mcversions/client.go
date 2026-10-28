@@ -5,15 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	"agrelha/internal/domain"
 )
 
 const (
 	DefaultManifestURL = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 	FallbackLatest     = "1.21.1"
+
+	// Mojang dropped the leading "1." in 2026; anything at or past this is on
+	// the new scheme.
+	firstModernRelease = "26.0"
 	DefaultCacheTTL    = 6 * time.Hour
 )
 
@@ -131,43 +135,8 @@ func (c *Client) IsRelease(ctx context.Context, version string) bool {
 	return false
 }
 
-func Compare(a, b string) int {
-	as, bs := splitVersion(a), splitVersion(b)
-	for i := 0; i < len(as) || i < len(bs); i++ {
-		var x, y int
-		if i < len(as) {
-			x = as[i]
-		}
-		if i < len(bs) {
-			y = bs[i]
-		}
-		if x != y {
-			if x < y {
-				return -1
-			}
-			return 1
-		}
-	}
-	return 0
-}
-
-func splitVersion(v string) []int {
-	if i := strings.IndexAny(v, "-+ "); i >= 0 {
-		v = v[:i]
-	}
-	parts := strings.Split(v, ".")
-	out := make([]int, 0, len(parts))
-	for _, p := range parts {
-		n, err := strconv.Atoi(p)
-		if err != nil {
-			break
-		}
-		out = append(out, n)
-	}
-	return out
-}
+func Compare(a, b string) int { return domain.CompareMCVersions(a, b) }
 
 func IsModern(v string) bool {
-	s := splitVersion(v)
-	return len(s) > 0 && s[0] >= 26
+	return domain.CompareMCVersions(v, firstModernRelease) >= 0
 }
