@@ -256,8 +256,10 @@ The page where Admission and Operators are managed for a game. Not a domain
 concept — it names a screen, and covers whichever of the two the game exposes.
 
 **Player**:
-Someone who joins a game server. Distinct from the single human who runs agrelha.
-_Avoid_: user, member
+Someone who joins a game server. Never signs in to agrelha; reaches it only for
+an address, a password or a Mod list. Distinct from an Account, which may hold
+no Grant and still sign in, and from an Operator, who administers in-game.
+_Avoid_: user, member, gamer
 
 **Account**:
 A person who can sign in to agrelha. Identified by the `sub` claim their identity
@@ -270,6 +272,13 @@ A named permission an Account holds, asserted by the identity provider in the
 token. `agrelha-admin` confers everything; `agrelha-user` confers sign-in only;
 `agrelha-<game>-<NN>` confers operating one Instance.
 _Avoid_: scope, permission, claim
+
+**Keeper**:
+An Account holding one or more Grants: someone who tends a World without
+administering agrelha. Not a Role of its own - it names the person a Grant
+produces, so an Account with no Grant is not yet a Keeper, and the agrelha
+operator is one too for the Instances they created.
+_Avoid_: user, owner, server admin
 
 **Grant**:
 The pairing of an Account with one Instance, expressed as the Account holding
