@@ -7,6 +7,20 @@ import (
 
 	appbepinex "agrelha/internal/app/bepinex"
 	"agrelha/internal/domain"
+	"agrelha/internal/web/components"
+)
+
+// These fragments are assembled as strings rather than templ because the panel
+// is patched in over SSE in pieces. They still speak hearth: every colour is a
+// token, and the shared control classes come from components so there is one
+// definition of what an input looks like.
+const (
+	bandClass     = "-mx-6 mt-6 border-t border-seam"
+	headClass     = "flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b border-seam px-6 py-4"
+	metaClass     = "mt-1 flex flex-wrap gap-x-3 font-pixel text-[11px] text-ink-faint"
+	proseClass    = "max-w-prose font-display text-sm leading-relaxed text-ink-muted"
+	checkboxClass = "focus-accent check"
+	quietBtnClass = "focus-accent font-pixel text-[11px] text-ink-faint transition-colors hover:text-accent"
 )
 
 func renderPanel(num int, name string, view appbepinex.FileView) string {
@@ -21,17 +35,20 @@ func renderPanel(num int, name string, view appbepinex.FileView) string {
 		}
 	}
 
-	fmt.Fprintf(&b, `<div class="rounded-xl border border-zinc-800 bg-zinc-900/95 shadow-xl"
-		data-signals="%s">`,
+	fmt.Fprintf(&b, `<div class="%s" data-signals="%s">`,
+		bandClass,
 		esc(fmt.Sprintf(`{cfgFile: '%s', cfgSha: '%s', cfgSearch: '', cfgSection: '', cfgOnlyChanged: false, cfgRaw: %t, cfgDirty: {}, cfgForget: []}`,
 			jsQuote(name), jsQuote(view.SHA256), !view.Config.Parsable())))
 
-	fmt.Fprintf(&b, `<div class="flex items-start justify-between gap-4 border-b border-zinc-800 p-4">
-		<div><h3 class="text-sm font-semibold text-zinc-100">%s</h3>
-		<div class="mt-0.5 font-mono text-[11px] text-zinc-500">%s · %d settings · %s</div></div>
+	fmt.Fprintf(&b, `<div class="%s">
+		<div class="min-w-0">
+			<h3 class="font-display text-base font-semibold text-ink">%s</h3>
+			<p class="%s"><span class="break-all">%s</span><span>%d settings</span><span>%s</span></p>
+		</div>
 		<button type="button" data-on:click="@setAll('cfgFile', ''); document.getElementById('cfg-panel').innerHTML = ''"
-			class="shrink-0 text-xs text-zinc-400 hover:text-zinc-200">Close</button></div>`,
-		esc(title), esc(name), view.Config.Count(), humanBytes(view.Size))
+			class="%s">Close</button></div>`,
+		headClass, esc(title), metaClass, esc(name), view.Config.Count(), humanBytes(view.Size),
+		components.ButtonClass(components.VariantSecondary))
 
 	if !view.Config.Parsable() {
 		b.WriteString(renderRawEditor(num, name, view))
@@ -39,29 +56,27 @@ func renderPanel(num int, name string, view appbepinex.FileView) string {
 		return b.String()
 	}
 
-	fmt.Fprintf(&b, `<div class="flex flex-wrap items-center gap-2 border-b border-zinc-800 p-4">
-		<input type="search" data-bind="cfgSearch" placeholder="Search settings…"
-			data-on:input__debounce.300ms="%s"
-			class="w-56 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none"/>
-		<select data-bind="cfgSection" data-on:change="%s"
-			class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-100 focus:border-zinc-400 focus:outline-none">
+	fmt.Fprintf(&b, `<div class="flex flex-wrap items-center gap-3 border-b border-seam px-6 py-3">
+		<div class="w-56"><input type="search" data-bind="cfgSearch" placeholder="Search settings"
+			data-on:input__debounce.300ms="%s" class="%s"/></div>
+		<div class="w-56"><select data-bind="cfgSection" data-on:change="%s" class="%s">
 		<option value="">All sections</option>`,
-		esc(settingsFetch(num)), esc(settingsFetch(num)))
+		esc(settingsFetch(num)), components.InputClass(),
+		esc(settingsFetch(num)), components.InputClass())
 	for _, s := range view.Config.SectionNames() {
 		fmt.Fprintf(&b, `<option value="%s">%s</option>`, esc(s), esc(s))
 	}
-	b.WriteString(`</select>`)
+	b.WriteString(`</select></div>`)
 
-	fmt.Fprintf(&b, `<label class="flex items-center gap-1.5 text-xs text-zinc-400">
-		<input type="checkbox" data-bind="cfgOnlyChanged" data-on:change="%s" class="rounded border-zinc-600 bg-zinc-800"/>
-		Changed from default</label>`, esc(settingsFetch(num)))
+	fmt.Fprintf(&b, `<label class="flex items-center gap-2 font-pixel text-[11px] text-ink-muted">
+		<input type="checkbox" data-bind="cfgOnlyChanged" data-on:change="%s" class="%s"/>
+		Changed from default</label>`, esc(settingsFetch(num)), checkboxClass)
 
-	fmt.Fprintf(&b, `<div class="ml-auto flex items-center gap-2">
-		<button type="button" data-on:click="%s"
-			class="rounded-lg bg-zinc-100 px-4 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white">Save</button></div></div>`,
-		esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/save', {contentType: 'json', payload: {file: $cfgFile, sha256: $cfgSha, values: $cfgDirty, forget: $cfgForget}})`, num)))
+	fmt.Fprintf(&b, `<div class="ml-auto"><button type="button" data-on:click="%s" class="%s">Save changes</button></div></div>`,
+		esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/save', {contentType: 'json', payload: {file: $cfgFile, sha256: $cfgSha, values: $cfgDirty, forget: $cfgForget}})`, num)),
+		components.ButtonClass(components.VariantPrimary))
 
-	b.WriteString(`<div id="cfg-settings" class="divide-y divide-zinc-800/60">`)
+	b.WriteString(`<div id="cfg-settings">`)
 	managed := managedSettings(view)
 	b.WriteString(renderSettings(num, name, view, managed, false, true))
 	b.WriteString(`</div>`)
@@ -87,15 +102,13 @@ func settingsFetch(num int) string {
 
 func renderSettings(num int, name string, view appbepinex.FileView, hits []domain.Setting, truncated, onlyManaged bool) string {
 	var b strings.Builder
-	esc := html.EscapeString
 
 	if len(hits) == 0 {
 		if onlyManaged {
-			return `<div class="p-8 text-center text-xs text-zinc-500">
-				agrelha is not managing any values in this file yet.<br/>
-				<span class="text-zinc-600">Search, or pick a section, to see what this mod exposes.</span></div>`
+			return fmt.Sprintf(`<div class="px-6 py-10"><p class="%s">agrelha is not managing any values in this file yet.
+				Search, or pick a section, to see what this mod exposes.</p></div>`, proseClass)
 		}
-		return `<div class="p-8 text-center text-xs text-zinc-500">No settings match.</div>`
+		return fmt.Sprintf(`<div class="px-6 py-10"><p class="%s">No settings match.</p></div>`, proseClass)
 	}
 
 	index := settingIndex(view)
@@ -108,10 +121,10 @@ func renderSettings(num int, name string, view appbepinex.FileView, hits []domai
 	}
 
 	if truncated {
-		fmt.Fprintf(&b, `<div class="bg-amber-950/20 p-3 text-center text-[11px] text-amber-400/90">
-			Showing the first %d matches of more. Narrow the search or pick a section.</div>`, searchLimit)
+		fmt.Fprintf(&b, `<p class="border-b border-seam bg-seam px-6 py-3 font-pixel text-[11px] text-ink-faint">
+			Showing the first <span class="text-accent">%d</span> matches. Narrow the search or pick a section to see the rest.</p>`,
+			searchLimit)
 	}
-	_ = esc
 	return b.String()
 }
 
@@ -123,32 +136,41 @@ func settingIndex(view appbepinex.FileView) map[domain.SettingKey]int {
 	return out
 }
 
+// A managed Setting is marked by a rule down its left edge rather than a badge:
+// at two hundred rows a rule is scannable and a badge is noise, and "agrelha
+// writes this value" is a property of the row, not a label on it.
 func renderSetting(num int, file string, view appbepinex.FileView, s domain.Setting, idx int) string {
 	var b strings.Builder
 	esc := html.EscapeString
 	managed := view.Overrides.Has(s.Section, s.Name)
 
-	b.WriteString(`<div class="p-4 hover:bg-zinc-800/20">`)
-	fmt.Fprintf(&b, `<div class="flex items-start justify-between gap-4"><div class="min-w-0 flex-1">
-		<div class="flex flex-wrap items-center gap-2">
-		<span class="text-xs font-medium text-zinc-200">%s</span>
-		<span class="rounded bg-zinc-800/80 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">%s</span>`,
+	rule := "border-l-transparent"
+	if managed {
+		rule = "border-l-accent"
+	}
+	fmt.Fprintf(&b, `<div class="border-b border-l-2 border-seam %s px-6 py-4">`, rule)
+	fmt.Fprintf(&b, `<div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3"><div class="min-w-0 flex-1">
+		<p class="flex flex-wrap items-baseline gap-x-3">
+		<span class="break-all font-pixel text-xs text-ink">%s</span>
+		<span class="font-pixel text-[11px] text-ink-faint">%s</span>`,
 		esc(s.Name), esc(s.Section))
 
 	if s.DiffersFromDefault() {
-		b.WriteString(`<span class="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-400" title="differs from the value the mod ships with">changed</span>`)
+		fmt.Fprintf(&b, `<span class="%s" title="differs from the value the mod ships with">changed</span>`,
+			components.TagClass(components.TagAccent))
 	}
 	if managed {
-		b.WriteString(`<span class="rounded-full bg-zinc-100/10 px-1.5 py-0.5 text-[10px] text-zinc-300" title="agrelha pins this value in git">managed</span>`)
+		fmt.Fprintf(&b, `<span class="%s" title="agrelha pins this value in git">managed</span>`,
+			components.TagClass(components.TagQuiet))
 	}
 	if s.Orphaned {
-		b.WriteString(`<span class="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500" title="the mod did not describe this setting, so it is edited as free text">undescribed</span>`)
+		fmt.Fprintf(&b, `<span class="%s" title="the mod did not describe this setting, so it is edited as free text">undescribed</span>`,
+			components.TagClass(components.TagQuiet))
 	}
-	b.WriteString(`</div>`)
+	b.WriteString(`</p>`)
 
 	if s.Description != "" {
-		fmt.Fprintf(&b, `<p class="mt-1 text-[11px] leading-relaxed text-zinc-500">%s</p>`,
-			esc(truncate(s.Description, 240)))
+		fmt.Fprintf(&b, `<p class="mt-2 %s">%s</p>`, proseClass, esc(truncate(s.Description, 240)))
 	}
 	meta := []string{}
 	if s.HasDefault {
@@ -161,20 +183,25 @@ func renderSetting(num int, file string, view appbepinex.FileView, s domain.Sett
 		meta = append(meta, s.Type)
 	}
 	if len(meta) > 0 {
-		fmt.Fprintf(&b, `<div class="mt-1 font-mono text-[10px] text-zinc-600">%s</div>`, esc(strings.Join(meta, " · ")))
+		fmt.Fprintf(&b, `<p class="%s">`, metaClass)
+		for _, m := range meta {
+			fmt.Fprintf(&b, `<span>%s</span>`, esc(m))
+		}
+		b.WriteString(`</p>`)
 	}
-	b.WriteString(`</div><div class="flex w-64 shrink-0 flex-col items-end gap-1.5">`)
+	b.WriteString(`</div><div class="flex w-64 shrink-0 flex-col items-end gap-2">`)
 	b.WriteString(renderControl(s, idx))
 
-	fmt.Fprintf(&b, `<div class="flex items-center gap-2 text-[10px]">`)
+	b.WriteString(`<div class="flex items-center gap-3">`)
 	if s.HasDefault {
-		fmt.Fprintf(&b, `<button type="button" data-on:click="%s" class="text-zinc-500 hover:text-zinc-300"
+		fmt.Fprintf(&b, `<button type="button" data-on:click="%s" class="%s"
 			title="pins the mod's default as a managed value">Reset to default</button>`,
 			esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/reset', {contentType: 'json', payload: {file: '%s', sha256: $cfgSha, section: '%s', setting: '%s'}})`,
-				num, jsQuote(file), jsQuote(s.Section), jsQuote(s.Name))))
+				num, jsQuote(file), jsQuote(s.Section), jsQuote(s.Name))),
+			quietBtnClass)
 	}
 	if managed {
-		fmt.Fprintf(&b, `<button type="button" data-on:click="%s" class="text-zinc-500 hover:text-amber-400"
+		fmt.Fprintf(&b, `<button type="button" data-on:click="%s" class="focus-accent font-pixel text-[11px] text-ink-faint transition-colors hover:text-danger"
 			title="stops agrelha managing this value; the server keeps the value it already has">Forget</button>`,
 			esc(fmt.Sprintf(`if (confirm('Stop managing %s?\n\nThe server keeps its current value; this only stops agrelha writing it.')) { $cfgForget = [...$cfgForget, '%d'] }`,
 				jsQuote(s.Name), idx)))
@@ -185,7 +212,7 @@ func renderSetting(num int, file string, view appbepinex.FileView, s domain.Sett
 
 func renderControl(s domain.Setting, idx int) string {
 	esc := html.EscapeString
-	base := `class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-100 focus:border-zinc-400 focus:outline-none"`
+	base := fmt.Sprintf(`class="%s"`, components.InputClass())
 
 	record := func(event string) string {
 		return fmt.Sprintf(`data-on:%s="$cfgDirty['%d'] = evt.target.value"`, event, idx)
@@ -198,11 +225,11 @@ func renderControl(s domain.Setting, idx int) string {
 			checked = " checked"
 		}
 
-		return fmt.Sprintf(`<label class="flex items-center gap-2 text-xs text-zinc-300">
-			<input type="checkbox"%s data-on:change="$cfgDirty['%d'] = evt.target.checked ? '%s' : '%s'"
-				class="h-4 w-4 rounded border-zinc-600 bg-zinc-800"/>
-			<span class="font-mono text-[11px] text-zinc-500">%s / %s</span></label>`,
-			checked, idx, esc(s.TrueValue()), esc(s.FalseValue()), esc(s.TrueValue()), esc(s.FalseValue()))
+		return fmt.Sprintf(`<label class="flex items-center gap-2 font-pixel text-[11px] text-ink-muted">
+			<input type="checkbox"%s data-on:change="$cfgDirty['%d'] = evt.target.checked ? '%s' : '%s'" class="%s"/>
+			<span class="text-ink-faint">%s / %s</span></label>`,
+			checked, idx, esc(s.TrueValue()), esc(s.FalseValue()), checkboxClass,
+			esc(s.TrueValue()), esc(s.FalseValue()))
 
 	case domain.ControlChoice:
 		var b strings.Builder
@@ -241,18 +268,19 @@ func renderControl(s domain.Setting, idx int) string {
 func renderRawEditor(num int, name string, view appbepinex.FileView) string {
 	esc := html.EscapeString
 
-	return fmt.Sprintf(`<div class="space-y-3 p-4">
-		<p class="text-[11px] text-zinc-500">
+	return fmt.Sprintf(`<div class="space-y-4 px-6 py-5">
+		<p class="%s">
 			agrelha could not read this file's structure, so it is edited as text.
-			This box holds only the values agrelha manages, in BepInEx syntax — not the mod's own file.
+			This box holds only the values agrelha manages, in BepInEx syntax, not the mod's own file.
 		</p>
-		<textarea data-bind="cfgRawContent" rows="14" spellcheck="false"
-			class="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs leading-relaxed text-zinc-200 focus:border-zinc-400 focus:outline-none">%s</textarea>
+		<textarea data-bind="cfgRawContent" rows="14" spellcheck="false" class="%s">%s</textarea>
 		<div class="flex justify-end">
-		<button type="button" data-on:click="%s"
-			class="rounded-lg bg-zinc-100 px-4 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white">Save</button></div></div>`,
+		<button type="button" data-on:click="%s" class="%s">Save changes</button></div></div>`,
+		proseClass,
+		components.TextareaClass(),
 		esc(view.Overrides.Encode()),
-		esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/raw', {contentType: 'json', payload: {file: '%s', content: $cfgRawContent}})`, num, jsQuote(name))))
+		esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/raw', {contentType: 'json', payload: {file: '%s', content: $cfgRawContent}})`, num, jsQuote(name))),
+		components.ButtonClass(components.VariantPrimary))
 }
 
 func isWholeNumber(t string) bool {
@@ -295,10 +323,9 @@ func renderImportPanel(num int, files []appbepinex.FileSummary) string {
 		`@post('/api/valheim/%d/configs/import/apply', {contentType: 'json', payload: {file: $cfgImportFile, sha256: $cfgImportSha, content: $cfgImport}})`, num)
 
 	var picker strings.Builder
-	picker.WriteString(`<label class="block text-[11px] text-zinc-500">Apply to
-		<select data-bind="cfgImportFile"
-			class="mt-1 block w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-100 focus:border-zinc-400 focus:outline-none">
-		<option value="">Detect from the file</option>`)
+	fmt.Fprintf(&picker, `<div class="space-y-1"><label class="block font-pixel text-[11px] text-ink-faint" for="cfg-import-target">Apply to</label>
+		<select id="cfg-import-target" data-bind="cfgImportFile" class="%s">
+		<option value="">Detect from the file</option>`, components.InputClass())
 	for _, f := range files {
 		label := f.Name
 		if f.PluginName != "" {
@@ -306,32 +333,38 @@ func renderImportPanel(num int, files []appbepinex.FileSummary) string {
 		}
 		fmt.Fprintf(&picker, `<option value="%s">%s</option>`, esc(f.Name), esc(label))
 	}
-	picker.WriteString(`</select></label>`)
+	picker.WriteString(`</select></div>`)
 
-	return fmt.Sprintf(`<div class="rounded-xl border border-zinc-800 bg-zinc-900/95 p-4 space-y-3 shadow-xl">
-		<div class="flex items-start justify-between gap-4">
-			<div><h3 class="text-sm font-semibold text-zinc-100">Import a config file</h3>
-			<p class="mt-0.5 text-[11px] leading-relaxed text-zinc-500">
-				Paste a mod's .cfg, or pick the file. agrelha compares it with what the mod generates and stores only the values that differ from its defaults.
-				Values you already manage but that the file does not mention are kept.
-				r2modman drops the plugin header when it saves, so pick the mod below if it cannot be detected.</p></div>
-			<button type="button" data-on:click="$cfgImportOpen = false; $cfgImport = ''"
-				class="shrink-0 text-xs text-zinc-400 hover:text-zinc-200">Close</button>
+	return fmt.Sprintf(`<div class="%s">
+		<div class="%s">
+			<div class="min-w-0">
+				<h3 class="font-display text-base font-semibold text-ink">Import a config file</h3>
+				<p class="mt-1 %s">
+					Paste a mod's .cfg, or pick the file. agrelha compares it with what the mod generates and stores only the values that differ from its defaults.
+					Values you already manage but that the file does not mention are kept.
+					r2modman drops the plugin header when it saves, so pick the mod below if it cannot be detected.</p>
+			</div>
+			<button type="button" data-on:click="$cfgImportOpen = false; $cfgImport = ''" class="%s">Close</button>
 		</div>
-		<input type="file" accept=".cfg,.txt,.ini,.json"
-			data-on:change="evt.target.files[0] &amp;&amp; (($cfgImportFile = evt.target.files[0].name), evt.target.files[0].text().then(t =&gt; { $cfgImport = t }))"
-			class="block w-full text-xs text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-xs file:text-zinc-200 hover:file:bg-zinc-700"/>
-		%s
-		<textarea data-bind="cfgImport" rows="8" spellcheck="false" placeholder="## Settings file was created by plugin ..."
-			class="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs leading-relaxed text-zinc-200 placeholder-zinc-600 focus:border-zinc-400 focus:outline-none"></textarea>
-		<div class="flex items-center justify-end gap-2">
-			<button type="button" data-on:click="%s"
-				class="rounded-lg border border-zinc-700 px-4 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Check</button>
-			<button type="button" data-on:click="%s"
-				class="rounded-lg bg-zinc-100 px-4 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white">Import</button>
+		<div class="space-y-4 px-6 py-5">
+			<input type="file" accept=".cfg,.txt,.ini,.json"
+				data-on:change="evt.target.files[0] &amp;&amp; (($cfgImportFile = evt.target.files[0].name), evt.target.files[0].text().then(t =&gt; { $cfgImport = t }))"
+				class="focus-accent block w-full font-pixel text-[11px] text-ink-muted file:mr-3 file:rounded-control file:border file:border-edge file:bg-surface-raised file:px-3 file:py-1.5 file:font-pixel file:text-[11px] file:text-ink hover:file:border-accent hover:file:text-accent"/>
+			%s
+			<textarea data-bind="cfgImport" rows="8" spellcheck="false" placeholder="## Settings file was created by plugin ..." class="%s"></textarea>
+			<div class="flex items-center justify-end gap-2">
+				<button type="button" data-on:click="%s" class="%s">Check</button>
+				<button type="button" data-on:click="%s" class="%s">Import</button>
+			</div>
+			<div id="cfg-import-preview"></div>
 		</div>
-		<div id="cfg-import-preview"></div>
-	</div>`, picker.String(), esc(preview), esc(apply))
+	</div>`,
+		bandClass, headClass, proseClass,
+		components.ButtonClass(components.VariantSecondary),
+		picker.String(),
+		components.TextareaClass(),
+		esc(preview), components.ButtonClass(components.VariantSecondary),
+		esc(apply), components.ButtonClass(components.VariantPrimary))
 }
 
 func renderImportPreview(num int, name string, view appbepinex.FileView, plan domain.ImportPlan) string {
@@ -339,8 +372,8 @@ func renderImportPreview(num int, name string, view appbepinex.FileView, plan do
 	esc := html.EscapeString
 
 	if !plan.Parsed {
-		return `<div class="rounded-lg border border-amber-900/60 bg-amber-950/25 p-3 text-[11px] text-amber-300">
-			Nothing in that text looks like a BepInEx config. It needs at least one [Section] and one Key = value line.</div>`
+		return `<p class="border-l-2 border-danger pl-3 font-pixel text-[11px] text-danger">
+			Nothing in that text looks like a BepInEx config. It needs at least one [Section] and one Key = value line.</p>`
 	}
 
 	title := name
@@ -352,21 +385,24 @@ func renderImportPreview(num int, name string, view appbepinex.FileView, plan do
 		title += " → " + name
 	}
 
-	fmt.Fprintf(&b, `<div class="mt-2 space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"
-		data-signals="%s">`,
+	fmt.Fprintf(&b, `<div class="space-y-3 border-t border-seam pt-4" data-signals="%s">`,
 		esc(fmt.Sprintf(`{cfgImportFile: '%s', cfgImportSha: '%s'}`, jsQuote(name), jsQuote(view.SHA256))))
 
-	fmt.Fprintf(&b, `<div class="text-[11px] text-zinc-400">%s</div>`, esc(title))
+	fmt.Fprintf(&b, `<p class="break-all font-pixel text-xs text-ink">%s</p>`, esc(title))
 
-	fmt.Fprintf(&b, `<div class="flex flex-wrap gap-3 text-[11px]">
-		<span class="text-zinc-200"><span class="font-semibold">%d</span> to import</span>
-		<span class="text-zinc-500">%d already default</span>
-		<span class="text-zinc-500">%d not declared by this mod</span>
-		<span class="%s">%d refused</span></div>`,
+	refused := "text-ink-faint"
+	if plan.Count(domain.ImportRejected) > 0 {
+		refused = "text-danger"
+	}
+	fmt.Fprintf(&b, `<p class="flex flex-wrap gap-x-4 font-pixel text-[11px]">
+		<span class="text-accent">%d</span> to import
+		<span class="text-ink-faint">%d already default</span>
+		<span class="text-ink-faint">%d not declared by this mod</span>
+		<span class="%s">%d refused</span></p>`,
 		plan.Count(domain.ImportApply),
 		plan.Count(domain.ImportSame),
 		plan.Count(domain.ImportUnmatched),
-		map[bool]string{true: "text-red-400", false: "text-zinc-600"}[plan.Count(domain.ImportRejected) > 0],
+		refused,
 		plan.Count(domain.ImportRejected))
 
 	rows := func(status domain.ImportStatus, label, cls string, showDiff bool) {
@@ -374,35 +410,35 @@ func renderImportPreview(num int, name string, view appbepinex.FileView, plan do
 		if len(entries) == 0 {
 			return
 		}
-		fmt.Fprintf(&b, `<div class="pt-1"><div class="mb-1 text-[10px] uppercase tracking-wide %s">%s</div>`, cls, esc(label))
+		fmt.Fprintf(&b, `<div class="pt-1"><p class="mb-1 font-pixel text-[11px] %s">%s</p>`, cls, esc(label))
 		shown := entries
 		if len(shown) > 40 {
 			shown = shown[:40]
 		}
 		for _, e := range shown {
-			fmt.Fprintf(&b, `<div class="flex items-baseline justify-between gap-3 py-0.5 font-mono text-[11px]">
-				<span class="truncate text-zinc-300">%s <span class="text-zinc-600">[%s]</span></span>`,
+			fmt.Fprintf(&b, `<div class="flex items-baseline justify-between gap-3 py-0.5 font-pixel text-[11px]">
+				<span class="truncate text-ink-muted">%s <span class="text-ink-faint">[%s]</span></span>`,
 				esc(e.Name), esc(e.Section))
 			if showDiff {
-				fmt.Fprintf(&b, `<span class="shrink-0 text-zinc-500">%s → <span class="text-zinc-200">%s</span></span>`,
+				fmt.Fprintf(&b, `<span class="shrink-0 text-ink-faint">%s → <span class="text-ink">%s</span></span>`,
 					esc(e.Current), esc(e.Value))
 			} else {
-				fmt.Fprintf(&b, `<span class="shrink-0 text-zinc-600">%s</span>`, esc(truncate(e.Reason, 60)))
+				fmt.Fprintf(&b, `<span class="shrink-0 text-ink-faint">%s</span>`, esc(truncate(e.Reason, 60)))
 			}
 			b.WriteString(`</div>`)
 		}
 		if len(entries) > len(shown) {
-			fmt.Fprintf(&b, `<div class="py-0.5 text-[10px] text-zinc-600">and %d more</div>`, len(entries)-len(shown))
+			fmt.Fprintf(&b, `<p class="py-0.5 font-pixel text-[11px] text-ink-faint">and %d more</p>`, len(entries)-len(shown))
 		}
 		b.WriteString(`</div>`)
 	}
 
-	rows(domain.ImportApply, "will be imported", "text-zinc-400", true)
-	rows(domain.ImportUnmatched, "not declared by this mod, imported anyway", "text-zinc-500", true)
-	rows(domain.ImportRejected, "refused", "text-red-400", false)
+	rows(domain.ImportApply, "will be imported", "text-ink-muted", true)
+	rows(domain.ImportUnmatched, "not declared by this mod, imported anyway", "text-ink-faint", true)
+	rows(domain.ImportRejected, "refused", "text-danger", false)
 
 	if !plan.Changes() {
-		b.WriteString(`<div class="pt-1 text-[11px] text-zinc-500">Nothing to import: every value matches what the mod already uses.</div>`)
+		b.WriteString(`<p class="font-pixel text-[11px] text-ink-faint">Nothing to import: every value matches what the mod already uses.</p>`)
 	}
 	b.WriteString(`</div>`)
 	return b.String()

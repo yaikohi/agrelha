@@ -25,7 +25,7 @@ type InputProps struct {
 }
 
 func (p InputProps) inputClasses() string {
-	base := "focus-accent w-full rounded-control border border-edge bg-seam px-3 py-2 font-pixel text-xs text-ink placeholder:text-ink-faint"
+	base := InputClass()
 	if p.Mono {
 		base += ""
 	}
@@ -115,7 +115,7 @@ type TextareaProps struct {
 }
 
 func (p TextareaProps) textareaClasses() string {
-	base := "focus-accent w-full rounded-control border border-edge bg-seam p-3 font-pixel text-xs leading-relaxed text-ink placeholder:text-ink-faint"
+	base := TextareaClass()
 	if p.Mono {
 		base += " font-mono text-xs"
 	}

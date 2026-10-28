@@ -48,6 +48,10 @@ func InputClass() string {
 	return "focus-accent w-full rounded-control border border-edge bg-seam px-3 py-2 font-pixel text-xs text-ink placeholder:text-ink-faint"
 }
 
+func TextareaClass() string {
+	return "focus-accent w-full rounded-control border border-edge bg-seam p-3 font-pixel text-xs leading-relaxed text-ink placeholder:text-ink-faint"
+}
+
 func variantClass(v Variant) string {
 	switch v {
 	case VariantDanger:
@@ -108,8 +112,12 @@ templ Button(p ButtonProps) {
 			type={ p.buttonType() }
 			disabled?={ p.Disabled }
 			title={ p.title() }
-			data-on:click={ p.OnClick }
-			data-indicator={ p.Indicator }
+			if p.OnClick != "" {
+				data-on:click={ p.OnClick }
+			}
+			if p.Indicator != "" {
+				data-indicator={ p.Indicator }
+			}
 			class={ p.classes() }
 		>
 			if p.Indicator != "" && p.LoadingText != "" {

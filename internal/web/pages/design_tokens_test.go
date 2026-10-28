@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -30,6 +31,8 @@ var (
 	rawHex          = regexp.MustCompile(`#[0-9a-fA-F]{3,8}\b`)
 	themeToken      = regexp.MustCompile(`(?m)^\s*(--(?:color|font|radius)-[a-z0-9-]+):`)
 	docToken        = regexp.MustCompile("`(--(?:color|font|radius)-[a-z0-9-]+)`")
+	docCell         = regexp.MustCompile("`([^`]+)`")
+	themeTokenValue = regexp.MustCompile(`(?m)^\s*(--(?:color|radius)-[a-z0-9-]+):\s*([^;]+);`)
 )
 
 func TestMigratedTemplatesNameRolesNotColours(t *testing.T) {
@@ -104,4 +107,130 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Some handlers build HTML as Go strings because they are patched in over SSE
+// in fragments. design_tokens_test originally globbed only .templ, so those
+// files drifted for an entire palette change without anything noticing. These
+// are the ones still carrying the pre-hearth palette.
+//
+// The list may only shrink: a file on it that has been migrated also fails, so
+// finishing the job is what removes the entry.
+var notYetMigrated = []string{
+	"handlers/console/gmod.go",
+	"handlers/console/minecraft.go",
+	"handlers/console/valheim.go",
+	"handlers/valheim/detail.go",
+	"handlers/valheim/wizard.go",
+	"handlers/wizard/wizard.go",
+	"pages/helpers.go",
+}
+
+func handwrittenGo(t *testing.T) []string {
+	t.Helper()
+	var out []string
+	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "assets" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		name := d.Name()
+		if !strings.HasSuffix(name, ".go") ||
+			strings.HasSuffix(name, "_templ.go") ||
+			strings.HasSuffix(name, "_test.go") {
+			return nil
+		}
+		out = append(out, path)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) == 0 {
+		t.Fatal("scanned no Go files under internal/web; has the layout changed?")
+	}
+	sort.Strings(out)
+	return out
+}
+
+func TestHandlerMarkupNamesRolesNotColours(t *testing.T) {
+	pending := map[string]bool{}
+	for _, f := range notYetMigrated {
+		pending[filepath.FromSlash(f)] = true
+	}
+	seen := map[string]bool{}
+
+	for _, path := range handwrittenGo(t) {
+		rel := strings.TrimPrefix(path, ".."+string(filepath.Separator))
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hits := append(tailwindPalette.FindAllString(string(body), -1),
+			rawHex.FindAllString(string(body), -1)...)
+
+		if pending[rel] {
+			seen[rel] = true
+			if len(hits) == 0 {
+				t.Errorf(`%s is listed in notYetMigrated but no longer uses off-palette colours.
+
+Delete its line from the list so the next file cannot slip back in behind it.`, rel)
+			}
+			continue
+		}
+		if len(hits) > 0 {
+			t.Errorf(`%s builds markup with a colour instead of a token: %s
+
+HTML assembled in Go is held to the same rule as a template: name the role
+(text-ink-muted), never the colour. See docs/design-system.md.`, rel, strings.Join(hits, ", "))
+		}
+	}
+
+	for _, f := range notYetMigrated {
+		if rel := filepath.FromSlash(f); !seen[rel] {
+			t.Errorf("notYetMigrated lists %s, which no longer exists under internal/web", f)
+		}
+	}
+}
+
+func TestDocumentedTokenValuesMatchTheStylesheet(t *testing.T) {
+	css, err := os.ReadFile(filepath.Join("..", "assets", "css", "input.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", "design-system.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defined := map[string]string{}
+	for _, m := range themeTokenValue.FindAllStringSubmatch(string(css), -1) {
+		defined[m[1]] = strings.ToLower(strings.TrimSpace(m[2]))
+	}
+
+	for _, line := range strings.Split(string(doc), "\n") {
+		cells := strings.Split(line, "|")
+		if len(cells) < 4 {
+			continue
+		}
+		name := docToken.FindStringSubmatch(cells[1])
+		if name == nil {
+			continue
+		}
+		value := docCell.FindStringSubmatch(cells[2])
+		if value == nil {
+			continue
+		}
+		if got, want := defined[name[1]], strings.ToLower(value[1]); got != want {
+			t.Errorf(`docs/design-system.md says %s is %s, but input.css defines %s.
+
+A table nobody can trust is worse than no table: fix whichever is stale.`,
+				name[1], want, got)
+		}
+	}
 }

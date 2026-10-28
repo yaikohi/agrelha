@@ -316,7 +316,7 @@ Old = 1
 	if !strings.Contains(got, "1 not declared by this mod") {
 		t.Error("unmatched entries must be visible before importing")
 	}
-	if !strings.Contains(got, "3 → <span class=\"text-zinc-200\">4</span>") {
+	if !strings.Contains(got, "3 → <span class=\"text-ink\">4</span>") {
 		t.Errorf("the preview must show current → new: %s", got)
 	}
 }

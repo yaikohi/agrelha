@@ -345,7 +345,7 @@ func (h *Handler) instanceFor(c *fiber.Ctx, num int) (*domain.Instance, error) {
 
 func configError(err error) string {
 	return fmt.Sprintf(
-		`<div class="rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-xs text-red-300">%s</div>`,
+		`<p class="-mx-6 mt-6 border-y border-l-2 border-seam border-l-danger px-6 py-4 font-pixel text-xs text-danger">%s</p>`,
 		html.EscapeString(err.Error()))
 }
 
