@@ -68,6 +68,7 @@ func (r *Runtime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status
 		st.Failure = ports.Failure{
 			RestartCount:  ps.RestartCount,
 			WaitingReason: ps.WaitingReason,
+			Restarting:    ps.WaitingReason == "CrashLoopBackOff",
 			ExitCode:      ps.LastExitCode,
 			Reason:        ps.LastReason,
 			FinishedAt:    ps.LastFinishedAt,

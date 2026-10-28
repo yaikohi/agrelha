@@ -72,6 +72,13 @@ type Failure struct {
 	RestartCount  int32
 	WaitingReason string
 
+	// Restarting means the runtime is cycling this server right now: Docker's
+	// restart policy acting, or a Pod in CrashLoopBackOff. A runtime reporting
+	// it lets a server that has never once started be told apart from one that
+	// is up, which Lifecycle alone cannot do - the operator asked for running
+	// in both cases.
+	Restarting bool
+
 	ExitCode   int32
 	Reason     string
 	FinishedAt time.Time
@@ -88,6 +95,14 @@ type Failure struct {
 func (f Failure) Crashed() bool {
 	return f.RestartCount > 0 || f.InitRestartCount > 0 ||
 		f.WaitingReason == "CrashLoopBackOff" || !f.FinishedAt.IsZero()
+}
+
+// CrashLooping reports a server the runtime keeps restarting because it will
+// not stay up. Distinct from Crashed, which stays true long after a server has
+// recovered.
+func (f Failure) CrashLooping() bool {
+	return (f.Restarting || f.WaitingReason == "CrashLoopBackOff") &&
+		(f.RestartCount > 0 || f.InitRestartCount > 0)
 }
 
 // FailedBeforeStart reports whether the server never ran because a setup step

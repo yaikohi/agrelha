@@ -91,9 +91,12 @@ func (r *Runtime) Status(ctx context.Context, ref ports.ServerRef) (ports.Status
 		st.Lifecycle = ports.LifecycleRunning
 	}
 
-	if inspect.State.Health != nil && inspect.State.Health.Status != "" && inspect.State.Health.Status != "none" {
+	switch {
+	case inspect.State.Restarting:
+		st.Available = false
+	case inspect.State.Health != nil && inspect.State.Health.Status != "" && inspect.State.Health.Status != "none":
 		st.Available = inspect.State.Health.Status == "healthy"
-	} else {
+	default:
 		st.Available = inspect.State.Running
 	}
 
@@ -117,9 +120,10 @@ func failureFrom(inspect ContainerInspect) ports.Failure {
 	f.RestartCount = inspect.RestartCount
 	f.OOMKilled = inspect.State.OOMKilled
 	f.Reason = inspect.State.Error
+	f.Restarting = inspect.State.Restarting
 
 	if !inspect.State.OOMKilled && inspect.RestartCount == 0 {
-		return ports.Failure{}
+		return ports.Failure{Restarting: f.Restarting}
 	}
 
 	f.ExitCode = int32(inspect.State.ExitCode)

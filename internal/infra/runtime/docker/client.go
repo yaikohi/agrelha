@@ -26,6 +26,7 @@ const (
 type ContainerState struct {
 	Status     string `json:"Status"` // "running", "exited", "created", etc.
 	Running    bool   `json:"Running"`
+	Restarting bool   `json:"Restarting"`
 	StartedAt  string `json:"StartedAt"`
 	FinishedAt string `json:"FinishedAt"`
 	ExitCode   int    `json:"ExitCode"`

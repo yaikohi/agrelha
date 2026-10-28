@@ -73,6 +73,8 @@ func managerStateLabel(inst InstanceUI) string {
 		return "Unknown"
 	case inst.State == "running":
 		return "Running"
+	case inst.State == "error":
+		return "Crash loop"
 	case inst.State == "starting", inst.State == "provisioning":
 		return "Starting…"
 	case inst.State == "":

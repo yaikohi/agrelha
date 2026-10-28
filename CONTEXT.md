@@ -319,6 +319,13 @@ fails if its Role already exists.
 When Source is `modpack`, those are facts read from the Pack, not settings. Any
 screen offering to change them is offering to break the Instance.
 
+**A server the runtime keeps restarting is not running.**
+Lifecycle records what the operator asked for, so it says `running` for a world
+that has never once started. Availability and the last Incident are what
+separate the two. An Instance the runtime is cycling is deletable: refusing it
+strands the world, because the one button that clears it is the one hidden by
+calling it healthy.
+
 **A Seed is immutable once a World exists.**
 The Seed only influences generation. Changing it afterwards changes nothing about
 the existing World, so presenting it as editable states something untrue.

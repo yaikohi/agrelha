@@ -376,8 +376,14 @@ func (m *InstanceManager) serverRef(inst domain.Instance) ports.ServerRef {
 // stateFromStatus maps the runtime's Lifecycle/Available pair onto the
 // Instance lifecycle. Available means players can connect; Lifecycle running
 // without Available means it is still coming up.
+//
+// A crash loop is checked first and deliberately does not read Lifecycle: the
+// operator asked for running in that case too, so Lifecycle cannot tell a
+// server that is up from one that has never once started.
 func stateFromStatus(st ports.Status) domain.InstanceState {
 	switch {
+	case st.Failure.CrashLooping():
+		return domain.StateError
 	case st.Available:
 		return domain.StateRunning
 	case st.Lifecycle == ports.LifecycleStopped:
