@@ -1,0 +1,95 @@
+{
+  "hearth": {
+    "color": {
+      "surface": {
+        "$value": "#1e1713",
+        "$type": "color",
+        "$description": "The page ground"
+      },
+      "surface-raised": {
+        "$value": "#2a211b",
+        "$type": "color",
+        "$description": "Inputs, wells, menus sitting above the ground"
+      },
+      "seam": {
+        "$value": "#120e0b",
+        "$type": "color",
+        "$description": "Line between ports; recessed areas"
+      },
+      "edge": {
+        "$value": "#42352c",
+        "$type": "color",
+        "$description": "Visible border on raised elements; unlit lamp"
+      },
+      "ink": {
+        "$value": "#ede3d4",
+        "$type": "color",
+        "$description": "Primary text"
+      },
+      "ink-muted": {
+        "$value": "#c2b1a0",
+        "$type": "color",
+        "$description": "Captions, secondary lines, quiet links"
+      },
+      "ink-faint": {
+        "$value": "#9c8b7c",
+        "$type": "color",
+        "$description": "Incidental metadata: version tags, colophon"
+      },
+      "accent": {
+        "$value": "#f4df75",
+        "$type": "color",
+        "$description": "The ember. Live state, hover, focus, primary action"
+      },
+      "accent-muted": {
+        "$value": "#efb268",
+        "$type": "color",
+        "$description": "Banked ember: reachable but empty socket"
+      },
+      "accent-ink": {
+        "$value": "#17110e",
+        "$type": "color",
+        "$description": "Text printed on an accent fill"
+      },
+      "danger": {
+        "$value": "#d9594c",
+        "$type": "color",
+        "$description": "Destructive actions only — never a status"
+      },
+      "tint-sky": {
+        "$value": "#7fa6b8",
+        "$type": "color",
+        "$description": "Minecraft game identity"
+      },
+      "tint-moss": {
+        "$value": "#8fa860",
+        "$type": "color",
+        "$description": "Valheim game identity"
+      },
+      "tint-flame": {
+        "$value": "#d9733a",
+        "$type": "color",
+        "$description": "Garry's Mod game identity"
+      }
+    },
+    "fontFamily": {
+      "display": {
+        "$value": "Fraunces, serif",
+        "$type": "fontFamily",
+        "$description": "Headings, world titles, and prose"
+      },
+      "pixel": {
+        "$value": "Departure Mono, monospace",
+        "$type": "fontFamily",
+        "$description": "Telemetry, addresses, counts, labels"
+      }
+    },
+    "borderRadius": {
+      "control": {
+        "$value": "2px",
+        "$type": "dimension",
+        "$description": "Buttons and inputs"
+      }
+    }
+  }
+}
