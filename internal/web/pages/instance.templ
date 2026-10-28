@@ -126,21 +126,24 @@ templ instanceOverview(o InstanceOverviewUI) {
 				}
 			</div>
 		}
-		<dl class="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-3">
-			for _, f := range o.Facts {
-				<div>
-					<dt class="font-pixel text-[11px] text-ink-faint">{ f.Label }</dt>
-					if f.SignalExpr != "" {
-						<dd class="mt-1 font-pixel text-sm text-ink" data-text={ f.SignalExpr }>{ f.Value }</dd>
-					} else {
-						<dd class="mt-1 font-pixel text-sm text-ink">{ f.Value }</dd>
-					}
-					if f.Note != "" {
-						<dd class="font-pixel text-[11px] text-ink-faint">{ f.Note }</dd>
-					}
-				</div>
-			}
-		</dl>
+		<div class="rounded-control border border-edge bg-surface-raised/20 p-6">
+			<h3 class="font-pixel text-xs uppercase tracking-wider text-ink-muted">Server telemetry</h3>
+			<dl class="mt-4 grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-3">
+				for _, f := range o.Facts {
+					<div>
+						<dt class="font-pixel text-xs text-ink-muted">{ f.Label }</dt>
+						if f.SignalExpr != "" {
+							<dd class="mt-1 font-pixel text-sm font-medium text-ink" data-text={ f.SignalExpr }>{ f.Value }</dd>
+						} else {
+							<dd class="mt-1 font-pixel text-sm font-medium text-ink">{ f.Value }</dd>
+						}
+						if f.Note != "" {
+							<dd class="mt-0.5 font-pixel text-xs text-ink-faint">{ f.Note }</dd>
+						}
+					</div>
+				}
+			</dl>
+		</div>
 	</div>
 }
 

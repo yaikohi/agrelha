@@ -10,10 +10,9 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 		@components.Nav(components.NavProps{Current: "minecraft", IsAdmin: true, SignedIn: true})
 		<div
 			class="space-y-6"
-			data-signals="{step:1,name:'',seed:'',source:'modpack',loader:'',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false,creating:false,redirect:''}"
+			data-signals="{step:1,name:'',nameError:'',seed:'',source:'modpack',loader:'',mc_version:'1.21.1',tier:'medium',motd:'',difficulty:'normal',gamemode:'survival',world_type:'default',max_players:20,pack_name:'',pack_id:'',pack_provider:'',pack_ref:'',cart:[],raw_mods:'',modQuery:'',packQuery:'',modSearchLoading:false,packSearchLoading:false,bestLoader:'neoforge',neoFit:0,fabFit:0,totalFitMods:0,importError:'',importLoading:false,creating:false,redirect:''}"
 			data-effect="if ($redirect) { window.location.href = $redirect }"
 		>
-			<!-- Stepper progress header -->
 			@components.StepIndicator(components.StepIndicatorProps{
 				Steps: []components.StepItem{
 					{Number: 1, Label: "Identity"},
@@ -23,10 +22,10 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 				},
 			})
 
-			<!-- STEP 1: IDENTITY -->
-			<div data-show="$step == 1" class="rounded-control border border-edge bg-surface-raised p-8 ">
-				<h2 class="text-lg font-bold text-ink">Step 1: Name Your World</h2>
+			<div data-show="$step == 1" class="rounded-control border border-edge bg-surface-raised p-8">
+				<h2 class="font-display text-xl font-semibold tracking-tight text-ink">Name your world</h2>
 				<p class="mt-1 text-xs text-ink-muted">Give your world a recognizable title and an optional seed.</p>
+				<p data-show="$nameError" class="mt-2 font-pixel text-xs text-danger" data-text="$nameError" style="display:none;"></p>
 
 				<div class="mt-6 max-w-md space-y-4">
 					@components.Input(components.InputProps{
@@ -47,20 +46,19 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						Variant: components.VariantGhost,
 						Size: components.SizeSm,
 						Href: "/minecraft",
-						Text: "← Cancel",
+						Text: "Cancel",
 					})
 					@components.Button(components.ButtonProps{
 						Variant: components.VariantPrimary,
 						Size: components.SizeMd,
-						OnClick: "if ($name.trim() !== '') { $step = 2 } else { alert('Please enter a world name') }",
-						Text: "Next: Choose World Type →",
+						OnClick: "if ($name.trim() !== '') { $nameError = ''; $step = 2 } else { $nameError = 'Please enter a world name'; $toast = 'Please enter a world name'; $toastkind = 'err' }",
+						Text: "Next: Choose world type",
 					})
 				</div>
 			</div>
 
-			<!-- STEP 2: WORLD TYPE -->
-			<div data-show="$step == 2" class="rounded-control border border-edge bg-surface-raised p-8 ">
-				<h2 class="text-lg font-bold text-ink">Step 2: Choose World Type</h2>
+			<div data-show="$step == 2" class="rounded-control border border-edge bg-surface-raised p-8">
+				<h2 class="font-display text-xl font-semibold tracking-tight text-ink">Choose world type</h2>
 				<p class="mt-1 text-xs text-ink-muted">Select how content and gameplay will be structured for this instance.</p>
 
 				<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -114,20 +112,20 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						Variant: components.VariantGhost,
 						Size: components.SizeSm,
 						OnClick: "$step = 1",
-						Text: "← Back to Identity",
+						Text: "Back to identity",
 					})
 				</div>
 			</div>
 
 			<!-- STEP 3: CONFIGURE (PATH SPECIFIC) -->
 			<!-- 3A: MODPACK -->
-			<div data-show="$step == 3 && $source == 'modpack'" class="rounded-control border border-edge bg-surface-raised p-8 ">
+			<div data-show="$step == 3 && $source == 'modpack'" class="rounded-control border border-edge bg-surface-raised p-8">
 				<div class="flex items-center justify-between">
 					<div>
-						<h2 class="text-lg font-bold text-ink">Step 3: Browse Modpacks</h2>
+						<h2 class="font-display text-xl font-semibold tracking-tight text-ink">Browse modpacks</h2>
 						<p class="mt-1 text-xs text-ink-muted">Search Modpack Index freely. Selecting a pack automatically sets the engine and version.</p>
 					</div>
-					<div data-show="$pack_name != ''" class="rounded-control border text-ink-muted text-ink-muted px-4 py-2">
+					<div data-show="$pack_name != ''" class="rounded-control border text-ink-muted px-4 py-2">
 						<span class="text-xs text-ink-muted">Selected: <strong class="font-semibold text-ink-muted" data-text="$pack_name"></strong></span>
 					</div>
 				</div>
@@ -160,20 +158,20 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						Variant: components.VariantGhost,
 						Size: components.SizeSm,
 						OnClick: "$step = 2",
-						Text: "← Back",
+						Text: "Back",
 					})
 					@components.Button(components.ButtonProps{
 						Variant: components.VariantPrimary,
 						Size: components.SizeMd,
-						OnClick: "if ($pack_name != '') { $step = 4 } else { alert('Please select a modpack first') }",
-						Text: "Next: Review →",
+						OnClick: "if ($pack_name != '') { $step = 4 } else { $toast = 'Please select a modpack first'; $toastkind = 'err' }",
+						Text: "Next: Review",
 					})
 				</div>
 			</div>
 
 			<!-- 3B: ASSEMBLE YOUR OWN -->
-			<div data-show="$step == 3 && $source == 'assemble'" class="rounded-control border border-edge bg-surface-raised p-8 ">
-				<h2 class="text-lg font-bold text-ink">Step 3: Assemble Mods</h2>
+			<div data-show="$step == 3 && $source == 'assemble'" class="rounded-control border border-edge bg-surface-raised p-8">
+				<h2 class="font-display text-xl font-semibold tracking-tight text-ink">Assemble mods</h2>
 				<p class="mt-1 text-xs text-ink-muted">Pick Minecraft version and select mods. We analyze loader compatibility in real time.</p>
 
 				<!-- Version & Live Compatibility Bar -->
@@ -303,20 +301,20 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						Variant: components.VariantGhost,
 						Size: components.SizeSm,
 						OnClick: "$step = 2",
-						Text: "← Back",
+						Text: "Back",
 					})
 					@components.Button(components.ButtonProps{
 						Variant: components.VariantPrimary,
 						Size: components.SizeMd,
-						OnClick: "if ($loader) { $step = 4 } else { alert('Please select a mod loader (NeoForge or Fabric) before proceeding') }",
-						Text: "Next: Review →",
+						OnClick: "if ($loader) { $step = 4 } else { $toast = 'Please select a mod loader (NeoForge or Fabric) before proceeding'; $toastkind = 'err' }",
+						Text: "Next: Review",
 					})
 				</div>
 			</div>
 
 			<!-- 3C: VANILLA -->
-			<div data-show="$step == 3 && $source == 'vanilla'" class="rounded-control border border-edge bg-surface-raised p-8 ">
-				<h2 class="text-lg font-bold text-ink">Step 3: Vanilla Server Settings</h2>
+			<div data-show="$step == 3 && $source == 'vanilla'" class="rounded-control border border-edge bg-surface-raised p-8">
+				<h2 class="font-display text-xl font-semibold tracking-tight text-ink">Vanilla server settings</h2>
 				<p class="mt-1 text-xs text-ink-muted">Configure your official Minecraft vanilla world parameters.</p>
 
 				<div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-2xl">
@@ -374,20 +372,20 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						Variant: components.VariantGhost,
 						Size: components.SizeSm,
 						OnClick: "$step = 2",
-						Text: "← Back",
+						Text: "Back",
 					})
 					@components.Button(components.ButtonProps{
 						Variant: components.VariantPrimary,
 						Size: components.SizeMd,
 						OnClick: "$step = 4",
-						Text: "Next: Review →",
+						Text: "Next: Review",
 					})
 				</div>
 			</div>
 
 			<!-- 3D: IMPORT -->
-			<div data-show="$step == 3 && $source == 'import'" class="rounded-control border border-edge bg-surface-raised p-8 ">
-				<h2 class="text-lg font-bold text-ink">Step 3: Import World Content</h2>
+			<div data-show="$step == 3 && $source == 'import'" class="rounded-control border border-edge bg-surface-raised p-8">
+				<h2 class="font-display text-xl font-semibold tracking-tight text-ink">Import world content</h2>
 				<p class="mt-1 text-xs text-ink-muted">Upload a modpack archive (.mrpack or Prism zip) or paste a mod list.</p>
 
 				<div class="mt-6 space-y-4 max-w-xl">
@@ -444,20 +442,20 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						Variant: components.VariantGhost,
 						Size: components.SizeSm,
 						OnClick: "$step = 2",
-						Text: "← Back",
+						Text: "Back",
 					})
 					@components.Button(components.ButtonProps{
 						Variant: components.VariantPrimary,
 						Size: components.SizeMd,
-						OnClick: "if ($raw_mods.trim() !== '' || $name !== '') { $step = 4 } else { alert('Please upload an archive or paste a mod list first') }",
-						Text: "Next: Review →",
+						OnClick: "if ($raw_mods.trim() !== '' || $name !== '') { $step = 4 } else { $toast = 'Please upload an archive or paste a mod list first'; $toastkind = 'err' }",
+						Text: "Next: Review",
 					})
 				</div>
 			</div>
 
 			<!-- STEP 4: REVIEW & CREATE -->
-			<div data-show="$step == 4" class="rounded-control border border-edge bg-surface-raised p-8 ">
-				<h2 class="text-lg font-bold text-ink">Step 4: Review & Resource Allocation</h2>
+			<div data-show="$step == 4" class="rounded-control border border-edge bg-surface-raised p-8">
+				<h2 class="font-display text-xl font-semibold tracking-tight text-ink">Review & resource allocation</h2>
 				<p class="mt-1 text-xs text-ink-muted">Confirm parameters and choose RAM tier based on cluster budget.</p>
 
 				<div class="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -535,15 +533,15 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 						Size: components.SizeSm,
 						OnClick: "if (!$creating) $step = 3",
 						Indicator: "creating",
-						Text: "← Back",
+						Text: "Back",
 					})
 					@components.Button(components.ButtonProps{
 						Variant: components.VariantPrimary,
 						Size: components.SizeMd,
 						Indicator: "creating",
-						LoadingText: "Creating Instance & Launching...",
+						LoadingText: "Creating instance & launching…",
 						OnClick: "if ($creating) return; @post('/api/minecraft/wizard/create')",
-						Text: "Create Instance & Launch",
+						Text: "Create instance & launch",
 					})
 				</div>
 			</div>

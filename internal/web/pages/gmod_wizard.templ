@@ -10,7 +10,7 @@ templ GModWizard(budget BudgetUI) {
 		@components.Nav(components.NavProps{Current: "gmod", IsAdmin: true, SignedIn: true})
 		<div
 			class="space-y-6"
-			data-signals="{step:1,name:'',password:'',gamemode:'sandbox',map:'gm_construct',collectionID:'',tier:'small',creating:false,redirect:''}"
+			data-signals="{step:1,name:'',nameError:'',password:'',gamemode:'sandbox',map:'gm_construct',collectionID:'',tier:'small',creating:false,redirect:''}"
 			data-effect="if ($redirect) { window.location.href = $redirect }"
 		>
 			@components.StepIndicator(components.StepIndicatorProps{
@@ -20,9 +20,10 @@ templ GModWizard(budget BudgetUI) {
 				},
 			})
 
-			<div data-show="$step == 1" class="rounded-control border border-edge bg-surface-raised p-8 ">
-				<h2 class="text-lg font-bold text-ink">Step 1: Garry's Mod Server Configuration</h2>
+			<div data-show="$step == 1" class="rounded-control border border-edge bg-surface-raised p-8">
+				<h2 class="font-display text-xl font-semibold tracking-tight text-ink">Garry's Mod server configuration</h2>
 				<p class="mt-1 text-xs text-ink-muted">Configure your world title, Workshop collection ID, gamemode, and map.</p>
+				<p data-show="$nameError" class="mt-2 font-pixel text-xs text-danger" data-text="$nameError" style="display:none;"></p>
 
 				<div class="mt-6 max-w-md space-y-4">
 					@components.Input(components.InputProps{
@@ -66,15 +67,15 @@ templ GModWizard(budget BudgetUI) {
 						@components.Button(components.ButtonProps{
 							Variant: components.VariantPrimary,
 							Size: components.SizeMd,
-							OnClick: "if ($name.trim()) { $step = 2 } else { alert('Please enter a world name') }",
-							Text: "Next: Choose Tier →",
+							OnClick: "if ($name.trim()) { $nameError = ''; $step = 2 } else { $nameError = 'Please enter a world name'; $toast = 'Please enter a world name'; $toastkind = 'err' }",
+							Text: "Next: Resource tier",
 						})
 					</div>
 				</div>
 			</div>
 
-			<div data-show="$step == 2" class="rounded-control border border-edge bg-surface-raised p-8 ">
-				<h2 class="text-lg font-bold text-ink">Step 2: Resource Tier & Confirmation</h2>
+			<div data-show="$step == 2" class="rounded-control border border-edge bg-surface-raised p-8">
+				<h2 class="font-display text-xl font-semibold tracking-tight text-ink">Resource tier & review</h2>
 				<p class="mt-1 text-xs text-ink-muted">Select memory allocation and verify server details.</p>
 
 				<div class="mt-6 space-y-6 max-w-md">
@@ -141,15 +142,15 @@ templ GModWizard(budget BudgetUI) {
 							Size: components.SizeMd,
 							OnClick: "if (!$creating) $step = 1",
 							Indicator: "creating",
-							Text: "← Back",
+							Text: "Back",
 						})
 						@components.Button(components.ButtonProps{
 							Variant: components.VariantPrimary,
 							Size: components.SizeMd,
 							Indicator: "creating",
-							LoadingText: "Creating Garry's Mod World...",
+							LoadingText: "Creating Garry's Mod world…",
 							OnClick: "if ($creating) return; @post('/api/gmod/wizard/create')",
-							Text: "+ Create Garry's Mod World",
+							Text: "Create Garry's Mod world",
 						})
 					</div>
 				</div>

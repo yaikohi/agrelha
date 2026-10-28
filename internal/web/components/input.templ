@@ -41,7 +41,7 @@ func (p InputProps) inputClasses() string {
 templ Input(props InputProps) {
 	<div class="space-y-1">
 		if props.Label != "" {
-			<label class="block font-pixel text-[11px] text-ink-faint">
+			<label class="block font-pixel text-xs text-ink-muted">
 				{ props.Label }
 				if props.Required {
 					<span class="ml-0.5 text-danger">*</span>
@@ -90,7 +90,7 @@ templ Input(props InputProps) {
 			<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ props.HelperText }</p>
 		}
 		if props.ErrorText != "" {
-			<p class="font-pixel text-[11px] text-danger">{ props.ErrorText }</p>
+			<p class="font-pixel text-xs text-danger">{ props.ErrorText }</p>
 		}
 	</div>
 }
@@ -131,7 +131,7 @@ func (p TextareaProps) textareaClasses() string {
 templ Textarea(props TextareaProps) {
 	<div class="space-y-1">
 		if props.Label != "" {
-			<label class="block font-pixel text-[11px] text-ink-faint">
+			<label class="block font-pixel text-xs text-ink-muted">
 				{ props.Label }
 				if props.Required {
 					<span class="ml-0.5 text-danger">*</span>
@@ -177,7 +177,7 @@ templ Textarea(props TextareaProps) {
 			<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ props.HelperText }</p>
 		}
 		if props.ErrorText != "" {
-			<p class="font-pixel text-[11px] text-danger">{ props.ErrorText }</p>
+			<p class="font-pixel text-xs text-danger">{ props.ErrorText }</p>
 		}
 	</div>
 }

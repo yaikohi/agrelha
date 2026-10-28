@@ -100,6 +100,9 @@ func TestInputAndTextarea(t *testing.T) {
 		if !strings.Contains(out, "focus-accent") {
 			t.Errorf("expected the shared focus ring, got %q", out)
 		}
+		if !strings.Contains(out, "text-xs text-ink-muted") {
+			t.Fatalf("Input label must use 'text-xs text-ink-muted'; at 2am form inputs drop below the accessibility floor with unreadable low-contrast 11px faint text, got: %s", out)
+		}
 	})
 
 	t.Run("renders textarea with rows and content", func(t *testing.T) {
@@ -193,6 +196,15 @@ func TestStepIndicator(t *testing.T) {
 	}
 	if !strings.Contains(out, "$step == 1") || !strings.Contains(out, "$step == 2") {
 		t.Errorf("expected signal data-class bindings, got %q", out)
+	}
+	if !strings.Contains(out, "01") || !strings.Contains(out, "02") || !strings.Contains(out, "03") {
+		t.Fatalf("expected two-digit step numbering (01, 02, 03); at 2am step indicator reverts to unpadded numbers breaking tabular alignment, got: %s", out)
+	}
+	if !strings.Contains(out, "select-none") || !strings.Contains(out, "/") {
+		t.Fatalf("expected '/' separator between steps; at 2am step indicator lacks visual boundary between steps, got: %s", out)
+	}
+	if !strings.Contains(out, "rounded-control border px-2 py-0.5 text-[11px]") {
+		t.Fatalf("expected chiseled tab step pill; at 2am step indicator reverts to rounded bubbles breaking the chiseled cast-iron aesthetic, got: %s", out)
 	}
 }
 

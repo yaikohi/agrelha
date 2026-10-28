@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/a-h/templ"
 )
 
 func TestLayoutAndLayoutHearthShareIdenticalContainerDimensions(t *testing.T) {
@@ -146,3 +148,57 @@ func TestModResultInstalledExpr(t *testing.T) {
 		t.Fatalf("expected InstalledExpr %q, got %q; at 2am installed mods do not show as installed on search results", wantInstalled, exprInstalled)
 	}
 }
+
+func TestWizardsDoNotUseBrowserAlert(t *testing.T) {
+	ctx := context.Background()
+
+	wizards := map[string]templ.Component{
+		"valheim":   ValheimWizard(BudgetUI{}),
+		"minecraft": MinecraftWizard([]string{"1.21.1"}, BudgetUI{}),
+		"gmod":      GModWizard(BudgetUI{}),
+	}
+
+	for name, comp := range wizards {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := comp.Render(ctx, &buf); err != nil {
+				t.Fatalf("failed to render %s wizard: %v", name, err)
+			}
+			out := buf.String()
+			if strings.Contains(out, "alert(") {
+				t.Fatalf("%s wizard contains browser alert(); at 2am an admin trapped in an unstyled modal dialog loses form context instead of receiving inline validation and Datastar toast feedback, got: %s", name, out)
+			}
+			if strings.Contains(out, "→") || strings.Contains(out, "←") {
+				t.Fatalf("%s wizard contains trailing or leading arrow chrome on action buttons; at 2am buttons look like unpolished template chrome rather than crisp console controls, got: %s", name, out)
+			}
+		})
+	}
+}
+
+func TestInstanceDetailServerTelemetryContainer(t *testing.T) {
+	ctx := context.Background()
+	var buf bytes.Buffer
+	overview := instanceOverview(InstanceOverviewUI{
+		Address: "192.168.20.224:2456",
+		Facts: []InstanceFactUI{
+			{Label: "World Name", Value: "Midgard"},
+			{Label: "Port", Value: "2456"},
+		},
+	})
+	if err := overview.Render(ctx, &buf); err != nil {
+		t.Fatalf("instanceOverview render failed: %v", err)
+	}
+	out := buf.String()
+	wantContainer := "rounded-control border border-edge bg-surface-raised/20 p-6"
+	if !strings.Contains(out, wantContainer) {
+		t.Fatalf("instanceOverview must wrap facts in %q; at 2am server telemetry unboxes into whitespace with no visual grouping, got: %s", wantContainer, out)
+	}
+	if !strings.Contains(out, "Server telemetry") {
+		t.Fatalf("instanceOverview missing 'Server telemetry' heading; at 2am an operator inspecting telemetry cannot identify the metrics panel, got: %s", out)
+	}
+	wantLabel := `class="font-pixel text-xs text-ink-muted">World Name</dt>`
+	if !strings.Contains(out, wantLabel) {
+		t.Fatalf("instanceOverview must render fact labels with %q; at 2am fact labels drop below the typography floor into low-contrast 11px text, got: %s", wantLabel, out)
+	}
+}
+

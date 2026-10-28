@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http/httptest"
 	"path/filepath"
@@ -156,17 +157,17 @@ func TestValheimWizardPage(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	html := string(body)
+	htmlContent := html.UnescapeString(string(body))
 
-	for _, want := range []string{"Create Valheim World", "Step 1: Name Your Valheim Server", "Step 2: Content & Modding", "Tier & Review"} {
-		if !strings.Contains(html, want) {
+	for _, want := range []string{"Create Valheim World", "Name your Valheim server", "Content & modding", "Resource tier & review"} {
+		if !strings.Contains(htmlContent, want) {
 			t.Errorf("wizard missing %q", want)
 		}
 	}
-	if !strings.Contains(html, `/api/valheim/wizard/create`) {
+	if !strings.Contains(htmlContent, `/api/valheim/wizard/create`) {
 		t.Errorf("wizard missing create @post handler")
 	}
-	if !strings.Contains(html, `/api/valheim/wizard/import`) {
+	if !strings.Contains(htmlContent, `/api/valheim/wizard/import`) {
 		t.Errorf("wizard missing import @post handler")
 	}
 }

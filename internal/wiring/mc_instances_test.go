@@ -111,7 +111,7 @@ func TestMCWizardPage(t *testing.T) {
 	rawHTML := string(body)
 	htmlContent := html.UnescapeString(rawHTML)
 
-	for _, want := range []string{"Create Minecraft World", "Step 1: Name Your World"} {
+	for _, want := range []string{"Create Minecraft World", "Name your world"} {
 		if !strings.Contains(htmlContent, want) {
 			t.Errorf("wizard missing %q", want)
 		}

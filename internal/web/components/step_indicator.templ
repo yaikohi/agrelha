@@ -2,7 +2,6 @@ package components
 
 import (
 	"fmt"
-	"strconv"
 )
 
 type StepItem struct {
@@ -25,25 +24,25 @@ func (p StepIndicatorProps) signalName() string {
 
 templ StepIndicator(props StepIndicatorProps) {
 	{{ sig := props.signalName() }}
-	<div class="border-b border-seam pb-5">
-		<div class="flex items-center justify-between text-xs font-medium">
+	<nav aria-label="Progress" class="border-b border-seam pb-5">
+		<div class="flex flex-wrap items-center gap-2 sm:gap-3 font-pixel text-xs">
 			for i, s := range props.Steps {
 				if i > 0 {
-					<div class="h-px flex-1 max-w-[3.5rem] bg-edge mx-2"></div>
+					<span class="text-edge select-none">/</span>
 				}
 				<div
 					class="flex items-center gap-2"
 					data-class={ fmt.Sprintf("{'text-ink': $%s == %d, 'text-ink-faint': $%s != %d}", sig, s.Number, sig, s.Number) }
 				>
 					<span
-						class="flex h-6 w-6 items-center justify-center rounded-full text-xs"
-						data-class={ fmt.Sprintf("{'bg-accent text-accent-ink': $%s == %d, 'bg-surface-raised text-ink-faint': $%s != %d}", sig, s.Number, sig, s.Number) }
+						class="rounded-control border px-2 py-0.5 text-[11px] transition-colors"
+						data-class={ fmt.Sprintf("{'border-accent bg-accent text-accent-ink font-semibold': $%s == %d, 'border-edge bg-surface-raised/80 text-ink': $%s > %d, 'border-edge/60 bg-surface/40 text-ink-faint': $%s < %d}", sig, s.Number, sig, s.Number, sig, s.Number) }
 					>
-						{ strconv.Itoa(s.Number) }
+						{ fmt.Sprintf("%02d", s.Number) }
 					</span>
 					<span>{ s.Label }</span>
 				</div>
 			}
 		</div>
-	</div>
+	</nav>
 }
