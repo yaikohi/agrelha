@@ -206,13 +206,13 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 								type="button"
 								data-on:click="$loader = 'neoforge'"
 								class="flex flex-col text-left rounded-control border p-3 cursor-pointer transition select-none"
-								data-class="{'text-accent ring-1 text-accent text-accent': $loader === 'neoforge', 'border-edge bg-seam hover:border-edge': $loader !== 'neoforge'}"
+								data-class="{'border-accent ring-1 ring-accent text-accent': $loader === 'neoforge', 'border-edge bg-seam hover:border-edge': $loader !== 'neoforge'}"
 							>
 								<div class="flex items-center justify-between w-full">
 									<div class="flex items-center gap-2">
 										<div
 											class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition"
-											data-class="{'text-accent text-accent': $loader === 'neoforge', 'border-edge bg-surface-raised': $loader !== 'neoforge'}"
+											data-class="{'border-accent bg-accent': $loader === 'neoforge', 'border-edge bg-surface-raised': $loader !== 'neoforge'}"
 										>
 											<div data-show="$loader === 'neoforge'" class="h-1.5 w-1.5 rounded-full bg-seam"></div>
 										</div>
@@ -221,10 +221,10 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 									<span class="font-pixel text-ink-muted" data-text="$neoFit + '/' + $totalFitMods"></span>
 								</div>
 								<div class="mt-2.5 flex flex-wrap gap-1">
-									<span data-show="$neoFit > $fabFit" class="rounded border text-accent text-accent px-1.5 py-0.5 text-[10px] font-medium text-accent">Recommended</span>
-									<span data-show="$totalFitMods > 0 && $neoFit === $fabFit && $neoFit === $totalFitMods" class="rounded border text-accent text-accent px-1.5 py-0.5 text-[10px] font-medium text-accent">100% compatible</span>
+									<span data-show="$neoFit > $fabFit" class="rounded border border-accent px-1.5 py-0.5 text-[10px] font-medium text-accent">Recommended</span>
+									<span data-show="$totalFitMods > 0 && $neoFit === $fabFit && $neoFit === $totalFitMods" class="rounded border border-accent px-1.5 py-0.5 text-[10px] font-medium text-accent">100% compatible</span>
 									<span data-show="$totalFitMods > 0 && $neoFit === $fabFit && $neoFit < $totalFitMods" class="rounded bg-surface-raised px-1.5 py-0.5 text-[10px] font-medium text-ink">Equal match</span>
-									<span data-show="$totalFitMods > $neoFit" class="rounded border text-accent text-accent px-1.5 py-0.5 text-[10px] font-medium text-accent" data-text="($totalFitMods - $neoFit) + ' incompatible'"></span>
+									<span data-show="$totalFitMods > $neoFit" class="rounded border border-accent px-1.5 py-0.5 text-[10px] font-medium text-accent" data-text="($totalFitMods - $neoFit) + ' incompatible'"></span>
 								</div>
 							</button>
 
@@ -233,13 +233,13 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 								type="button"
 								data-on:click="$loader = 'fabric'"
 								class="flex flex-col text-left rounded-control border p-3 cursor-pointer transition select-none"
-								data-class="{'text-accent ring-1 text-accent text-accent': $loader === 'fabric', 'border-edge bg-seam hover:border-edge': $loader !== 'fabric'}"
+								data-class="{'border-accent ring-1 ring-accent text-accent': $loader === 'fabric', 'border-edge bg-seam hover:border-edge': $loader !== 'fabric'}"
 							>
 								<div class="flex items-center justify-between w-full">
 									<div class="flex items-center gap-2">
 										<div
 											class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition"
-											data-class="{'text-accent text-accent': $loader === 'fabric', 'border-edge bg-surface-raised': $loader !== 'fabric'}"
+											data-class="{'border-accent bg-accent': $loader === 'fabric', 'border-edge bg-surface-raised': $loader !== 'fabric'}"
 										>
 											<div data-show="$loader === 'fabric'" class="h-1.5 w-1.5 rounded-full bg-seam"></div>
 										</div>
@@ -248,10 +248,10 @@ templ MinecraftWizard(availableVersions []string, budget BudgetUI) {
 									<span class="font-pixel text-ink-muted" data-text="$fabFit + '/' + $totalFitMods"></span>
 								</div>
 								<div class="mt-2.5 flex flex-wrap gap-1">
-									<span data-show="$fabFit > $neoFit" class="rounded border text-accent text-accent px-1.5 py-0.5 text-[10px] font-medium text-accent">Recommended</span>
-									<span data-show="$totalFitMods > 0 && $fabFit === $neoFit && $fabFit === $totalFitMods" class="rounded border text-accent text-accent px-1.5 py-0.5 text-[10px] font-medium text-accent">100% compatible</span>
+									<span data-show="$fabFit > $neoFit" class="rounded border border-accent px-1.5 py-0.5 text-[10px] font-medium text-accent">Recommended</span>
+									<span data-show="$totalFitMods > 0 && $fabFit === $neoFit && $fabFit === $totalFitMods" class="rounded border border-accent px-1.5 py-0.5 text-[10px] font-medium text-accent">100% compatible</span>
 									<span data-show="$totalFitMods > 0 && $fabFit === $neoFit && $fabFit < $totalFitMods" class="rounded bg-surface-raised px-1.5 py-0.5 text-[10px] font-medium text-ink">Equal match</span>
-									<span data-show="$totalFitMods > $fabFit" class="rounded border text-accent text-accent px-1.5 py-0.5 text-[10px] font-medium text-accent" data-text="($totalFitMods - $fabFit) + ' incompatible'"></span>
+									<span data-show="$totalFitMods > $fabFit" class="rounded border border-accent px-1.5 py-0.5 text-[10px] font-medium text-accent" data-text="($totalFitMods - $fabFit) + ' incompatible'"></span>
 								</div>
 							</button>
 						</div>

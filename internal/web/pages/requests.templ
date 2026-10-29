@@ -33,7 +33,7 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 				<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">
 					Awaiting your decision
 					if len(pending) > 0 {
-						<span class="ml-2 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
+						<span class="ml-2 rounded-full border border-accent px-2 py-0.5 text-[10px] font-medium text-accent">
 							{ len(pending) }
 						</span>
 					}
@@ -68,7 +68,7 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 										<input type="hidden" name="id" value={ r.ID }/>
 										<button
 											type="submit"
-											class="rounded-control border text-accent text-accent px-3 py-1.5 text-xs font-medium text-accent hover:text-accent hover:text-accent transition"
+											class="rounded-control border border-accent px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent hover:text-accent-ink transition"
 										>
 											Approve &amp; create
 										</button>
@@ -113,7 +113,7 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 							</div>
 							<div class="flex items-center gap-3">
 								if r.Status == "approved" {
-									<span class="rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] text-accent">approved</span>
+									<span class="rounded-full border border-accent px-2 py-0.5 text-[10px] text-accent">approved</span>
 								} else {
 									<span class="rounded-full border border-edge bg-surface-raised px-2 py-0.5 text-[10px] text-ink-muted">denied</span>
 								}

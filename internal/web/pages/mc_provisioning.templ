@@ -16,7 +16,7 @@ templ MinecraftProvisioning(inst InstanceUI) {
 			data-effect={ fmt.Sprintf("@get('/api/minecraft/provisioning/%d/stream')", inst.Number) }
 		>
 			<div class="rounded-control border border-edge bg-surface-raised p-8 text-center">
-				<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-control text-accent text-3xl text-accent ring-1 text-accent">
+				<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-control border border-accent text-3xl text-accent">
 					<span data-show="!$ready" class="animate-spin">⚙️</span>
 					<span data-show="$ready">🎮</span>
 				</div>
@@ -27,28 +27,28 @@ templ MinecraftProvisioning(inst InstanceUI) {
 				<div class="mt-8 space-y-3 text-left">
 					<!-- Step 1: desired state -->
 					<div class="flex items-center gap-3 rounded-control border border-edge bg-seam p-3.5 text-xs">
-						<span class="flex h-5 w-5 items-center justify-center rounded-full text-accent text-accent">✓</span>
+						<span class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink">✓</span>
 						<span class="font-medium text-ink">{ shared.ProvisioningStepCommitted(inst.Host) }</span>
 					</div>
 
 					<!-- Step 2: reconcile -->
 					<div class="flex items-center gap-3 rounded-control border border-edge bg-seam p-3.5 text-xs">
-						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full text-accent text-accent animate-pulse">⏳</span>
-						<span data-show="$phase != 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full text-accent text-accent">✓</span>
+						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink animate-pulse">⏳</span>
+						<span data-show="$phase != 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink">✓</span>
 						<span class="font-medium text-ink">{ shared.ProvisioningStepReconciling(inst.Host) }</span>
 					</div>
 
 					<!-- Step 3: server startup -->
 					<div class="flex items-center gap-3 rounded-control border border-edge bg-seam p-3.5 text-xs">
-						<span data-show="$phase == 'booting'" class="flex h-5 w-5 items-center justify-center rounded-full text-accent text-accent animate-pulse">⏳</span>
-						<span data-show="$phase == 'ready'" class="flex h-5 w-5 items-center justify-center rounded-full text-accent text-accent">✓</span>
+						<span data-show="$phase == 'booting'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink animate-pulse">⏳</span>
+						<span data-show="$phase == 'ready'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink">✓</span>
 						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-surface-raised text-ink-faint">○</span>
 						<span class="font-medium text-ink">{ shared.ProvisioningStepStarting(inst.Host) }</span>
 					</div>
 				</div>
 
 				<!-- Ready Banner -->
-				<div data-show="$ready" class="mt-8 rounded-control border text-accent text-accent p-5">
+				<div data-show="$ready" class="mt-8 rounded-control border border-accent p-5">
 					<h3 class="text-sm font-semibold text-accent">Server is Online & Ready!</h3>
 					<p class="mt-1 text-xs text-ink">Connect in Minecraft via:</p>
 					<div class="mt-2 font-pixel text-sm font-bold text-ink bg-surface-raised py-2 rounded-control border text-accent">
@@ -66,7 +66,7 @@ templ MinecraftProvisioning(inst InstanceUI) {
 					<a
 						data-show="$ready"
 						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d", inst.Number)) }
-						class="rounded-control text-accent px-5 py-2.5 text-xs font-semibold text-ink hover:text-accent"
+						class="rounded-control border border-accent px-5 py-2.5 text-xs font-semibold text-ink hover:bg-accent hover:text-accent-ink"
 					>
 						Manage World &rarr;
 					</a>

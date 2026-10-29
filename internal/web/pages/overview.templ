@@ -78,7 +78,7 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 									<span class="text-sm font-medium text-ink">{ fmt.Sprintf("%02d %s", w.Number, w.Name) }</span>
 									<span class="text-[11px] text-ink-faint">{ w.State }</span>
 									if w.Drifts {
-										<span class="rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] text-accent">
+										<span class="rounded-full border border-accent px-2 py-0.5 text-[10px] text-accent">
 											off { w.Tier }
 										</span>
 									} else {
@@ -90,7 +90,7 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 										<input type="hidden" name="target" value={ w.Target() }/>
 										<button
 											type="submit"
-											class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs text-ink-muted hover:text-accent hover:text-accent transition"
+											class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs text-ink-muted hover:text-accent transition"
 										>
 											Restore { w.TierLabel }
 										</button>
@@ -106,7 +106,7 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 								@numField("cpulimit", "CPU limit (m)", w.CPULimit)
 								<button
 									type="submit"
-									class="rounded-control border text-accent text-accent px-3 py-1.5 text-xs font-medium text-accent hover:text-accent hover:text-accent transition"
+									class="rounded-control border border-accent px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent hover:text-accent-ink transition"
 								>
 									Save &amp; restart
 								</button>

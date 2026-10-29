@@ -16,7 +16,7 @@ templ MinecraftConfigEdit(name, content string, isNew, enabled bool) {
 			</h1>
 		</div>
 		if !enabled {
-			<p class="mb-4 rounded text-accent p-3 text-sm text-accent">Declarative plane disabled — set the Codeberg token to save.</p>
+			<p class="mb-4 rounded-control border border-accent p-3 text-sm text-accent">Declarative plane disabled — set the Codeberg token to save.</p>
 		}
 		<form method="post" action="/minecraft/configs/save" class="space-y-4">
 			if isNew {

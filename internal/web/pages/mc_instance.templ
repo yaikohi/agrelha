@@ -245,7 +245,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 											<button
 												type="button"
 												data-on:click={ fmt.Sprintf("if (confirm('Restore %s in-place over current world data? A pre-restore safety snapshot will be created automatically.')) @post('/api/minecraft/%d/backups/restore-inplace?archive=%s', {payload: {archive: '%s'}})", b.Name, d.Number, b.Name, b.Name) }
-												class="rounded text-accent border text-accent px-2 py-1 text-[11px] font-medium text-accent hover:text-accent"
+												class="rounded-control border border-accent px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent hover:text-accent-ink"
 											>
 												Restore In-Place
 											</button>

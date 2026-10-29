@@ -144,7 +144,7 @@ templ valheimAccessTab(props ValheimAccessProps) {
 										{ w.Name }
 									</a>
 									if w.State == "running" {
-										<span class="inline-flex items-center gap-1 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
+										<span class="inline-flex items-center gap-1 rounded-full border border-accent px-2 py-0.5 text-[10px] font-medium text-accent">
 											<span class="h-1.5 w-1.5 rounded-full text-accent"></span>
 											running
 										</span>
@@ -154,7 +154,7 @@ templ valheimAccessTab(props ValheimAccessProps) {
 											stopped
 										</span>
 									} else {
-										<span class="inline-flex items-center gap-1 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
+										<span class="inline-flex items-center gap-1 rounded-full border border-accent px-2 py-0.5 text-[10px] font-medium text-accent">
 											{ w.State }
 										</span>
 									}
@@ -211,11 +211,11 @@ templ valheimAccessTab(props ValheimAccessProps) {
 	</div>
 
 	if !props.Enabled {
-		<p class="mb-4 rounded text-accent p-3 text-sm text-accent">Declarative plane disabled — set the Codeberg token to grant/revoke admin.</p>
+		<p class="mb-4 rounded-control border border-accent p-3 text-sm text-accent">Declarative plane disabled — set the Codeberg token to grant/revoke admin.</p>
 	}
 	<form method="post" action="/access/grant" class="mb-6 flex gap-2">
 		<input name="steam_id" placeholder="76561198…" class="w-64 rounded bg-surface-raised px-3 py-2 text-sm border border-edge focus-accent"/>
-		<button class="rounded text-accent px-4 py-2 text-sm hover:text-accent font-medium">Grant admin</button>
+		<button class="rounded-control border border-accent px-4 py-2 text-sm hover:bg-accent hover:text-accent-ink font-medium">Grant admin</button>
 	</form>
 	<p class="mb-6 text-xs text-ink-faint">Admin changes commit to git; they apply on the next server restart (ADMINLIST_IDS is rendered on start).</p>
 	<h2 class="mb-2 text-sm font-medium text-ink-muted">Current admins ({ strconv.Itoa(len(props.AdminIDs)) })</h2>
@@ -268,7 +268,7 @@ templ valheimAccessTab(props ValheimAccessProps) {
 							} else {
 								<form method="post" action="/access/grant">
 									<input type="hidden" name="steam_id" value={ p.SteamID }/>
-									<button class="rounded text-accent px-3 py-1 text-xs hover:text-accent">Grant</button>
+									<button class="rounded-control border border-accent px-3 py-1 text-xs hover:bg-accent hover:text-accent-ink">Grant</button>
 								</form>
 							}
 						</td>
@@ -285,7 +285,7 @@ templ minecraftAccessTab(props MCAccessProps) {
 		<p class="mt-0.5 text-xs text-ink-muted">Configure operator privileges, connection whitelist, and live in-game admission.</p>
 	</div>
 	if !props.Enabled {
-		<p class="mb-6 rounded text-accent p-3 text-sm text-accent">Declarative plane disabled — set the Codeberg token to manage ops or whitelist.</p>
+		<p class="mb-6 rounded-control border border-accent p-3 text-sm text-accent">Declarative plane disabled — set the Codeberg token to manage ops or whitelist.</p>
 	}
 
 	<div class="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-control border border-edge bg-surface-raised p-5 ">
@@ -293,9 +293,9 @@ templ minecraftAccessTab(props MCAccessProps) {
 			<div class="flex items-center gap-3">
 				<h2 class="text-base font-medium text-ink">Whitelist Enforcement</h2>
 				if props.WhitelistActive {
-					<span class="rounded text-accent border text-accent px-2.5 py-0.5 text-xs font-medium text-accent">ACTIVE (Enforced)</span>
+					<span class="rounded-control border border-accent px-2.5 py-0.5 text-xs font-medium text-accent">ACTIVE (Enforced)</span>
 				} else {
-					<span class="rounded text-accent border text-accent px-2.5 py-0.5 text-xs font-medium text-accent">DISABLED (Public)</span>
+					<span class="rounded-control border border-accent px-2.5 py-0.5 text-xs font-medium text-accent">DISABLED (Public)</span>
 				}
 			</div>
 			<p class="mt-1 text-xs text-ink-muted">
@@ -308,9 +308,9 @@ templ minecraftAccessTab(props MCAccessProps) {
 		</div>
 		<form method="post" action="/api/minecraft/access/whitelist/toggle">
 			if props.WhitelistActive {
-				<button class="rounded text-accent px-4 py-2 text-xs font-medium hover:text-accent text-ink">Disable Whitelist</button>
+				<button class="rounded-control border border-accent px-4 py-2 text-xs font-medium hover:bg-accent hover:text-accent-ink text-ink">Disable Whitelist</button>
 			} else {
-				<button class="rounded text-accent px-4 py-2 text-xs font-medium hover:text-accent text-ink">Enforce Whitelist</button>
+				<button class="rounded-control border border-accent px-4 py-2 text-xs font-medium hover:bg-accent hover:text-accent-ink text-ink">Enforce Whitelist</button>
 			}
 		</form>
 	</div>
@@ -323,7 +323,7 @@ templ minecraftAccessTab(props MCAccessProps) {
 			</div>
 			<form method="post" action="/api/minecraft/access/op" class="mb-4 flex gap-2">
 				<input name="username" placeholder="Mojang username…" class="w-full rounded bg-seam px-3 py-2 text-sm border border-edge focus-accent"/>
-				<button class="shrink-0 rounded text-accent px-4 py-2 text-sm font-medium hover:text-accent">Op Player</button>
+				<button class="shrink-0 rounded-control border border-accent px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-ink">Op Player</button>
 			</form>
 			<ul class="divide-y divide-seam rounded border border-edge bg-seam overflow-hidden">
 				if len(props.Ops) == 0 {
@@ -348,7 +348,7 @@ templ minecraftAccessTab(props MCAccessProps) {
 			</div>
 			<form method="post" action="/api/minecraft/access/whitelist/add" class="mb-4 flex gap-2">
 				<input name="username" placeholder="Mojang username…" class="w-full rounded bg-seam px-3 py-2 text-sm border border-edge focus-accent"/>
-				<button class="shrink-0 rounded text-accent px-4 py-2 text-sm font-medium hover:text-accent">Add to Whitelist</button>
+				<button class="shrink-0 rounded-control border border-accent px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-ink">Add to Whitelist</button>
 			</form>
 			<ul class="divide-y divide-seam rounded border border-edge bg-seam overflow-hidden">
 				if len(props.Whitelist) == 0 {
@@ -382,7 +382,7 @@ templ minecraftAccessTab(props MCAccessProps) {
 						</div>
 						<div class="flex items-center gap-1.5 border-l border-edge pl-3">
 							if Contains(props.Ops, player) {
-								<span class="rounded text-accent border text-accent px-2 py-0.5 text-[10px] text-accent font-pixel">OP</span>
+								<span class="rounded-control border border-accent px-2 py-0.5 text-[10px] text-accent font-pixel">OP</span>
 							} else {
 								<form method="post" action="/api/minecraft/access/op" class="inline">
 									<input type="hidden" name="username" value={ player }/>
@@ -390,7 +390,7 @@ templ minecraftAccessTab(props MCAccessProps) {
 								</form>
 							}
 							if Contains(props.Whitelist, player) {
-								<span class="rounded text-accent border text-accent px-2 py-0.5 text-[10px] text-accent font-pixel">Whitelisted</span>
+								<span class="rounded-control border border-accent px-2 py-0.5 text-[10px] text-accent font-pixel">Whitelisted</span>
 							} else {
 								<form method="post" action="/api/minecraft/access/whitelist/add" class="inline">
 									<input type="hidden" name="username" value={ player }/>
@@ -444,7 +444,7 @@ templ gmodAccessTab(props GModAccessProps) {
 										{ w.Name }
 									</a>
 									if w.State == "running" {
-										<span class="inline-flex items-center gap-1 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
+										<span class="inline-flex items-center gap-1 rounded-full border border-accent px-2 py-0.5 text-[10px] font-medium text-accent">
 											<span class="h-1.5 w-1.5 rounded-full text-accent"></span>
 											running
 										</span>
@@ -454,7 +454,7 @@ templ gmodAccessTab(props GModAccessProps) {
 											stopped
 										</span>
 									} else {
-										<span class="inline-flex items-center gap-1 rounded-full border text-accent text-accent px-2 py-0.5 text-[10px] font-medium text-accent">
+										<span class="inline-flex items-center gap-1 rounded-full border border-accent px-2 py-0.5 text-[10px] font-medium text-accent">
 											{ w.State }
 										</span>
 									}
