@@ -61,6 +61,13 @@ templ layoutShell(title, bodyClass, mainClass string, hearth bool) {
 			data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',online:false,backup:'—',backupinfo:'',updates:0,valheim_updates:0,mc_updates:0,selected:{},toast:'',toastkind:'',mc_players:'—',mc_cpu:'—',mc_mem:'—',mc_uptime:'—',mc_state:'unknown'}"
 			data-effect="@get('/sse')"
 		>
+			<script>
+				window.addEventListener("pageshow", function (e) {
+					if (e.persisted) {
+						window.location.reload();
+					}
+				});
+			</script>
 			<main class={ mainClass }>
 				{ children... }
 			</main>
