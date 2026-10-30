@@ -102,7 +102,7 @@ var gameRecordMappers = map[domain.GameID]GameRecordMapper{
 		},
 		FromRecord: func(rec InstanceRecord, inst *domain.Instance) {
 			inst.Minecraft = &domain.MinecraftConfig{
-				Loader:      domain.NormalizeLoader(rec.Loader),
+				Loader:      domain.ParseLoader(rec.Loader),
 				MCVersion:   rec.MCVersion,
 				Difficulty:  rec.Difficulty,
 				Gamemode:    rec.Gamemode,

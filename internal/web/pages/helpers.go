@@ -286,7 +286,18 @@ type GameSummaryUI struct {
 	TotalBudgetGiB  int
 	ActiveInstance  *InstanceUI
 	ActiveInstances []InstanceUI
+	CanOpen         func(number int) bool
 	SavedInstances  []InstanceUI
+}
+
+func (g GameSummaryUI) MayOpen(isAdmin bool, number int) bool {
+	if number <= 0 {
+		return false
+	}
+	if isAdmin {
+		return true
+	}
+	return g.CanOpen != nil && g.CanOpen(number)
 }
 
 type MinecraftSummaryUI = GameSummaryUI
@@ -548,7 +559,7 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 			row.PlayersSignal = fmt.Sprintf("inst_valheim_%d_players", inst.Number)
 			row.UptimeSignal = fmt.Sprintf("inst_valheim_%d_uptime", inst.Number)
 		}
-		if isAdmin && inst.Number > 0 {
+		if vh.MayOpen(isAdmin, inst.Number) {
 			row.OverviewURL = fmt.Sprintf("/valheim/%d/overview", inst.Number)
 		}
 		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number), offersClientBundle(inst)))
@@ -569,7 +580,7 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 			row.PlayersSignal = fmt.Sprintf("inst_valheim_%d_players", inst.Number)
 			row.UptimeSignal = fmt.Sprintf("inst_valheim_%d_uptime", inst.Number)
 		}
-		if isAdmin && inst.Number > 0 {
+		if vh.MayOpen(isAdmin, inst.Number) {
 			row.OverviewURL = fmt.Sprintf("/valheim/%d/overview", inst.Number)
 		}
 		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/valheim/%d/mods/export", inst.Number), offersClientBundle(inst)))
@@ -617,7 +628,7 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 			row.PlayersSignal = fmt.Sprintf("inst_minecraft_%d_players", inst.Number)
 			row.UptimeSignal = fmt.Sprintf("inst_minecraft_%d_uptime", inst.Number)
 		}
-		if isAdmin && inst.Number > 0 {
+		if mc.MayOpen(isAdmin, inst.Number) {
 			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
 		}
 		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), offersClientBundle(inst)))
@@ -638,7 +649,7 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 			row.PlayersSignal = fmt.Sprintf("inst_minecraft_%d_players", inst.Number)
 			row.UptimeSignal = fmt.Sprintf("inst_minecraft_%d_uptime", inst.Number)
 		}
-		if isAdmin && inst.Number > 0 {
+		if mc.MayOpen(isAdmin, inst.Number) {
 			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
 		}
 		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), offersClientBundle(inst)))
@@ -790,7 +801,7 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 			row.PlayersSignal = fmt.Sprintf("inst_%s_%d_players", p.ID, inst.Number)
 			row.UptimeSignal = fmt.Sprintf("inst_%s_%d_uptime", p.ID, inst.Number)
 		}
-		if isAdmin && inst.Number > 0 {
+		if summary.MayOpen(isAdmin, inst.Number) {
 			row.OverviewURL = fmt.Sprintf("/%s/%d/overview", p.ID, inst.Number)
 		}
 		if p.Capabilities.Mods {
@@ -810,7 +821,7 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 			row.PlayersSignal = fmt.Sprintf("inst_%s_%d_players", p.ID, inst.Number)
 			row.UptimeSignal = fmt.Sprintf("inst_%s_%d_uptime", p.ID, inst.Number)
 		}
-		if isAdmin && inst.Number > 0 {
+		if summary.MayOpen(isAdmin, inst.Number) {
 			row.OverviewURL = fmt.Sprintf("/%s/%d/overview", p.ID, inst.Number)
 		}
 		if p.Capabilities.Mods {

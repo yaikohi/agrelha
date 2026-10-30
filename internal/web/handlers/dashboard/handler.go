@@ -268,6 +268,10 @@ func (h *Handler) DashboardPage(c *fiber.Ctx) error {
 		mgr := h.instanceManager(p.ID)
 		statsFn := h.instanceStatsFunc(p.ID)
 		summary := h.buildSummary(c.UserContext(), p, mgr, statsFn)
+		game := p.ID
+		summary.CanOpen = func(number int) bool {
+			return shared.PrincipalOf(c).CanOperate(game, number)
+		}
 
 		var card pages.GameCardUI
 		var actions pages.CardActionsUI
