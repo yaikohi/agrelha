@@ -36,10 +36,11 @@ type InstalledModUI struct {
 }
 
 type InstalledModsUI struct {
-	Game  string
-	Num   int
-	Mods  []InstalledModUI
-	Empty string
+	Game     string
+	Num      int
+	Mods     []InstalledModUI
+	Empty    string
+	ReadOnly bool
 }
 
 func modPayload(slug, provider string) string {
@@ -106,6 +107,7 @@ func ValheimInstalledMods(d InstanceDetailUI) InstalledModsUI {
 		Num:   d.Number,
 		Empty: "No mods installed. This world runs clean BepInEx.",
 	}
+	ui.ReadOnly = !d.CanOperate
 	for _, slug := range d.InstalledMods {
 		ui.Mods = append(ui.Mods, InstalledModUI{Label: slug, Slug: slug})
 	}
@@ -118,6 +120,7 @@ func MinecraftInstalledMods(d InstanceDetailUI) InstalledModsUI {
 		empty = fmt.Sprintf("Mods for %s are downloaded on launch from its pack, so none are listed here.", d.Pack)
 	}
 	ui := InstalledModsUI{Game: "minecraft", Num: d.Number, Empty: empty}
+	ui.ReadOnly = !d.CanOperate
 	for _, slug := range d.InstalledMods {
 		ui.Mods = append(ui.Mods, InstalledModUI{Label: slug, Slug: slug})
 	}

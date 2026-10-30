@@ -116,23 +116,42 @@ templ InstalledMods(i InstalledModsUI) {
 						<span class="font-pixel text-[11px] text-ink-faint">{ "v" + m.Version }</span>
 					}
 				</p>
-				<button
-					type="button"
-					data-indicator={ "busy_inst_" + UpdateToken(m.Slug) }
-					data-attr:disabled={ "$busy_inst_" + UpdateToken(m.Slug) }
-					data-on:click={ toastActionClick(m.RemoveScript(i.Game, i.Num)) }
-					class={ components.ButtonClass(components.VariantDanger) }
-				>
-					<span data-show={ "!$busy_inst_" + UpdateToken(m.Slug) }>Remove</span>
-					<span class="inline-flex items-center gap-1.5" data-show={ "$busy_inst_" + UpdateToken(m.Slug) } style="display:none;">
-						<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
-						<span>Removing…</span>
-					</span>
-				</button>
+				if !i.ReadOnly {
+					<button
+						type="button"
+						data-indicator={ "busy_inst_" + UpdateToken(m.Slug) }
+						data-attr:disabled={ "$busy_inst_" + UpdateToken(m.Slug) }
+						data-on:click={ toastActionClick(m.RemoveScript(i.Game, i.Num)) }
+						class={ components.ButtonClass(components.VariantDanger) }
+					>
+						<span data-show={ "!$busy_inst_" + UpdateToken(m.Slug) }>Remove</span>
+						<span class="inline-flex items-center gap-1.5" data-show={ "$busy_inst_" + UpdateToken(m.Slug) } style="display:none;">
+							<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
+							<span>Removing…</span>
+						</span>
+					</button>
+				}
 			</div>
 		}
 		<p class="border-t border-seam px-6 py-3 font-pixel text-[11px] text-ink-faint">
 			{ fmt.Sprintf("%d installed", len(i.Mods)) }
 		</p>
 	}
+}
+
+templ ModsReadOnly(d InstanceDetailUI, mods InstalledModsUI, exportHref, exportLabel string) {
+	<div class="mt-8">
+		<div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+			<div class="min-w-0">
+				<h2 class="font-display text-xl font-semibold text-ink">Installed</h2>
+				<p class="mt-1 max-w-prose font-display text-sm leading-relaxed text-ink-muted">
+					{ d.Name } is run by someone else. Here is what it loads, so you can match it before you join.
+				</p>
+			</div>
+			<a href={ templ.SafeURL(exportHref) } download class={ components.ButtonClass(components.VariantSecondary) }>{ exportLabel }</a>
+		</div>
+		<div class="-mx-6 mt-5 border-b border-seam">
+			@InstalledMods(mods)
+		</div>
+	</div>
 }

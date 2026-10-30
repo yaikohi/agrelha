@@ -21,15 +21,20 @@ templ Panel(games []DashboardGameUI, signedIn bool, flashKind, flashMsg string) 
 }
 
 templ panelMasthead(signedIn bool) {
-	<header class="flex flex-wrap items-baseline justify-between gap-4">
-		<h1 class="font-display text-3xl font-semibold tracking-tight text-ink">agrelha</h1>
-		if !signedIn {
-			<a href="/auth/login" class="focus-accent font-pixel text-xs text-ink-muted transition-colors hover:text-accent">Sign in</a>
-		}
-		<p class="w-full max-w-prose font-display text-base leading-relaxed text-ink-muted">
-			These servers run on a machine at home. Copy an address, paste it into the game.
+	if signedIn {
+		@components.Nav(components.NavProps{Current: "", IsAdmin: false, SignedIn: true, GrafanaURL: ""})
+		<p class="mt-6 max-w-prose font-display text-base leading-relaxed text-ink-muted">
+			These servers run on a machine at home. Pick a game to see its worlds, or copy an address and paste it into the game.
 		</p>
-	</header>
+	} else {
+		<header class="flex flex-wrap items-baseline justify-between gap-4">
+			<h1 class="font-display text-3xl font-semibold tracking-tight text-ink">agrelha</h1>
+			<a href="/auth/login" class="focus-accent font-pixel text-xs text-ink-muted transition-colors hover:text-accent">Sign in</a>
+			<p class="w-full max-w-prose font-display text-base leading-relaxed text-ink-muted">
+				These servers run on a machine at home. Copy an address, paste it into the game.
+			</p>
+		</header>
+	}
 }
 
 templ panelPort(p PanelPortUI) {

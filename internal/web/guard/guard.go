@@ -125,11 +125,19 @@ func Instance(game domain.GameID) fiber.Handler {
 			}
 			return c.Next()
 		}
+		if c.Method() == fiber.MethodGet && isModsViewPath(c, game, num) {
+			return c.Next()
+		}
 		if !p.CanOperate(game, num) {
 			return Forbidden(c, "You do not have access to that world.")
 		}
 		return c.Next()
 	}
+}
+
+func isModsViewPath(c *fiber.Ctx, game domain.GameID, num int) bool {
+	p := strings.TrimSuffix(c.Path(), "/")
+	return p == fmt.Sprintf("/%s/%d/mods", game, num)
 }
 
 func isBareInstancePath(c *fiber.Ctx, num int) bool {

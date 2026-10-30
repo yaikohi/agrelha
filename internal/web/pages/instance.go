@@ -62,10 +62,13 @@ type instanceSpec struct {
 	pending  func(InstanceDetailUI) string
 }
 
-func instanceTabs(game string, num int, active string, vanilla bool) []InstanceTabUI {
+func instanceTabs(game string, num int, active string, vanilla, canOperate bool) []InstanceTabUI {
 	slugs, ok := implementedTabs[game]
 	if !ok {
 		slugs = []string{"overview"}
+	}
+	if !canOperate {
+		slugs = []string{"mods"}
 	}
 	consoleLabel := tabLabelBySlug["console"]
 	if p, ok := domain.ProfileFor(domain.GameID(game)); ok && !p.Capabilities.Console {
@@ -91,7 +94,7 @@ func instanceTabs(game string, num int, active string, vanilla bool) []InstanceT
 }
 
 func instanceActions(spec instanceSpec, d InstanceDetailUI) []ActionUI {
-	if d.HostUnreachable || d.HostUnknown {
+	if d.HostUnreachable || d.HostUnknown || !d.CanOperate {
 		return nil
 	}
 	post := func(verb string) string {
@@ -118,7 +121,7 @@ func buildInstanceHead(spec instanceSpec, d InstanceDetailUI) InstanceHeadUI {
 		StateLabel: managerStateLabel(d.InstanceUI),
 		Presence:   managerPresence(d.InstanceUI),
 		Actions:    instanceActions(spec, d),
-		Tabs:       instanceTabs(spec.game, d.Number, d.ActiveTab, d.Vanilla),
+		Tabs:       instanceTabs(spec.game, d.Number, d.ActiveTab, d.Vanilla, d.CanOperate),
 	}
 	if d.HostUnreachable || d.HostUnknown {
 		h.Blocked = "Lifecycle controls are unavailable while the Host is out of reach."

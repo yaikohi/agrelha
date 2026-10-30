@@ -2,6 +2,7 @@ package minecraft
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -54,6 +55,7 @@ func (h *Handler) MCDashboard(c *fiber.Ctx) error {
 		uiInstances = append(uiInstances, pages.InstanceUI{
 			IsAdmin:            shared.IsAdmin(c),
 			CanOperate:         shared.PrincipalOf(c).CanOperate(domain.GameMinecraft, inst.Number),
+			Owned:              shared.PrincipalOf(c).HasRole(domain.InstanceRole(domain.GameMinecraft, inst.Number)),
 			Host:               inst.EffectiveHost(),
 			HostUnreachable:    inst.HostUnreachable,
 			HostUnknown:        inst.HostUnknown,
@@ -135,6 +137,12 @@ func (h *Handler) MCInstanceCreate(c *fiber.Ctx) error {
 	created, err := h.cfg.MCInstances.CreateInstance(c.UserContext(), inst, domain.ModList{Primary: mods}, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Failed to create world: "+err.Error(), nil)
+	}
+
+	if p := shared.PrincipalOf(c); !p.Admin && h.cfg.Requests != nil {
+		if err := h.cfg.Requests.GrantCreator(c.UserContext(), p.Subject, created.GameID, created.Number, h.cfg.Actor(c)); err != nil {
+			slog.Error("world created but creator not granted access", "number", created.Number, "err", err)
+		}
 	}
 
 	return shared.SSEToast(c, "ok", fmt.Sprintf("World %q created as instance #%02d.", created.Name, created.Number)+shared.CreationSentence(created.EffectiveHost(), created.HostUnreachable), nil)

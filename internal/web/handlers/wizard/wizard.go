@@ -496,6 +496,12 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		}
 	}
 
+	if !p.Admin && h.cfg.Requests != nil {
+		if err := h.cfg.Requests.GrantCreator(c.UserContext(), p.Subject, created.GameID, created.Number, h.cfg.Actor(c)); err != nil {
+			slog.Error("world created but creator not granted access", "number", created.Number, "err", err)
+		}
+	}
+
 	_ = h.cfg.MCInstances.StartInstance(c.UserContext(), created.Number, h.cfg.Actor(c))
 
 	redirectURL := fmt.Sprintf("/minecraft/provisioning/%d", created.Number)

@@ -190,6 +190,7 @@ type InstanceUI struct {
 	HostUnreachable    bool
 	HostUnknown        bool
 	CanOperate         bool
+	Owned              bool
 }
 
 type InstanceDetailUI struct {

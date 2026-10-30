@@ -116,6 +116,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 			StartBlockedReason: blockedReason,
 			IsAdmin:            shared.IsAdmin(c),
 			CanOperate:         shared.PrincipalOf(c).CanOperate(domain.GameGMod, inst.Number),
+			Owned:              shared.PrincipalOf(c).HasRole(domain.InstanceRole(domain.GameGMod, inst.Number)),
 		})
 	}
 
@@ -319,6 +320,8 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 			HostUnreachable: inst.HostUnreachable,
 			HostUnknown:     inst.HostUnknown,
 			IsAdmin:         shared.IsAdmin(c),
+			CanOperate:      shared.PrincipalOf(c).CanOperate(domain.GameGMod, inst.Number),
+			Owned:           shared.PrincipalOf(c).HasRole(domain.InstanceRole(domain.GameGMod, inst.Number)),
 			GameID:          string(inst.GameID),
 			Number:          inst.Number,
 			Name:            inst.Name,

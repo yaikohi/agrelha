@@ -48,8 +48,11 @@ func TestManagerOffersNoLifecycleToAViewerWhoCannotOperate(t *testing.T) {
 
 The guard refuses those calls, and a button that always 403s is worse than no button.`, labelsOf(port.Actions))
 		}
-		if len(port.Links) != 0 {
-			t.Errorf("a viewer who cannot operate was offered %v", labelsOf(port.Links))
+		if got := labelsOf(port.Links); len(got) != 1 || got[0] != "mods" {
+			t.Errorf(`a viewer without a Role for this world was offered %v.
+
+Only mods is readable without a grant - it is what you need to match the world before you join.
+Everything else (configs, console, backups) is refused by the guard.`, got)
 		}
 	})
 }

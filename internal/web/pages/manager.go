@@ -19,6 +19,7 @@ type ManagerPortUI struct {
 	Name       string
 	Href       string
 	Address    string
+	Owned      bool
 	Lamp       string
 	StateLabel string
 	Presence   string
@@ -112,7 +113,10 @@ func tierFact(inst InstanceUI) string {
 
 func managerLinks(spec managerSpec, inst InstanceUI) []ActionUI {
 	if !inst.CanOperate {
-		return nil
+		return []ActionUI{{
+			Label: "mods",
+			Href:  fmt.Sprintf("/%s/%d/mods", spec.game, inst.Number),
+		}}
 	}
 	out := make([]ActionUI, 0, len(spec.links))
 	for _, l := range spec.links {
@@ -179,6 +183,7 @@ func buildManager(spec managerSpec, instances []InstanceUI, budget BudgetUI) Man
 			Index:      i,
 			Number:     inst.Number,
 			Name:       inst.Name,
+			Owned:      inst.Owned,
 			Href:       fmt.Sprintf("/%s/%d", spec.game, inst.Number),
 			Address:    ConnectAddress(inst.LBIP, spec.port(inst)),
 			Lamp:       managerLamp(inst),

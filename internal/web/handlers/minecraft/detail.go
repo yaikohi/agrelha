@@ -61,6 +61,8 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 			HostUnreachable: inst.HostUnreachable,
 			HostUnknown:     inst.HostUnknown,
 			IsAdmin:         shared.IsAdmin(c),
+			CanOperate:      shared.PrincipalOf(c).CanOperate(domain.GameMinecraft, inst.Number),
+			Owned:           shared.PrincipalOf(c).HasRole(domain.InstanceRole(domain.GameMinecraft, inst.Number)),
 			GameID:          string(domain.GameMinecraft),
 			Number:          inst.Number,
 			Name:            inst.Name,
@@ -304,8 +306,9 @@ func (h *Handler) renderMCInstalledModsHTML(ctx context.Context, num int) string
 	inst, _ := h.cfg.MCInstances.GetInstance(ctx, num)
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
-			GameID: "minecraft",
-			Number: num,
+			GameID:     "minecraft",
+			Number:     num,
+			CanOperate: true,
 		},
 		InstalledMods: installed,
 	}

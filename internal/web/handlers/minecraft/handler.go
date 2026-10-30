@@ -12,6 +12,7 @@ import (
 
 	"agrelha/internal/app/instances"
 	"agrelha/internal/app/modupdates"
+	"agrelha/internal/app/requests"
 	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 	"agrelha/internal/web/pages"
@@ -41,6 +42,7 @@ const instanceStatsTTL = 15 * time.Second
 // Config specifies dependencies for the Minecraft instances handlers.
 type Config struct {
 	MCInstances             *instances.InstanceManager
+	Requests                *requests.Service
 	MinecraftGame           ports.Game
 	SearchMods              SearchModsFunc
 	LastIncident            func(ctx context.Context, number int) (*domain.Incident, error)

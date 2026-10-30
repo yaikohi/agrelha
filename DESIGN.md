@@ -36,6 +36,10 @@ typography:
     fontFamily: Fraunces
     fontSize: 30px
     fontWeight: 700
+  display-2xl:
+    fontFamily: Fraunces
+    fontSize: 24px
+    fontWeight: 600
   display-xl:
     fontFamily: Fraunces
     fontSize: 20px
@@ -49,8 +53,12 @@ typography:
     fontSize: 14px
     fontWeight: 400
   label:
-    fontFamily: Departure Mono
+    fontFamily: Fraunces
     fontSize: 12px
+    fontWeight: 500
+  wordmark:
+    fontFamily: Departure Mono
+    fontSize: 22px
     fontWeight: 400
 rounded:
   control: 2px
@@ -99,6 +107,10 @@ components:
     textColor: "{colors.ink-faint}"
     borderColor: "{colors.edge}"
     opacity: 0.55
+  button-loading:
+    dotSize: 6px
+    dotColor: inherits the variant's own textColor
+    gap: 8px
   button-md:
     padding: 8px 14px
     typography: "{typography.label}"
@@ -308,7 +320,13 @@ component never has to decide its own weight — the colour it already needed se
 
 Prose and headings (14px and above) keep their own weights; this rule governs the small tier only.
 
-Where the pixel face is used, prefer 22px or 33px so it lands on its grid.
+**The pixel face has its own scale, and it is not the prose scale.** Departure Mono renders
+crisply only at multiples of 11px, so it uses exactly two steps — **22px** and **33px** — and no
+others. These never mix with 12/14/16/20/24/30: the two scales belong to different faces and are
+never compared, which is why the 1.125 ratio floor does not apply between them. 22px is the
+default; 33px is for a wordmark that has to carry a page on its own.
+
+Any pixel-face text at a size outside those two steps is a defect, not a variation.
 
 Hierarchy: `display-3xl` (brand, page titles) → `display-xl` (section heads) → `display-base`
 (card titles) → `prose-sm` (helper text, descriptions) → `label` (12px — controls, metadata and
@@ -317,8 +335,8 @@ logs alike).
 **The small end of the scale is one step, not two.** An earlier 11px level was retired: every colour in the
 palette was used at both 11px and 12px (`ink-faint` alone, 48 times at 11 and 36 at 12), so the two
 sizes were one semantic level applied inconsistently — and at a 1.091 ratio the eye cannot separate
-them anyway. Steps are now 12 → 14 → 16 → 20 → 30, ratios 1.167 / 1.143 / 1.250 / 1.500, none below
-the 1.125 floor at which a size difference stops being perceptible.
+them anyway. Steps are now 12 → 14 → 16 → 20 → 24 → 30, ratios 1.167 / 1.143 / 1.250 / 1.200 /
+1.250, none below the 1.125 floor at which a size difference stops being perceptible.
 
 ## Layout
 
@@ -352,14 +370,56 @@ hardness taken off. The lamp is the single exception, a `pill` circle.
 Borders are structural. A control's border *is* its affordance — the Secondary button has no fill
 and no shadow, so its 1px `edge` border is the only thing that makes it a button.
 
+## Motion
+
+**The application does not move on its own.** Motion answers an action — a copy confirming, a
+panel opening, a state changing — and shows what changed. Nothing animates because time passed.
+This is deliberate: a tool watched while a server boots should not compete with itself for
+attention, and the lamp glow was explicitly demoted once already for exactly that reason.
+
+**The landing page is the single exception.** Its seam may carry ambient fire, because that page
+is the product's front door rather than a working surface, and the hearth is the thing the whole
+system is named for. The exception is bounded: one element on one page. Nothing else on the
+landing animates unprompted — not the lamps, not the rail, not the worlds.
+
+**State is never encoded in motion.** Lamp states are distinguished by *form* — solid disc, hollow
+annulus, thin ring — so they survive greyscale, low vision, a frozen frame, and
+`prefers-reduced-motion`. A reader who never sees a single frame of animation loses nothing but
+atmosphere.
+
+**Two animations exist only in code and cannot be drawn in Penpot.** Both are recorded here
+because the design file will never show them:
+
+- **The loading dot pulses** (`animate-pulse`) while a button's action is in flight. Penpot models
+  the dot at rest. This is permitted by the rule above — it answers an action and reports that
+  work is still running.
+- **The lamp's glow**, handled the same way and deliberately demoted.
+
+**Two dot sizes, on purpose.** The button's loading dot is 6px and takes the surrounding text's
+colour, because it sits inline before a label and must match that text's optical weight. The
+Toast's is 8px and always `{colors.accent}`, because it stands alone as the only status marker in
+a floating notification with no label beside it to match. Same idea, different job — do not
+unify them without changing both contexts.
+
+**Under `prefers-reduced-motion` all ambient motion stops** and renders a single resting frame.
+Action-driven feedback stays, because removing it would leave people unsure whether anything
+happened.
+
 ## Components
 
-**`Button`** — Variant × Size × State, 36 combinations.
+**`Button`** — Variant × Size × State, 48 combinations.
 - Variants: Primary (accent outline, fills on hover), Secondary (edge outline → accent on hover),
   Danger (edge outline → danger on hover), Link (no border).
 - Sizes: Sm `6px 12px` @ 12px · Md `8px 14px` @ 12px · Lg `8px 16px` @ 14px.
 - Disabled overrides every variant to `{colors.ink-faint}` on an `{colors.edge}` border at
   `opacity 0.55` — **including Link, which gains a border it otherwise never has**.
+- Loading prefixes the label with a **6px dot that takes the variant's own text colour**, on the
+  standard 8px gap. Unlike Disabled, Loading does *not* override the variant — a loading Primary
+  stays accent, a loading Danger stays muted. The button is non-interactive while loading, but it
+  keeps its identity, because the user is waiting for the action they chose and the control should
+  still look like that action.
+- In use the label also swaps to the in-flight verb — `Restart` becomes `Restarting`. The variants
+  carry the neutral label because the verb is supplied per instance.
 - Note the code declares 8 variants and 4 sizes but renders only 4 and 3: Success and Warning fall
   through to Primary, and `SizeXs` falls through to Sm. The design system models what renders.
 

@@ -583,6 +583,7 @@ func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 		ListIncidents:           incidentLister(d, domain.GameMinecraft),
 		DismissIncident:         incidentDismisser(d),
 		MCInstances:             d.MCInstances,
+		Requests:                d.Requests,
 		MinecraftGame:           d.MinecraftGame,
 		SearchMods:              searchMods,
 		Actor:                   actor,

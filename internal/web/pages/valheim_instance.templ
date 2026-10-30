@@ -35,6 +35,14 @@ templ ValheimInstanceDetail(d InstanceDetailUI) {
 }
 
 templ valheimModsTab(d InstanceDetailUI) {
+	if !d.CanOperate {
+		@ModsReadOnly(d, ValheimInstalledMods(d), fmt.Sprintf("/api/valheim/%d/mods/export", d.Number), "Export .r2z")
+	} else {
+		@valheimModsTabOperate(d)
+	}
+}
+
+templ valheimModsTabOperate(d InstanceDetailUI) {
 	<div
 		data-signals="{modQuery: '', modSearchLoading: false, addslug: '', showModDetail: false, modFilter: ''}"
 		data-effect={ fmt.Sprintf("@post('/api/valheim/%d/mods/search', {payload: {q: ''}})", d.Number) }

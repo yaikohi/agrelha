@@ -379,6 +379,14 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 }
 
 templ mcModsTab(d InstanceDetailUI) {
+	if !d.CanOperate {
+		@ModsReadOnly(d, MinecraftInstalledMods(d), fmt.Sprintf("/api/minecraft/%d/mods/export", d.Number), "Export pack")
+	} else {
+		@mcModsTabOperate(d)
+	}
+}
+
+templ mcModsTabOperate(d InstanceDetailUI) {
 	<div data-signals="{addslug:'',modQuery:'',modSearchLoading:false,modFilter:''}">
 		if !d.PackDefined() {
 			<div id="mod-updates-panel">

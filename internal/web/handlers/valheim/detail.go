@@ -53,6 +53,8 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 			HostUnreachable: inst.HostUnreachable,
 			HostUnknown:     inst.HostUnknown,
 			IsAdmin:         shared.IsAdmin(c),
+			CanOperate:      shared.PrincipalOf(c).CanOperate(domain.GameValheim, inst.Number),
+			Owned:           shared.PrincipalOf(c).HasRole(domain.InstanceRole(domain.GameValheim, inst.Number)),
 			GameID:          string(inst.GameID),
 			Number:          inst.Number,
 			Name:            inst.Name,

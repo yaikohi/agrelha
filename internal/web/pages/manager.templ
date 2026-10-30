@@ -56,6 +56,9 @@ templ managerPort(p ManagerPortUI) {
 			<p class="flex flex-wrap items-baseline gap-3">
 				<span class={ "font-pixel text-[11px] tracking-wide " + p.Tint }>{ p.Slot() }</span>
 				<span class="font-pixel text-[11px] text-ink-faint" data-text={ p.StateSignalExpr() }>{ p.StateLabel }</span>
+				if p.Owned {
+					<span class="font-pixel text-[11px] text-ink">yours</span>
+				}
 			</p>
 			<a href={ templ.SafeURL(p.Href) } class="focus-accent mt-0.5 block font-display text-2xl font-semibold text-ink transition-colors hover:text-accent">{ p.Name }</a>
 			<button
