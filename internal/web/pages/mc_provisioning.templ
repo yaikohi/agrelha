@@ -12,75 +12,110 @@ templ MinecraftProvisioning(inst InstanceUI, flashKind, flashMsg string) {
 		@components.Nav(components.NavProps{Current: "minecraft", IsAdmin: inst.IsAdmin, SignedIn: true})
 		@flashBanner(flashKind, flashMsg)
 		<div
-			class="mx-auto max-w-2xl space-y-6"
-			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,slow:false,cause:'',problem:'',lb_ip:%q,instanceNumber:%d,detail:%q}", inst.LBIP, inst.Number, shared.ProvisioningDetail(inst.Host)) }
+			class="mx-auto max-w-xl space-y-6"
+			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,slow:false,cause:'',problem:'',lb_ip:%q,instanceNumber:%d,detail:%q,copied:false}", inst.LBIP, inst.Number, shared.ProvisioningDetail(inst.Host)) }
+			data-computed:stopped="$phase == 'failed' || $phase == 'stalled'"
 			data-effect={ fmt.Sprintf("@get('/api/minecraft/provisioning/%d/stream')", inst.Number) }
-			data-computed-stopped="$phase == 'failed' || $phase == 'stalled'"
 		>
 			<div class="rounded-control border border-edge bg-surface-raised p-8 text-center">
-				<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-control border border-accent text-3xl text-accent">
-					<span data-show="!$ready && !$stopped()" class="animate-spin">⚙️</span>
-					<span data-show="$ready">🎮</span>
-					<span data-show="$stopped()">✕</span>
+				<!-- Header -->
+				<div>
+					<p class="font-pixel text-[11px] text-ink-faint">
+						<a href="/minecraft" class="text-tint-moss transition-colors hover:text-accent">minecraft</a>
+						<span class="mx-1.5 text-edge">/</span>
+						<span>{ fmt.Sprintf("instance #%02d", inst.Number) }</span>
+					</p>
+					<h1 class="mt-2 font-display text-2xl font-semibold tracking-tight text-ink">{ inst.Name }</h1>
+					<p class="mt-1 font-pixel text-xs text-ink-muted">{ fmt.Sprintf("%s:%d", inst.LBIP, MinecraftPort(inst)) }</p>
 				</div>
 
-				<h1 class="mt-4 text-xl font-bold text-ink">{ inst.Name }</h1>
-				<p class="mt-1 font-pixel text-xs text-ink-muted">{ fmt.Sprintf("Instance #%02d · %s", inst.Number, inst.LBIP) }</p>
+				<!-- Live Status Indicator -->
+				<div class="mt-6 flex items-center justify-center gap-2.5 font-pixel text-xs">
+					<span data-show="!$ready && !$stopped" class="lamp lamp-dim animate-pulse"></span>
+					<span data-show="!$ready && !$stopped" class="text-accent font-medium">
+						<span data-show="$phase == 'syncing'" data-text="$detail">{ shared.ProvisioningDetail(inst.Host) }</span>
+						<span data-show="$phase == 'booting'" style="display:none;">Starting Minecraft server…</span>
+					</span>
 
-				<div class="mt-8 space-y-3 text-left">
-					<!-- Step 1: desired state -->
-					<div class="flex items-center gap-3 rounded-control border border-edge bg-seam p-3.5 text-xs">
-						<span class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink">✓</span>
+					<span data-show="$ready" style="display:none;" class="lamp lamp-lit"></span>
+					<span data-show="$ready" style="display:none;" class="text-accent font-medium">Online &amp; Ready</span>
+
+					<span data-show="$stopped" style="display:none;" class="lamp lamp-out"></span>
+					<span data-show="$stopped" style="display:none;" class="text-danger font-medium" data-text="$phase == 'failed' ? 'Provisioning failed' : 'Provisioning stalled'"></span>
+				</div>
+
+				<!-- Progress Steps -->
+				<div class="mt-8 space-y-2.5 text-left">
+					<!-- Step 1: Desired state committed -->
+					<div class="flex items-center gap-3 rounded-control border border-edge/60 bg-seam px-4 py-3 text-xs">
+						<span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-edge bg-surface-raised font-pixel text-[11px] text-accent">✓</span>
 						<span class="font-medium text-ink">{ shared.ProvisioningStepCommitted(inst.Host) }</span>
 					</div>
 
-					<!-- Step 2: reconcile -->
-					<div class="flex items-center gap-3 rounded-control border border-edge bg-seam p-3.5 text-xs">
-						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink animate-pulse">⏳</span>
-						<span data-show="$phase != 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink">✓</span>
-						<span class="font-medium text-ink">{ shared.ProvisioningStepReconciling(inst.Host) }</span>
+					<!-- Step 2: Reconciler -->
+					<div class="flex items-center gap-3 rounded-control border border-edge/60 bg-seam px-4 py-3 text-xs">
+						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-accent/60 bg-surface-raised font-pixel text-[11px] text-accent animate-pulse">…</span>
+						<span data-show="$phase != 'syncing'" style="display:none;" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-edge bg-surface-raised font-pixel text-[11px] text-accent">✓</span>
+						<span class="font-medium" data-class="{'text-ink': $phase != 'syncing', 'text-ink-muted': $phase == 'syncing'}">{ shared.ProvisioningStepReconciling(inst.Host) }</span>
 					</div>
 
-					<!-- Step 3: server startup -->
+					<!-- Step 3: Server startup -->
 					<div
-						class="flex items-center gap-3 rounded-control border bg-seam p-3.5 text-xs"
-						data-class="{'border-danger': $stopped(), 'border-edge': !$stopped()}"
+						class="flex items-center gap-3 rounded-control border border-edge bg-seam px-4 py-3 text-xs transition-colors"
+						data-class="{'border-danger': $stopped, 'border-edge': !$stopped}"
 					>
-						<span data-show="$phase == 'booting'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink animate-pulse">⏳</span>
-						<span data-show="$phase == 'ready'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink">✓</span>
-						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-surface-raised text-ink-faint">○</span>
-						<span data-show="$stopped()" class="flex h-5 w-5 items-center justify-center rounded-full bg-danger text-accent-ink">✕</span>
-						<span class="font-medium text-ink">{ shared.ProvisioningStepStarting(inst.Host) }</span>
+						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-edge/40 bg-surface/40 font-pixel text-[11px] text-ink-faint">○</span>
+						<span data-show="$phase == 'booting'" style="display:none;" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-accent/60 bg-surface-raised font-pixel text-[11px] text-accent animate-pulse">…</span>
+						<span data-show="$phase == 'ready'" style="display:none;" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-edge bg-surface-raised font-pixel text-[11px] text-accent">✓</span>
+						<span data-show="$stopped" style="display:none;" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-danger/60 bg-surface-raised font-pixel text-[11px] text-danger">✕</span>
+						<span class="font-medium" data-class="{'text-ink-faint': $phase == 'syncing', 'text-ink': $phase != 'syncing'}">{ shared.ProvisioningStepStarting(inst.Host) }</span>
 					</div>
 				</div>
 
-				<p data-show="$slow && !$ready && !$stopped()" class="mt-6 font-pixel text-[11px] text-ink-muted">
+				<!-- Slow Notice -->
+				<p data-show="$slow && !$ready && !$stopped" style="display:none;" class="mt-6 font-pixel text-[11px] leading-relaxed text-ink-muted">
 					This is taking longer than usual. A large modpack has hundreds of files to fetch, so a long wait here is normal — the page keeps watching.
 				</p>
 
-				<div data-show="$problem != ''" class="mt-6 rounded-control border border-danger p-4 text-left">
-					<p class="font-pixel text-[11px] text-danger" data-text="$problem"></p>
+				<!-- Problem Notice -->
+				<div data-show="$problem != ''" style="display:none;" class="mt-6 rounded-control border border-danger/60 bg-surface p-4 text-left">
+					<p class="font-pixel text-xs text-danger" data-text="$problem"></p>
 					<p class="mt-1 font-pixel text-[11px] text-ink-faint">Still watching — this may clear on its own.</p>
 				</div>
 
-				<div data-show="$stopped()" class="mt-8 rounded-control border border-danger p-5 text-left">
-					<h3 class="font-pixel text-xs text-danger" data-text="$phase == 'failed' ? 'This world did not come up' : 'Given up waiting'"></h3>
+				<!-- Failure / Stalled Box -->
+				<div data-show="$stopped" style="display:none;" class="mt-8 rounded-control border border-danger/60 bg-surface p-5 text-left">
+					<h3 class="font-pixel text-xs font-semibold text-danger" data-text="$phase == 'failed' ? 'This world did not come up' : 'Given up waiting'"></h3>
 					<p class="mt-2 font-display text-sm leading-relaxed text-ink" data-text="$cause"></p>
 				</div>
 
 				<!-- Ready Banner -->
-				<div data-show="$ready" class="mt-8 rounded-control border border-accent p-5">
-					<h3 class="text-sm font-semibold text-accent">Server is Online & Ready!</h3>
-					<p class="mt-1 text-xs text-ink">Connect in Minecraft via:</p>
-					<div class="mt-2 font-pixel text-sm font-bold text-ink bg-surface-raised py-2 rounded-control border text-accent">
-						<span data-text={ fmt.Sprintf("$lb_ip + ':%d'", MinecraftPort(inst)) }></span>
+				<div data-show="$ready" style="display:none;" class="mt-8 rounded-control border border-edge bg-seam p-6 text-center">
+					<div class="flex items-center justify-center gap-2">
+						<span class="lamp lamp-lit"></span>
+						<h3 class="font-display text-base font-semibold text-ink">Server is Online &amp; Ready</h3>
+					</div>
+					<p class="mt-2 font-pixel text-xs text-ink-muted">Connect in Minecraft via</p>
+					<div class="mt-3 inline-flex items-center gap-3 rounded-control border border-edge bg-surface-raised px-4 py-2 font-pixel text-sm font-bold text-accent">
+						<span data-text={ fmt.Sprintf("$lb_ip + ':%d'", MinecraftPort(inst)) }>{ fmt.Sprintf("%s:%d", inst.LBIP, MinecraftPort(inst)) }</span>
+						<button
+							type="button"
+							title="Copy address"
+							data-on:click={ fmt.Sprintf("navigator.clipboard.writeText($lb_ip + ':%d'); $copied = true; setTimeout(() => $copied = false, 1800)", MinecraftPort(inst)) }
+							class="font-pixel text-[11px] font-normal text-ink-muted hover:text-accent transition-colors cursor-pointer"
+						>
+							<span data-show="!$copied">Copy</span>
+							<span data-show="$copied" style="display:none;" class="text-accent">Copied!</span>
+						</button>
 					</div>
 				</div>
 
-				<div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+				<!-- Action Buttons -->
+				<div class="mt-8 flex flex-wrap items-center justify-center gap-3 border-t border-edge/60 pt-6">
 					<a href="/minecraft" class={ components.ButtonClass(components.VariantSecondary) }>Return to Dashboard</a>
 					<a
-						data-show="$stopped()"
+						data-show="$stopped"
+						style="display:none;"
 						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/console", inst.Number)) }
 						class={ components.ButtonClass(components.VariantSecondary) }
 					>
@@ -88,7 +123,8 @@ templ MinecraftProvisioning(inst InstanceUI, flashKind, flashMsg string) {
 					</a>
 					<button
 						type="button"
-						data-show="$stopped()"
+						data-show="$stopped"
+						style="display:none;"
 						data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/start'); window.location.reload()", inst.Number) }
 						class={ components.ButtonClass(components.VariantPrimary) }
 					>
@@ -96,6 +132,7 @@ templ MinecraftProvisioning(inst InstanceUI, flashKind, flashMsg string) {
 					</button>
 					<a
 						data-show="$ready"
+						style="display:none;"
 						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d", inst.Number)) }
 						class={ components.ButtonClass(components.VariantPrimary) }
 					>
