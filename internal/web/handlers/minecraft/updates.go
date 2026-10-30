@@ -146,11 +146,11 @@ func (h *Handler) updatableInstance(c *fiber.Ctx) (*domain.Instance, error) {
 	if h.cfg.MCInstances == nil {
 		return nil, fmt.Errorf("Minecraft instance manager unconfigured")
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid instance number")
 	}
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
 		return nil, fmt.Errorf("Minecraft instance not found")
 	}

@@ -23,7 +23,7 @@ const (
 	quietBtnClass = "focus-accent font-pixel text-[11px] text-ink-faint transition-colors hover:text-accent"
 )
 
-func renderPanel(num int, name string, view appbepinex.FileView) string {
+func renderPanel(instanceNumber int, name string, view appbepinex.FileView) string {
 	var b strings.Builder
 	esc := html.EscapeString
 
@@ -51,7 +51,7 @@ func renderPanel(num int, name string, view appbepinex.FileView) string {
 		components.ButtonClass(components.VariantSecondary))
 
 	if !view.Config.Parsable() {
-		b.WriteString(renderRawEditor(num, name, view))
+		b.WriteString(renderRawEditor(instanceNumber, name, view))
 		b.WriteString(`</div>`)
 		return b.String()
 	}
@@ -61,8 +61,8 @@ func renderPanel(num int, name string, view appbepinex.FileView) string {
 			data-on:input__debounce.300ms="%s" class="%s"/></div>
 		<div class="w-56"><select data-bind="cfgSection" data-on:change="%s" class="%s">
 		<option value="">All sections</option>`,
-		esc(settingsFetch(num)), components.InputClass(),
-		esc(settingsFetch(num)), components.InputClass())
+		esc(settingsFetch(instanceNumber)), components.InputClass(),
+		esc(settingsFetch(instanceNumber)), components.InputClass())
 	for _, s := range view.Config.SectionNames() {
 		fmt.Fprintf(&b, `<option value="%s">%s</option>`, esc(s), esc(s))
 	}
@@ -70,15 +70,15 @@ func renderPanel(num int, name string, view appbepinex.FileView) string {
 
 	fmt.Fprintf(&b, `<label class="flex items-center gap-2 font-pixel text-[11px] text-ink-muted">
 		<input type="checkbox" data-bind="cfgOnlyChanged" data-on:change="%s" class="%s"/>
-		Changed from default</label>`, esc(settingsFetch(num)), checkboxClass)
+		Changed from default</label>`, esc(settingsFetch(instanceNumber)), checkboxClass)
 
 	fmt.Fprintf(&b, `<div class="ml-auto"><button type="button" data-on:click="%s" class="%s">Save changes</button></div></div>`,
-		esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/save', {contentType: 'json', payload: {file: $cfgFile, sha256: $cfgSha, values: $cfgDirty, forget: $cfgForget}})`, num)),
+		esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/save', {contentType: 'json', payload: {file: $cfgFile, sha256: $cfgSha, values: $cfgDirty, forget: $cfgForget}})`, instanceNumber)),
 		components.ButtonClass(components.VariantPrimary))
 
 	b.WriteString(`<div id="cfg-settings">`)
 	managed := managedSettings(view)
-	b.WriteString(renderSettings(num, name, view, managed, false, true))
+	b.WriteString(renderSettings(instanceNumber, name, view, managed, false, true))
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
 	return b.String()
@@ -94,13 +94,13 @@ func managedSettings(view appbepinex.FileView) []domain.Setting {
 	return out
 }
 
-func settingsFetch(num int) string {
+func settingsFetch(instanceNumber int) string {
 	return fmt.Sprintf(
 		`@get('/api/valheim/%d/configs/settings?f=' + encodeURIComponent($cfgFile) + '&q=' + encodeURIComponent($cfgSearch) + '&section=' + encodeURIComponent($cfgSection) + '&changed=' + $cfgOnlyChanged)`,
-		num)
+		instanceNumber)
 }
 
-func renderSettings(num int, name string, view appbepinex.FileView, hits []domain.Setting, truncated, onlyManaged bool) string {
+func renderSettings(instanceNumber int, name string, view appbepinex.FileView, hits []domain.Setting, truncated, onlyManaged bool) string {
 	var b strings.Builder
 
 	if len(hits) == 0 {
@@ -117,7 +117,7 @@ func renderSettings(num int, name string, view appbepinex.FileView, hits []domai
 		if !ok {
 			continue
 		}
-		b.WriteString(renderSetting(num, name, view, s, i))
+		b.WriteString(renderSetting(instanceNumber, name, view, s, i))
 	}
 
 	if truncated {
@@ -139,7 +139,7 @@ func settingIndex(view appbepinex.FileView) map[domain.SettingKey]int {
 // A managed Setting is marked by a rule down its left edge rather than a badge:
 // at two hundred rows a rule is scannable and a badge is noise, and "agrelha
 // writes this value" is a property of the row, not a label on it.
-func renderSetting(num int, file string, view appbepinex.FileView, s domain.Setting, idx int) string {
+func renderSetting(instanceNumber int, file string, view appbepinex.FileView, s domain.Setting, idx int) string {
 	var b strings.Builder
 	esc := html.EscapeString
 	managed := view.Overrides.Has(s.Section, s.Name)
@@ -197,7 +197,7 @@ func renderSetting(num int, file string, view appbepinex.FileView, s domain.Sett
 		fmt.Fprintf(&b, `<button type="button" data-on:click="%s" class="%s"
 			title="pins the mod's default as a managed value">Reset to default</button>`,
 			esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/reset', {contentType: 'json', payload: {file: '%s', sha256: $cfgSha, section: '%s', setting: '%s'}})`,
-				num, jsQuote(file), jsQuote(s.Section), jsQuote(s.Name))),
+				instanceNumber, jsQuote(file), jsQuote(s.Section), jsQuote(s.Name))),
 			quietBtnClass)
 	}
 	if managed {
@@ -265,7 +265,7 @@ func renderControl(s domain.Setting, idx int) string {
 	}
 }
 
-func renderRawEditor(num int, name string, view appbepinex.FileView) string {
+func renderRawEditor(instanceNumber int, name string, view appbepinex.FileView) string {
 	esc := html.EscapeString
 
 	return fmt.Sprintf(`<div class="space-y-4 px-6 py-5">
@@ -279,7 +279,7 @@ func renderRawEditor(num int, name string, view appbepinex.FileView) string {
 		proseClass,
 		components.TextareaClass(),
 		esc(view.Overrides.Encode()),
-		esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/raw', {contentType: 'json', payload: {file: '%s', content: $cfgRawContent}})`, num, jsQuote(name))),
+		esc(fmt.Sprintf(`@post('/api/valheim/%d/configs/raw', {contentType: 'json', payload: {file: '%s', content: $cfgRawContent}})`, instanceNumber, jsQuote(name))),
 		components.ButtonClass(components.VariantPrimary))
 }
 
@@ -315,12 +315,12 @@ func humanBytes(n int64) string {
 	}
 }
 
-func renderImportPanel(num int, files []appbepinex.FileSummary) string {
+func renderImportPanel(instanceNumber int, files []appbepinex.FileSummary) string {
 	esc := html.EscapeString
 	preview := fmt.Sprintf(
-		`@post('/api/valheim/%d/configs/import/preview', {contentType: 'json', payload: {file: $cfgImportFile, content: $cfgImport}})`, num)
+		`@post('/api/valheim/%d/configs/import/preview', {contentType: 'json', payload: {file: $cfgImportFile, content: $cfgImport}})`, instanceNumber)
 	apply := fmt.Sprintf(
-		`@post('/api/valheim/%d/configs/import/apply', {contentType: 'json', payload: {file: $cfgImportFile, sha256: $cfgImportSha, content: $cfgImport}})`, num)
+		`@post('/api/valheim/%d/configs/import/apply', {contentType: 'json', payload: {file: $cfgImportFile, sha256: $cfgImportSha, content: $cfgImport}})`, instanceNumber)
 
 	var picker strings.Builder
 	fmt.Fprintf(&picker, `<div class="space-y-1"><label class="block font-pixel text-[11px] text-ink-faint" for="cfg-import-target">Apply to</label>
@@ -367,7 +367,7 @@ func renderImportPanel(num int, files []appbepinex.FileSummary) string {
 		esc(apply), components.ButtonClass(components.VariantPrimary))
 }
 
-func renderImportPreview(num int, name string, view appbepinex.FileView, plan domain.ImportPlan) string {
+func renderImportPreview(instanceNumber int, name string, view appbepinex.FileView, plan domain.ImportPlan) string {
 	var b strings.Builder
 	esc := html.EscapeString
 

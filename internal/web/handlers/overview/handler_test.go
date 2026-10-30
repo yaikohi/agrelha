@@ -115,9 +115,9 @@ func (r *rig) seed(t *testing.T) domain.Instance {
 	return *inst
 }
 
-func (r *rig) resources(t *testing.T, num int) domain.Resources {
+func (r *rig) resources(t *testing.T, instanceNumber int) domain.Resources {
 	t.Helper()
-	got, err := r.mgr.GetInstance(context.Background(), num)
+	got, err := r.mgr.GetInstance(context.Background(), instanceNumber)
 	if err != nil || got == nil {
 		t.Fatal(err)
 	}

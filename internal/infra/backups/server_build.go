@@ -18,8 +18,8 @@ const serverBuildFile = "server-build.json"
 // instanceDir is the Instance's own directory on the shared export. The naming
 // convention belongs to the domain, because the deployment template has to
 // render the same string into the sidecars that write here.
-func instanceDir(backupsDir, slug string, num int) string {
-	return filepath.Join(backupsDir, domain.Instance{Slug: slug, Number: num}.BackupsSubdir())
+func instanceDir(backupsDir, slug string, instanceNumber int) string {
+	return filepath.Join(backupsDir, domain.Instance{Slug: slug, Number: instanceNumber}.BackupsSubdir())
 }
 
 type serverBuildDoc struct {
@@ -33,11 +33,11 @@ type serverBuildDoc struct {
 // store offers. A missing file is not an error: the sidecar may not have run
 // yet, and "we do not know" is a legitimate answer that the UI must be able to
 // tell apart from "up to date".
-func ReadServerBuild(backupsDir, slug string, num int) (*domain.ServerBuild, error) {
+func ReadServerBuild(backupsDir, slug string, instanceNumber int) (*domain.ServerBuild, error) {
 	if backupsDir == "" || slug == "" {
 		return nil, nil
 	}
-	path := filepath.Join(instanceDir(backupsDir, slug, num), serverBuildFile)
+	path := filepath.Join(instanceDir(backupsDir, slug, instanceNumber), serverBuildFile)
 	raw, err := os.ReadFile(path)
 	switch {
 	case os.IsNotExist(err):

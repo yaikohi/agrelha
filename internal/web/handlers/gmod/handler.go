@@ -281,7 +281,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).SendString("Garry's Mod instance manager not configured")
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
@@ -291,7 +291,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Unknown tab for a Garry's Mod world: " + tab)
 	}
 
-	inst, err := h.cfg.Instances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.Instances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
 		return c.Status(fiber.StatusNotFound).SendString("Garry's Mod instance not found")
 	}
@@ -365,7 +365,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 		if col, err := h.cfg.Workshop.GetCollection(c.UserContext(), collectionID); err == nil {
 			d.CollectionTitle = col.Title
 			d.CollectionItems = col.ItemCount
-			if since, ok := h.serverRunningSince(c, num); ok && !col.TimeUpdated.IsZero() && col.TimeUpdated.After(since) {
+			if since, ok := h.serverRunningSince(c, instanceNumber); ok && !col.TimeUpdated.IsZero() && col.TimeUpdated.After(since) {
 				d.RestartPending = true
 				d.RestartReason = fmt.Sprintf("Steam Workshop collection %q was updated upstream on %s. Restart the server to apply changes.", col.Title, col.TimeUpdated.Format("Jan 02, 2006"))
 			}
@@ -380,16 +380,16 @@ func (h *Handler) InstanceStart(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Garry's Mod instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.Instances.StartInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.Instances.StartInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Start failed: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Starting Garry's Mod instance #%02d...", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Starting Garry's Mod instance #%02d...", instanceNumber), nil)
 }
 
 func (h *Handler) InstanceStop(c *fiber.Ctx) error {
@@ -397,16 +397,16 @@ func (h *Handler) InstanceStop(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Garry's Mod instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.Instances.StopInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.Instances.StopInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Stop failed: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Stopping Garry's Mod instance #%02d...", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Stopping Garry's Mod instance #%02d...", instanceNumber), nil)
 }
 
 func (h *Handler) InstanceRestart(c *fiber.Ctx) error {
@@ -414,16 +414,16 @@ func (h *Handler) InstanceRestart(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Garry's Mod instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.Instances.RestartInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.Instances.RestartInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Restart failed: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Restarting Garry's Mod instance #%02d...", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Restarting Garry's Mod instance #%02d...", instanceNumber), nil)
 }
 
 func (h *Handler) InstanceDelete(c *fiber.Ctx) error {
@@ -431,25 +431,25 @@ func (h *Handler) InstanceDelete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Garry's Mod instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.Instances.DeleteInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.Instances.DeleteInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to delete world: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted Garry's Mod instance #%02d.", num), map[string]any{
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted Garry's Mod instance #%02d.", instanceNumber), map[string]any{
 		"redirect": "/gmod",
 	})
 }
 
-func (h *Handler) serverRunningSince(c *fiber.Ctx, num int) (time.Time, bool) {
+func (h *Handler) serverRunningSince(c *fiber.Ctx, instanceNumber int) (time.Time, bool) {
 	if h.cfg.Instances == nil {
 		return time.Time{}, false
 	}
-	st, err := h.cfg.Instances.RuntimeStatus(c.UserContext(), num)
+	st, err := h.cfg.Instances.RuntimeStatus(c.UserContext(), instanceNumber)
 	if err != nil || st.StartedAt.IsZero() {
 		return time.Time{}, false
 	}

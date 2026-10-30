@@ -11,8 +11,8 @@ import (
 func TestTheIngestSourceStreamsFromTheResolvedInstance(t *testing.T) {
 	var askedFor int
 	src := NewInstanceSource(
-		func(ctx context.Context, num int, tail int64) (io.ReadCloser, error) {
-			askedFor = num
+		func(ctx context.Context, instanceNumber int, tail int64) (io.ReadCloser, error) {
+			askedFor = instanceNumber
 			return io.NopCloser(strings.NewReader("line\n")), nil
 		},
 		func(ctx context.Context) (int, error) { return 2, nil },
@@ -33,7 +33,7 @@ func TestTheIngestSourceStreamsFromTheResolvedInstance(t *testing.T) {
 func TestTheIngestSourceReportsAnUnresolvableTarget(t *testing.T) {
 	want := errors.New("no valheim instance")
 	src := NewInstanceSource(
-		func(ctx context.Context, num int, tail int64) (io.ReadCloser, error) {
+		func(ctx context.Context, instanceNumber int, tail int64) (io.ReadCloser, error) {
 			t.Error("streamed logs despite having no target instance")
 			return nil, nil
 		},

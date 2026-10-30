@@ -52,13 +52,13 @@ func New(opts ...Option) *Tracker {
 	return t
 }
 
-func (t *Tracker) Players(num int) (int, bool) {
+func (t *Tracker) Players(instanceNumber int) (int, bool) {
 	if t == nil {
 		return 0, false
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	w, ok := t.state[num]
+	w, ok := t.state[instanceNumber]
 	if !ok || !w.live {
 		return 0, false
 	}
@@ -68,7 +68,7 @@ func (t *Tracker) Players(num int) (int, bool) {
 	return len(w.online), true
 }
 
-func (t *Tracker) Watch(ctx context.Context, num int, s Streamer) {
+func (t *Tracker) Watch(ctx context.Context, instanceNumber int, s Streamer) {
 	if t == nil || s == nil {
 		return
 	}
@@ -77,10 +77,10 @@ func (t *Tracker) Watch(ctx context.Context, num int, s Streamer) {
 			if ctx.Err() != nil {
 				return
 			}
-			if err := t.consume(ctx, num, s); err != nil && ctx.Err() == nil {
-				slog.Debug("occupancy: log stream ended", "instance", num, "err", err)
+			if err := t.consume(ctx, instanceNumber, s); err != nil && ctx.Err() == nil {
+				slog.Debug("occupancy: log stream ended", "instance", instanceNumber, "err", err)
 			}
-			t.drop(num)
+			t.drop(instanceNumber)
 			select {
 			case <-ctx.Done():
 				return
@@ -90,14 +90,14 @@ func (t *Tracker) Watch(ctx context.Context, num int, s Streamer) {
 	}()
 }
 
-func (t *Tracker) consume(ctx context.Context, num int, s Streamer) error {
+func (t *Tracker) consume(ctx context.Context, instanceNumber int, s Streamer) error {
 	rc, err := s.StreamLogs(ctx, t.tail)
 	if err != nil {
 		return err
 	}
 	defer rc.Close()
 
-	t.begin(num)
+	t.begin(instanceNumber)
 
 	sc := bufio.NewScanner(rc)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -108,32 +108,32 @@ func (t *Tracker) consume(ctx context.Context, num int, s Streamer) error {
 		id, ev := domain.ValheimConnection(sc.Text())
 		switch ev {
 		case domain.ConnJoined:
-			t.set(num, id, true)
+			t.set(instanceNumber, id, true)
 		case domain.ConnLeft:
-			t.set(num, id, false)
+			t.set(instanceNumber, id, false)
 		}
 	}
 	return sc.Err()
 }
 
-func (t *Tracker) begin(num int) {
+func (t *Tracker) begin(instanceNumber int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.state[num] = &world{online: map[string]struct{}{}, connectedAt: t.now(), live: true}
+	t.state[instanceNumber] = &world{online: map[string]struct{}{}, connectedAt: t.now(), live: true}
 }
 
-func (t *Tracker) drop(num int) {
+func (t *Tracker) drop(instanceNumber int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if w, ok := t.state[num]; ok {
+	if w, ok := t.state[instanceNumber]; ok {
 		w.live = false
 	}
 }
 
-func (t *Tracker) set(num int, id string, online bool) {
+func (t *Tracker) set(instanceNumber int, id string, online bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	w, ok := t.state[num]
+	w, ok := t.state[instanceNumber]
 	if !ok {
 		return
 	}

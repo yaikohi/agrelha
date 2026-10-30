@@ -59,7 +59,7 @@ type Config struct {
 	// ServerBuild reports the game binaries an Instance runs versus the newest
 	// the store offers. Injected as a function because the source is a file on
 	// the backups mount, not a port.
-	ServerBuild           func(slug string, num int) (*domain.ServerBuild, error)
+	ServerBuild           func(slug string, instanceNumber int) (*domain.ServerBuild, error)
 	TS                    ports.PackageCatalog
 	ReadmeCache           ports.ReadmeCache
 	Actor                 func(*fiber.Ctx) string

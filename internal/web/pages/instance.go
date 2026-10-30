@@ -62,7 +62,7 @@ type instanceSpec struct {
 	pending  func(InstanceDetailUI) string
 }
 
-func instanceTabs(game string, num int, active string, vanilla, canOperate bool) []InstanceTabUI {
+func instanceTabs(game string, instanceNumber int, active string, vanilla, canOperate bool) []InstanceTabUI {
 	slugs, ok := implementedTabs[game]
 	if !ok {
 		slugs = []string{"overview"}
@@ -86,7 +86,7 @@ func instanceTabs(game string, num int, active string, vanilla, canOperate bool)
 		}
 		tabs = append(tabs, InstanceTabUI{
 			Label:  label,
-			Href:   fmt.Sprintf("/%s/%d/%s", game, num, slug),
+			Href:   fmt.Sprintf("/%s/%d/%s", game, instanceNumber, slug),
 			Active: active == slug,
 		})
 	}
@@ -343,6 +343,6 @@ var gmodInstanceSpec = instanceSpec{
 	},
 }
 
-func logStreamExpr(game string, num int) string {
-	return fmt.Sprintf("@get('/api/%s/%d/logs/stream')", game, num)
+func logStreamExpr(game string, instanceNumber int) string {
+	return fmt.Sprintf("@get('/api/%s/%d/logs/stream')", game, instanceNumber)
 }

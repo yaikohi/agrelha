@@ -147,8 +147,8 @@ templ instanceOverview(o InstanceOverviewUI) {
 	</div>
 }
 
-templ instanceConsole(game string, num int, note string, placeholder string) {
-	<div class="mt-8 space-y-4" data-effect={ logStreamExpr(game, num) }>
+templ instanceConsole(game string, instanceNumber int, note string, placeholder string) {
+	<div class="mt-8 space-y-4" data-effect={ logStreamExpr(game, instanceNumber) }>
 		<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ note }</p>
 		@components.LogPane("console-logs", placeholder)
 	</div>

@@ -64,7 +64,13 @@ func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
 		app.Get("/auth/login", cfg.Auth.Login)
 		app.Post("/auth/login", cfg.Auth.Login)
 		app.Get("/auth/callback", cfg.Auth.Callback)
-		app.Get("/auth/logout", cfg.Auth.Logout)
+		app.Get("/auth/logout", func(c *fiber.Ctx) error {
+			if err := cfg.Auth.Logout(c); err != nil {
+				return err
+			}
+			shared.SetFlash(c, "ok", "Signed out.")
+			return nil
+		})
 	}
 
 	// Public routes (accessible by LAN / WireGuard players)

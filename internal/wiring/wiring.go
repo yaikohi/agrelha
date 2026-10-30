@@ -220,21 +220,21 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	if d.MCK8s != nil {
 		instOpts = append(instOpts,
 			instances.WithJobRunner(d.MCK8s),
-			instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
-				inst, err := d.MCInstances.GetInstance(ctx, num)
+			instances.WithConfigsReader(func(ctx context.Context, instanceNumber int) (map[string]string, error) {
+				inst, err := d.MCInstances.GetInstance(ctx, instanceNumber)
 				if err != nil || inst == nil {
 					if err == nil {
-						err = fmt.Errorf("instance %d not found", num)
+						err = fmt.Errorf("instance %d not found", instanceNumber)
 					}
 					return nil, err
 				}
 				return d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName(domain.MinecraftProfile))
 			}),
-			instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
-				inst, err := d.MCInstances.GetInstance(ctx, num)
+			instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
+				inst, err := d.MCInstances.GetInstance(ctx, instanceNumber)
 				if err != nil || inst == nil {
 					if err == nil {
-						err = fmt.Errorf("instance %d not found", num)
+						err = fmt.Errorf("instance %d not found", instanceNumber)
 					}
 					return nil, err
 				}
@@ -254,11 +254,11 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			}),
 			// The CurseForge half of the same ConfigMap. Absent for any world with
 			// no CurseForge mods, which is not an error.
-			instances.WithCurseForgeReader(func(ctx context.Context, num int) ([]string, error) {
-				inst, err := d.MCInstances.GetInstance(ctx, num)
+			instances.WithCurseForgeReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
+				inst, err := d.MCInstances.GetInstance(ctx, instanceNumber)
 				if err != nil || inst == nil {
 					if err == nil {
-						err = fmt.Errorf("instance %d not found", num)
+						err = fmt.Errorf("instance %d not found", instanceNumber)
 					}
 					return nil, err
 				}
@@ -380,21 +380,21 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	if d.K8s != nil {
 		valheimInstOpts = append(valheimInstOpts,
 			instances.WithJobRunner(d.K8s),
-			instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
-				inst, err := d.ValheimInstances.GetInstance(ctx, num)
+			instances.WithConfigsReader(func(ctx context.Context, instanceNumber int) (map[string]string, error) {
+				inst, err := d.ValheimInstances.GetInstance(ctx, instanceNumber)
 				if err != nil || inst == nil {
 					if err == nil {
-						err = fmt.Errorf("instance %d not found", num)
+						err = fmt.Errorf("instance %d not found", instanceNumber)
 					}
 					return nil, err
 				}
 				return d.K8s.ConfigMapData(ctx, inst.ConfigsCMName(domain.ValheimProfile))
 			}),
-			instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
-				inst, err := d.ValheimInstances.GetInstance(ctx, num)
+			instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
+				inst, err := d.ValheimInstances.GetInstance(ctx, instanceNumber)
 				if err != nil || inst == nil {
 					if err == nil {
-						err = fmt.Errorf("instance %d not found", num)
+						err = fmt.Errorf("instance %d not found", instanceNumber)
 					}
 					return nil, err
 				}
@@ -748,36 +748,36 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	// nothing published to read, and the Configs tab says so rather than
 	// pretending the world has no settings.
 	if d.ValheimInstances != nil && (cfg.BackupsDir != "" || cfg.DataDir != "") {
-		localBepInEx := func(num int) string {
+		localBepInEx := func(instanceNumber int) string {
 			if cfg.DataDir == "" {
 				return ""
 			}
-			dir := compose.InstanceDataDir(cfg.DataDir, domain.NewInstanceID(domain.GameValheim, num), "")
+			dir := compose.InstanceDataDir(cfg.DataDir, domain.NewInstanceID(domain.GameValheim, instanceNumber), "")
 			return filepath.Join(dir, "config", "bepinex")
 		}
 		d.ValheimConfigs = appbepinex.New(
-			appbepinex.WithSnapshot(func(slug string, num int) (*domain.ConfigSnapshot, error) {
-				snap, err := infrabackups.ReadConfigSnapshot(cfg.BackupsDir, slug, num)
+			appbepinex.WithSnapshot(func(slug string, instanceNumber int) (*domain.ConfigSnapshot, error) {
+				snap, err := infrabackups.ReadConfigSnapshot(cfg.BackupsDir, slug, instanceNumber)
 				if err != nil {
 					return nil, err
 				}
 				if snap != nil {
 					return snap, nil
 				}
-				return infrabackups.ReadConfigSnapshotFromDir(localBepInEx(num), fmt.Sprintf("%s-%02d", slug, num))
+				return infrabackups.ReadConfigSnapshotFromDir(localBepInEx(instanceNumber), fmt.Sprintf("%s-%02d", slug, instanceNumber))
 			}),
-			appbepinex.WithFile(func(slug string, num int, name string) (string, string, error) {
-				body, sum, err := infrabackups.ReadConfigFile(cfg.BackupsDir, slug, num, name)
+			appbepinex.WithFile(func(slug string, instanceNumber int, name string) (string, string, error) {
+				body, sum, err := infrabackups.ReadConfigFile(cfg.BackupsDir, slug, instanceNumber, name)
 				if err == nil {
 					return body, sum, nil
 				}
 				if !os.IsNotExist(err) {
 					return "", "", err
 				}
-				return infrabackups.ReadConfigFileFromDir(localBepInEx(num), name)
+				return infrabackups.ReadConfigFileFromDir(localBepInEx(instanceNumber), name)
 			}),
-			appbepinex.WithOverrides(func(ctx context.Context, num int) (map[string]string, error) {
-				return d.ValheimInstances.ListConfigData(ctx, num)
+			appbepinex.WithOverrides(func(ctx context.Context, instanceNumber int) (map[string]string, error) {
+				return d.ValheimInstances.ListConfigData(ctx, instanceNumber)
 			}),
 			appbepinex.WithWriter(d.ValheimInstances),
 		)

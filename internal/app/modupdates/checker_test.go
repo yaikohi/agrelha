@@ -63,12 +63,12 @@ type fakeInstances struct {
 	failInstalledAfterReplace bool
 }
 
-func (f *fakeInstances) GetInstance(_ context.Context, num int) (*domain.Instance, error) {
+func (f *fakeInstances) GetInstance(_ context.Context, instanceNumber int) (*domain.Instance, error) {
 	if f.getInstErr != nil {
 		return nil, f.getInstErr
 	}
 	for _, inst := range f.insts {
-		if inst.Number == num {
+		if inst.Number == instanceNumber {
 			return &inst, nil
 		}
 	}
@@ -82,17 +82,17 @@ func (f *fakeInstances) ListInstances(context.Context) ([]domain.Instance, error
 	return f.insts, f.err
 }
 
-func (f *fakeInstances) GetInstalledMods(_ context.Context, num int) ([]string, error) {
+func (f *fakeInstances) GetInstalledMods(_ context.Context, instanceNumber int) ([]string, error) {
 	if f.installedErr != nil {
 		return nil, f.installedErr
 	}
 	if f.err != nil {
 		return nil, f.err
 	}
-	return f.entries[num], nil
+	return f.entries[instanceNumber], nil
 }
 
-func (f *fakeInstances) ReplaceMods(_ context.Context, num int, entries []string, detail string, _ ...string) (bool, error) {
+func (f *fakeInstances) ReplaceMods(_ context.Context, instanceNumber int, entries []string, detail string, _ ...string) (bool, error) {
 	if f.replaceErr != nil {
 		return false, f.replaceErr
 	}
@@ -100,8 +100,8 @@ func (f *fakeInstances) ReplaceMods(_ context.Context, num int, entries []string
 		f.wrote = map[int][]string{}
 		f.details = map[int]string{}
 	}
-	f.wrote[num] = entries
-	f.details[num] = detail
+	f.wrote[instanceNumber] = entries
+	f.details[instanceNumber] = detail
 	if f.replaceUnchanged {
 		return false, nil
 	}
@@ -124,8 +124,8 @@ func (p *plainInstances) ListInstances(context.Context) ([]domain.Instance, erro
 	return p.insts, nil
 }
 
-func (p *plainInstances) GetInstalledMods(_ context.Context, num int) ([]string, error) {
-	return p.entries[num], nil
+func (p *plainInstances) GetInstalledMods(_ context.Context, instanceNumber int) ([]string, error) {
+	return p.entries[instanceNumber], nil
 }
 
 func (p *plainInstances) ReplaceMods(context.Context, int, []string, string, ...string) (bool, error) {

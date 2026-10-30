@@ -24,7 +24,7 @@ func TestEveryGameResolvesAGamePath(t *testing.T) {
 		d := InstanceDetailUI{InstanceUI: InstanceUI{GameID: string(id)}}
 		got := d.GamePath()
 		if got == "" {
-			t.Errorf("GamePath() empty for %q; every handler rendering this panel must set GameID, or the mod-update buttons POST to /api//<num>/... and silently do nothing", id)
+			t.Errorf("GamePath() empty for %q; every handler rendering this panel must set GameID, or the mod-update buttons POST to /api//<instanceNumber>/... and silently do nothing", id)
 		}
 		if strings.Contains("/api/"+got+"/1/mods/updates/apply", "//") {
 			t.Errorf("malformed URL for %q", id)

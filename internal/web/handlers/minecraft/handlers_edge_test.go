@@ -383,7 +383,7 @@ func TestMCInstanceDetailAllBranches(t *testing.T) {
 
 	respBadNum, _ := appBad.Test(httptest.NewRequest("GET", "/test/invalid/overview", nil))
 	if respBadNum.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("expected 400 for bad instance num, got: %d", respBadNum.StatusCode)
+		t.Errorf("expected 400 for bad instance instanceNumber, got: %d", respBadNum.StatusCode)
 	}
 
 	respNotFound, _ := app.Test(httptest.NewRequest("GET", "/minecraft/999/overview", nil))
@@ -532,7 +532,7 @@ func TestMCInstanceDetailAllBranches(t *testing.T) {
 	// Invalid number via appBad
 	respBadExp, _ := appBad.Test(httptest.NewRequest("GET", "/test/bad/export", nil))
 	if respBadExp.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("expected 400 for bad export num, got: %d", respBadExp.StatusCode)
+		t.Errorf("expected 400 for bad export instanceNumber, got: %d", respBadExp.StatusCode)
 	}
 
 	// Unconfigured MinecraftGame
@@ -663,7 +663,7 @@ func TestMCConfigsAllBranches(t *testing.T) {
 
 	respBadGetNum, _ := appBad.Test(httptest.NewRequest("GET", "/test/bad/configs/file?f=server.properties", nil))
 	if respBadGetNum.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("expected 400 for bad get num, got: %d", respBadGetNum.StatusCode)
+		t.Errorf("expected 400 for bad get instanceNumber, got: %d", respBadGetNum.StatusCode)
 	}
 
 	respNoFileGet, _ := app.Test(httptest.NewRequest("GET", "/api/minecraft/1/configs/file?f=", nil))
@@ -1136,7 +1136,7 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 
 	respExportBadNum, _ := appUnconstrained.Test(httptest.NewRequest("GET", "/test/export/bad", nil))
 	if respExportBadNum.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("expected 400 for export with bad num, got: %d", respExportBadNum.StatusCode)
+		t.Errorf("expected 400 for export with bad instanceNumber, got: %d", respExportBadNum.StatusCode)
 	}
 
 	respPageEmptyTab, err := appUnconstrained.Test(httptest.NewRequest("GET", "/test/page/1", nil))
@@ -1348,14 +1348,14 @@ func TestMinecraftFinalCoverageEdges(t *testing.T) {
 	}
 
 	// 11. updates.go: MCModUpdatesApply
-	// Branch: updatableInstance fails (bad num on unconstrained route)
+	// Branch: updatableInstance fails (bad instanceNumber on unconstrained route)
 	respApplyBadNum, _ := appUnconstrained.Test(httptest.NewRequest("POST", "/test/apply/bad", nil))
 	bApplyBadNum, _ := io.ReadAll(respApplyBadNum.Body)
 	if !strings.Contains(string(bApplyBadNum), "invalid instance number") {
 		t.Errorf("expected invalid instance number toast, got: %s", bApplyBadNum)
 	}
 
-	// Branch: updatableInstance fails for undo (bad num on unconstrained route)
+	// Branch: updatableInstance fails for undo (bad instanceNumber on unconstrained route)
 	respUndoBadNum, _ := appUnconstrained.Test(httptest.NewRequest("POST", "/test/undo/bad", nil))
 	bUndoBadNum, _ := io.ReadAll(respUndoBadNum.Body)
 	if !strings.Contains(string(bUndoBadNum), "invalid instance number") {

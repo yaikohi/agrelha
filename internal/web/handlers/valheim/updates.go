@@ -146,11 +146,11 @@ func (h *Handler) updatableInstance(c *fiber.Ctx) (*domain.Instance, error) {
 	if h.cfg.ValheimInstances == nil {
 		return nil, fmt.Errorf("Valheim instance manager unconfigured")
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid instance number")
 	}
-	inst, err := h.cfg.ValheimInstances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.ValheimInstances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
 		return nil, fmt.Errorf("Valheim instance not found")
 	}

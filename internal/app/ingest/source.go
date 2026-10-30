@@ -7,12 +7,12 @@ import (
 )
 
 type InstanceSource struct {
-	logs   func(ctx context.Context, num int, tail int64) (io.ReadCloser, error)
+	logs   func(ctx context.Context, instanceNumber int, tail int64) (io.ReadCloser, error)
 	target func(ctx context.Context) (int, error)
 }
 
 func NewInstanceSource(
-	logs func(ctx context.Context, num int, tail int64) (io.ReadCloser, error),
+	logs func(ctx context.Context, instanceNumber int, tail int64) (io.ReadCloser, error),
 	target func(ctx context.Context) (int, error),
 ) InstanceSource {
 	return InstanceSource{logs: logs, target: target}
@@ -22,9 +22,9 @@ func (s InstanceSource) StreamLogs(ctx context.Context, tail int64) (io.ReadClos
 	if s.logs == nil || s.target == nil {
 		return nil, fmt.Errorf("ingest: no log source configured")
 	}
-	num, err := s.target(ctx)
+	instanceNumber, err := s.target(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return s.logs(ctx, num, tail)
+	return s.logs(ctx, instanceNumber, tail)
 }

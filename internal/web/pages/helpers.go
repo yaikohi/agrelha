@@ -894,11 +894,11 @@ func GModCard(summary GameSummaryUI, isAdmin bool) GameCardUI {
 	for _, inst := range summary.SavedInstances {
 		port := GModPort(inst)
 		row := ServerRowUI{
-			Name:         inst.Name,
-			Address:      fmt.Sprintf("%s:%d", inst.LBIP, port),
-			Password:     inst.Password,
-			JoinLabel:    "Join via Steam",
-			Online:       false,
+			Name:      inst.Name,
+			Address:   fmt.Sprintf("%s:%d", inst.LBIP, port),
+			Password:  inst.Password,
+			JoinLabel: "Join via Steam",
+			Online:    false,
 		}
 		if inst.Number > 0 {
 			row.OnlineSignal = fmt.Sprintf("inst_gmod_%d_online", inst.Number)
@@ -1048,7 +1048,7 @@ var tabLabelBySlug = map[string]string{
 	"settings": "Settings",
 }
 
-func InstanceTabs(game string, num int, active string, vanilla bool) []components.TabItem {
+func InstanceTabs(game string, instanceNumber int, active string, vanilla bool) []components.TabItem {
 	slugs, ok := implementedTabs[game]
 	if !ok {
 		slugs = []string{"overview"}
@@ -1070,7 +1070,7 @@ func InstanceTabs(game string, num int, active string, vanilla bool) []component
 		}
 		tabs = append(tabs, components.TabItem{
 			Label:  label,
-			Href:   fmt.Sprintf("/%s/%d/%s", game, num, slug),
+			Href:   fmt.Sprintf("/%s/%d/%s", game, instanceNumber, slug),
 			Active: active == slug,
 		})
 	}

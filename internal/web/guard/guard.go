@@ -115,34 +115,34 @@ func Instance(game domain.GameID) fiber.Handler {
 		if !p.SignedIn() {
 			return Unauthenticated(c)
 		}
-		num, err := strconv.Atoi(c.Params("num"))
-		if err != nil || num <= 0 {
+		instanceNumber, err := strconv.Atoi(c.Params("num"))
+		if err != nil || instanceNumber <= 0 {
 			return Forbidden(c, "Unknown instance.")
 		}
-		if c.Method() == fiber.MethodDelete && isBareInstancePath(c, num) {
+		if c.Method() == fiber.MethodDelete && isBareInstancePath(c, instanceNumber) {
 			if !p.Admin {
 				return Forbidden(c, "Only administrators can delete a world.")
 			}
 			return c.Next()
 		}
-		if c.Method() == fiber.MethodGet && isModsViewPath(c, game, num) {
+		if c.Method() == fiber.MethodGet && isModsViewPath(c, game, instanceNumber) {
 			return c.Next()
 		}
-		if !p.CanOperate(game, num) {
+		if !p.CanOperate(game, instanceNumber) {
 			return Forbidden(c, "You do not have access to that world.")
 		}
 		return c.Next()
 	}
 }
 
-func isModsViewPath(c *fiber.Ctx, game domain.GameID, num int) bool {
+func isModsViewPath(c *fiber.Ctx, game domain.GameID, instanceNumber int) bool {
 	p := strings.TrimSuffix(c.Path(), "/")
-	return p == fmt.Sprintf("/%s/%d/mods", game, num)
+	return p == fmt.Sprintf("/%s/%d/mods", game, instanceNumber)
 }
 
-func isBareInstancePath(c *fiber.Ctx, num int) bool {
+func isBareInstancePath(c *fiber.Ctx, instanceNumber int) bool {
 	p := strings.TrimSuffix(c.Path(), "/")
-	return strings.HasSuffix(p, "/instances/"+strconv.Itoa(num))
+	return strings.HasSuffix(p, "/instances/"+strconv.Itoa(instanceNumber))
 }
 
 func AdminExact(paths ...string) fiber.Handler {

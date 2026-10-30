@@ -95,12 +95,12 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	backupName, err := h.cfg.MCInstances.CreateBackup(c.UserContext(), num, h.cfg.Actor(c))
+	backupName, err := h.cfg.MCInstances.CreateBackup(c.UserContext(), instanceNumber, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
@@ -114,7 +114,7 @@ func (h *Handler) RestoreInPlace(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -132,7 +132,7 @@ func (h *Handler) RestoreInPlace(c *fiber.Ctx) error {
 		archive = strings.TrimSpace(c.Query("archive"))
 	}
 
-	if err := h.cfg.MCInstances.RestoreInPlace(c.UserContext(), num, archive, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.MCInstances.RestoreInPlace(c.UserContext(), instanceNumber, archive, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
 
@@ -146,7 +146,7 @@ func (h *Handler) RestoreNew(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -158,7 +158,7 @@ func (h *Handler) RestoreNew(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 
-	created, err := h.cfg.MCInstances.RestoreNew(c.UserContext(), num, req.Name, req.Tier, req.Archive, h.cfg.Actor(c))
+	created, err := h.cfg.MCInstances.RestoreNew(c.UserContext(), instanceNumber, req.Name, req.Tier, req.Archive, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
@@ -207,9 +207,9 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "File name required.", nil)
 	}
 
-	num, _ := strconv.Atoi(c.Params("num"))
+	instanceNumber, _ := strconv.Atoi(c.Params("num"))
 	if h.cfg.MCInstances != nil {
-		if err := h.cfg.MCInstances.DeleteBackup(c.UserContext(), num, fileName, h.cfg.Actor(c)); err != nil {
+		if err := h.cfg.MCInstances.DeleteBackup(c.UserContext(), instanceNumber, fileName, h.cfg.Actor(c)); err != nil {
 			return shared.SSEToast(c, "err", err.Error(), nil)
 		}
 	} else if h.cfg.BackupsDir != "" {
@@ -224,7 +224,7 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 	}
 
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted %s.", fileName), map[string]any{
-		"redirect": fmt.Sprintf("/minecraft/%d/backups", num),
+		"redirect": fmt.Sprintf("/minecraft/%d/backups", instanceNumber),
 	})
 }
 
@@ -234,12 +234,12 @@ func (h *Handler) ValheimCreate(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	backupName, err := h.cfg.ValheimInstances.CreateBackup(c.UserContext(), num, h.cfg.Actor(c))
+	backupName, err := h.cfg.ValheimInstances.CreateBackup(c.UserContext(), instanceNumber, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
@@ -253,7 +253,7 @@ func (h *Handler) ValheimRestoreInPlace(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -271,7 +271,7 @@ func (h *Handler) ValheimRestoreInPlace(c *fiber.Ctx) error {
 		archive = strings.TrimSpace(c.Query("archive"))
 	}
 
-	if err := h.cfg.ValheimInstances.RestoreInPlace(c.UserContext(), num, archive, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.ValheimInstances.RestoreInPlace(c.UserContext(), instanceNumber, archive, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
 
@@ -285,7 +285,7 @@ func (h *Handler) ValheimRestoreNew(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -297,7 +297,7 @@ func (h *Handler) ValheimRestoreNew(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 
-	created, err := h.cfg.ValheimInstances.RestoreNew(c.UserContext(), num, req.Name, req.Tier, req.Archive, h.cfg.Actor(c))
+	created, err := h.cfg.ValheimInstances.RestoreNew(c.UserContext(), instanceNumber, req.Name, req.Tier, req.Archive, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
@@ -326,9 +326,9 @@ func (h *Handler) ValheimDelete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "File name required.", nil)
 	}
 
-	num, _ := strconv.Atoi(c.Params("num"))
+	instanceNumber, _ := strconv.Atoi(c.Params("num"))
 	if h.cfg.ValheimInstances != nil {
-		if err := h.cfg.ValheimInstances.DeleteBackup(c.UserContext(), num, fileName, h.cfg.Actor(c)); err != nil {
+		if err := h.cfg.ValheimInstances.DeleteBackup(c.UserContext(), instanceNumber, fileName, h.cfg.Actor(c)); err != nil {
 			return shared.SSEToast(c, "err", err.Error(), nil)
 		}
 	} else if h.cfg.BackupsDir != "" {
@@ -343,6 +343,6 @@ func (h *Handler) ValheimDelete(c *fiber.Ctx) error {
 	}
 
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted %s.", fileName), map[string]any{
-		"redirect": fmt.Sprintf("/valheim/%d/backups", num),
+		"redirect": fmt.Sprintf("/valheim/%d/backups", instanceNumber),
 	})
 }

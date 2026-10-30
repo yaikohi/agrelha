@@ -189,7 +189,7 @@ func TestDashboardPageWithInstances(t *testing.T) {
 		mcRepo, nil, nil, 32, 8, 4,
 		"manifests/minecraft-modded", "192.168.20.225", nil, "minecraft-modded",
 		instances.WithGameID(domain.GameMinecraft),
-		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+		instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
 			return []string{"jei"}, nil
 		}),
 	)
@@ -209,7 +209,7 @@ func TestDashboardPageWithInstances(t *testing.T) {
 		vhRepo, nil, nil, 16, 4, 2,
 		"manifests/valheim", "192.168.20.224", nil, "valheim",
 		instances.WithGameID(domain.GameValheim),
-		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+		instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
 			return []string{"bepinex"}, nil
 		}),
 	)
@@ -272,7 +272,7 @@ type mockModLister struct {
 	err  error
 }
 
-func (m *mockModLister) GetInstalledMods(ctx context.Context, num int) ([]string, error) {
+func (m *mockModLister) GetInstalledMods(ctx context.Context, instanceNumber int) ([]string, error) {
 	return m.mods, m.err
 }
 
@@ -394,7 +394,7 @@ func TestTileSignalsWithPerInstanceStreams(t *testing.T) {
 		mcRepo, nil, nil, 32, 8, 4,
 		"manifests/minecraft-modded", "192.168.20.225", nil, "minecraft-modded",
 		instances.WithGameID(domain.GameMinecraft),
-		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+		instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
 			return []string{"jei"}, nil
 		}),
 	)
@@ -414,7 +414,7 @@ func TestTileSignalsWithPerInstanceStreams(t *testing.T) {
 		vhRepo, nil, nil, 16, 4, 2,
 		"manifests/valheim", "192.168.20.224", nil, "valheim",
 		instances.WithGameID(domain.GameValheim),
-		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+		instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
 			return []string{"bepinex"}, nil
 		}),
 	)

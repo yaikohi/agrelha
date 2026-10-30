@@ -515,7 +515,7 @@ func TestBackupsEdges(t *testing.T) {
 	appRoutes.Post("/test/mc/:num/restore-inplace", hRoutes.RestoreInPlace)
 	appRoutes.Post("/test/mc/:num/restore-new", hRoutes.RestoreNew)
 
-	// mc create invalid num
+	// mc create invalid instanceNumber
 	resp, _ := appRoutes.Test(httptest.NewRequest(http.MethodPost, "/test/mc/abc/create", nil))
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "Invalid instance number") {
@@ -532,7 +532,7 @@ func TestBackupsEdges(t *testing.T) {
 		t.Errorf("expected unconfigured: %s", string(body))
 	}
 
-	// mc restore-inplace invalid num
+	// mc restore-inplace invalid instanceNumber
 	resp, _ = appRoutes.Test(httptest.NewRequest(http.MethodPost, "/test/mc/abc/restore-inplace", nil))
 	body, _ = io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "Invalid instance number") {
@@ -547,7 +547,7 @@ func TestBackupsEdges(t *testing.T) {
 		t.Errorf("expected unconfigured: %s", string(body))
 	}
 
-	// mc restore-new invalid num
+	// mc restore-new invalid instanceNumber
 	resp, _ = appRoutes.Test(httptest.NewRequest(http.MethodPost, "/test/mc/abc/restore-new", nil))
 	body, _ = io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "Invalid instance number") {
@@ -638,7 +638,7 @@ func TestBackupsEdges(t *testing.T) {
 	resp, _ = appVH.Test(httptest.NewRequest(http.MethodPost, "/test/vh/abc/create", nil))
 	body, _ = io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "Invalid instance number") {
-		t.Errorf("expected invalid num: %s", string(body))
+		t.Errorf("expected invalid instanceNumber: %s", string(body))
 	}
 
 	resp, _ = appVH.Test(httptest.NewRequest(http.MethodPost, "/test/vh/999/create", nil))
@@ -657,7 +657,7 @@ func TestBackupsEdges(t *testing.T) {
 	resp, _ = appVH.Test(httptest.NewRequest(http.MethodPost, "/test/vh/abc/restore-inplace", nil))
 	body, _ = io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "Invalid instance number") {
-		t.Errorf("expected invalid num: %s", string(body))
+		t.Errorf("expected invalid instanceNumber: %s", string(body))
 	}
 
 	reqFormVH := httptest.NewRequest(http.MethodPost, "/test/vh/1/restore-inplace", strings.NewReader("archive=arch.tar.gz"))
@@ -688,7 +688,7 @@ func TestBackupsEdges(t *testing.T) {
 	resp, _ = appVH.Test(httptest.NewRequest(http.MethodPost, "/test/vh/abc/restore-new", nil))
 	body, _ = io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "Invalid instance number") {
-		t.Errorf("expected invalid num: %s", string(body))
+		t.Errorf("expected invalid instanceNumber: %s", string(body))
 	}
 
 	reqNewVHErr := httptest.NewRequest(http.MethodPost, "/test/vh/999/restore-new", strings.NewReader(`{"name":"VNew","tier":"small","archive":"arch.tar.gz"}`))

@@ -596,11 +596,11 @@ func (m *mockFailingRepo) Upsert(inst domain.Instance) error {
 	return m.upsertErr
 }
 
-func (m *mockFailingRepo) Get(num int) (*domain.Instance, error) {
+func (m *mockFailingRepo) Get(instanceNumber int) (*domain.Instance, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
-	return &domain.Instance{Number: num, Slug: "vh-load", Name: "VH Load"}, nil
+	return &domain.Instance{Number: instanceNumber, Slug: "vh-load", Name: "VH Load"}, nil
 }
 
 func (m *mockFailingRepo) List() ([]domain.Instance, error) {
@@ -799,7 +799,7 @@ func TestWiring_BackfillValheimSource_Branches(t *testing.T) {
 		K8s:              k8sClient,
 	}
 
-	// 1. Cannot load instance (num 99 not in mgr2) -> triggers lines 600-602
+	// 1. Cannot load instance (instanceNumber 99 not in mgr2) -> triggers lines 600-602
 	backfillValheimSource(ctx, d)
 
 	// 2. Cannot save instance -> insert 99 into mgr3 with closed DB so SaveInstance fails

@@ -59,11 +59,11 @@ func parseTarget(raw string) (domain.GameID, int, error) {
 	if _, ok := domain.ProfileFor(game); !ok {
 		return "", 0, fmt.Errorf("unknown game %q", parts[0])
 	}
-	num, err := strconv.Atoi(parts[1])
-	if err != nil || num <= 0 {
+	instanceNumber, err := strconv.Atoi(parts[1])
+	if err != nil || instanceNumber <= 0 {
 		return "", 0, fmt.Errorf("bad instance number %q", parts[1])
 	}
-	return game, num, nil
+	return game, instanceNumber, nil
 }
 
 func (h *Handler) instanceOptions(c *fiber.Ctx) ([]pages.InstanceOptionUI, map[string]string) {
@@ -122,16 +122,16 @@ func (h *Handler) AccountsPage(c *fiber.Ctx) error {
 					row.Admin = true
 					continue
 				}
-				game, num, ok := domain.ParseInstanceRole(r)
+				game, instanceNumber, ok := domain.ParseInstanceRole(r)
 				if !ok {
 					continue
 				}
 				label := labels[string(r)]
 				if label == "" {
-					label = fmt.Sprintf("%s %02d (deleted)", game, num)
+					label = fmt.Sprintf("%s %02d (deleted)", game, instanceNumber)
 				}
 				row.Grants = append(row.Grants, pages.AccountGrantUI{
-					Target: fmt.Sprintf("%s:%d", game, num),
+					Target: fmt.Sprintf("%s:%d", game, instanceNumber),
 					Label:  label,
 				})
 			}
@@ -144,12 +144,12 @@ func (h *Handler) AccountsPage(c *fiber.Ctx) error {
 
 func (h *Handler) Grant(c *fiber.Ctx) error {
 	subject := strings.TrimSpace(c.FormValue("subject"))
-	game, num, err := parseTarget(c.FormValue("target"))
+	game, instanceNumber, err := parseTarget(c.FormValue("target"))
 	if err != nil {
 		shared.SetFlash(c, "err", err.Error())
 		return c.Redirect("/accounts", fiber.StatusSeeOther)
 	}
-	if err := h.cfg.Authz.Grant(c.UserContext(), subject, game, num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.Authz.Grant(c.UserContext(), subject, game, instanceNumber, h.cfg.Actor(c)); err != nil {
 		if errors.Is(err, ports.ErrNoAccount) {
 			shared.SetFlash(c, "err", "That account has never signed in, so it cannot be granted access yet.")
 		} else {
@@ -157,22 +157,22 @@ func (h *Handler) Grant(c *fiber.Ctx) error {
 		}
 		return c.Redirect("/accounts", fiber.StatusSeeOther)
 	}
-	shared.SetFlash(c, "ok", fmt.Sprintf("Granted %s %02d. It applies when they next sign in.", game, num))
+	shared.SetFlash(c, "ok", fmt.Sprintf("Granted %s %02d. It applies when they next sign in.", game, instanceNumber))
 	return c.Redirect("/accounts", fiber.StatusSeeOther)
 }
 
 func (h *Handler) Revoke(c *fiber.Ctx) error {
 	subject := strings.TrimSpace(c.FormValue("subject"))
-	game, num, err := parseTarget(c.FormValue("target"))
+	game, instanceNumber, err := parseTarget(c.FormValue("target"))
 	if err != nil {
 		shared.SetFlash(c, "err", err.Error())
 		return c.Redirect("/accounts", fiber.StatusSeeOther)
 	}
-	if err := h.cfg.Authz.Revoke(c.UserContext(), subject, game, num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.Authz.Revoke(c.UserContext(), subject, game, instanceNumber, h.cfg.Actor(c)); err != nil {
 		shared.SetFlash(c, "err", "Revoke failed: "+err.Error())
 		return c.Redirect("/accounts", fiber.StatusSeeOther)
 	}
-	shared.SetFlash(c, "ok", fmt.Sprintf("Revoked %s %02d. Use 'Sign out everywhere' to end their current session now.", game, num))
+	shared.SetFlash(c, "ok", fmt.Sprintf("Revoked %s %02d. Use 'Sign out everywhere' to end their current session now.", game, instanceNumber))
 	return c.Redirect("/accounts", fiber.StatusSeeOther)
 }
 

@@ -68,8 +68,8 @@ var (
 	openFile           = func(fh *multipart.FileHeader) (multipart.File, error) { return fh.Open() }
 	readAll            = io.ReadAll
 	parseMrpack        = modpack.ParseMrpack
-	provisioningStatus = func(m *instances.InstanceManager, ctx context.Context, num int) (string, bool, error) {
-		return m.ProvisioningStatus(ctx, num)
+	provisioningStatus = func(m *instances.InstanceManager, ctx context.Context, instanceNumber int) (instances.ProvisionState, error) {
+		return m.ProvisioningStatus(ctx, instanceNumber)
 	}
 	bodyParser = func(c *fiber.Ctx, out any) error { return c.BodyParser(out) }
 )
@@ -516,12 +516,12 @@ func (h *Handler) MCProvisioningPage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).SendString("Instance manager not configured")
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
 		return c.Status(fiber.StatusNotFound).SendString("Instance not found")
 	}
@@ -565,12 +565,12 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 		return c.SendString("event: datastar-patch-signals\ndata: signals {\"phase\":\"ready\",\"ready\":true}\n\n")
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid number")
 	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
 		return c.Status(fiber.StatusNotFound).SendString("Not found")
 	}
@@ -580,28 +580,57 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 	c.Set("Connection", "keep-alive")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		for range 60 {
-			phase, isReady, err := provisioningStatus(h.cfg.MCInstances, context.Background(), inst.Number)
-			if err != nil {
-				phase = "syncing"
-				isReady = false
-			}
-
+		emit := func(st instances.ProvisionState, slow bool, problem string) {
 			_ = sse.PatchSignals(w, map[string]any{
-				"phase": phase,
-				"ready": isReady,
-				"lb_ip": inst.LBIP,
-				"num":   inst.Number,
+				"phase":   st.Phase,
+				"ready":   st.Ready,
+				"cause":   st.Cause,
+				"problem": problem,
+				"slow":    slow,
+				"lb_ip":   inst.LBIP,
+				"num":     inst.Number,
 			})
-
-			if isReady {
-				break
-			}
-			sleep(3 * time.Second)
 		}
+
+		var problem string
+		for tick := range provisioningTicks {
+			st, err := provisioningStatus(h.cfg.MCInstances, context.Background(), inst.Number)
+			if err != nil {
+				problem = "Cannot reach the cluster to ask how this world is doing: " + err.Error()
+			} else {
+				problem = ""
+			}
+
+			slow := tick >= provisioningSlowAfter
+			emit(st, slow, problem)
+
+			if st.Ready || st.Phase == "failed" {
+				return
+			}
+			sleep(provisioningPoll)
+		}
+
+		emit(instances.ProvisionState{
+			Phase: "stalled",
+			Cause: "This world has not come up within " + provisioningBudget().String() + ". It may still be working - its logs will say - but this page has stopped waiting.",
+		}, true, problem)
 	})
 
 	return nil
+}
+
+// The provisioning stream must never stop without saying so. A big modpack
+// routinely takes longer than a few minutes to fetch and boot, so the budget is
+// generous and the page is told when a wait has become unusual rather than
+// being left to spin.
+const (
+	provisioningPoll      = 3 * time.Second
+	provisioningTicks     = 400
+	provisioningSlowAfter = 60
+)
+
+func provisioningBudget() time.Duration {
+	return provisioningPoll * provisioningTicks
 }
 
 func ssePatch(c *fiber.Ctx, signals map[string]any, fragments map[string]string) error {

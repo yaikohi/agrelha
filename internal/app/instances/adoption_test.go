@@ -132,7 +132,7 @@ type mockRepoForAdoption struct {
 }
 
 func (m *mockRepoForAdoption) List() ([]domain.Instance, error) { return nil, nil }
-func (m *mockRepoForAdoption) Get(num int) (*domain.Instance, error) {
+func (m *mockRepoForAdoption) Get(instanceNumber int) (*domain.Instance, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
@@ -141,10 +141,10 @@ func (m *mockRepoForAdoption) Get(num int) (*domain.Instance, error) {
 func (m *mockRepoForAdoption) Upsert(inst domain.Instance) error {
 	return m.upsertErr
 }
-func (m *mockRepoForAdoption) UpdateState(num int, state domain.InstanceState) error {
+func (m *mockRepoForAdoption) UpdateState(instanceNumber int, state domain.InstanceState) error {
 	return nil
 }
-func (m *mockRepoForAdoption) Delete(num int) error { return nil }
+func (m *mockRepoForAdoption) Delete(instanceNumber int) error { return nil }
 
 type mockRuntimeErr struct {
 	mockRuntimeForAdoption

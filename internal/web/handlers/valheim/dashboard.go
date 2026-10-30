@@ -108,16 +108,16 @@ func (h *Handler) ValheimInstanceStart(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.ValheimInstances.StartInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.ValheimInstances.StartInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Start failed: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Starting Valheim instance #%02d...", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Starting Valheim instance #%02d...", instanceNumber), nil)
 }
 
 // ValheimInstanceStop stops a Valheim instance.
@@ -126,16 +126,16 @@ func (h *Handler) ValheimInstanceStop(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.ValheimInstances.StopInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.ValheimInstances.StopInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Stop failed: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Stopping Valheim instance #%02d...", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Stopping Valheim instance #%02d...", instanceNumber), nil)
 }
 
 // ValheimInstanceRestart restarts a Valheim instance.
@@ -144,16 +144,16 @@ func (h *Handler) ValheimInstanceRestart(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.ValheimInstances.RestartInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.ValheimInstances.RestartInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Restart failed: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Restarting Valheim instance #%02d...", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Restarting Valheim instance #%02d...", instanceNumber), nil)
 }
 
 // ValheimInstanceDelete deletes a Valheim instance.
@@ -162,14 +162,14 @@ func (h *Handler) ValheimInstanceDelete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.ValheimInstances.DeleteInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.ValheimInstances.DeleteInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to delete world: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted Valheim instance #%02d (final snapshot saved to backups).", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted Valheim instance #%02d (final snapshot saved to backups).", instanceNumber), nil)
 }

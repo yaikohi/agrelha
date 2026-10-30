@@ -38,11 +38,11 @@ func TestBackfillReproducesHistoricalSizes(t *testing.T) {
 		{domain.GameValheim, domain.TierLarge, 8, 10, 0},
 	}
 
-	num := 0
+	instanceNumber := 0
 	for _, c := range cases {
-		num++
+		instanceNumber++
 		profile, _ := domain.ProfileFor(c.game)
-		rec := InstanceRecord{Number: num, Name: "w", Slug: "w", Tier: string(c.tier), State: "stopped"}
+		rec := InstanceRecord{Number: instanceNumber, Name: "w", Slug: "w", Tier: string(c.tier), State: "stopped"}
 		var err error
 		if c.game == domain.GameValheim {
 			err = st.UpsertValheimInstance(rec)
@@ -59,9 +59,9 @@ func TestBackfillReproducesHistoricalSizes(t *testing.T) {
 
 		var got *InstanceRecord
 		if c.game == domain.GameValheim {
-			got, err = st.GetValheimInstance(num)
+			got, err = st.GetValheimInstance(instanceNumber)
 		} else {
-			got, err = st.GetInstance(num)
+			got, err = st.GetInstance(instanceNumber)
 		}
 		if err != nil || got == nil {
 			t.Fatalf("read back %s/%s: %v", c.game, c.tier, err)

@@ -32,7 +32,7 @@ type BackupScheduler struct {
 	instances      InstanceLister
 	jobRunner      JobRunner
 	cmdExec        func(ctx context.Context, inst domain.Instance, cmd string) error
-	pruner         func(slug string, num, keep int) error
+	pruner         func(slug string, instanceNumber, keep int) error
 	audit          ports.AuditRecorder
 	event          ports.EventRecorder
 	namespace      string
@@ -94,7 +94,7 @@ func WithCommandExecutor(fn func(ctx context.Context, inst domain.Instance, cmd 
 }
 
 // WithPruner configures an archive pruner function.
-func WithPruner(fn func(slug string, num, keep int) error) Option {
+func WithPruner(fn func(slug string, instanceNumber, keep int) error) Option {
 	return func(s *BackupScheduler) {
 		s.pruner = fn
 	}

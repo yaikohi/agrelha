@@ -181,7 +181,7 @@ func (h *Handler) back(c *fiber.Ctx, kind, msg string) error {
 }
 
 func (h *Handler) SaveResources(c *fiber.Ctx) error {
-	game, num, err := parseTarget(c.FormValue("target"))
+	game, instanceNumber, err := parseTarget(c.FormValue("target"))
 	if err != nil {
 		return h.back(c, "err", err.Error())
 	}
@@ -199,15 +199,15 @@ func (h *Handler) SaveResources(c *fiber.Ctx) error {
 	if err := h.cfg.Capacity.CheckResources(c.UserContext(), game, r, shared.IsAdmin(c)); err != nil {
 		return h.back(c, "err", err.Error())
 	}
-	if err := mgr.SetResources(c.UserContext(), num, r, h.cfg.Actor(c)); err != nil {
+	if err := mgr.SetResources(c.UserContext(), instanceNumber, r, h.cfg.Actor(c)); err != nil {
 		return h.back(c, "err", "Resize failed: "+err.Error())
 	}
 	return h.back(c, "ok", fmt.Sprintf("%s %02d resized to %d/%d GiB. It is restarting.",
-		game, num, r.MemRequestGiB, r.MemLimitGiB))
+		game, instanceNumber, r.MemRequestGiB, r.MemLimitGiB))
 }
 
 func (h *Handler) ApplyTier(c *fiber.Ctx) error {
-	game, num, err := parseTarget(c.FormValue("target"))
+	game, instanceNumber, err := parseTarget(c.FormValue("target"))
 	if err != nil {
 		return h.back(c, "err", err.Error())
 	}
@@ -215,18 +215,18 @@ func (h *Handler) ApplyTier(c *fiber.Ctx) error {
 	if mgr == nil {
 		return h.back(c, "err", fmt.Sprintf("no manager for %s", game))
 	}
-	inst, err := mgr.GetInstance(c.UserContext(), num)
+	inst, err := mgr.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
-		return h.back(c, "err", fmt.Sprintf("world %s %02d not found", game, num))
+		return h.back(c, "err", fmt.Sprintf("world %s %02d not found", game, instanceNumber))
 	}
 	tier, err := h.cfg.Capacity.Tier(c.UserContext(), game, string(inst.Tier))
 	if err != nil || tier == nil {
 		return h.back(c, "err", fmt.Sprintf("no tier %q defined for %s", inst.Tier, game))
 	}
-	if err := mgr.ApplyTier(c.UserContext(), num, *tier, h.cfg.Actor(c)); err != nil {
+	if err := mgr.ApplyTier(c.UserContext(), instanceNumber, *tier, h.cfg.Actor(c)); err != nil {
 		return h.back(c, "err", "Could not apply tier: "+err.Error())
 	}
-	return h.back(c, "ok", fmt.Sprintf("%s %02d restored to %s. It is restarting.", game, num, tier.Name))
+	return h.back(c, "ok", fmt.Sprintf("%s %02d restored to %s. It is restarting.", game, instanceNumber, tier.Name))
 }
 
 func (h *Handler) SaveSettings(c *fiber.Ctx) error {

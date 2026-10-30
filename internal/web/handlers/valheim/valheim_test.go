@@ -196,16 +196,16 @@ func setupTestValheimHandlerFull(t *testing.T) (*Handler, *store.Store, *instanc
 		"valheim",
 		instances.WithGameID(domain.GameValheim),
 		instances.WithBackupsDir(bDir),
-		instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
-			path := fmt.Sprintf("manifests/valheim/instance-%02d/configs.yaml", num)
+		instances.WithConfigsReader(func(ctx context.Context, instanceNumber int) (map[string]string, error) {
+			path := fmt.Sprintf("manifests/valheim/instance-%02d/configs.yaml", instanceNumber)
 			doc, _ := mockState.Get(ctx, path)
 			if doc.Data == nil {
 				return make(map[string]string), nil
 			}
 			return doc.Data, nil
 		}),
-		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
-			path := fmt.Sprintf("manifests/valheim/instance-%02d/mods.yaml", num)
+		instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
+			path := fmt.Sprintf("manifests/valheim/instance-%02d/mods.yaml", instanceNumber)
 			doc, _ := mockState.Get(ctx, path)
 			var lines []string
 			for line := range strings.SplitSeq(doc.Data["mods.txt"], "\n") {

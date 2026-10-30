@@ -15,18 +15,18 @@ import (
 var safeBackupName = regexp.MustCompile(`^(mc|valheim)-[a-z0-9-]+-\d{2}-[a-zA-Z0-9_.-]+\.tar\.gz$`)
 
 // FormatBackupFileName generates a standard archive name for instance backups.
-func FormatBackupFileName(slug string, num int, tag string) string {
-	return domain.FormatBackupFileName(slug, num, tag)
+func FormatBackupFileName(slug string, instanceNumber int, tag string) string {
+	return domain.FormatBackupFileName(slug, instanceNumber, tag)
 }
 
 // PruneBackups keeps the latest keepCount backups matching the instance pattern and deletes older archives.
-func PruneBackups(backupsDir, slug string, num, keepCount int) error {
+func PruneBackups(backupsDir, slug string, instanceNumber, keepCount int) error {
 	if backupsDir == "" || keepCount <= 0 {
 		return nil
 	}
 
-	patternMC := filepath.Join(backupsDir, fmt.Sprintf("mc-%s-%02d-*.tar.gz", slug, num))
-	patternValheim := filepath.Join(backupsDir, fmt.Sprintf("valheim-%s-%02d-*.tar.gz", slug, num))
+	patternMC := filepath.Join(backupsDir, fmt.Sprintf("mc-%s-%02d-*.tar.gz", slug, instanceNumber))
+	patternValheim := filepath.Join(backupsDir, fmt.Sprintf("valheim-%s-%02d-*.tar.gz", slug, instanceNumber))
 	matchesMC, err := filepath.Glob(patternMC)
 	if err != nil {
 		return err

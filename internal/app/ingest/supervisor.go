@@ -15,7 +15,7 @@ type InstanceLister interface {
 }
 
 type InstanceLogStreamer interface {
-	InstanceLogs(ctx context.Context, num int, tail int64) (io.ReadCloser, error)
+	InstanceLogs(ctx context.Context, instanceNumber int, tail int64) (io.ReadCloser, error)
 }
 
 type Supervisor struct {
@@ -74,25 +74,25 @@ func (s *Supervisor) Reconcile(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for num := range active {
-		if _, exists := s.workers[num]; !exists {
+	for instanceNumber := range active {
+		if _, exists := s.workers[instanceNumber]; !exists {
 			wCtx, cancel := context.WithCancel(ctx)
-			s.workers[num] = cancel
+			s.workers[instanceNumber] = cancel
 			streamer := logStreamerFunc(func(c context.Context, tail int64) (io.ReadCloser, error) {
-				return s.streamer.InstanceLogs(c, num, tail)
+				return s.streamer.InstanceLogs(c, instanceNumber, tail)
 			})
 			s.wg.Add(1)
 			go func(n int, workerCtx context.Context) {
 				defer s.wg.Done()
 				Run(workerCtx, n, streamer, s.store)
-			}(num, wCtx)
+			}(instanceNumber, wCtx)
 		}
 	}
 
-	for num, cancel := range s.workers {
-		if !active[num] {
+	for instanceNumber, cancel := range s.workers {
+		if !active[instanceNumber] {
 			cancel()
-			delete(s.workers, num)
+			delete(s.workers, instanceNumber)
 		}
 	}
 }
@@ -101,17 +101,17 @@ func (s *Supervisor) ActiveWorkers() []int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	res := make([]int, 0, len(s.workers))
-	for num := range s.workers {
-		res = append(res, num)
+	for instanceNumber := range s.workers {
+		res = append(res, instanceNumber)
 	}
 	return res
 }
 
 func (s *Supervisor) stopAll() {
 	s.mu.Lock()
-	for num, cancel := range s.workers {
+	for instanceNumber, cancel := range s.workers {
 		cancel()
-		delete(s.workers, num)
+		delete(s.workers, instanceNumber)
 	}
 	s.mu.Unlock()
 	s.wg.Wait()

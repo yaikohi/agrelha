@@ -24,15 +24,15 @@ func (f *fakeSource) GameID() domain.GameID { return f.game }
 func (f *fakeSource) ListInstances(context.Context) ([]domain.Instance, error) {
 	return f.instances, nil
 }
-func (f *fakeSource) RuntimeStatus(_ context.Context, num int) (ports.Status, error) {
-	return f.status[num], nil
+func (f *fakeSource) RuntimeStatus(_ context.Context, instanceNumber int) (ports.Status, error) {
+	return f.status[instanceNumber], nil
 }
-func (f *fakeSource) CrashLogs(_ context.Context, num int, _ int64, step ...string) (io.ReadCloser, error) {
+func (f *fakeSource) CrashLogs(_ context.Context, instanceNumber int, _ int64, step ...string) (io.ReadCloser, error) {
 	f.logCalls++
 	if len(step) > 0 {
 		f.logStep = step[0]
 	}
-	return io.NopCloser(strings.NewReader(f.logs[num])), nil
+	return io.NopCloser(strings.NewReader(f.logs[instanceNumber])), nil
 }
 
 type fakeRecorder struct {
@@ -41,8 +41,8 @@ type fakeRecorder struct {
 	eventKind []string
 }
 
-func (r *fakeRecorder) LastIncident(_ context.Context, _ domain.GameID, num int) (*domain.Incident, error) {
-	return r.last[num], nil
+func (r *fakeRecorder) LastIncident(_ context.Context, _ domain.GameID, instanceNumber int) (*domain.Incident, error) {
+	return r.last[instanceNumber], nil
 }
 func (r *fakeRecorder) RecordIncident(_ context.Context, in domain.Incident) (int64, error) {
 	r.recorded = append(r.recorded, in)
@@ -184,14 +184,14 @@ func (f *failingSource) ListInstances(context.Context) ([]domain.Instance, error
 	return f.fakeSource.ListInstances(context.Background())
 }
 
-func (f *failingSource) CrashLogs(ctx context.Context, num int, tail int64, step ...string) (io.ReadCloser, error) {
+func (f *failingSource) CrashLogs(ctx context.Context, instanceNumber int, tail int64, step ...string) (io.ReadCloser, error) {
 	if f.logsErr {
 		return nil, context.Canceled
 	}
 	if f.readErr {
 		return &errReader{}, nil
 	}
-	return f.fakeSource.CrashLogs(ctx, num, tail, step...)
+	return f.fakeSource.CrashLogs(ctx, instanceNumber, tail, step...)
 }
 
 type failingRecorder struct {
@@ -200,11 +200,11 @@ type failingRecorder struct {
 	recordErr bool
 }
 
-func (r *failingRecorder) LastIncident(ctx context.Context, g domain.GameID, num int) (*domain.Incident, error) {
+func (r *failingRecorder) LastIncident(ctx context.Context, g domain.GameID, instanceNumber int) (*domain.Incident, error) {
 	if r.lastErr {
 		return nil, context.Canceled
 	}
-	return r.fakeRecorder.LastIncident(ctx, g, num)
+	return r.fakeRecorder.LastIncident(ctx, g, instanceNumber)
 }
 
 func (r *failingRecorder) RecordIncident(ctx context.Context, in domain.Incident) (int64, error) {
@@ -293,4 +293,3 @@ func TestWatcherErrorBranches(t *testing.T) {
 		t.Errorf("expected isNew to be true when InitStep differs")
 	}
 }
-

@@ -238,8 +238,8 @@ func startMinecraftScheduler(ctx context.Context, cfg *config.Config, d Deps) *a
 	if cfg != nil {
 		opts = append(opts, appbackups.WithNamespace(cfg.MinecraftNamespace))
 		if cfg.BackupsDir != "" {
-			opts = append(opts, appbackups.WithPruner(func(slug string, num, keep int) error {
-				return infrabackups.PruneBackups(cfg.BackupsDir, slug, num, keep)
+			opts = append(opts, appbackups.WithPruner(func(slug string, instanceNumber, keep int) error {
+				return infrabackups.PruneBackups(cfg.BackupsDir, slug, instanceNumber, keep)
 			}))
 		}
 	}
@@ -320,8 +320,8 @@ func startValheimScheduler(ctx context.Context, cfg *config.Config, d Deps) *app
 			appbackups.WithBackupsPVC("valheim-backups"),
 		)
 		if cfg.BackupsDir != "" {
-			opts = append(opts, appbackups.WithPruner(func(slug string, num, keep int) error {
-				return infrabackups.PruneBackups(cfg.BackupsDir, slug, num, keep)
+			opts = append(opts, appbackups.WithPruner(func(slug string, instanceNumber, keep int) error {
+				return infrabackups.PruneBackups(cfg.BackupsDir, slug, instanceNumber, keep)
 			}))
 		}
 	}
@@ -427,8 +427,8 @@ func buildValheimHandler(cfg *config.Config, d Deps, applyValheimAfterSync func(
 	var serverBuild func(string, int) (*domain.ServerBuild, error)
 	if cfg != nil && cfg.BackupsDir != "" {
 		dir := cfg.BackupsDir
-		serverBuild = func(slug string, num int) (*domain.ServerBuild, error) {
-			return infrabackups.ReadServerBuild(dir, slug, num)
+		serverBuild = func(slug string, instanceNumber int) (*domain.ServerBuild, error) {
+			return infrabackups.ReadServerBuild(dir, slug, instanceNumber)
 		}
 	}
 
@@ -481,21 +481,21 @@ func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 		}
 		if d.MCK8s != nil {
 			opts = append(opts,
-				instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
-					inst, err := d.MCInstances.GetInstance(ctx, num)
+				instances.WithConfigsReader(func(ctx context.Context, instanceNumber int) (map[string]string, error) {
+					inst, err := d.MCInstances.GetInstance(ctx, instanceNumber)
 					if err != nil || inst == nil {
 						if err == nil {
-							err = fmt.Errorf("instance %d not found", num)
+							err = fmt.Errorf("instance %d not found", instanceNumber)
 						}
 						return nil, err
 					}
 					return d.MCK8s.ConfigMapData(ctx, inst.ConfigsCMName(domain.MinecraftProfile))
 				}),
-				instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
-					inst, err := d.MCInstances.GetInstance(ctx, num)
+				instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
+					inst, err := d.MCInstances.GetInstance(ctx, instanceNumber)
 					if err != nil || inst == nil {
 						if err == nil {
-							err = fmt.Errorf("instance %d not found", num)
+							err = fmt.Errorf("instance %d not found", instanceNumber)
 						}
 						return nil, err
 					}
@@ -935,8 +935,8 @@ func gmodConsoleLog(dataRoot string) func(context.Context, int, int) (io.ReadClo
 	if dataRoot == "" {
 		return nil
 	}
-	return func(ctx context.Context, num, tailLines int) (io.ReadCloser, error) {
-		dir := compose.InstanceDataDir(dataRoot, domain.NewInstanceID(domain.GameGMod, num), "")
+	return func(ctx context.Context, instanceNumber, tailLines int) (io.ReadCloser, error) {
+		dir := compose.InstanceDataDir(dataRoot, domain.NewInstanceID(domain.GameGMod, instanceNumber), "")
 		return logtail.Follow(ctx, filepath.Join(dir, domain.GModConsoleLogRelPath), tailLines)
 	}
 }

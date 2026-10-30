@@ -37,11 +37,11 @@ func (r *fullMockRepo) Upsert(inst domain.Instance) error {
 	return nil
 }
 
-func (r *fullMockRepo) Get(num int) (*domain.Instance, error) {
+func (r *fullMockRepo) Get(instanceNumber int) (*domain.Instance, error) {
 	if r.getErr != nil {
 		return nil, r.getErr
 	}
-	inst, ok := r.instances[num]
+	inst, ok := r.instances[instanceNumber]
 	if !ok {
 		return nil, nil
 	}
@@ -59,24 +59,24 @@ func (r *fullMockRepo) List() ([]domain.Instance, error) {
 	return out, nil
 }
 
-func (r *fullMockRepo) UpdateState(num int, state domain.InstanceState) error {
+func (r *fullMockRepo) UpdateState(instanceNumber int, state domain.InstanceState) error {
 	if r.upStateErr != nil {
 		return r.upStateErr
 	}
-	inst, ok := r.instances[num]
+	inst, ok := r.instances[instanceNumber]
 	if !ok {
 		return fmt.Errorf("not found")
 	}
 	inst.State = state
-	r.instances[num] = inst
+	r.instances[instanceNumber] = inst
 	return nil
 }
 
-func (r *fullMockRepo) Delete(num int) error {
+func (r *fullMockRepo) Delete(instanceNumber int) error {
 	if r.deleteErr != nil {
 		return r.deleteErr
 	}
-	delete(r.instances, num)
+	delete(r.instances, instanceNumber)
 	return nil
 }
 
@@ -239,10 +239,10 @@ func TestManagerOptionsAndGetters(t *testing.T) {
 		WithVersionResolver(func(ctx context.Context, fullName string) (string, error) {
 			return "1.0", nil
 		}),
-		WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+		WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
 			return []string{"mod"}, nil
 		}),
-		WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
+		WithConfigsReader(func(ctx context.Context, instanceNumber int) (map[string]string, error) {
 			return map[string]string{"cfg": "data"}, nil
 		}),
 		WithGlobalConfigsReader(func(ctx context.Context) (map[string]string, error) {
@@ -682,7 +682,7 @@ func TestManagerModsEdges(t *testing.T) {
 	repo.Upsert(domain.Instance{Number: 2, Source: domain.SourceVanilla})
 
 	// 1. GetInstalledMods
-	mgr.modsReader = func(ctx context.Context, num int) ([]string, error) {
+	mgr.modsReader = func(ctx context.Context, instanceNumber int) ([]string, error) {
 		return []string{"custom-reader-mod"}, nil
 	}
 	if mods, err := mgr.GetInstalledMods(ctx, 1); err != nil || len(mods) != 1 || mods[0] != "custom-reader-mod" {
@@ -846,7 +846,7 @@ func TestManagerConfigsEdges(t *testing.T) {
 	}
 
 	// 1. ListConfigs & GetConfig
-	mgr.configsReader = func(ctx context.Context, num int) (map[string]string, error) {
+	mgr.configsReader = func(ctx context.Context, instanceNumber int) (map[string]string, error) {
 		return map[string]string{"cfg1": "v1"}, nil
 	}
 	if cfgs, err := mgr.ListConfigs(ctx, 1); err != nil || len(cfgs) != 1 {
@@ -855,7 +855,7 @@ func TestManagerConfigsEdges(t *testing.T) {
 	if val, err := mgr.GetConfig(ctx, 1, "cfg1"); err != nil || val != "v1" {
 		t.Errorf("unexpected GetConfig from reader: %s", val)
 	}
-	mgr.configsReader = func(ctx context.Context, num int) (map[string]string, error) {
+	mgr.configsReader = func(ctx context.Context, instanceNumber int) (map[string]string, error) {
 		return nil, fmt.Errorf("reader fail")
 	}
 	if _, err := mgr.ListConfigs(ctx, 1); err == nil {
@@ -1079,31 +1079,42 @@ func TestManagerDiagnosticsAndStatusEdges(t *testing.T) {
 	}
 
 	// 3. ProvisioningStatus
-	if _, _, err := mgr.ProvisioningStatus(ctx, 999); err == nil {
+	if _, err := mgr.ProvisioningStatus(ctx, 999); err == nil {
 		t.Errorf("expected error on non-existent instance")
 	}
 	mgr.runtime = nil
-	if phase, ready, err := mgr.ProvisioningStatus(ctx, 1); err != nil || phase != "ready" || !ready {
-		t.Errorf("expected ready when runtime is nil: %s, %v, %v", phase, ready, err)
+	if st, err := mgr.ProvisioningStatus(ctx, 1); err != nil || st.Phase != "ready" || !st.Ready {
+		t.Errorf("expected ready when runtime is nil: %+v, %v", st, err)
 	}
 	mgr.runtime = rt
 	rt.statusErr = fmt.Errorf("status fail")
-	if phase, ready, _ := mgr.ProvisioningStatus(ctx, 1); phase != "syncing" || ready {
-		t.Errorf("expected syncing when status errors: %s", phase)
+	if st, err := mgr.ProvisioningStatus(ctx, 1); err == nil || st.Ready {
+		t.Errorf(`a runtime that cannot be reached must surface as an error, not as progress: %+v, %v
+
+Reporting it as "syncing" is what made a broken cluster look like a slow one.`, st, err)
 	}
 	rt.statusErr = nil
 	rt.status = ports.Status{Available: true}
-	if phase, ready, _ := mgr.ProvisioningStatus(ctx, 1); phase != "ready" || !ready {
-		t.Errorf("expected ready: %s", phase)
+	if st, _ := mgr.ProvisioningStatus(ctx, 1); st.Phase != "ready" || !st.Ready {
+		t.Errorf("expected ready: %+v", st)
 	}
 	rt.status = ports.Status{Available: false, Lifecycle: ports.LifecycleRunning}
-	if phase, ready, _ := mgr.ProvisioningStatus(ctx, 1); phase != "booting" || ready {
-		t.Errorf("expected booting: %s", phase)
+	if st, _ := mgr.ProvisioningStatus(ctx, 1); st.Phase != "booting" || st.Ready {
+		t.Errorf("expected booting: %+v", st)
 	}
 	rt.status = ports.Status{Available: false, Lifecycle: ports.LifecycleStopped}
-	if phase, ready, _ := mgr.ProvisioningStatus(ctx, 1); phase != "syncing" || ready {
-		t.Errorf("expected syncing: %s", phase)
+	if st, _ := mgr.ProvisioningStatus(ctx, 1); st.Phase != "syncing" || st.Ready {
+		t.Errorf("expected syncing: %+v", st)
 	}
+	rt.status = ports.Status{Failure: ports.Failure{WaitingReason: "ImagePullBackOff"}}
+	if st, _ := mgr.ProvisioningStatus(ctx, 1); st.Phase != "failed" || st.Cause == "" {
+		t.Errorf("a server whose image will not pull must report failed with a cause: %+v", st)
+	}
+	rt.status = ports.Status{Failure: ports.Failure{InitRestartCount: 3, InitStep: "mc-mods"}}
+	if st, _ := mgr.ProvisioningStatus(ctx, 1); st.Phase != "failed" || st.Cause == "" {
+		t.Errorf("setup failing before start must report failed with a cause: %+v", st)
+	}
+	rt.status = ports.Status{Available: false, Lifecycle: ports.LifecycleStopped}
 
 	// 4. Budget
 	b := mgr.Budget([]domain.Instance{{Number: 1, State: domain.StateRunning, Tier: domain.TierMedium}})

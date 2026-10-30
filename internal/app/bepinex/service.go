@@ -15,15 +15,15 @@ var ErrStaleSnapshot = errors.New("the server rewrote this config while you were
 
 var ErrNotPublished = errors.New("no configs have been published for this world yet")
 
-type SnapshotReader func(slug string, num int) (*domain.ConfigSnapshot, error)
+type SnapshotReader func(slug string, instanceNumber int) (*domain.ConfigSnapshot, error)
 
-type FileReader func(slug string, num int, name string) (body, sha256 string, err error)
+type FileReader func(slug string, instanceNumber int, name string) (body, sha256 string, err error)
 
-type OverridesReader func(ctx context.Context, num int) (map[string]string, error)
+type OverridesReader func(ctx context.Context, instanceNumber int) (map[string]string, error)
 
 type OverridesWriter interface {
-	SaveConfig(ctx context.Context, num int, filename, content string, actor ...string) (bool, error)
-	DeleteConfig(ctx context.Context, num int, filename string, actor ...string) (bool, error)
+	SaveConfig(ctx context.Context, instanceNumber int, filename, content string, actor ...string) (bool, error)
+	DeleteConfig(ctx context.Context, instanceNumber int, filename string, actor ...string) (bool, error)
 }
 
 type Option func(*Service)
@@ -202,12 +202,12 @@ func SettingLabel(section, name string) string {
 	return domain.SettingKey{Section: section, Name: name}.String()
 }
 
-func (s *Service) storedOverrides(ctx context.Context, num int) (map[string]domain.OverrideSet, error) {
+func (s *Service) storedOverrides(ctx context.Context, instanceNumber int) (map[string]domain.OverrideSet, error) {
 	out := map[string]domain.OverrideSet{}
 	if s.overrides == nil {
 		return out, nil
 	}
-	data, err := s.overrides(ctx, num)
+	data, err := s.overrides(ctx, instanceNumber)
 	if err != nil {
 		return nil, err
 	}

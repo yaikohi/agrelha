@@ -587,7 +587,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 	// Create a backup file in bDir matching pattern valheim-modded-world-01-*.tar.gz
 	_ = os.WriteFile(filepath.Join(bDir, "valheim-modded-world-01-20260914.tar.gz"), []byte("data"), 0644)
 
-	// Create modded instance (num 1)
+	// Create modded instance (instanceNumber 1)
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		GameID:  domain.GameValheim,
 		Number:  1,
@@ -601,7 +601,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create vanilla instance (num 2)
+	// Create vanilla instance (instanceNumber 2)
 	_, err = mgr.CreateInstance(context.Background(), domain.Instance{
 		GameID:  domain.GameValheim,
 		Number:  2,
@@ -637,7 +637,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 		t.Errorf("expected 503, got %d", respUnconfPage.StatusCode)
 	}
 
-	// Bad num
+	// Bad instanceNumber
 	respBadNumPage, _ := app.Test(httptest.NewRequest("GET", "/test/page/bad", nil))
 	if respBadNumPage.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("expected 400, got %d", respBadNumPage.StatusCode)
@@ -700,7 +700,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 		t.Errorf("expected unconfigured, got: %s", string(bUnconfSettings))
 	}
 
-	// Bad num
+	// Bad instanceNumber
 	respBadNumSettings, _ := app.Test(httptest.NewRequest("POST", "/test/settings/bad", nil))
 	bBadNumSettings, _ := io.ReadAll(respBadNumSettings.Body)
 	if !strings.Contains(string(bBadNumSettings), "Invalid instance number") {
@@ -757,7 +757,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 		t.Errorf("expected unconfigured, got: %s", string(bUnconfInstall))
 	}
 
-	// Bad num
+	// Bad instanceNumber
 	respBadNumRemove, _ := app.Test(httptest.NewRequest("POST", "/test/remove/bad", nil))
 	bBadNumRemove, _ := io.ReadAll(respBadNumRemove.Body)
 	if !strings.Contains(string(bBadNumRemove), "Invalid instance number") {
@@ -806,7 +806,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 	memStore.patchErr = nil
 
 	// 4. ModsSearch edges
-	// Bad num
+	// Bad instanceNumber
 	respBadSearchNum, _ := app.Test(httptest.NewRequest("GET", "/test/search/bad", nil))
 	if respBadSearchNum.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("expected 400, got %d", respBadSearchNum.StatusCode)
@@ -878,7 +878,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 	}
 
 	// 5. ValheimModDetail edges
-	// Bad num
+	// Bad instanceNumber
 	respBadDetailNum, _ := app.Test(httptest.NewRequest("GET", "/test/moddetail/bad", nil))
 	if respBadDetailNum.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("expected 400, got %d", respBadDetailNum.StatusCode)
@@ -1048,7 +1048,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 	innerElement = origInner
 
 	// 7. ValheimInstanceExport edges
-	// Bad num
+	// Bad instanceNumber
 	respBadExportNum, _ := app.Test(httptest.NewRequest("GET", "/test/export/bad", nil))
 	if respBadExportNum.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("expected 400, got %d", respBadExportNum.StatusCode)
@@ -1501,7 +1501,7 @@ func TestValheimUpdatesAllEdges(t *testing.T) {
 		valheimmanifests.New("ykhi.xyz/gameserver=true", "valheim"), "valheim",
 		instances.WithGameID(domain.GameValheim),
 		instances.WithBackupsDir(bDir),
-		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
+		instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
 			if modsReaderErr != nil {
 				return nil, modsReaderErr
 			}
@@ -1509,7 +1509,7 @@ func TestValheimUpdatesAllEdges(t *testing.T) {
 		}),
 	)
 
-	// Create modded instance (num 1)
+	// Create modded instance (instanceNumber 1)
 	inst, err := mgr.CreateInstance(context.Background(), domain.Instance{
 		GameID: domain.GameValheim,
 		Number: 1,
@@ -1523,7 +1523,7 @@ func TestValheimUpdatesAllEdges(t *testing.T) {
 	}
 	currentMods = []string{"Author-Mod-1.0.0"}
 
-	// Create vanilla instance (num 2)
+	// Create vanilla instance (instanceNumber 2)
 	_, err = mgr.CreateInstance(context.Background(), domain.Instance{
 		GameID: domain.GameValheim,
 		Number: 2,
@@ -1594,7 +1594,7 @@ func TestValheimUpdatesAllEdges(t *testing.T) {
 		t.Errorf("expected unconfigured, got: %s", string(bUnconfCheck))
 	}
 
-	// - bad num
+	// - bad instanceNumber
 	respBadNumCheck, _ := app.Test(httptest.NewRequest("POST", "/api/valheim/bad/mods/updates/check", nil))
 	bBadNumCheck, _ := io.ReadAll(respBadNumCheck.Body)
 	if !strings.Contains(string(bBadNumCheck), "invalid instance number") {

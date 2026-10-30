@@ -28,11 +28,11 @@ const searchLimit = 200
 // ValheimInstanceConfigGet opens one mod's config: its sections, and either the
 // settings the operator already manages or the raw override set.
 func (h *Handler) ValheimInstanceConfigGet(c *fiber.Ctx) error {
-	svc, num, name, err := h.configRequest(c)
+	svc, instanceNumber, name, err := h.configRequest(c)
 	if err != nil {
 		return ssePatchElements(c, "#cfg-panel", configError(err))
 	}
-	inst, err := h.instanceFor(c, num)
+	inst, err := h.instanceFor(c, instanceNumber)
 	if err != nil {
 		return ssePatchElements(c, "#cfg-panel", configError(err))
 	}
@@ -41,18 +41,18 @@ func (h *Handler) ValheimInstanceConfigGet(c *fiber.Ctx) error {
 	if err != nil {
 		return ssePatchElements(c, "#cfg-panel", configError(err))
 	}
-	return ssePatchElements(c, "#cfg-panel", renderPanel(num, name, view))
+	return ssePatchElements(c, "#cfg-panel", renderPanel(instanceNumber, name, view))
 }
 
 // ValheimInstanceConfigSettings renders the Settings matching a section or a
 // search. It is a separate endpoint because the whole point is not to render
 // them all at once.
 func (h *Handler) ValheimInstanceConfigSettings(c *fiber.Ctx) error {
-	svc, num, name, err := h.configRequest(c)
+	svc, instanceNumber, name, err := h.configRequest(c)
 	if err != nil {
 		return ssePatchElements(c, "#cfg-settings", configError(err))
 	}
-	inst, err := h.instanceFor(c, num)
+	inst, err := h.instanceFor(c, instanceNumber)
 	if err != nil {
 		return ssePatchElements(c, "#cfg-settings", configError(err))
 	}
@@ -71,16 +71,16 @@ func (h *Handler) ValheimInstanceConfigSettings(c *fiber.Ctx) error {
 	// rows they did not ask for.
 	onlyManaged := q.Text == "" && q.Section == "" && !q.OnlyChanged
 	hits, truncated := view.Config.Search(q)
-	return ssePatchElements(c, "#cfg-settings", renderSettings(num, name, view, hits, truncated, onlyManaged))
+	return ssePatchElements(c, "#cfg-settings", renderSettings(instanceNumber, name, view, hits, truncated, onlyManaged))
 }
 
 // ValheimInstanceConfigSave records the operator's edits as Overrides.
 func (h *Handler) ValheimInstanceConfigSave(c *fiber.Ctx) error {
-	svc, num, name, err := h.configRequest(c)
+	svc, instanceNumber, name, err := h.configRequest(c)
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
-	inst, err := h.instanceFor(c, num)
+	inst, err := h.instanceFor(c, instanceNumber)
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
@@ -120,11 +120,11 @@ func (h *Handler) ValheimInstanceConfigSave(c *fiber.Ctx) error {
 // restores nothing: the file on the server keeps whatever value was last
 // written to it. A reset that only forgot would visibly do nothing.
 func (h *Handler) ValheimInstanceConfigReset(c *fiber.Ctx) error {
-	svc, num, name, err := h.configRequest(c)
+	svc, instanceNumber, name, err := h.configRequest(c)
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
-	inst, err := h.instanceFor(c, num)
+	inst, err := h.instanceFor(c, instanceNumber)
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
@@ -154,7 +154,7 @@ func (h *Handler) ValheimInstanceConfigDelete(c *fiber.Ctx) error {
 	if h.cfg.ValheimInstances == nil {
 		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -170,7 +170,7 @@ func (h *Handler) ValheimInstanceConfigDelete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid config file name.", nil)
 	}
 
-	changed, err := h.cfg.ValheimInstances.DeleteConfig(c.UserContext(), num, name, h.cfg.Actor(c))
+	changed, err := h.cfg.ValheimInstances.DeleteConfig(c.UserContext(), instanceNumber, name, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Failed: "+err.Error(), nil)
 	}
@@ -187,7 +187,7 @@ func (h *Handler) ValheimInstanceConfigRaw(c *fiber.Ctx) error {
 	if h.cfg.ValheimInstances == nil {
 		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -208,7 +208,7 @@ func (h *Handler) ValheimInstanceConfigRaw(c *fiber.Ctx) error {
 	if strings.TrimSpace(body) == "" {
 		// Emptying the box stops agrelha managing the file. It does not reset
 		// anything: the server keeps the values it already has.
-		changed, err := h.cfg.ValheimInstances.DeleteConfig(c.UserContext(), num, name, h.cfg.Actor(c))
+		changed, err := h.cfg.ValheimInstances.DeleteConfig(c.UserContext(), instanceNumber, name, h.cfg.Actor(c))
 		if err != nil {
 			return shared.SSEToast(c, "err", "Failed: "+err.Error(), nil)
 		}
@@ -218,7 +218,7 @@ func (h *Handler) ValheimInstanceConfigRaw(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "ok",
 			fmt.Sprintf("Stopped managing %s. The server keeps its current values until something writes over them.", name), nil)
 	}
-	changed, err := h.cfg.ValheimInstances.SaveConfig(c.UserContext(), num, name, body, h.cfg.Actor(c))
+	changed, err := h.cfg.ValheimInstances.SaveConfig(c.UserContext(), instanceNumber, name, body, h.cfg.Actor(c))
 	return h.configSaveResult(c, name, changed, err)
 }
 
@@ -245,15 +245,15 @@ func (h *Handler) requestRestart(c *fiber.Ctx, reason string) {
 	if h.cfg.ValheimRestarts == nil {
 		return
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return
 	}
 	slug := ""
-	if inst, err := h.instanceFor(c, num); err == nil {
+	if inst, err := h.instanceFor(c, instanceNumber); err == nil {
 		slug = inst.Slug
 	}
-	h.cfg.ValheimRestarts.Request(num, slug, "config change: "+reason)
+	h.cfg.ValheimRestarts.Request(instanceNumber, slug, "config change: "+reason)
 }
 
 // ValheimForceRestart restarts now, whoever is connected. It is the operator
@@ -262,11 +262,11 @@ func (h *Handler) ValheimForceRestart(c *fiber.Ctx) error {
 	if h.cfg.ValheimRestarts == nil {
 		return shared.SSEToast(c, "err", "Restart queue unavailable.", nil)
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
-	if err := h.cfg.ValheimRestarts.Force(c.UserContext(), num); err != nil {
+	if err := h.cfg.ValheimRestarts.Force(c.UserContext(), instanceNumber); err != nil {
 		return shared.SSEToast(c, "err", "Restart failed: "+err.Error(), nil)
 	}
 	return shared.SSEToast(c, "ok", "Restarting now.", nil)
@@ -315,7 +315,7 @@ func (h *Handler) configRequest(c *fiber.Ctx) (*appbepinex.Service, int, string,
 	// Validate the request before the dependency. A bad instance number or a
 	// name trying to escape the config directory is wrong whatever agrelha is
 	// configured with, and reporting "unavailable" for it hides a real answer.
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return nil, 0, "", errors.New("Invalid instance number.")
 	}
@@ -329,16 +329,16 @@ func (h *Handler) configRequest(c *fiber.Ctx) (*appbepinex.Service, int, string,
 	if h.cfg.ValheimConfigs == nil {
 		return nil, 0, "", errors.New("Mod configuration is unavailable: no backups directory is configured.")
 	}
-	return h.cfg.ValheimConfigs, num, name, nil
+	return h.cfg.ValheimConfigs, instanceNumber, name, nil
 }
 
-func (h *Handler) instanceFor(c *fiber.Ctx, num int) (*domain.Instance, error) {
+func (h *Handler) instanceFor(c *fiber.Ctx, instanceNumber int) (*domain.Instance, error) {
 	if h.cfg.ValheimInstances == nil {
 		return nil, errors.New("Valheim instance manager unconfigured.")
 	}
-	inst, err := h.cfg.ValheimInstances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.ValheimInstances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
-		return nil, fmt.Errorf("instance %d not found", num)
+		return nil, fmt.Errorf("instance %d not found", instanceNumber)
 	}
 	return inst, nil
 }
@@ -393,11 +393,11 @@ func (h *Handler) configTabState(c *fiber.Ctx, d *pages.InstanceDetailUI, inst d
 }
 
 func (h *Handler) ValheimInstanceConfigImportPreview(c *fiber.Ctx) error {
-	svc, num, _, err := h.configRequest(c)
+	svc, instanceNumber, _, err := h.configRequest(c)
 	if err != nil {
 		return ssePatchElements(c, "#cfg-import-preview", configError(err))
 	}
-	inst, err := h.instanceFor(c, num)
+	inst, err := h.instanceFor(c, instanceNumber)
 	if err != nil {
 		return ssePatchElements(c, "#cfg-import-preview", configError(err))
 	}
@@ -421,15 +421,15 @@ func (h *Handler) ValheimInstanceConfigImportPreview(c *fiber.Ctx) error {
 	if err != nil {
 		return ssePatchElements(c, "#cfg-import-preview", configError(err))
 	}
-	return ssePatchElements(c, "#cfg-import-preview", renderImportPreview(num, name, view, plan))
+	return ssePatchElements(c, "#cfg-import-preview", renderImportPreview(instanceNumber, name, view, plan))
 }
 
 func (h *Handler) ValheimInstanceConfigImportApply(c *fiber.Ctx) error {
-	svc, num, _, err := h.configRequest(c)
+	svc, instanceNumber, _, err := h.configRequest(c)
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
-	inst, err := h.instanceFor(c, num)
+	inst, err := h.instanceFor(c, instanceNumber)
 	if err != nil {
 		return shared.SSEToast(c, "err", err.Error(), nil)
 	}
@@ -470,11 +470,11 @@ func (h *Handler) ValheimInstanceConfigImportApply(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ValheimInstanceConfigImportOpen(c *fiber.Ctx) error {
-	svc, num, _, err := h.configRequest(c)
+	svc, instanceNumber, _, err := h.configRequest(c)
 	if err != nil {
 		return ssePatchElements(c, "#cfg-panel", configError(err))
 	}
-	inst, err := h.instanceFor(c, num)
+	inst, err := h.instanceFor(c, instanceNumber)
 	if err != nil {
 		return ssePatchElements(c, "#cfg-panel", configError(err))
 	}
@@ -482,7 +482,7 @@ func (h *Handler) ValheimInstanceConfigImportOpen(c *fiber.Ctx) error {
 	if err != nil {
 		return ssePatchElements(c, "#cfg-panel", configError(err))
 	}
-	return ssePatchElements(c, "#cfg-panel", renderImportPanel(num, files))
+	return ssePatchElements(c, "#cfg-panel", renderImportPanel(instanceNumber, files))
 }
 
 func (h *Handler) importTarget(c *fiber.Ctx, svc *appbepinex.Service, inst domain.Instance, body, hinted string) (string, error) {

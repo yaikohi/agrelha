@@ -36,10 +36,10 @@ func hostScopedReaderManager(t *testing.T) (*InstanceManager, *mockStateStore) {
 	return mgr, states
 }
 
-func seedHostScopedWorld(t *testing.T, mgr *InstanceManager, states *mockStateStore, num int, host domain.Host) {
+func seedHostScopedWorld(t *testing.T, mgr *InstanceManager, states *mockStateStore, instanceNumber int, host domain.Host) {
 	t.Helper()
 	inst := domain.Instance{
-		Number: num,
+		Number: instanceNumber,
 		Name:   "Lareira",
 		Slug:   "lareira",
 		Tier:   domain.TierSmall,
@@ -47,7 +47,7 @@ func seedHostScopedWorld(t *testing.T, mgr *InstanceManager, states *mockStateSt
 		GameID: domain.GameValheim,
 	}
 	if err := mgr.repo.Upsert(inst); err != nil {
-		t.Fatalf("seed instance %d: %v", num, err)
+		t.Fatalf("seed instance %d: %v", instanceNumber, err)
 	}
 	dir := mgr.instanceDirFor(inst)
 	_ = states.Put(context.Background(), dir+"/mods.yaml", ports.Document{
