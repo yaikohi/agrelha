@@ -156,8 +156,10 @@ func TestManagerOptionsAndAccessors(t *testing.T) {
 			return []string{"dep1"}, nil
 		}),
 		WithVersionResolver(func(ctx context.Context, mod string) (string, error) { return "1.0", nil }),
-		WithModsReader(func(ctx context.Context, num int) ([]string, error) { return []string{"mod1"}, nil }),
-		WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) { return map[string]string{"k": "v"}, nil }),
+		WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) { return []string{"mod1"}, nil }),
+		WithConfigsReader(func(ctx context.Context, instanceNumber int) (map[string]string, error) {
+			return map[string]string{"k": "v"}, nil
+		}),
 		WithGlobalConfigsReader(func(ctx context.Context) (map[string]string, error) { return map[string]string{"g": "v"}, nil }),
 		WithGlobalConfigsPath("manifests/minecraft-modded/configs.yaml"),
 		WithBackupsDir(t.TempDir()),
@@ -293,7 +295,8 @@ func TestManagerLifecycleAndRuntimeOperations(t *testing.T) {
 	}
 
 	// 5. ProvisioningStatus
-	phase, ready, err := mgr.ProvisioningStatus(ctx, 1)
+	provState, err := mgr.ProvisioningStatus(ctx, 1)
+	phase, ready := provState.Phase, provState.Ready
 	if err != nil {
 		t.Errorf("provisioning status error: %v", err)
 	}

@@ -780,14 +780,14 @@ func TestMCProvisioningStreamCases(t *testing.T) {
 	reqInvalidPage := httptest.NewRequest("GET", "/minecraft/provisioning/not-a-number", nil)
 	respInvalidPage, _ := app.Test(reqInvalidPage)
 	if respInvalidPage.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("expected 400 for invalid page num, got: %d", respInvalidPage.StatusCode)
+		t.Errorf("expected 400 for invalid page instanceNumber, got: %d", respInvalidPage.StatusCode)
 	}
 
 	// 3. MCProvisioningStream invalid number
 	reqInvalidStream := httptest.NewRequest("GET", "/api/minecraft/provisioning/not-a-number/stream", nil)
 	respInvalidStream, _ := app.Test(reqInvalidStream)
 	if respInvalidStream.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("expected 400 for invalid stream num, got: %d", respInvalidStream.StatusCode)
+		t.Errorf("expected 400 for invalid stream instanceNumber, got: %d", respInvalidStream.StatusCode)
 	}
 
 	// 4. MCProvisioningStream not found
@@ -828,12 +828,12 @@ func TestMCProvisioningStreamCases(t *testing.T) {
 	origStatus := provisioningStatus
 	defer func() { provisioningStatus = origStatus }()
 	var attempts int
-	provisioningStatus = func(m *instances.InstanceManager, ctx context.Context, num int) (string, bool, error) {
+	provisioningStatus = func(m *instances.InstanceManager, ctx context.Context, instanceNumber int) (instances.ProvisionState, error) {
 		attempts++
 		if attempts == 1 {
-			return "", false, errors.New("simulated status error")
+			return instances.ProvisionState{}, errors.New("simulated status error")
 		}
-		return "ready", true, nil
+		return instances.ProvisionState{Phase: "ready", Ready: true}, nil
 	}
 
 	reqStreamErr := httptest.NewRequest("GET", "/api/minecraft/provisioning/11/stream", nil)
@@ -842,8 +842,13 @@ func TestMCProvisioningStreamCases(t *testing.T) {
 		t.Fatalf("expected 200 for stream err, got: %v", respStreamErr.StatusCode)
 	}
 	bodyStreamErr, _ := io.ReadAll(respStreamErr.Body)
-	if !strings.Contains(string(bodyStreamErr), `"syncing"`) {
-		t.Errorf("expected syncing signal in stream error recovery, got: %s", bodyStreamErr)
+	if !strings.Contains(string(bodyStreamErr), `"problem"`) || !strings.Contains(string(bodyStreamErr), "simulated status error") {
+		t.Errorf(`a status error must reach the page as a problem, got: %s
+
+It used to be relabelled "syncing", which made an unreachable cluster look like a slow one.`, bodyStreamErr)
+	}
+	if !strings.Contains(string(bodyStreamErr), `"ready":true`) {
+		t.Errorf("the stream must recover and still report ready, got: %s", bodyStreamErr)
 	}
 }
 

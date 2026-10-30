@@ -21,7 +21,7 @@ func (h *Handler) MCRconCommand(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -38,7 +38,7 @@ func (h *Handler) MCRconCommand(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Command cannot be empty.", nil)
 	}
 
-	resp, err := h.cfg.MCInstances.ExecuteCommand(c.UserContext(), num, cmd)
+	resp, err := h.cfg.MCInstances.ExecuteCommand(c.UserContext(), instanceNumber, cmd)
 	if err != nil {
 		resp = fmt.Sprintf("Error: %s", err.Error())
 	}
@@ -73,12 +73,12 @@ func (h *Handler) MCLogsStream(c *fiber.Ctx) error {
 		return c.Send(buf.Bytes())
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid number")
 	}
 
-	stream, err := h.cfg.MCInstances.InstanceLogs(context.Background(), num, 100)
+	stream, err := h.cfg.MCInstances.InstanceLogs(context.Background(), instanceNumber, 100)
 	if err != nil {
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")

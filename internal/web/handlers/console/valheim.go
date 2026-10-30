@@ -118,12 +118,12 @@ func (h *Handler) ValheimLogsStream(c *fiber.Ctx) error {
 		return c.Send(buf.Bytes())
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid number")
 	}
 
-	stream, err := h.cfg.ValheimInstances.InstanceLogs(context.Background(), num, 100)
+	stream, err := h.cfg.ValheimInstances.InstanceLogs(context.Background(), instanceNumber, 100)
 	if err != nil {
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")

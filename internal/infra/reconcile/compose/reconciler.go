@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -286,9 +287,7 @@ func RenderComposeWith(serviceName, dataRoot string, spec domain.RuntimeSpec, ex
 			serviceName: svc,
 		},
 	}
-	for name, es := range extra {
-		cf.Services[name] = es
-	}
+	maps.Copy(cf.Services, extra)
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)

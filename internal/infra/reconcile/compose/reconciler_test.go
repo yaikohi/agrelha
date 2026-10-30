@@ -318,7 +318,7 @@ func TestShellVariablesSurviveComposeInterpolation(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 
-	for _, line := range strings.Split(string(body), "\n") {
+	for line := range strings.SplitSeq(string(body), "\n") {
 		stripped := strings.ReplaceAll(line, "$$", "")
 		if strings.Contains(stripped, "$") {
 			t.Errorf("bare $ survives into the rendered file, so compose interpolates it away\nand the container receives an empty string: %q", line)
@@ -369,4 +369,3 @@ func TestReconcilerEnforcesDataRootSeparation(t *testing.T) {
 		t.Fatal("expected non-nil reconciler")
 	}
 }
-

@@ -64,12 +64,12 @@ them on every incoming line - so there must be a visible way back to the newest 
 
 func TestTrimmingOnlyHappensWhileFollowing(t *testing.T) {
 	layout := readPage(t, "pages/layout.templ")
-	idx := strings.Index(layout, "removeChild")
-	if idx < 0 {
+	before, _, ok := strings.Cut(layout, "removeChild")
+	if !ok {
 		t.Fatal("the pane no longer caps its line count; a long-running stream would grow the DOM without bound")
 	}
-	guard := strings.LastIndex(layout[:idx], "if (!follow) return;")
-	observer := strings.LastIndex(layout[:idx], "MutationObserver")
+	guard := strings.LastIndex(before, "if (!follow) return;")
+	observer := strings.LastIndex(before, "MutationObserver")
 	if guard < 0 || guard < observer {
 		t.Error(`lines are trimmed even when the operator has scrolled up.
 

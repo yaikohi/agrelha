@@ -511,17 +511,17 @@ func (h *Handler) TileSignals(ctx context.Context) map[string]any {
 // modLister is the slice of an instance manager the hub needs to tell whether a
 // World has anything to export.
 type modLister interface {
-	GetInstalledMods(ctx context.Context, num int) ([]string, error)
+	GetInstalledMods(ctx context.Context, instanceNumber int) ([]string, error)
 }
 
 // hasMods reports whether a World has any mods to hand a player. A Modded World
 // with an empty list has nothing to download, which is separate from whether it
 // runs a Loader at all.
-func hasMods(ctx context.Context, m modLister, num int) bool {
+func hasMods(ctx context.Context, m modLister, instanceNumber int) bool {
 	if m == nil {
 		return false
 	}
-	mods, err := m.GetInstalledMods(ctx, num)
+	mods, err := m.GetInstalledMods(ctx, instanceNumber)
 	return err == nil && len(mods) > 0
 }
 

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 
@@ -132,9 +133,7 @@ func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map
 	if err != nil {
 		return nil, err
 	}
-	for name, content := range state {
-		files[name] = content
-	}
+	maps.Copy(files, state)
 
 	return files, nil
 }

@@ -50,10 +50,10 @@ type InstanceManager struct {
 	event               ports.EventRecorder
 	depResolver         func(ctx context.Context, slug, mcVersion, loader string) ([]string, error)
 	versionResolver     func(ctx context.Context, fullName string) (string, error)
-	modsReader          func(ctx context.Context, num int) ([]string, error)
-	cfModsReader        func(ctx context.Context, num int) ([]string, error)
+	modsReader          func(ctx context.Context, instanceNumber int) ([]string, error)
+	cfModsReader        func(ctx context.Context, instanceNumber int) ([]string, error)
 	cfResolver          func(ctx context.Context, slug, mcVersion, loader string) ([]string, error)
-	configsReader       func(ctx context.Context, num int) (map[string]string, error)
+	configsReader       func(ctx context.Context, instanceNumber int) (map[string]string, error)
 	globalConfigsReader func(ctx context.Context) (map[string]string, error)
 	globalConfigsPath   string
 	backupsDir          string
@@ -129,7 +129,7 @@ func WithVersionResolver(fn func(ctx context.Context, fullName string) (string, 
 	return func(m *InstanceManager) { m.versionResolver = fn }
 }
 
-func WithModsReader(fn func(ctx context.Context, num int) ([]string, error)) Option {
+func WithModsReader(fn func(ctx context.Context, instanceNumber int) ([]string, error)) Option {
 	return func(m *InstanceManager) { m.modsReader = fn }
 }
 
@@ -144,11 +144,11 @@ func WithCurseForgeResolver(fn func(ctx context.Context, slug, mcVersion, loader
 
 // WithCurseForgeReader supplies the CurseForge half of a Minecraft Mod list.
 // Valheim never sets it: Thunderstore is its only catalogue.
-func WithCurseForgeReader(fn func(ctx context.Context, num int) ([]string, error)) Option {
+func WithCurseForgeReader(fn func(ctx context.Context, instanceNumber int) ([]string, error)) Option {
 	return func(m *InstanceManager) { m.cfModsReader = fn }
 }
 
-func WithConfigsReader(fn func(ctx context.Context, num int) (map[string]string, error)) Option {
+func WithConfigsReader(fn func(ctx context.Context, instanceNumber int) (map[string]string, error)) Option {
 	return func(m *InstanceManager) { m.configsReader = fn }
 }
 
@@ -293,24 +293,24 @@ func (m *InstanceManager) instanceDirFor(inst domain.Instance) string {
 	return fmt.Sprintf("%s/%s", m.instanceRoot(inst.EffectiveHost()), domain.InstanceDirName(inst.Number))
 }
 
-func (m *InstanceManager) readsFromCluster(num int) bool {
+func (m *InstanceManager) readsFromCluster(instanceNumber int) bool {
 	if m.repo == nil {
 		return true
 	}
-	inst, err := m.repo.Get(num)
+	inst, err := m.repo.Get(instanceNumber)
 	if err != nil || inst == nil {
 		return true
 	}
 	return inst.EffectiveHost().IsCluster()
 }
 
-func (m *InstanceManager) instanceDir(num int) string {
+func (m *InstanceManager) instanceDir(instanceNumber int) string {
 	if m.repo != nil {
-		if inst, err := m.repo.Get(num); err == nil && inst != nil {
+		if inst, err := m.repo.Get(instanceNumber); err == nil && inst != nil {
 			return m.instanceDirFor(*inst)
 		}
 	}
-	return fmt.Sprintf("%s/%s", m.instancesRelPath, domain.InstanceDirName(num))
+	return fmt.Sprintf("%s/%s", m.instancesRelPath, domain.InstanceDirName(instanceNumber))
 }
 
 func (m *InstanceManager) GameID() domain.GameID       { return m.gameID }
@@ -485,10 +485,10 @@ func (m *InstanceManager) ListInstancesByGame(ctx context.Context, gameID domain
 	return filtered, nil
 }
 
-func (m *InstanceManager) GetInstance(ctx context.Context, num int) (*domain.Instance, error) {
-	rec, err := m.repo.Get(num)
+func (m *InstanceManager) GetInstance(ctx context.Context, instanceNumber int) (*domain.Instance, error) {
+	rec, err := m.repo.Get(instanceNumber)
 	if err != nil {
-		return nil, fmt.Errorf("get instance %d: %w", num, err)
+		return nil, fmt.Errorf("get instance %d: %w", instanceNumber, err)
 	}
 	if rec == nil {
 		return nil, nil
@@ -681,52 +681,52 @@ func (m *InstanceManager) writeManifestsConverging(ctx context.Context, inst dom
 // SetResources resizes a world. Unlike UpdateSettings, which only touched the
 // database, this re-renders the Instance's manifests so the change actually
 // reaches the cluster - which means it restarts the world.
-func (m *InstanceManager) SetResources(ctx context.Context, num int, r domain.Resources, actor ...string) error {
+func (m *InstanceManager) SetResources(ctx context.Context, instanceNumber int, r domain.Resources, actor ...string) error {
 	if err := r.Validate(); err != nil {
 		return err
 	}
-	inst, err := m.GetInstance(ctx, num)
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
 	}
 	if inst == nil {
-		return fmt.Errorf("instance %d not found", num)
+		return fmt.Errorf("instance %d not found", instanceNumber)
 	}
 
-	mods, err := m.GetModList(ctx, num)
+	mods, err := m.GetModList(ctx, instanceNumber)
 	if err != nil {
-		return fmt.Errorf("read current mods for instance %d: %w", num, err)
+		return fmt.Errorf("read current mods for instance %d: %w", instanceNumber, err)
 	}
 
 	inst.Resources = r
 	commitMsg := fmt.Sprintf("%s: resize instance %02d to %d/%d GiB",
-		m.gamePrefix(), num, r.MemRequestGiB, r.MemLimitGiB)
+		m.gamePrefix(), instanceNumber, r.MemRequestGiB, r.MemLimitGiB)
 	if err := m.writeManifests(ctx, *inst, mods, commitMsg); err != nil {
 		return err
 	}
 	if err := m.repo.Upsert(*inst); err != nil {
-		return fmt.Errorf("save instance %d resources: %w", num, err)
+		return fmt.Errorf("save instance %d resources: %w", instanceNumber, err)
 	}
 
 	action := fmt.Sprintf("%s-instance-resize", m.gamePrefix())
 	if m.audit != nil {
 		_ = m.audit.RecordAudit(actorOrHyphen(actor), action,
-			fmt.Sprintf("#%02d -> %d/%d GiB", num, r.MemRequestGiB, r.MemLimitGiB))
+			fmt.Sprintf("#%02d -> %d/%d GiB", instanceNumber, r.MemRequestGiB, r.MemLimitGiB))
 	}
 	return nil
 }
 
 // ApplyTier re-sizes a world back onto a Tier's resources. Opt-in per world:
 // changing a Tier definition never moves an existing world by itself.
-func (m *InstanceManager) ApplyTier(ctx context.Context, num int, tier domain.Tier, actor ...string) error {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) ApplyTier(ctx context.Context, instanceNumber int, tier domain.Tier, actor ...string) error {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
 	}
 	if inst == nil {
-		return fmt.Errorf("instance %d not found", num)
+		return fmt.Errorf("instance %d not found", instanceNumber)
 	}
-	if err := m.SetResources(ctx, num, tier.Resources, actor...); err != nil {
+	if err := m.SetResources(ctx, instanceNumber, tier.Resources, actor...); err != nil {
 		return err
 	}
 	if tier.Key == "" || domain.ResourceTier(tier.Key) == inst.Tier {
@@ -737,13 +737,13 @@ func (m *InstanceManager) ApplyTier(ctx context.Context, num int, tier domain.Ti
 	return m.repo.Upsert(*inst)
 }
 
-func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...string) error {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) StartInstance(ctx context.Context, instanceNumber int, actor ...string) error {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
 	}
 	if inst == nil {
-		return fmt.Errorf("instance %d not found", num)
+		return fmt.Errorf("instance %d not found", instanceNumber)
 	}
 	if inst.State == domain.StateRunning {
 		return nil
@@ -756,7 +756,7 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...s
 
 	var others []domain.Instance
 	for _, other := range instances {
-		if other.Number != num {
+		if other.Number != instanceNumber {
 			others = append(others, other)
 		}
 	}
@@ -771,7 +771,7 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...s
 		var mods domain.ModList
 		if profile.Capabilities.Mods {
 			var modsErr error
-			if mods, modsErr = m.GetModList(ctx, num); modsErr != nil {
+			if mods, modsErr = m.GetModList(ctx, instanceNumber); modsErr != nil {
 				return fmt.Errorf("start instance %d: converge: read mod list: %w", inst.Number, modsErr)
 			}
 		}
@@ -786,13 +786,13 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...s
 	}
 
 	inst.State = domain.StateRunning
-	if err := m.repo.UpdateState(num, domain.StateRunning); err != nil {
+	if err := m.repo.UpdateState(instanceNumber, domain.StateRunning); err != nil {
 		return err
 	}
 
 	startAction := fmt.Sprintf("%s-instance-start", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), startAction, fmt.Sprintf("Instance #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), startAction, fmt.Sprintf("Instance #%02d", instanceNumber))
 	}
 	if m.event != nil {
 		_ = m.event.RecordEvent(startAction, actorOrHyphen(actor))
@@ -800,13 +800,13 @@ func (m *InstanceManager) StartInstance(ctx context.Context, num int, actor ...s
 	return nil
 }
 
-func (m *InstanceManager) StopInstance(ctx context.Context, num int, actor ...string) error {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) StopInstance(ctx context.Context, instanceNumber int, actor ...string) error {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
 	}
 	if inst == nil {
-		return fmt.Errorf("instance %d not found", num)
+		return fmt.Errorf("instance %d not found", instanceNumber)
 	}
 
 	if m.preStopHook != nil && inst.State == domain.StateRunning {
@@ -820,13 +820,13 @@ func (m *InstanceManager) StopInstance(ctx context.Context, num int, actor ...st
 	}
 
 	inst.State = domain.StateStopped
-	if err := m.repo.UpdateState(num, domain.StateStopped); err != nil {
+	if err := m.repo.UpdateState(instanceNumber, domain.StateStopped); err != nil {
 		return err
 	}
 
 	stopAction := fmt.Sprintf("%s-instance-stop", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), stopAction, fmt.Sprintf("Instance #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), stopAction, fmt.Sprintf("Instance #%02d", instanceNumber))
 	}
 	if m.event != nil {
 		_ = m.event.RecordEvent(stopAction, actorOrHyphen(actor))
@@ -834,13 +834,13 @@ func (m *InstanceManager) StopInstance(ctx context.Context, num int, actor ...st
 	return nil
 }
 
-func (m *InstanceManager) DeleteInstance(ctx context.Context, num int, actor ...string) error {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) DeleteInstance(ctx context.Context, instanceNumber int, actor ...string) error {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
 	}
 	if inst == nil {
-		return fmt.Errorf("instance %d not found", num)
+		return fmt.Errorf("instance %d not found", instanceNumber)
 	}
 
 	if m.preDeleteHook != nil {
@@ -850,12 +850,12 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int, actor ...
 	if m.runtime != nil {
 		st, err := m.runtime.Status(ctx, m.serverRef(*inst))
 		if err == nil && (st.Lifecycle == ports.LifecycleRunning || st.Available) {
-			return fmt.Errorf("instance %d (%s) must be stopped before it can be deleted", num, inst.Name)
+			return fmt.Errorf("instance %d (%s) must be stopped before it can be deleted", instanceNumber, inst.Name)
 		}
 	}
 
 	dirRel := m.instanceDirFor(*inst)
-	commitMsg := fmt.Sprintf("%s: delete instance %02d (%s)", m.gamePrefix(), num, inst.Name)
+	commitMsg := fmt.Sprintf("%s: delete instance %02d (%s)", m.gamePrefix(), instanceNumber, inst.Name)
 
 	if m.stateStore != nil {
 		if err := m.stateStore.Delete(ctx, dirRel, commitMsg); err != nil {
@@ -863,25 +863,25 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int, actor ...
 		}
 	}
 
-	if err := m.repo.Delete(num); err != nil {
+	if err := m.repo.Delete(instanceNumber); err != nil {
 		return err
 	}
 
 	if m.roleRetirer != nil {
 		if err := m.roleRetirer(ctx, *inst); err != nil {
 			slog.Error("instance role not retired, orphaned in the identity provider",
-				"game", m.gamePrefix(), "number", num, "err", err)
+				"game", m.gamePrefix(), "number", instanceNumber, "err", err)
 			if m.audit != nil {
 				_ = m.audit.RecordAudit(actorOrHyphen(actor),
 					fmt.Sprintf("%s-instance-role-orphaned", m.gamePrefix()),
-					fmt.Sprintf("Instance #%02d: %v", num, err))
+					fmt.Sprintf("Instance #%02d: %v", instanceNumber, err))
 			}
 		}
 	}
 
 	deleteAction := fmt.Sprintf("%s-instance-delete", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), deleteAction, fmt.Sprintf("Instance #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), deleteAction, fmt.Sprintf("Instance #%02d", instanceNumber))
 	}
 	if m.event != nil {
 		_ = m.event.RecordEvent(deleteAction, actorOrHyphen(actor))
@@ -889,24 +889,24 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, num int, actor ...
 	return nil
 }
 
-func (m *InstanceManager) RestartInstance(ctx context.Context, num int, actor ...string) error {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) RestartInstance(ctx context.Context, instanceNumber int, actor ...string) error {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
 	}
 	if inst == nil {
-		return fmt.Errorf("instance %d not found", num)
+		return fmt.Errorf("instance %d not found", instanceNumber)
 	}
 
 	if m.runtime != nil {
 		if err := m.runtime.Restart(ctx, m.serverRef(*inst)); err != nil {
-			return fmt.Errorf("restart instance %d: %w", num, err)
+			return fmt.Errorf("restart instance %d: %w", instanceNumber, err)
 		}
 	}
 
 	restartAction := fmt.Sprintf("%s-instance-restart", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), restartAction, fmt.Sprintf("Instance #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), restartAction, fmt.Sprintf("Instance #%02d", instanceNumber))
 	}
 	if m.event != nil {
 		_ = m.event.RecordEvent(restartAction, actorOrHyphen(actor))
@@ -914,13 +914,13 @@ func (m *InstanceManager) RestartInstance(ctx context.Context, num int, actor ..
 	return nil
 }
 
-func (m *InstanceManager) UpdateSettings(ctx context.Context, num int, name, motd, tier, mcVersion string, actor ...string) error {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) UpdateSettings(ctx context.Context, instanceNumber int, name, motd, tier, mcVersion string, actor ...string) error {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
 	}
 	if inst == nil {
-		return fmt.Errorf("instance %d not found", num)
+		return fmt.Errorf("instance %d not found", instanceNumber)
 	}
 
 	if name != "" {
@@ -942,23 +942,23 @@ func (m *InstanceManager) UpdateSettings(ctx context.Context, num int, name, mot
 	}
 
 	if err := m.repo.Upsert(*inst); err != nil {
-		return fmt.Errorf("update instance %d settings: %w", num, err)
+		return fmt.Errorf("update instance %d settings: %w", instanceNumber, err)
 	}
 
 	saveAction := fmt.Sprintf("%s-settings-save", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), saveAction, fmt.Sprintf("Updated settings for #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), saveAction, fmt.Sprintf("Updated settings for #%02d", instanceNumber))
 	}
 	return nil
 }
 
-func (m *InstanceManager) UpdateValheimSettings(ctx context.Context, num int, name, motd, tier, password string, actor ...string) error {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) UpdateValheimSettings(ctx context.Context, instanceNumber int, name, motd, tier, password string, actor ...string) error {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
 	}
 	if inst == nil {
-		return fmt.Errorf("instance %d not found", num)
+		return fmt.Errorf("instance %d not found", instanceNumber)
 	}
 
 	if name != "" {
@@ -974,24 +974,24 @@ func (m *InstanceManager) UpdateValheimSettings(ctx context.Context, num int, na
 	}
 
 	if err := m.repo.Upsert(*inst); err != nil {
-		return fmt.Errorf("update instance %d settings: %w", num, err)
+		return fmt.Errorf("update instance %d settings: %w", instanceNumber, err)
 	}
 
 	saveAction := fmt.Sprintf("%s-settings-save", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), saveAction, fmt.Sprintf("Updated settings for #%02d", num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), saveAction, fmt.Sprintf("Updated settings for #%02d", instanceNumber))
 	}
 	return nil
 }
 
-func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]string, error) {
-	if m.modsReader != nil && m.readsFromCluster(num) {
-		return m.modsReader(ctx, num)
+func (m *InstanceManager) GetInstalledMods(ctx context.Context, instanceNumber int) ([]string, error) {
+	if m.modsReader != nil && m.readsFromCluster(instanceNumber) {
+		return m.modsReader(ctx, instanceNumber)
 	}
 	if m.stateStore == nil {
 		return nil, nil
 	}
-	path := m.instanceDir(num) + "/mods.yaml"
+	path := m.instanceDir(instanceNumber) + "/mods.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
 		return nil, err
@@ -1010,14 +1010,14 @@ func (m *InstanceManager) GetInstalledMods(ctx context.Context, num int) ([]stri
 
 // GetCurseForgeMods reads the CurseForge half of a Mod list. An Instance with no
 // CurseForge entries has no such file, which is not an error.
-func (m *InstanceManager) GetCurseForgeMods(ctx context.Context, num int) ([]string, error) {
-	if m.cfModsReader != nil && m.readsFromCluster(num) {
-		return m.cfModsReader(ctx, num)
+func (m *InstanceManager) GetCurseForgeMods(ctx context.Context, instanceNumber int) ([]string, error) {
+	if m.cfModsReader != nil && m.readsFromCluster(instanceNumber) {
+		return m.cfModsReader(ctx, instanceNumber)
 	}
 	if m.stateStore == nil {
 		return nil, nil
 	}
-	path := m.instanceDir(num) + "/mods.yaml"
+	path := m.instanceDir(instanceNumber) + "/mods.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
 		return nil, err
@@ -1033,8 +1033,8 @@ func (m *InstanceManager) GetCurseForgeMods(ctx context.Context, num int) ([]str
 
 // GetModList reads everything an Instance runs, split by Provider - the shape
 // the renderer needs.
-func (m *InstanceManager) GetModList(ctx context.Context, num int) (domain.ModList, error) {
-	primary, err := m.GetInstalledMods(ctx, num)
+func (m *InstanceManager) GetModList(ctx context.Context, instanceNumber int) (domain.ModList, error) {
+	primary, err := m.GetInstalledMods(ctx, instanceNumber)
 	if err != nil {
 		return domain.ModList{}, err
 	}
@@ -1042,7 +1042,7 @@ func (m *InstanceManager) GetModList(ctx context.Context, num int) (domain.ModLi
 	if m.gameID != domain.GameMinecraft {
 		return out, nil
 	}
-	cf, err := m.GetCurseForgeMods(ctx, num)
+	cf, err := m.GetCurseForgeMods(ctx, instanceNumber)
 	if err != nil {
 		return out, err
 	}
@@ -1057,17 +1057,17 @@ func joinLines(lines []string) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, actor ...string) (int, error) {
+func (m *InstanceManager) InstallMod(ctx context.Context, instanceNumber int, slug string, actor ...string) (int, error) {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		return 0, fmt.Errorf("mod slug required")
 	}
-	inst, err := m.GetInstance(ctx, num)
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return 0, err
 	}
 	if inst == nil {
-		return 0, fmt.Errorf("instance %d not found", num)
+		return 0, fmt.Errorf("instance %d not found", instanceNumber)
 	}
 	if !inst.CanInstallMods() {
 		return 0, inst.VanillaImmutableErr()
@@ -1083,7 +1083,7 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 		}
 		deps, err := m.depResolver(ctx, slug, mcVer, loader)
 		if err != nil {
-			slog.Warn("could not resolve all mod dependencies", "slug", slug, "instance", num, "err", err)
+			slog.Warn("could not resolve all mod dependencies", "slug", slug, "instance", instanceNumber, "err", err)
 		} else {
 			wanted = append(wanted, deps...)
 		}
@@ -1092,8 +1092,8 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 	if m.stateStore == nil {
 		return 0, ports.ErrNotImplemented
 	}
-	modsPath := m.instanceDir(num) + "/mods.yaml"
-	msg := fmt.Sprintf("%s: install %s into instance #%02d", m.gamePrefix(), slug, num)
+	modsPath := m.instanceDir(instanceNumber) + "/mods.yaml"
+	msg := fmt.Sprintf("%s: install %s into instance #%02d", m.gamePrefix(), slug, instanceNumber)
 	addedCount := 0
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
@@ -1161,7 +1161,7 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 		return 0, err
 	}
 	if changed && m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-install", m.gamePrefix()), fmt.Sprintf("Installed %s into #%02d", slug, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-install", m.gamePrefix()), fmt.Sprintf("Installed %s into #%02d", slug, instanceNumber))
 	}
 	return addedCount, nil
 }
@@ -1170,13 +1170,13 @@ func (m *InstanceManager) InstallMod(ctx context.Context, num int, slug string, 
 // change several pins at once (a mod update and everything it drags with it)
 // use this rather than a sequence of installs, so the world never boots against
 // a half-applied set. It reports whether anything actually changed.
-func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []string, detail string, actor ...string) (bool, error) {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) ReplaceMods(ctx context.Context, instanceNumber int, entries []string, detail string, actor ...string) (bool, error) {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return false, err
 	}
 	if inst == nil {
-		return false, fmt.Errorf("instance %d not found", num)
+		return false, fmt.Errorf("instance %d not found", instanceNumber)
 	}
 	if !inst.CanInstallMods() {
 		return false, inst.VanillaImmutableErr()
@@ -1195,8 +1195,8 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 	}
 	next := body.String()
 
-	modsPath := m.instanceDir(num) + "/mods.yaml"
-	msg := fmt.Sprintf("%s: update mods on instance #%02d", m.gamePrefix(), num)
+	modsPath := m.instanceDir(instanceNumber) + "/mods.yaml"
+	msg := fmt.Sprintf("%s: update mods on instance #%02d", m.gamePrefix(), instanceNumber)
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
 			doc.Data = make(map[string]string)
@@ -1214,15 +1214,15 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 	if m.reconciler != nil && !inst.EffectiveHost().IsCluster() {
 		converged := domain.ModList{Primary: next}
 		if m.gameID == domain.GameMinecraft {
-			cf, cfErr := m.GetCurseForgeMods(ctx, num)
+			cf, cfErr := m.GetCurseForgeMods(ctx, instanceNumber)
 			if cfErr != nil {
-				return false, fmt.Errorf("converge mods on instance %d: read curseforge mods: %w", num, cfErr)
+				return false, fmt.Errorf("converge mods on instance %d: read curseforge mods: %w", instanceNumber, cfErr)
 			}
 			converged.CurseForge = joinLines(cf)
 		}
 		running := inst.State == domain.StateRunning
 		if werr := m.writeManifestsConverging(ctx, *inst, converged, msg, running); werr != nil {
-			return false, fmt.Errorf("converge mods on instance %d: %w", num, werr)
+			return false, fmt.Errorf("converge mods on instance %d: %w", instanceNumber, werr)
 		}
 	}
 
@@ -1232,9 +1232,9 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 
 	if m.audit != nil {
 		if detail == "" {
-			detail = fmt.Sprintf("Updated mods on #%02d", num)
+			detail = fmt.Sprintf("Updated mods on #%02d", instanceNumber)
 		}
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-update", m.gamePrefix()), fmt.Sprintf("#%02d: %s", num, detail))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-update", m.gamePrefix()), fmt.Sprintf("#%02d: %s", instanceNumber, detail))
 	}
 
 	if m.reconciler != nil && !inst.EffectiveHost().IsCluster() {
@@ -1267,17 +1267,17 @@ func (m *InstanceManager) ReplaceMods(ctx context.Context, num int, entries []st
 // two Providers store their entries in different files in different syntaxes,
 // and because CurseForge dependencies must be resolved here rather than by the
 // server (ADR 0004).
-func (m *InstanceManager) InstallCurseForgeMod(ctx context.Context, num int, slug string, actor ...string) (int, error) {
+func (m *InstanceManager) InstallCurseForgeMod(ctx context.Context, instanceNumber int, slug string, actor ...string) (int, error) {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		return 0, fmt.Errorf("mod slug required")
 	}
-	inst, err := m.GetInstance(ctx, num)
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return 0, err
 	}
 	if inst == nil {
-		return 0, fmt.Errorf("instance %d not found", num)
+		return 0, fmt.Errorf("instance %d not found", instanceNumber)
 	}
 	if inst.GameID != domain.GameMinecraft {
 		return 0, fmt.Errorf("CurseForge mods are a Minecraft concept")
@@ -1308,8 +1308,8 @@ func (m *InstanceManager) InstallCurseForgeMod(ctx context.Context, num int, slu
 		return 0, fmt.Errorf("no CurseForge mod named %s exists for %s/%s", slug, mcVer, loader)
 	}
 
-	modsPath := m.instanceDir(num) + "/mods.yaml"
-	msg := fmt.Sprintf("%s: install curseforge %s into instance #%02d", m.gamePrefix(), slug, num)
+	modsPath := m.instanceDir(instanceNumber) + "/mods.yaml"
+	msg := fmt.Sprintf("%s: install curseforge %s into instance #%02d", m.gamePrefix(), slug, instanceNumber)
 	added := 0
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
@@ -1350,7 +1350,7 @@ func (m *InstanceManager) InstallCurseForgeMod(ctx context.Context, num int, slu
 	}
 	if changed && m.audit != nil {
 		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-install", m.gamePrefix()),
-			fmt.Sprintf("Installed curseforge %s into #%02d (%d entries)", slug, num, added))
+			fmt.Sprintf("Installed curseforge %s into #%02d (%d entries)", slug, instanceNumber, added))
 	}
 	return added, nil
 }
@@ -1359,7 +1359,7 @@ func (m *InstanceManager) InstallCurseForgeMod(ctx context.Context, num int, slu
 // Dependencies it pulled in are left alone: agrelha cannot tell whether another
 // mod also needs them, and removing one that is still required would turn a tidy
 // list into a broken world.
-func (m *InstanceManager) RemoveCurseForgeMod(ctx context.Context, num int, slug string, actor ...string) error {
+func (m *InstanceManager) RemoveCurseForgeMod(ctx context.Context, instanceNumber int, slug string, actor ...string) error {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		return fmt.Errorf("mod slug required")
@@ -1372,8 +1372,8 @@ func (m *InstanceManager) RemoveCurseForgeMod(ctx context.Context, num int, slug
 		return fmt.Errorf("mod slug required")
 	}
 
-	modsPath := m.instanceDir(num) + "/mods.yaml"
-	msg := fmt.Sprintf("%s: remove curseforge %s from instance #%02d", m.gamePrefix(), target.Slug, num)
+	modsPath := m.instanceDir(instanceNumber) + "/mods.yaml"
+	msg := fmt.Sprintf("%s: remove curseforge %s from instance #%02d", m.gamePrefix(), target.Slug, instanceNumber)
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
 			return false, nil
@@ -1399,12 +1399,12 @@ func (m *InstanceManager) RemoveCurseForgeMod(ctx context.Context, num int, slug
 	}
 	if changed && m.audit != nil {
 		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-remove", m.gamePrefix()),
-			fmt.Sprintf("Removed curseforge %s from #%02d", target.Slug, num))
+			fmt.Sprintf("Removed curseforge %s from #%02d", target.Slug, instanceNumber))
 	}
 	return nil
 }
 
-func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, actor ...string) error {
+func (m *InstanceManager) RemoveMod(ctx context.Context, instanceNumber int, slug string, actor ...string) error {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		return fmt.Errorf("mod slug required")
@@ -1412,8 +1412,8 @@ func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, a
 	if m.stateStore == nil {
 		return ports.ErrNotImplemented
 	}
-	modsPath := m.instanceDir(num) + "/mods.yaml"
-	msg := fmt.Sprintf("%s: remove %s from instance #%02d", m.gamePrefix(), slug, num)
+	modsPath := m.instanceDir(instanceNumber) + "/mods.yaml"
+	msg := fmt.Sprintf("%s: remove %s from instance #%02d", m.gamePrefix(), slug, instanceNumber)
 	changed, err := m.stateStore.Patch(ctx, modsPath, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
 			return false, nil
@@ -1441,14 +1441,14 @@ func (m *InstanceManager) RemoveMod(ctx context.Context, num int, slug string, a
 		return err
 	}
 	if changed && m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-remove", m.gamePrefix()), fmt.Sprintf("Removed %s from #%02d", slug, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-mod-remove", m.gamePrefix()), fmt.Sprintf("Removed %s from #%02d", slug, instanceNumber))
 	}
 	return nil
 }
 
-func (m *InstanceManager) ListConfigs(ctx context.Context, num int) ([]string, error) {
-	if m.configsReader != nil && m.readsFromCluster(num) {
-		data, err := m.configsReader(ctx, num)
+func (m *InstanceManager) ListConfigs(ctx context.Context, instanceNumber int) ([]string, error) {
+	if m.configsReader != nil && m.readsFromCluster(instanceNumber) {
+		data, err := m.configsReader(ctx, instanceNumber)
 		if err != nil {
 			return nil, err
 		}
@@ -1462,7 +1462,7 @@ func (m *InstanceManager) ListConfigs(ctx context.Context, num int) ([]string, e
 	if m.stateStore == nil {
 		return nil, nil
 	}
-	path := m.instanceDir(num) + "/configs.yaml"
+	path := m.instanceDir(instanceNumber) + "/configs.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
 		return nil, err
@@ -1479,14 +1479,14 @@ func (m *InstanceManager) ListConfigs(ctx context.Context, num int) ([]string, e
 // file name. ListConfigs answers "which files", which costs the same read; the
 // BepInEx editor needs the bodies too and should not pay for that read once per
 // file.
-func (m *InstanceManager) ListConfigData(ctx context.Context, num int) (map[string]string, error) {
-	if m.configsReader != nil && m.readsFromCluster(num) {
-		return m.configsReader(ctx, num)
+func (m *InstanceManager) ListConfigData(ctx context.Context, instanceNumber int) (map[string]string, error) {
+	if m.configsReader != nil && m.readsFromCluster(instanceNumber) {
+		return m.configsReader(ctx, instanceNumber)
 	}
 	if m.stateStore == nil {
 		return nil, nil
 	}
-	return m.configDataAt(ctx, m.instanceDir(num)+"/configs.yaml")
+	return m.configDataAt(ctx, m.instanceDir(instanceNumber)+"/configs.yaml")
 }
 
 func (m *InstanceManager) ListConfigDataFor(ctx context.Context, inst domain.Instance) (map[string]string, error) {
@@ -1519,9 +1519,9 @@ func (m *InstanceManager) configDataAt(ctx context.Context, path string) (map[st
 	return doc.Data, nil
 }
 
-func (m *InstanceManager) GetConfig(ctx context.Context, num int, filename string) (string, error) {
-	if m.configsReader != nil && m.readsFromCluster(num) {
-		data, err := m.configsReader(ctx, num)
+func (m *InstanceManager) GetConfig(ctx context.Context, instanceNumber int, filename string) (string, error) {
+	if m.configsReader != nil && m.readsFromCluster(instanceNumber) {
+		data, err := m.configsReader(ctx, instanceNumber)
 		if err != nil {
 			return "", err
 		}
@@ -1530,7 +1530,7 @@ func (m *InstanceManager) GetConfig(ctx context.Context, num int, filename strin
 	if m.stateStore == nil {
 		return "", ports.ErrNotImplemented
 	}
-	path := m.instanceDir(num) + "/configs.yaml"
+	path := m.instanceDir(instanceNumber) + "/configs.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
 		return "", err
@@ -1541,12 +1541,12 @@ func (m *InstanceManager) GetConfig(ctx context.Context, num int, filename strin
 	return "", nil
 }
 
-func (m *InstanceManager) SaveConfig(ctx context.Context, num int, filename, content string, actor ...string) (bool, error) {
+func (m *InstanceManager) SaveConfig(ctx context.Context, instanceNumber int, filename, content string, actor ...string) (bool, error) {
 	if m.stateStore == nil {
 		return false, ports.ErrNotImplemented
 	}
-	path := m.instanceDir(num) + "/configs.yaml"
-	msg := fmt.Sprintf("agrelha: edit config %s for instance #%02d", filename, num)
+	path := m.instanceDir(instanceNumber) + "/configs.yaml"
+	msg := fmt.Sprintf("agrelha: edit config %s for instance #%02d", filename, instanceNumber)
 	changed, err := m.stateStore.Patch(ctx, path, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
 			doc.Data = make(map[string]string)
@@ -1561,17 +1561,17 @@ func (m *InstanceManager) SaveConfig(ctx context.Context, num int, filename, con
 		return false, err
 	}
 	if changed && m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-config-edit", m.gamePrefix()), fmt.Sprintf("Saved %s on #%02d", filename, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-config-edit", m.gamePrefix()), fmt.Sprintf("Saved %s on #%02d", filename, instanceNumber))
 	}
 	return changed, nil
 }
 
-func (m *InstanceManager) DeleteConfig(ctx context.Context, num int, filename string, actor ...string) (bool, error) {
+func (m *InstanceManager) DeleteConfig(ctx context.Context, instanceNumber int, filename string, actor ...string) (bool, error) {
 	if m.stateStore == nil {
 		return false, ports.ErrNotImplemented
 	}
-	path := m.instanceDir(num) + "/configs.yaml"
-	msg := fmt.Sprintf("agrelha: delete config %s for instance #%02d", filename, num)
+	path := m.instanceDir(instanceNumber) + "/configs.yaml"
+	msg := fmt.Sprintf("agrelha: delete config %s for instance #%02d", filename, instanceNumber)
 	changed, err := m.stateStore.Patch(ctx, path, msg, func(doc *ports.Document) (bool, error) {
 		if doc.Data == nil {
 			return false, nil
@@ -1586,7 +1586,7 @@ func (m *InstanceManager) DeleteConfig(ctx context.Context, num int, filename st
 		return false, err
 	}
 	if changed && m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-config-delete", m.gamePrefix()), fmt.Sprintf("Deleted %s on #%02d", filename, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), fmt.Sprintf("%s-config-delete", m.gamePrefix()), fmt.Sprintf("Deleted %s on #%02d", filename, instanceNumber))
 	}
 	return changed, nil
 }
@@ -1742,26 +1742,69 @@ func (m *InstanceManager) InstanceStats(ctx context.Context, insts []domain.Inst
 	return out
 }
 
-// ProvisioningStatus reports the current readiness phase ("syncing", "booting", "ready") of an instance during provisioning.
-func (m *InstanceManager) ProvisioningStatus(ctx context.Context, num int) (phase string, ready bool, err error) {
-	inst, err := m.GetInstance(ctx, num)
+// ProvisionState is where an instance has got to while it is being brought up.
+// Phase is one of "syncing", "booting", "ready" and "failed"; Cause carries the
+// runtime's account of a failure, so a stuck provision can say why rather than
+// spinning. A runtime error is returned as an error and never dressed up as
+// progress - a cluster that cannot be reached must not look like a slow one.
+type ProvisionState struct {
+	Phase string
+	Ready bool
+	Cause string
+}
+
+// ProvisioningStatus reports how far an instance has got while provisioning.
+func (m *InstanceManager) ProvisioningStatus(ctx context.Context, instanceNumber int) (ProvisionState, error) {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil || inst == nil {
-		return "unknown", false, fmt.Errorf("instance not found")
+		return ProvisionState{Phase: "unknown"}, fmt.Errorf("instance not found")
 	}
 	if m.runtime == nil {
-		return "ready", true, nil
+		return ProvisionState{Phase: "ready", Ready: true}, nil
 	}
 	st, err := m.runtime.Status(ctx, m.serverRef(*inst))
 	if err != nil {
-		return "syncing", false, nil
+		return ProvisionState{Phase: "syncing"}, err
 	}
 	if st.Available {
-		return "ready", true, nil
+		return ProvisionState{Phase: "ready", Ready: true}, nil
+	}
+	if cause := provisionFailure(st.Failure); cause != "" {
+		return ProvisionState{Phase: "failed", Cause: cause}, nil
 	}
 	if st.Lifecycle == ports.LifecycleRunning {
-		return "booting", false, nil
+		return ProvisionState{Phase: "booting"}, nil
 	}
-	return "syncing", false, nil
+	return ProvisionState{Phase: "syncing"}, nil
+}
+
+// provisionFailure names why a server will not come up, or returns "" when the
+// runtime reports nothing conclusive. A server that is simply slow has no
+// failure to report, so silence here means "still working", never "fine".
+func provisionFailure(f ports.Failure) string {
+	switch f.WaitingReason {
+	case "ImagePullBackOff", "ErrImagePull":
+		return "The server image could not be pulled. Check the registry credentials and that the tag exists."
+	case "CreateContainerConfigError":
+		return "The container could not be configured. A referenced secret or config is missing."
+	}
+	if f.FailedBeforeStart() {
+		step := f.InitStep
+		if step == "" {
+			step = "setup"
+		}
+		return fmt.Sprintf("Setup failed before the server started, during %s. The mod or pack download is the usual cause.", step)
+	}
+	if f.OOMKilled {
+		return "The server ran out of memory and was killed. A larger tier, or a lighter pack, will fix it."
+	}
+	if f.CrashLooping() {
+		if f.Reason != "" {
+			return fmt.Sprintf("The server keeps restarting (%s, exit %d). Its logs name the cause.", f.Reason, f.ExitCode)
+		}
+		return fmt.Sprintf("The server keeps restarting after %d attempts. Its logs name the cause.", f.RestartCount)
+	}
+	return ""
 }
 
 type BudgetInfo = domain.Budget
@@ -1771,16 +1814,16 @@ func (m *InstanceManager) Budget(instances []domain.Instance) BudgetInfo {
 }
 
 // InstanceLogs streams logs for an instance using the configured runtime.
-func (m *InstanceManager) InstanceLogs(ctx context.Context, num int, tail int64) (io.ReadCloser, error) {
+func (m *InstanceManager) InstanceLogs(ctx context.Context, instanceNumber int, tail int64) (io.ReadCloser, error) {
 	if m.runtime == nil {
 		return nil, ports.ErrNotImplemented
 	}
-	inst, err := m.GetInstance(ctx, num)
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return nil, err
 	}
 	if inst == nil {
-		return nil, fmt.Errorf("instance %d not found", num)
+		return nil, fmt.Errorf("instance %d not found", instanceNumber)
 	}
 	if tail <= 0 {
 		tail = 100
@@ -1861,16 +1904,16 @@ func (m *InstanceManager) SaveInstance(inst domain.Instance) error {
 
 // RuntimeStatus reports what the runtime knows about an instance, including how
 // it last died.
-func (m *InstanceManager) RuntimeStatus(ctx context.Context, num int) (ports.Status, error) {
+func (m *InstanceManager) RuntimeStatus(ctx context.Context, instanceNumber int) (ports.Status, error) {
 	if m.runtime == nil {
 		return ports.Status{Lifecycle: ports.LifecycleUnknown}, ports.ErrNotImplemented
 	}
-	inst, err := m.GetInstance(ctx, num)
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return ports.Status{Lifecycle: ports.LifecycleUnknown}, err
 	}
 	if inst == nil {
-		return ports.Status{Lifecycle: ports.LifecycleUnknown}, fmt.Errorf("instance %d not found", num)
+		return ports.Status{Lifecycle: ports.LifecycleUnknown}, fmt.Errorf("instance %d not found", instanceNumber)
 	}
 	return m.runtime.Status(ctx, m.serverRef(*inst))
 }
@@ -1878,16 +1921,16 @@ func (m *InstanceManager) RuntimeStatus(ctx context.Context, num int) (ports.Sta
 // CrashLogs reads the terminated container's logs. step names a setup container
 // when the failure happened before the server started; empty reads the server. Kubernetes reaps these when
 // the pod is replaced, so they must be captured at detection, not on demand.
-func (m *InstanceManager) CrashLogs(ctx context.Context, num int, tail int64, step ...string) (io.ReadCloser, error) {
+func (m *InstanceManager) CrashLogs(ctx context.Context, instanceNumber int, tail int64, step ...string) (io.ReadCloser, error) {
 	if m.runtime == nil {
 		return nil, ports.ErrNotImplemented
 	}
-	inst, err := m.GetInstance(ctx, num)
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return nil, err
 	}
 	if inst == nil {
-		return nil, fmt.Errorf("instance %d not found", num)
+		return nil, fmt.Errorf("instance %d not found", instanceNumber)
 	}
 	if tail <= 0 {
 		tail = 100
@@ -1900,23 +1943,23 @@ func (m *InstanceManager) CrashLogs(ctx context.Context, num int, tail int64, st
 }
 
 // ExecuteCommand executes a console command on an instance via the configured command executor.
-func (m *InstanceManager) ExecuteCommand(ctx context.Context, num int, cmd string) (string, error) {
+func (m *InstanceManager) ExecuteCommand(ctx context.Context, instanceNumber int, cmd string) (string, error) {
 	if m.commandExecutor == nil {
 		return "", errors.New("command execution not configured")
 	}
-	inst, err := m.GetInstance(ctx, num)
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return "", err
 	}
 	if inst == nil {
-		return "", fmt.Errorf("instance %d not found", num)
+		return "", fmt.Errorf("instance %d not found", instanceNumber)
 	}
 	return m.commandExecutor(ctx, *inst, cmd)
 }
 
 // CreateBackup launches an asynchronous backup job for a specific instance.
-func (m *InstanceManager) CreateBackup(ctx context.Context, num int, actor ...string) (string, error) {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) CreateBackup(ctx context.Context, instanceNumber int, actor ...string) (string, error) {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil || inst == nil {
 		return "", fmt.Errorf("instance not found")
 	}
@@ -1952,7 +1995,7 @@ func (m *InstanceManager) CreateBackup(ctx context.Context, num int, actor ...st
 
 	backupAction := fmt.Sprintf("%s-backup", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), backupAction, fmt.Sprintf("Backup %s for instance #%02d", backupName, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), backupAction, fmt.Sprintf("Backup %s for instance #%02d", backupName, instanceNumber))
 	}
 	if m.event != nil {
 		_ = m.event.RecordEvent(backupAction, actorOrHyphen(actor))
@@ -1961,11 +2004,11 @@ func (m *InstanceManager) CreateBackup(ctx context.Context, num int, actor ...st
 	return backupName, nil
 }
 
-func pruneBackups(backupsDir, gamePrefix, slug string, num, keepCount int) error {
+func pruneBackups(backupsDir, gamePrefix, slug string, instanceNumber, keepCount int) error {
 	if backupsDir == "" || keepCount <= 0 {
 		return nil
 	}
-	pattern := filepath.Join(backupsDir, fmt.Sprintf("%s-%s-%02d-*.tar.gz", gamePrefix, slug, num))
+	pattern := filepath.Join(backupsDir, fmt.Sprintf("%s-%s-%02d-*.tar.gz", gamePrefix, slug, instanceNumber))
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return err
@@ -1993,8 +2036,8 @@ func pruneBackups(backupsDir, gamePrefix, slug string, num, keepCount int) error
 }
 
 // RestoreInPlace uncompresses an archive back into an existing stopped instance PVC.
-func (m *InstanceManager) RestoreInPlace(ctx context.Context, num int, archive string, actor ...string) error {
-	inst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) RestoreInPlace(ctx context.Context, instanceNumber int, archive string, actor ...string) error {
+	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil || inst == nil {
 		return fmt.Errorf("instance not found")
 	}
@@ -2022,7 +2065,7 @@ func (m *InstanceManager) RestoreInPlace(ctx context.Context, num int, archive s
 
 	restoreAction := fmt.Sprintf("%s-backup-restore-inplace", m.gamePrefix())
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), restoreAction, fmt.Sprintf("Restored %s into #%02d", archiveName, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), restoreAction, fmt.Sprintf("Restored %s into #%02d", archiveName, instanceNumber))
 	}
 	if m.event != nil {
 		_ = m.event.RecordEvent(restoreAction, actorOrHyphen(actor))
@@ -2032,8 +2075,8 @@ func (m *InstanceManager) RestoreInPlace(ctx context.Context, num int, archive s
 }
 
 // RestoreNew provisions a new instance initialized from an existing backup archive.
-func (m *InstanceManager) RestoreNew(ctx context.Context, num int, newName, tier, archive string, actor ...string) (*domain.Instance, error) {
-	srcInst, err := m.GetInstance(ctx, num)
+func (m *InstanceManager) RestoreNew(ctx context.Context, instanceNumber int, newName, tier, archive string, actor ...string) (*domain.Instance, error) {
+	srcInst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil || srcInst == nil {
 		return nil, fmt.Errorf("source instance not found")
 	}
@@ -2111,7 +2154,7 @@ func (m *InstanceManager) RestoreNew(ctx context.Context, num int, newName, tier
 }
 
 // DeleteBackup safely deletes a specific backup archive file from backupsDir.
-func (m *InstanceManager) DeleteBackup(ctx context.Context, num int, fileName string, actor ...string) error {
+func (m *InstanceManager) DeleteBackup(ctx context.Context, instanceNumber int, fileName string, actor ...string) error {
 	if m.backupsDir == "" {
 		return fmt.Errorf("backups directory unconfigured")
 	}
@@ -2130,7 +2173,7 @@ func (m *InstanceManager) DeleteBackup(ctx context.Context, num int, fileName st
 	}
 
 	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-backup-delete", fmt.Sprintf("Deleted backup %s for #%02d", cleanName, num))
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), "mc-backup-delete", fmt.Sprintf("Deleted backup %s for #%02d", cleanName, instanceNumber))
 	}
 
 	return nil

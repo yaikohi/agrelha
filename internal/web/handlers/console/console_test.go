@@ -363,7 +363,7 @@ func TestMCRconAndLogs(t *testing.T) {
 	respBadNum, _ := app.Test(reqBadNum)
 	bodyBadNum, _ := io.ReadAll(respBadNum.Body)
 	if !strings.Contains(string(bodyBadNum), "Invalid instance number") {
-		t.Errorf("bad num response = %s", string(bodyBadNum))
+		t.Errorf("bad instanceNumber response = %s", string(bodyBadNum))
 	}
 
 	// 2. Empty command

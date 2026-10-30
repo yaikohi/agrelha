@@ -25,7 +25,7 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).SendString("Valheim instance manager not configured")
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
@@ -35,7 +35,7 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 		tab = "overview"
 	}
 
-	inst, err := h.cfg.ValheimInstances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.ValheimInstances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
 		return c.Status(fiber.StatusNotFound).SendString("Valheim instance not found")
 	}
@@ -144,7 +144,7 @@ func (h *Handler) ValheimInstanceSettingsSave(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -169,7 +169,7 @@ func (h *Handler) ValheimInstanceSettingsSave(c *fiber.Ctx) error {
 		tierStr = strings.TrimSpace(c.FormValue("tier"))
 	}
 
-	if err := h.cfg.ValheimInstances.UpdateValheimSettings(c.UserContext(), num, name, pwd, tierStr, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.ValheimInstances.UpdateValheimSettings(c.UserContext(), instanceNumber, name, pwd, tierStr, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to update settings: "+err.Error(), nil)
 	}
 
@@ -182,7 +182,7 @@ func (h *Handler) ValheimInstanceModsRemove(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -203,11 +203,11 @@ func (h *Handler) ValheimInstanceModsRemove(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Mod slug required.", nil)
 	}
 
-	if err := h.cfg.ValheimInstances.RemoveMod(c.UserContext(), num, slug, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.ValheimInstances.RemoveMod(c.UserContext(), instanceNumber, slug, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Remove failed: "+err.Error(), nil)
 	}
 
-	updatedMods, _ := h.cfg.ValheimInstances.GetInstalledMods(c.UserContext(), num)
+	updatedMods, _ := h.cfg.ValheimInstances.GetInstalledMods(c.UserContext(), instanceNumber)
 	modsMap := make(map[string]bool, len(updatedMods))
 	for _, m := range updatedMods {
 		modsMap[m] = true
@@ -216,12 +216,12 @@ func (h *Handler) ValheimInstanceModsRemove(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	_ = innerElement(w, "#installed-mods-container", renderInstalledModsHTML(num, updatedMods))
+	_ = innerElement(w, "#installed-mods-container", renderInstalledModsHTML(instanceNumber, updatedMods))
 	_ = patchSignals(w, map[string]any{
-		"toast":                                        fmt.Sprintf("Removed %s. Updating...", slug),
-		"toastkind":                                    "ok",
-		fmt.Sprintf("inst_valheim_%d_mods", num):       modsMap,
-		fmt.Sprintf("inst_valheim_%d_mods_count", num): len(modsMap),
+		"toast":     fmt.Sprintf("Removed %s. Updating...", slug),
+		"toastkind": "ok",
+		fmt.Sprintf("inst_valheim_%d_mods", instanceNumber):       modsMap,
+		fmt.Sprintf("inst_valheim_%d_mods_count", instanceNumber): len(modsMap),
 	})
 	_ = w.Flush()
 	return c.Send(buf.Bytes())
@@ -233,7 +233,7 @@ func (h *Handler) ValheimInstanceModsInstall(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Valheim instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -254,12 +254,12 @@ func (h *Handler) ValheimInstanceModsInstall(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Mod slug required.", nil)
 	}
 
-	added, err := h.cfg.ValheimInstances.InstallMod(c.UserContext(), num, slug, h.cfg.Actor(c))
+	added, err := h.cfg.ValheimInstances.InstallMod(c.UserContext(), instanceNumber, slug, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Install failed: "+err.Error(), nil)
 	}
 
-	updatedMods, _ := h.cfg.ValheimInstances.GetInstalledMods(c.UserContext(), num)
+	updatedMods, _ := h.cfg.ValheimInstances.GetInstalledMods(c.UserContext(), instanceNumber)
 	modsMap := make(map[string]bool, len(updatedMods))
 	for _, m := range updatedMods {
 		modsMap[m] = true
@@ -268,12 +268,12 @@ func (h *Handler) ValheimInstanceModsInstall(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	_ = innerElement(w, "#installed-mods-container", renderInstalledModsHTML(num, updatedMods))
+	_ = innerElement(w, "#installed-mods-container", renderInstalledModsHTML(instanceNumber, updatedMods))
 	_ = patchSignals(w, map[string]any{
-		"toast":                                        fmt.Sprintf("Installed %s (+%d mods). Updating...", slug, added),
-		"toastkind":                                    "ok",
-		fmt.Sprintf("inst_valheim_%d_mods", num):       modsMap,
-		fmt.Sprintf("inst_valheim_%d_mods_count", num): len(modsMap),
+		"toast":     fmt.Sprintf("Installed %s (+%d mods). Updating...", slug, added),
+		"toastkind": "ok",
+		fmt.Sprintf("inst_valheim_%d_mods", instanceNumber):       modsMap,
+		fmt.Sprintf("inst_valheim_%d_mods_count", instanceNumber): len(modsMap),
 	})
 	_ = w.Flush()
 	return c.Send(buf.Bytes())
@@ -281,7 +281,7 @@ func (h *Handler) ValheimInstanceModsInstall(c *fiber.Ctx) error {
 
 // ValheimInstanceModsSearch searches Thunderstore packages for a Valheim instance.
 func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
@@ -327,7 +327,7 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 
 	installedMap := make(map[string]bool)
 	if h.cfg.ValheimInstances != nil {
-		if installed, err := h.cfg.ValheimInstances.GetInstalledMods(c.UserContext(), num); err == nil {
+		if installed, err := h.cfg.ValheimInstances.GetInstalledMods(c.UserContext(), instanceNumber); err == nil {
 			for _, m := range installed {
 				// Entries may be pinned ("Ns/Name/1.2.0") or bare ("Ns-Name");
 				// both are the same mod, so compare on identity.
@@ -338,7 +338,7 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 		}
 	}
 
-	ui := pages.ModResultsUI{Game: "valheim", Num: num, Query: q}
+	ui := pages.ModResultsUI{Game: "valheim", Num: instanceNumber, Query: q}
 	if q == "" {
 		ui.Heading = "Popular on Thunderstore"
 		ui.Note = "ranked by downloads"
@@ -368,7 +368,7 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 
 // ValheimModDetail renders the slide-over detail drawer with README, versions, and dependencies via SSE.
 func (h *Handler) ValheimModDetail(c *fiber.Ctx) error {
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
@@ -440,7 +440,7 @@ func (h *Handler) ValheimModDetail(c *fiber.Ctx) error {
 
 	isInstalled := false
 	if h.cfg.ValheimInstances != nil {
-		if installed, err := h.cfg.ValheimInstances.GetInstalledMods(ctx, num); err == nil {
+		if installed, err := h.cfg.ValheimInstances.GetInstalledMods(ctx, instanceNumber); err == nil {
 			for _, m := range installed {
 				cleanM := strings.ToLower(strings.TrimSpace(m))
 				if cleanM == strings.ToLower(slug) || cleanM == strings.ToLower(owner+"-"+name) || cleanM == strings.ToLower(name) {
@@ -476,9 +476,9 @@ func (h *Handler) ValheimModDetail(c *fiber.Ctx) error {
 
 	var actionBtn string
 	if isInstalled {
-		actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/remove?slug=%s', {payload: {slug: '%s'}}); $showModDetail = false" class="rounded-lg bg-red-950/60 border border-red-800/60 px-4 py-2 text-xs font-medium text-red-300 hover:bg-red-900/60 transition">Remove Mod</button>`, num, jsSlug, jsSlug)
+		actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/remove?slug=%s', {payload: {slug: '%s'}}); $showModDetail = false" class="rounded-lg bg-red-950/60 border border-red-800/60 px-4 py-2 text-xs font-medium text-red-300 hover:bg-red-900/60 transition">Remove Mod</button>`, instanceNumber, jsSlug, jsSlug)
 	} else {
-		actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/install?slug=%s', {payload: {slug: '%s'}}); $showModDetail = false" class="rounded-lg bg-zinc-100 px-5 py-2 text-xs font-semibold text-zinc-950 hover:bg-white transition shadow-sm">+ Install Mod</button>`, num, jsSlug, jsSlug)
+		actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/install?slug=%s', {payload: {slug: '%s'}}); $showModDetail = false" class="rounded-lg bg-zinc-100 px-5 py-2 text-xs font-semibold text-zinc-950 hover:bg-white transition shadow-sm">+ Install Mod</button>`, instanceNumber, jsSlug, jsSlug)
 	}
 
 	var readmeContent string
@@ -604,10 +604,10 @@ func ssePatchElements(c *fiber.Ctx, selector, content string) error {
 	return c.Send(buf.Bytes())
 }
 
-func renderInstalledModsHTML(num int, mods []string) string {
+func renderInstalledModsHTML(instanceNumber int, mods []string) string {
 	ui := pages.InstalledModsUI{
 		Game:  "valheim",
-		Num:   num,
+		Num:   instanceNumber,
 		Empty: "No mods installed. This world runs clean BepInEx.",
 	}
 	for _, slug := range mods {
@@ -631,7 +631,7 @@ func renderComponent(c templ.Component) string {
 
 // ValheimInstanceExport exports the instance client bundle as an .r2z modpack profile.
 func (h *Handler) ValheimInstanceExport(c *fiber.Ctx) error {
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
@@ -640,7 +640,7 @@ func (h *Handler) ValheimInstanceExport(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).SendString("Export service unavailable")
 	}
 
-	inst, err := h.cfg.ValheimInstances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.ValheimInstances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
 		return c.Status(fiber.StatusNotFound).SendString("Valheim instance not found")
 	}

@@ -9,9 +9,9 @@ import (
 	"agrelha/internal/domain"
 )
 
-func writeManifest(t *testing.T, root string, num int, name, body string) {
+func writeManifest(t *testing.T, root string, instanceNumber int, name, body string) {
 	t.Helper()
-	dir := filepath.Join(root, "minecraft", domain.InstanceDirName(num), "data")
+	dir := filepath.Join(root, "minecraft", domain.InstanceDirName(instanceNumber), "data")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

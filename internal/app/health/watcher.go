@@ -24,8 +24,8 @@ const (
 type Source interface {
 	GameID() domain.GameID
 	ListInstances(ctx context.Context) ([]domain.Instance, error)
-	RuntimeStatus(ctx context.Context, num int) (ports.Status, error)
-	CrashLogs(ctx context.Context, num int, tail int64, step ...string) (io.ReadCloser, error)
+	RuntimeStatus(ctx context.Context, instanceNumber int) (ports.Status, error)
+	CrashLogs(ctx context.Context, instanceNumber int, tail int64, step ...string) (io.ReadCloser, error)
 }
 
 // Recorder persists what the watcher finds.
@@ -162,8 +162,8 @@ func failureReason(f ports.Failure) string {
 	return f.Reason
 }
 
-func (w *Watcher) captureTail(ctx context.Context, src Source, num int, step string) string {
-	rc, err := src.CrashLogs(ctx, num, w.tail, step)
+func (w *Watcher) captureTail(ctx context.Context, src Source, instanceNumber int, step string) string {
+	rc, err := src.CrashLogs(ctx, instanceNumber, w.tail, step)
 	if err != nil {
 		return ""
 	}

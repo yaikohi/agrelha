@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -14,12 +15,7 @@ func tabLabels(game string) []string {
 }
 
 func has(labels []string, want string) bool {
-	for _, l := range labels {
-		if l == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(labels, want)
 }
 
 func TestGModIsNotOfferedTabsItHasNoCapabilityFor(t *testing.T) {

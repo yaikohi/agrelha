@@ -98,7 +98,7 @@ func (h *Handler) MCInstanceConfigGet(c *fiber.Ctx) error {
 	if h.cfg.MCInstances == nil {
 		return c.Status(fiber.StatusServiceUnavailable).SendString("Service unavailable")
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
@@ -108,7 +108,7 @@ func (h *Handler) MCInstanceConfigGet(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("File name required")
 	}
 
-	content, _ := h.cfg.MCInstances.GetConfig(c.UserContext(), num, fileName)
+	content, _ := h.cfg.MCInstances.GetConfig(c.UserContext(), instanceNumber, fileName)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -131,7 +131,7 @@ func (h *Handler) MCInstanceConfigSave(c *fiber.Ctx) error {
 	if h.cfg.MCInstances == nil {
 		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -152,7 +152,7 @@ func (h *Handler) MCInstanceConfigSave(c *fiber.Ctx) error {
 
 	content := strings.ReplaceAll(req.Content, "\r\n", "\n")
 
-	changed, err := h.cfg.MCInstances.SaveConfig(c.UserContext(), num, fileName, content, h.cfg.Actor(c))
+	changed, err := h.cfg.MCInstances.SaveConfig(c.UserContext(), instanceNumber, fileName, content, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Save failed: "+err.Error(), nil)
 	}
@@ -172,7 +172,7 @@ func (h *Handler) MCInstanceConfigDelete(c *fiber.Ctx) error {
 	if h.cfg.MCInstances == nil {
 		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -190,7 +190,7 @@ func (h *Handler) MCInstanceConfigDelete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "File name required.", nil)
 	}
 
-	changed, err := h.cfg.MCInstances.DeleteConfig(c.UserContext(), num, fileName, h.cfg.Actor(c))
+	changed, err := h.cfg.MCInstances.DeleteConfig(c.UserContext(), instanceNumber, fileName, h.cfg.Actor(c))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Delete failed: "+err.Error(), nil)
 	}

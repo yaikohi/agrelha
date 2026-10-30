@@ -154,16 +154,16 @@ func (h *Handler) MCInstanceStart(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.MCInstances.StartInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.MCInstances.StartInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to start world: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Starting instance #%02d...", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Starting instance #%02d...", instanceNumber), nil)
 }
 
 // MCInstanceStop stops a running Minecraft instance after flushing and auto-backing up.
@@ -172,16 +172,16 @@ func (h *Handler) MCInstanceStop(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.MCInstances.StopInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.MCInstances.StopInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to stop world: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Stopping instance #%02d (pre-stop snapshot initiated)...", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Stopping instance #%02d (pre-stop snapshot initiated)...", instanceNumber), nil)
 }
 
 // MCInstanceDelete deletes a Minecraft instance after creating a final snapshot.
@@ -190,16 +190,16 @@ func (h *Handler) MCInstanceDelete(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.MCInstances.DeleteInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.MCInstances.DeleteInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to delete world: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted instance #%02d (final snapshot saved to backups).", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Deleted instance #%02d (final snapshot saved to backups).", instanceNumber), nil)
 }
 
 // MCInstanceRestart restarts a Minecraft instance.
@@ -208,14 +208,14 @@ func (h *Handler) MCInstanceRestart(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager not configured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	if err := h.cfg.MCInstances.RestartInstance(c.UserContext(), num, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.MCInstances.RestartInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Restart failed: "+err.Error(), nil)
 	}
 
-	return shared.SSEToast(c, "ok", fmt.Sprintf("Restarting instance #%02d...", num), nil)
+	return shared.SSEToast(c, "ok", fmt.Sprintf("Restarting instance #%02d...", instanceNumber), nil)
 }

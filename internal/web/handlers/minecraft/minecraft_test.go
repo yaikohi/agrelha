@@ -116,15 +116,15 @@ func setupTestInstancesHandlerWithState(t *testing.T) (*Handler, *store.Store, *
 	mgr = instances.NewInstanceManager(
 		store.NewInstanceRepo(st), mockState, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded",
 		instances.WithBackupsDir(testBackupsDir),
-		instances.WithConfigsReader(func(ctx context.Context, num int) (map[string]string, error) {
-			inst, err := mgr.GetInstance(ctx, num)
+		instances.WithConfigsReader(func(ctx context.Context, instanceNumber int) (map[string]string, error) {
+			inst, err := mgr.GetInstance(ctx, instanceNumber)
 			if err != nil {
 				return nil, err
 			}
 			return mck8s.ConfigMapData(ctx, inst.ConfigsCMName(domain.MinecraftProfile))
 		}),
-		instances.WithModsReader(func(ctx context.Context, num int) ([]string, error) {
-			inst, err := mgr.GetInstance(ctx, num)
+		instances.WithModsReader(func(ctx context.Context, instanceNumber int) ([]string, error) {
+			inst, err := mgr.GetInstance(ctx, instanceNumber)
 			if err != nil {
 				return nil, err
 			}

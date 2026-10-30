@@ -73,7 +73,7 @@ func TestEveryThemeTokenIsDocumented(t *testing.T) {
 		defined[m[1]] = true
 	}
 	documented := map[string]bool{}
-	for _, line := range strings.Split(string(doc), "\n") {
+	for line := range strings.SplitSeq(string(doc), "\n") {
 		if !strings.HasPrefix(strings.TrimSpace(line), "|") {
 			continue
 		}
@@ -213,7 +213,7 @@ func TestDocumentedTokenValuesMatchTheStylesheet(t *testing.T) {
 		defined[m[1]] = strings.ToLower(strings.TrimSpace(m[2]))
 	}
 
-	for _, line := range strings.Split(string(doc), "\n") {
+	for line := range strings.SplitSeq(string(doc), "\n") {
 		cells := strings.Split(line, "|")
 		if len(cells) < 4 {
 			continue

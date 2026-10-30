@@ -1,5 +1,7 @@
 package pages
 
+import "slices"
+
 import "testing"
 
 // The blocker was not that Delete was missing but that it was gated on a state
@@ -35,10 +37,5 @@ func TestARunningInstanceStillCannotBeDeleted(t *testing.T) {
 }
 
 func contains(ss []string, want string) bool {
-	for _, s := range ss {
-		if s == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ss, want)
 }

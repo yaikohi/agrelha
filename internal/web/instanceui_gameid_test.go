@@ -37,7 +37,7 @@ func TestEveryInstanceUILiteralSetsGameID(t *testing.T) {
 		t.Errorf(`%v builds a pages.InstanceUI without GameID.
 
 GamePath() resolves the game profile from GameID and returns "" when it cannot.
-Every per-game URL the template builds then collapses to /api//<num>/..., which
+Every per-game URL the template builds then collapses to /api//<instanceNumber>/..., which
 matches no route, returns 200 in 0ms, and makes the button look dead. Nothing
 fails loudly, so set GameID on every InstanceUI a handler renders.`, offenders)
 	}

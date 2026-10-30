@@ -2,6 +2,7 @@ package compose
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 
 	"agrelha/internal/domain"
@@ -47,9 +48,7 @@ func (r *Renderer) Render(inst domain.Instance, mods domain.ModList) (map[string
 	if spec.Env == nil {
 		spec.Env = map[string]string{}
 	}
-	for k, v := range inst.EnvWith(r.profile, mods) {
-		spec.Env[k] = v
-	}
+	maps.Copy(spec.Env, inst.EnvWith(r.profile, mods))
 
 	hostPorts, err := domain.WithHostPorts(r.profile, inst, spec.Ports)
 	if err != nil {
@@ -75,9 +74,7 @@ func (r *Renderer) Render(inst domain.Instance, mods domain.ModList) (map[string
 	if err != nil {
 		return nil, fmt.Errorf("render state files for %s: %w", name, err)
 	}
-	for fname, content := range state {
-		files[fname] = content
-	}
+	maps.Copy(files, state)
 	return files, nil
 }
 

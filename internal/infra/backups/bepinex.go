@@ -30,11 +30,11 @@ type configIndexDocument struct {
 	Files       []configIndexFile `json:"files"`
 }
 
-func ReadConfigSnapshot(backupsDir, slug string, num int) (*domain.ConfigSnapshot, error) {
+func ReadConfigSnapshot(backupsDir, slug string, instanceNumber int) (*domain.ConfigSnapshot, error) {
 	if backupsDir == "" || slug == "" {
 		return nil, nil
 	}
-	path := filepath.Join(instanceDir(backupsDir, slug, num), configsDir, configIndexDoc)
+	path := filepath.Join(instanceDir(backupsDir, slug, instanceNumber), configsDir, configIndexDoc)
 	raw, err := os.ReadFile(path)
 	switch {
 	case os.IsNotExist(err):
@@ -65,14 +65,14 @@ func ReadConfigSnapshot(backupsDir, slug string, num int) (*domain.ConfigSnapsho
 	return out, nil
 }
 
-func ReadConfigFile(backupsDir, slug string, num int, name string) (string, string, error) {
+func ReadConfigFile(backupsDir, slug string, instanceNumber int, name string) (string, string, error) {
 	if backupsDir == "" || slug == "" {
 		return "", "", os.ErrNotExist
 	}
 	if !safeConfigName(name) {
 		return "", "", fmt.Errorf("invalid config file name %q", name)
 	}
-	path := filepath.Join(instanceDir(backupsDir, slug, num), configsDir, name)
+	path := filepath.Join(instanceDir(backupsDir, slug, instanceNumber), configsDir, name)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return "", "", err

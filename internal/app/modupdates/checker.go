@@ -49,8 +49,8 @@ type InstanceCatalog interface {
 // the mod list of one of them.
 type Instances interface {
 	ListInstances(ctx context.Context) ([]domain.Instance, error)
-	GetInstalledMods(ctx context.Context, num int) ([]string, error)
-	ReplaceMods(ctx context.Context, num int, entries []string, detail string, actor ...string) (bool, error)
+	GetInstalledMods(ctx context.Context, instanceNumber int) ([]string, error)
+	ReplaceMods(ctx context.Context, instanceNumber int, entries []string, detail string, actor ...string) (bool, error)
 }
 
 // RestorePoints persists the way back from an update.
@@ -177,40 +177,40 @@ func (c *Checker) Refresh(ctx context.Context) {
 }
 
 // RefreshOne recomputes the report for one world and returns it.
-func (c *Checker) RefreshOne(ctx context.Context, num int) (Report, error) {
+func (c *Checker) RefreshOne(ctx context.Context, instanceNumber int) (Report, error) {
 	if c == nil || c.insts == nil || c.cat == nil {
 		return Report{}, nil
 	}
-	rep, err := c.compute(ctx, num)
+	rep, err := c.compute(ctx, instanceNumber)
 	c.mu.Lock()
-	c.snap[num] = snapshot{report: rep, err: err}
+	c.snap[instanceNumber] = snapshot{report: rep, err: err}
 	c.mu.Unlock()
 	if len(rep.Missing) > 0 {
 		slog.Warn("modupdates: installed mods are no longer published upstream",
-			"instance", num, "count", len(rep.Missing), "first", rep.Missing[0].FullName())
+			"instance", instanceNumber, "count", len(rep.Missing), "first", rep.Missing[0].FullName())
 	}
 	return rep, err
 }
 
-func (c *Checker) getInstance(ctx context.Context, num int) domain.Instance {
+func (c *Checker) getInstance(ctx context.Context, instanceNumber int) domain.Instance {
 	if ig, ok := c.insts.(interface {
 		GetInstance(context.Context, int) (*domain.Instance, error)
 	}); ok {
-		inst, err := ig.GetInstance(ctx, num)
+		inst, err := ig.GetInstance(ctx, instanceNumber)
 		if err == nil && inst != nil {
 			return *inst
 		}
 	}
 	all, err := c.insts.ListInstances(ctx)
 	if err != nil {
-		return domain.Instance{Number: num, GameID: c.gameID}
+		return domain.Instance{Number: instanceNumber, GameID: c.gameID}
 	}
 	for _, inst := range all {
-		if inst.Number == num {
+		if inst.Number == instanceNumber {
 			return inst
 		}
 	}
-	return domain.Instance{Number: num, GameID: c.gameID}
+	return domain.Instance{Number: instanceNumber, GameID: c.gameID}
 }
 
 func (c *Checker) latestVersionForRef(ctx context.Context, ref domain.ModRef, inst domain.Instance) (string, []string, error) {
@@ -233,13 +233,13 @@ func (c *Checker) resolveTreeForRef(ctx context.Context, ref domain.ModRef, inst
 	return nil, nil
 }
 
-func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
-	inst := c.getInstance(ctx, num)
+func (c *Checker) compute(ctx context.Context, instanceNumber int) (Report, error) {
+	inst := c.getInstance(ctx, instanceNumber)
 	if inst.IsVanilla() || inst.PackDefined() {
 		return Report{At: time.Now()}, nil
 	}
 
-	entries, err := c.insts.GetInstalledMods(ctx, num)
+	entries, err := c.insts.GetInstalledMods(ctx, instanceNumber)
 	if err != nil {
 		return Report{}, err
 	}
@@ -330,30 +330,32 @@ func (c *Checker) compute(ctx context.Context, num int) (Report, error) {
 }
 
 // Report returns the last computed answer for one world.
-func (c *Checker) Report(num int) Report {
+func (c *Checker) Report(instanceNumber int) Report {
 	if c == nil {
 		return Report{}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.snap[num].report
+	return c.snap[instanceNumber].report
 }
 
 // LastError is why the last check for one world failed, if it did.
-func (c *Checker) LastError(num int) error {
+func (c *Checker) LastError(instanceNumber int) error {
 	if c == nil {
 		return nil
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.snap[num].err
+	return c.snap[instanceNumber].err
 }
 
 // Updates is the update list from the last report.
-func (c *Checker) Updates(num int) []domain.ModUpdate { return c.Report(num).Updates }
+func (c *Checker) Updates(instanceNumber int) []domain.ModUpdate {
+	return c.Report(instanceNumber).Updates
+}
 
 // Count is how many mods on one world have a newer version upstream.
-func (c *Checker) Count(num int) int { return len(c.Report(num).Updates) }
+func (c *Checker) Count(instanceNumber int) int { return len(c.Report(instanceNumber).Updates) }
 
 // Counts is Count for every world the checker has seen.
 func (c *Checker) Counts() map[int]int {
@@ -363,8 +365,8 @@ func (c *Checker) Counts() map[int]int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make(map[int]int, len(c.snap))
-	for num, s := range c.snap {
-		out[num] = len(s.report.Updates)
+	for instanceNumber, s := range c.snap {
+		out[instanceNumber] = len(s.report.Updates)
 	}
 	return out
 }
@@ -381,21 +383,21 @@ func (c *Checker) Total() int {
 // Pending reports whether an applied update is still waiting for the declared
 // state to reach the cluster. It clears itself once the world reports the
 // versions that were written, or after pendingTTL.
-func (c *Checker) Pending(ctx context.Context, num int) bool {
+func (c *Checker) Pending(ctx context.Context, instanceNumber int) bool {
 	if c == nil {
 		return false
 	}
 	c.mu.Lock()
-	p, ok := c.pend[num]
+	p, ok := c.pend[instanceNumber]
 	c.mu.Unlock()
 	if !ok {
 		return false
 	}
 	if time.Since(p.at) > pendingTTL {
-		c.clearPending(num)
+		c.clearPending(instanceNumber)
 		return false
 	}
-	entries, err := c.insts.GetInstalledMods(ctx, num)
+	entries, err := c.insts.GetInstalledMods(ctx, instanceNumber)
 	if err != nil {
 		return true
 	}
@@ -408,36 +410,36 @@ func (c *Checker) Pending(ctx context.Context, num int) bool {
 			return true
 		}
 	}
-	c.clearPending(num)
+	c.clearPending(instanceNumber)
 	return false
 }
 
-func (c *Checker) markPending(num int, entries []string) {
+func (c *Checker) markPending(instanceNumber int, entries []string) {
 	want := make(map[string]bool, len(entries))
 	for _, e := range entries {
 		want[e] = true
 	}
 	c.mu.Lock()
-	c.pend[num] = pending{want: want, at: time.Now()}
+	c.pend[instanceNumber] = pending{want: want, at: time.Now()}
 	c.mu.Unlock()
 }
 
-func (c *Checker) clearPending(num int) {
+func (c *Checker) clearPending(instanceNumber int) {
 	c.mu.Lock()
-	delete(c.pend, num)
+	delete(c.pend, instanceNumber)
 	c.mu.Unlock()
 }
 
 // forget drops the updates that were just written, so the badge stops counting
 // work the operator has already ordered. The next refresh re-derives the truth.
-func (c *Checker) forget(num int, applied []domain.ModUpdate) {
+func (c *Checker) forget(instanceNumber int, applied []domain.ModUpdate) {
 	done := make(map[string]bool, len(applied))
 	for _, u := range applied {
 		done[u.Ref.Key()] = true
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	s := c.snap[num]
+	s := c.snap[instanceNumber]
 	kept := s.report.Updates[:0:0]
 	for _, u := range s.report.Updates {
 		if !done[u.Ref.Key()] {
@@ -445,21 +447,21 @@ func (c *Checker) forget(num int, applied []domain.ModUpdate) {
 		}
 	}
 	s.report.Updates = kept
-	c.snap[num] = s
+	c.snap[instanceNumber] = s
 }
 
 // Apply repins the named mods to their latest version, re-resolving each one's
 // dependency tree, and rewrites the world's mod list. Keys are ModRef.Key
 // values; an empty list means every update the last check found. It returns the
 // updates it wrote.
-func (c *Checker) Apply(ctx context.Context, num int, keys []string, actor string) ([]domain.ModUpdate, error) {
+func (c *Checker) Apply(ctx context.Context, instanceNumber int, keys []string, actor string) ([]domain.ModUpdate, error) {
 	if c == nil || c.insts == nil || c.cat == nil {
 		return nil, fmt.Errorf("mod updates unavailable")
 	}
 
-	available := c.Updates(num)
+	available := c.Updates(instanceNumber)
 	if len(available) == 0 {
-		rep, err := c.RefreshOne(ctx, num)
+		rep, err := c.RefreshOne(ctx, instanceNumber)
 		if err != nil {
 			return nil, err
 		}
@@ -483,9 +485,9 @@ func (c *Checker) Apply(ctx context.Context, num int, keys []string, actor strin
 		return nil, fmt.Errorf("none of the selected mods have an update")
 	}
 
-	inst := c.getInstance(ctx, num)
+	inst := c.getInstance(ctx, instanceNumber)
 
-	previous, err := c.insts.GetInstalledMods(ctx, num)
+	previous, err := c.insts.GetInstalledMods(ctx, instanceNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -535,27 +537,27 @@ func (c *Checker) Apply(ctx context.Context, num int, keys []string, actor strin
 		out = append(out, byKey[k].Entry())
 	}
 
-	changed, err := c.insts.ReplaceMods(ctx, num, out, updateDetail(targets), actor)
+	changed, err := c.insts.ReplaceMods(ctx, instanceNumber, out, updateDetail(targets), actor)
 	if err != nil {
 		return nil, err
 	}
-	c.forget(num, targets)
+	c.forget(instanceNumber, targets)
 	if !changed {
 		return nil, nil
 	}
-	c.markPending(num, out)
-	c.saveRestorePoint(num, previous, out)
+	c.markPending(instanceNumber, out)
+	c.saveRestorePoint(instanceNumber, previous, out)
 	return targets, nil
 }
 
 // Undo restores the mod list from before the last update. It refuses when the
 // world's current list is not exactly what that update wrote: something else has
 // changed the mods since, and reverting would silently discard it.
-func (c *Checker) Undo(ctx context.Context, num int, actor string) (*domain.ModRestorePoint, error) {
+func (c *Checker) Undo(ctx context.Context, instanceNumber int, actor string) (*domain.ModRestorePoint, error) {
 	if c == nil || c.restore == nil {
 		return nil, fmt.Errorf("no restore point is available")
 	}
-	rp, err := c.RestoreAvailable(ctx, num)
+	rp, err := c.RestoreAvailable(ctx, instanceNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -563,53 +565,53 @@ func (c *Checker) Undo(ctx context.Context, num int, actor string) (*domain.ModR
 		return nil, fmt.Errorf("no restore point is available")
 	}
 
-	changed, err := c.insts.ReplaceMods(ctx, num, rp.Previous, "Reverted the last mod update", actor)
+	changed, err := c.insts.ReplaceMods(ctx, instanceNumber, rp.Previous, "Reverted the last mod update", actor)
 	if err != nil {
 		return nil, err
 	}
 	if changed {
-		c.markPending(num, rp.Previous)
+		c.markPending(instanceNumber, rp.Previous)
 	}
 	// One step back, not a stack: using the way back consumes it, so undo can
 	// never ping-pong against redo.
-	if err := c.restore.ClearRestorePoint(c.gameID, num); err != nil {
-		slog.Warn("modupdates: cannot clear restore point", "instance", num, "err", err)
+	if err := c.restore.ClearRestorePoint(c.gameID, instanceNumber); err != nil {
+		slog.Warn("modupdates: cannot clear restore point", "instance", instanceNumber, "err", err)
 	}
-	if _, err := c.RefreshOne(ctx, num); err != nil {
-		slog.Warn("modupdates: refresh after undo failed", "instance", num, "err", err)
+	if _, err := c.RefreshOne(ctx, instanceNumber); err != nil {
+		slog.Warn("modupdates: refresh after undo failed", "instance", instanceNumber, "err", err)
 	}
 	return rp, nil
 }
 
 // RestoreAvailable returns the restore point only while it is still safe to use,
 // clearing it once it is not.
-func (c *Checker) RestoreAvailable(ctx context.Context, num int) (*domain.ModRestorePoint, error) {
+func (c *Checker) RestoreAvailable(ctx context.Context, instanceNumber int) (*domain.ModRestorePoint, error) {
 	if c == nil || c.restore == nil {
 		return nil, nil
 	}
-	rp, err := c.restore.RestorePoint(c.gameID, num)
+	rp, err := c.restore.RestorePoint(c.gameID, instanceNumber)
 	if err != nil || rp == nil {
 		return nil, err
 	}
-	entries, err := c.insts.GetInstalledMods(ctx, num)
+	entries, err := c.insts.GetInstalledMods(ctx, instanceNumber)
 	if err != nil {
 		return nil, err
 	}
 	if !rp.Matches(entries) {
-		if err := c.restore.ClearRestorePoint(c.gameID, num); err != nil {
-			slog.Warn("modupdates: cannot clear stale restore point", "instance", num, "err", err)
+		if err := c.restore.ClearRestorePoint(c.gameID, instanceNumber); err != nil {
+			slog.Warn("modupdates: cannot clear stale restore point", "instance", instanceNumber, "err", err)
 		}
 		return nil, nil
 	}
 	return rp, nil
 }
 
-func (c *Checker) saveRestorePoint(num int, previous, applied []string) {
+func (c *Checker) saveRestorePoint(instanceNumber int, previous, applied []string) {
 	if c.restore == nil {
 		return
 	}
-	if err := c.restore.SaveRestorePoint(c.gameID, num, previous, applied); err != nil {
-		slog.Warn("modupdates: cannot save restore point", "instance", num, "err", err)
+	if err := c.restore.SaveRestorePoint(c.gameID, instanceNumber, previous, applied); err != nil {
+		slog.Warn("modupdates: cannot save restore point", "instance", instanceNumber, "err", err)
 	}
 }
 

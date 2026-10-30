@@ -213,7 +213,7 @@ func TestRunDailyWithCommandExecPrunerAndValheim(t *testing.T) {
 	}
 
 	var prunedSlugs []string
-	pruner := func(slug string, num, keep int) error {
+	pruner := func(slug string, instanceNumber, keep int) error {
 		mu.Lock()
 		defer mu.Unlock()
 		prunedSlugs = append(prunedSlugs, slug)

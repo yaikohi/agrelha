@@ -9,16 +9,18 @@ import (
 
 templ MinecraftProvisioning(inst InstanceUI) {
 	@Layout("Provisioning " + inst.Name) {
-		@components.Nav(components.NavProps{Current: "minecraft", IsAdmin: true, SignedIn: true})
+		@components.Nav(components.NavProps{Current: "minecraft", IsAdmin: inst.IsAdmin, SignedIn: true})
 		<div
 			class="mx-auto max-w-2xl space-y-6"
-			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,lb_ip:%q,num:%d,detail:%q}", inst.LBIP, inst.Number, shared.ProvisioningDetail(inst.Host)) }
+			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,slow:false,cause:'',problem:'',lb_ip:%q,instanceNumber:%d,detail:%q}", inst.LBIP, inst.Number, shared.ProvisioningDetail(inst.Host)) }
 			data-effect={ fmt.Sprintf("@get('/api/minecraft/provisioning/%d/stream')", inst.Number) }
+			data-computed-stopped="$phase == 'failed' || $phase == 'stalled'"
 		>
 			<div class="rounded-control border border-edge bg-surface-raised p-8 text-center">
 				<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-control border border-accent text-3xl text-accent">
-					<span data-show="!$ready" class="animate-spin">⚙️</span>
+					<span data-show="!$ready && !$stopped()" class="animate-spin">⚙️</span>
 					<span data-show="$ready">🎮</span>
+					<span data-show="$stopped()">✕</span>
 				</div>
 
 				<h1 class="mt-4 text-xl font-bold text-ink">{ inst.Name }</h1>
@@ -39,12 +41,30 @@ templ MinecraftProvisioning(inst InstanceUI) {
 					</div>
 
 					<!-- Step 3: server startup -->
-					<div class="flex items-center gap-3 rounded-control border border-edge bg-seam p-3.5 text-xs">
+					<div
+						class="flex items-center gap-3 rounded-control border bg-seam p-3.5 text-xs"
+						data-class="{'border-danger': $stopped(), 'border-edge': !$stopped()}"
+					>
 						<span data-show="$phase == 'booting'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink animate-pulse">⏳</span>
 						<span data-show="$phase == 'ready'" class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-accent-ink">✓</span>
 						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 items-center justify-center rounded-full bg-surface-raised text-ink-faint">○</span>
+						<span data-show="$stopped()" class="flex h-5 w-5 items-center justify-center rounded-full bg-danger text-accent-ink">✕</span>
 						<span class="font-medium text-ink">{ shared.ProvisioningStepStarting(inst.Host) }</span>
 					</div>
+				</div>
+
+				<p data-show="$slow && !$ready && !$stopped()" class="mt-6 font-pixel text-[11px] text-ink-muted">
+					This is taking longer than usual. A large modpack has hundreds of files to fetch, so a long wait here is normal — the page keeps watching.
+				</p>
+
+				<div data-show="$problem != ''" class="mt-6 rounded-control border border-danger p-4 text-left">
+					<p class="font-pixel text-[11px] text-danger" data-text="$problem"></p>
+					<p class="mt-1 font-pixel text-[11px] text-ink-faint">Still watching — this may clear on its own.</p>
+				</div>
+
+				<div data-show="$stopped()" class="mt-8 rounded-control border border-danger p-5 text-left">
+					<h3 class="font-pixel text-xs text-danger" data-text="$phase == 'failed' ? 'This world did not come up' : 'Given up waiting'"></h3>
+					<p class="mt-2 font-display text-sm leading-relaxed text-ink" data-text="$cause"></p>
 				</div>
 
 				<!-- Ready Banner -->
@@ -56,17 +76,27 @@ templ MinecraftProvisioning(inst InstanceUI) {
 					</div>
 				</div>
 
-				<div class="mt-8 flex items-center justify-center gap-3">
+				<div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+					<a href="/minecraft" class={ components.ButtonClass(components.VariantSecondary) }>Return to Dashboard</a>
 					<a
-						href="/minecraft"
-						class="rounded-control bg-surface-raised px-5 py-2.5 text-xs font-semibold text-ink hover:text-accent"
+						data-show="$stopped()"
+						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d/console", inst.Number)) }
+						class={ components.ButtonClass(components.VariantSecondary) }
 					>
-						Return to Dashboard
+						View logs
 					</a>
+					<button
+						type="button"
+						data-show="$stopped()"
+						data-on:click={ fmt.Sprintf("@post('/api/minecraft/instances/%d/start'); window.location.reload()", inst.Number) }
+						class={ components.ButtonClass(components.VariantPrimary) }
+					>
+						Try again
+					</button>
 					<a
 						data-show="$ready"
 						href={ templ.SafeURL(fmt.Sprintf("/minecraft/%d", inst.Number)) }
-						class="rounded-control border border-accent px-5 py-2.5 text-xs font-semibold text-ink hover:bg-accent hover:text-accent-ink"
+						class={ components.ButtonClass(components.VariantPrimary) }
 					>
 						Manage World &rarr;
 					</a>

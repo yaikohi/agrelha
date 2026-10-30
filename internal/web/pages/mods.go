@@ -50,20 +50,20 @@ func modPayload(slug, provider string) string {
 	return fmt.Sprintf("{payload: {slug: '%s', provider: '%s'}}", EscapeJS(slug), EscapeJS(provider))
 }
 
-func (r ModResultUI) InstallScript(game string, num int) string {
-	return fmt.Sprintf("@post('/api/%s/%d/mods/install', %s)", game, num, modPayload(r.Slug, r.Provider))
+func (r ModResultUI) InstallScript(game string, instanceNumber int) string {
+	return fmt.Sprintf("@post('/api/%s/%d/mods/install', %s)", game, instanceNumber, modPayload(r.Slug, r.Provider))
 }
 
-func (r ModResultUI) RemoveScript(game string, num int) string {
-	return fmt.Sprintf("@post('/api/%s/%d/mods/remove', %s)", game, num, modPayload(r.Slug, r.Provider))
+func (r ModResultUI) RemoveScript(game string, instanceNumber int) string {
+	return fmt.Sprintf("@post('/api/%s/%d/mods/remove', %s)", game, instanceNumber, modPayload(r.Slug, r.Provider))
 }
 
-func (r ModResultUI) DetailScript(game string, num int) string {
-	return fmt.Sprintf("@post('/api/%s/%d/mods/detail', %s); $showModDetail = true", game, num, modPayload(r.Slug, ""))
+func (r ModResultUI) DetailScript(game string, instanceNumber int) string {
+	return fmt.Sprintf("@post('/api/%s/%d/mods/detail', %s); $showModDetail = true", game, instanceNumber, modPayload(r.Slug, ""))
 }
 
-func (r ModResultUI) InstalledExpr(game string, num int) string {
-	pref := fmt.Sprintf("inst_%s_%d", game, num)
+func (r ModResultUI) InstalledExpr(game string, instanceNumber int) string {
+	pref := fmt.Sprintf("inst_%s_%d", game, instanceNumber)
 	return fmt.Sprintf("($%s_mods ? !!$%s_mods['%s'] : %t)", pref, pref, EscapeJS(r.Slug), r.Installed)
 }
 
@@ -89,10 +89,10 @@ func (m ModResultsUI) MoreScript() string {
 		m.Game, m.Num, EscapeJS(m.Query), m.NextN)
 }
 
-func (i InstalledModUI) RemoveScript(game string, num int) string {
+func (i InstalledModUI) RemoveScript(game string, instanceNumber int) string {
 	return fmt.Sprintf(
 		"if (confirm('Remove %s from this world? It is uninstalled on the next restart.')) @post('/api/%s/%d/mods/remove', {payload: {slug: '%s'}})",
-		EscapeJS(i.Label), game, num, EscapeJS(i.Slug),
+		EscapeJS(i.Label), game, instanceNumber, EscapeJS(i.Slug),
 	)
 }
 

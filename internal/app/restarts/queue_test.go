@@ -24,8 +24,8 @@ func newRig(t *testing.T, opts ...Option) *rig {
 	t.Helper()
 	r := &rig{known: true}
 	base := []Option{
-		WithLookup(func(_ context.Context, num int) (*domain.Instance, error) {
-			return &domain.Instance{GameID: domain.GameValheim, Number: num, Slug: "boppo"}, nil
+		WithLookup(func(_ context.Context, instanceNumber int) (*domain.Instance, error) {
+			return &domain.Instance{GameID: domain.GameValheim, Number: instanceNumber, Slug: "boppo"}, nil
 		}),
 		WithOccupancy(func(context.Context, domain.Instance) (int, bool) { return r.players, r.known }),
 		WithRestarter(func(_ context.Context, inst domain.Instance) error {
@@ -100,8 +100,8 @@ func TestUnknownOccupancyIsNotTreatedAsEmpty(t *testing.T) {
 
 func TestNoOccupancySourceStillWaits(t *testing.T) {
 	q := New(
-		WithLookup(func(_ context.Context, num int) (*domain.Instance, error) {
-			return &domain.Instance{Number: num}, nil
+		WithLookup(func(_ context.Context, instanceNumber int) (*domain.Instance, error) {
+			return &domain.Instance{Number: instanceNumber}, nil
 		}),
 		WithRestarter(func(context.Context, domain.Instance) error {
 			t.Error("must not restart with no way to check occupancy")

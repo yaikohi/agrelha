@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"maps"
 	"strings"
 	"text/template"
 
@@ -161,9 +162,7 @@ func Render(inst domain.Instance, modsTxt, nodeSelector, namespace string) (map[
 	if err != nil {
 		return nil, err
 	}
-	for name, content := range state {
-		files[name] = content
-	}
+	maps.Copy(files, state)
 
 	return files, nil
 }

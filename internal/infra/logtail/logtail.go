@@ -73,10 +73,7 @@ func seekToTail(f *os.File, tailLines int) (int64, error) {
 		return size, nil
 	}
 
-	window := int64(maxTailBytes)
-	if size < window {
-		window = size
-	}
+	window := min(size, int64(maxTailBytes))
 	buf := make([]byte, window)
 	if _, err := f.ReadAt(buf, size-window); err != nil && err != io.EOF {
 		return 0, err

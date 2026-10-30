@@ -23,7 +23,7 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).SendString("Instance manager not configured")
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
@@ -33,7 +33,7 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 		tab = "overview"
 	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
 		return c.Status(fiber.StatusNotFound).SendString("Instance not found")
 	}
@@ -142,7 +142,7 @@ func (h *Handler) MCInstanceSettingsSave(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -172,7 +172,7 @@ func (h *Handler) MCInstanceSettingsSave(c *fiber.Ctx) error {
 		mcVer = strings.TrimSpace(c.FormValue("mc_version"))
 	}
 
-	if err := h.cfg.MCInstances.UpdateSettings(c.UserContext(), num, name, motd, tierStr, mcVer, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.MCInstances.UpdateSettings(c.UserContext(), instanceNumber, name, motd, tierStr, mcVer, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to update settings: "+err.Error(), nil)
 	}
 
@@ -185,7 +185,7 @@ func (h *Handler) MCInstanceModsRemove(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
 
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -199,18 +199,18 @@ func (h *Handler) MCInstanceModsRemove(c *fiber.Ctx) error {
 	if provider == domain.ProviderCurseForge {
 		remove = h.cfg.MCInstances.RemoveCurseForgeMod
 	}
-	if err := remove(c.UserContext(), num, slug, h.cfg.Actor(c)); err != nil {
+	if err := remove(c.UserContext(), instanceNumber, slug, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Remove failed: "+err.Error(), nil)
 	}
 
-	updatedModsHTML := h.renderMCInstalledModsHTML(c.UserContext(), num)
+	updatedModsHTML := h.renderMCInstalledModsHTML(c.UserContext(), instanceNumber)
 	modsMap := make(map[string]bool)
-	if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), num); err == nil {
+	if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), instanceNumber); err == nil {
 		for _, m := range mods {
 			modsMap[m] = true
 		}
 	}
-	if cfMods, err := h.cfg.MCInstances.GetCurseForgeMods(c.UserContext(), num); err == nil {
+	if cfMods, err := h.cfg.MCInstances.GetCurseForgeMods(c.UserContext(), instanceNumber); err == nil {
 		for _, m := range cfMods {
 			modsMap[m] = true
 		}
@@ -222,10 +222,10 @@ func (h *Handler) MCInstanceModsRemove(c *fiber.Ctx) error {
 	w := bufio.NewWriter(&buf)
 	_ = sse.InnerElement(w, "#installed-mods-container", updatedModsHTML)
 	_ = sse.PatchSignals(w, map[string]any{
-		"toast":                                           fmt.Sprintf("Removed %s. Updating...", slug),
-		"toastkind":                                       "ok",
-		fmt.Sprintf("inst_minecraft_%d_mods", num):       modsMap,
-		fmt.Sprintf("inst_minecraft_%d_mods_count", num): len(modsMap),
+		"toast":     fmt.Sprintf("Removed %s. Updating...", slug),
+		"toastkind": "ok",
+		fmt.Sprintf("inst_minecraft_%d_mods", instanceNumber):       modsMap,
+		fmt.Sprintf("inst_minecraft_%d_mods_count", instanceNumber): len(modsMap),
 	})
 	_ = w.Flush()
 	return c.Send(buf.Bytes())
@@ -236,7 +236,7 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 	if h.cfg.MCInstances == nil {
 		return shared.SSEToast(c, "err", "Instance manager unconfigured.", nil)
 	}
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
@@ -251,7 +251,7 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 	// Modrinth would only fail at boot.
 	var msg string
 	if provider == domain.ProviderCurseForge {
-		added, err := h.cfg.MCInstances.InstallCurseForgeMod(c.UserContext(), num, slug, h.cfg.Actor(c))
+		added, err := h.cfg.MCInstances.InstallCurseForgeMod(c.UserContext(), instanceNumber, slug, h.cfg.Actor(c))
 		if err != nil {
 			return shared.SSEToast(c, "err", "Install failed: "+err.Error(), nil)
 		}
@@ -260,21 +260,21 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 			msg = fmt.Sprintf("Installed %s from CurseForge (+%d required). Updating...", slug, added-1)
 		}
 	} else {
-		added, err := h.cfg.MCInstances.InstallMod(c.UserContext(), num, slug, h.cfg.Actor(c))
+		added, err := h.cfg.MCInstances.InstallMod(c.UserContext(), instanceNumber, slug, h.cfg.Actor(c))
 		if err != nil {
 			return shared.SSEToast(c, "err", "Install failed: "+err.Error(), nil)
 		}
 		msg = fmt.Sprintf("Installed %s (+%d deps). Updating...", slug, added-1)
 	}
 
-	updatedModsHTML := h.renderMCInstalledModsHTML(c.UserContext(), num)
+	updatedModsHTML := h.renderMCInstalledModsHTML(c.UserContext(), instanceNumber)
 	modsMap := make(map[string]bool)
-	if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), num); err == nil {
+	if mods, err := h.cfg.MCInstances.GetInstalledMods(c.UserContext(), instanceNumber); err == nil {
 		for _, m := range mods {
 			modsMap[m] = true
 		}
 	}
-	if cfMods, err := h.cfg.MCInstances.GetCurseForgeMods(c.UserContext(), num); err == nil {
+	if cfMods, err := h.cfg.MCInstances.GetCurseForgeMods(c.UserContext(), instanceNumber); err == nil {
 		for _, m := range cfMods {
 			modsMap[m] = true
 		}
@@ -286,28 +286,28 @@ func (h *Handler) MCInstanceModsInstall(c *fiber.Ctx) error {
 	w := bufio.NewWriter(&buf)
 	_ = sse.InnerElement(w, "#installed-mods-container", updatedModsHTML)
 	_ = sse.PatchSignals(w, map[string]any{
-		"toast":                                           msg,
-		"toastkind":                                       "ok",
-		fmt.Sprintf("inst_minecraft_%d_mods", num):       modsMap,
-		fmt.Sprintf("inst_minecraft_%d_mods_count", num): len(modsMap),
+		"toast":     msg,
+		"toastkind": "ok",
+		fmt.Sprintf("inst_minecraft_%d_mods", instanceNumber):       modsMap,
+		fmt.Sprintf("inst_minecraft_%d_mods_count", instanceNumber): len(modsMap),
 	})
 	_ = w.Flush()
 	return c.Send(buf.Bytes())
 }
 
-func (h *Handler) renderMCInstalledModsHTML(ctx context.Context, num int) string {
+func (h *Handler) renderMCInstalledModsHTML(ctx context.Context, instanceNumber int) string {
 	var installed []string
-	if mods, err := h.cfg.MCInstances.GetInstalledMods(ctx, num); err == nil {
+	if mods, err := h.cfg.MCInstances.GetInstalledMods(ctx, instanceNumber); err == nil {
 		installed = append(installed, mods...)
 	}
-	if cfMods, err := h.cfg.MCInstances.GetCurseForgeMods(ctx, num); err == nil {
+	if cfMods, err := h.cfg.MCInstances.GetCurseForgeMods(ctx, instanceNumber); err == nil {
 		installed = append(installed, cfMods...)
 	}
-	inst, _ := h.cfg.MCInstances.GetInstance(ctx, num)
+	inst, _ := h.cfg.MCInstances.GetInstance(ctx, instanceNumber)
 	d := pages.InstanceDetailUI{
 		InstanceUI: pages.InstanceUI{
 			GameID:     "minecraft",
-			Number:     num,
+			Number:     instanceNumber,
 			CanOperate: true,
 		},
 		InstalledMods: installed,
@@ -323,7 +323,7 @@ func (h *Handler) renderMCInstalledModsHTML(ctx context.Context, num int) string
 
 // MCInstanceExport exports the instance as a Modrinth modpack (.mrpack).
 func (h *Handler) MCInstanceExport(c *fiber.Ctx) error {
-	num, err := strconv.Atoi(c.Params("num"))
+	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
@@ -332,7 +332,7 @@ func (h *Handler) MCInstanceExport(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).SendString("Export service unavailable")
 	}
 
-	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), num)
+	inst, err := h.cfg.MCInstances.GetInstance(c.UserContext(), instanceNumber)
 	if err != nil || inst == nil {
 		return c.Status(fiber.StatusNotFound).SendString("Instance not found")
 	}

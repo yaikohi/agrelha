@@ -101,7 +101,7 @@ func TestVolumesPointAtTheDataRoot(t *testing.T) {
 	if !strings.Contains(body, "/srv/gamedata/valheim/instance-01/config:/config") {
 		t.Errorf("config volume not under the data root:\n%s", body)
 	}
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		v := strings.TrimSpace(line)
 		if !strings.HasPrefix(v, "- ./") {
 			continue
@@ -133,7 +133,7 @@ func TestTheReconcilerCanActuallyReadTheModList(t *testing.T) {
 	}
 
 	script := body[strings.Index(body, "mod-reconcile:"):]
-	if i := strings.Index(script, "/config-mods"); i < 0 {
+	if found := strings.Contains(script, "/config-mods"); !found {
 		t.Error("reconciler no longer references /config-mods")
 	}
 }
@@ -239,4 +239,3 @@ func TestComposeStateFilesDoNotRenderEmptyNamespace(t *testing.T) {
 		}
 	}
 }
-

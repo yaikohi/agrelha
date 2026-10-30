@@ -172,7 +172,7 @@ func (f *fakeInstanceManager) ListInstances(ctx context.Context) ([]domain.Insta
 	return out, nil
 }
 
-func (f *fakeInstanceManager) InstanceLogs(ctx context.Context, num int, tail int64) (io.ReadCloser, error) {
+func (f *fakeInstanceManager) InstanceLogs(ctx context.Context, instanceNumber int, tail int64) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("")), nil
 }
 

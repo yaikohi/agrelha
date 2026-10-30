@@ -259,6 +259,9 @@ func TestSharedRemainingEdges(t *testing.T) {
 	if ct := respRender.Header.Get("Content-Type"); !strings.Contains(ct, "text/html") {
 		t.Errorf("expected text/html content type, got %s", ct)
 	}
+	if cc := respRender.Header.Get("Cache-Control"); !strings.Contains(cc, "no-store") {
+		t.Errorf("pages are session-dependent and must not be cached: Cache-Control = %q, want no-store", cc)
+	}
 
 	// 4. SSEToast
 	app.Get("/toast", func(c *fiber.Ctx) error {

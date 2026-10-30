@@ -6,6 +6,7 @@ import (
 	"go/printer"
 	"go/token"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -145,7 +146,7 @@ func TestEveryHostScopedCapabilityIsGatedOnTheInstanceHost(t *testing.T) {
 		t.Errorf("%s consults a host-scoped reader without gating on the Instance Host:\n  %s\n"+
 			"a Docker Host world materialises its Mod list and configs through the state store;\n"+
 			"answering from the cluster there returns whatever ArgoCD last synced, which for a migrated world is frozen forever.\n"+
-			"add \"&& m.readsFromCluster(num)\", or \"&& inst.EffectiveHost().IsCluster()\" where an Instance is already in hand.",
+			"add \"&& m.readsFromCluster(instanceNumber)\", or \"&& inst.EffectiveHost().IsCluster()\" where an Instance is already in hand.",
 			managerFile, site)
 	}
 
@@ -224,10 +225,8 @@ func assignsClusterClient(block *ast.BlockStmt) bool {
 		if !ok {
 			continue
 		}
-		for _, lhs := range assign.Lhs {
-			if isClusterClient(lhs) {
-				return true
-			}
+		if slices.ContainsFunc(assign.Lhs, isClusterClient) {
+			return true
 		}
 	}
 	return false

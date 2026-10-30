@@ -27,8 +27,7 @@ func TestFollowStartsFromTheNewestLinesNotTheOldest(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "console.log")
 	writeLines(t, path, 1, 500)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	rc, err := Follow(ctx, path, 10)
 	if err != nil {
 		t.Fatal(err)
@@ -102,8 +101,7 @@ func TestAnEmptyFileDoesNotBreakTheTail(t *testing.T) {
 	if err := os.WriteFile(path, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	if _, err := Follow(ctx, path, 10); err != nil {
 		t.Errorf("a freshly created console log failed to open: %v", err)
 	}

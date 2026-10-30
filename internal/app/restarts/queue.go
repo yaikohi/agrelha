@@ -27,7 +27,7 @@ type Restarter func(ctx context.Context, inst domain.Instance) error
 
 type StartedAt func(ctx context.Context, inst domain.Instance) (time.Time, bool)
 
-type InstanceLookup func(ctx context.Context, num int) (*domain.Instance, error)
+type InstanceLookup func(ctx context.Context, instanceNumber int) (*domain.Instance, error)
 
 type EventRecorder func(kind, detail string)
 
@@ -66,27 +66,27 @@ func New(opts ...Option) *Queue {
 	return q
 }
 
-func (q *Queue) Request(num int, slug, reason string) {
+func (q *Queue) Request(instanceNumber int, slug, reason string) {
 	if q == nil {
 		return
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if existing, ok := q.pending[num]; ok {
+	if existing, ok := q.pending[instanceNumber]; ok {
 		existing.Reason = reason
-		q.pending[num] = existing
+		q.pending[instanceNumber] = existing
 		return
 	}
-	q.pending[num] = Pending{Number: num, Slug: slug, Reason: reason, Since: q.now()}
+	q.pending[instanceNumber] = Pending{Number: instanceNumber, Slug: slug, Reason: reason, Since: q.now()}
 }
 
-func (q *Queue) Pending(num int) (Pending, bool) {
+func (q *Queue) Pending(instanceNumber int) (Pending, bool) {
 	if q == nil {
 		return Pending{}, false
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	p, ok := q.pending[num]
+	p, ok := q.pending[instanceNumber]
 	return p, ok
 }
 
@@ -104,13 +104,13 @@ func (q *Queue) All() []Pending {
 	return out
 }
 
-func (q *Queue) Cancel(num int) {
+func (q *Queue) Cancel(instanceNumber int) {
 	if q == nil {
 		return
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	delete(q.pending, num)
+	delete(q.pending, instanceNumber)
 }
 
 func (q *Queue) Settle(ctx context.Context) {
@@ -128,20 +128,20 @@ func (q *Queue) Settle(ctx context.Context) {
 	}
 }
 
-func (q *Queue) Force(ctx context.Context, num int) error {
+func (q *Queue) Force(ctx context.Context, instanceNumber int) error {
 	if q == nil {
 		return fmt.Errorf("restart queue unavailable")
 	}
 	q.mu.Lock()
-	p, ok := q.pending[num]
+	p, ok := q.pending[instanceNumber]
 	q.mu.Unlock()
 	if !ok {
-		p = Pending{Number: num, Reason: "manual restart"}
+		p = Pending{Number: instanceNumber, Reason: "manual restart"}
 	}
 	if err := q.roll(ctx, p); err != nil {
 		return err
 	}
-	q.Cancel(num)
+	q.Cancel(instanceNumber)
 	return nil
 }
 
@@ -236,11 +236,11 @@ func (q *Queue) roll(ctx context.Context, p Pending) error {
 	return nil
 }
 
-func (q *Queue) block(num int, why string) {
+func (q *Queue) block(instanceNumber int, why string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if p, ok := q.pending[num]; ok {
+	if p, ok := q.pending[instanceNumber]; ok {
 		p.Blocked = why
-		q.pending[num] = p
+		q.pending[instanceNumber] = p
 	}
 }

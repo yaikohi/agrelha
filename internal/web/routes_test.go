@@ -1,7 +1,9 @@
 package web_test
 
 import (
+	"encoding/base64"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -111,5 +113,34 @@ func TestRoutes_AllHandlersMounted(t *testing.T) {
 		if err != nil || resp.StatusCode != fiber.StatusOK {
 			t.Errorf("%s %s failed: status = %d, err = %v", endpoint.method, endpoint.path, resp.StatusCode, err)
 		}
+	}
+}
+
+func TestRoutes_LogoutLeavesSignedOutFlash(t *testing.T) {
+	app := web.New(web.ServerConfig{Auth: &mockRoutesAuth{}})
+
+	req := httptest.NewRequest(fiber.MethodGet, "/auth/logout", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("GET /auth/logout: %v", err)
+	}
+
+	var flash string
+	for _, raw := range resp.Header.Values("Set-Cookie") {
+		if strings.HasPrefix(raw, "agrelha_flash=") {
+			flash = raw
+		}
+	}
+	if flash == "" {
+		t.Fatalf("logout set no flash cookie; signing out would land on a page that says nothing changed. Set-Cookie = %v", resp.Header.Values("Set-Cookie"))
+	}
+
+	value := strings.TrimPrefix(strings.Split(flash, ";")[0], "agrelha_flash=")
+	decoded, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		t.Fatalf("flash cookie %q is not decodable: %v", value, err)
+	}
+	if got := string(decoded); got != "ok|Signed out." {
+		t.Errorf("flash = %q, want %q", got, "ok|Signed out.")
 	}
 }

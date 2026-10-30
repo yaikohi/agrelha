@@ -2,6 +2,7 @@ package instances
 
 import (
 	"context"
+	"maps"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func (r *modListSpyRenderer) Render(inst domain.Instance, mods domain.ModList) (
 
 func indentLines(s string) string {
 	var sb strings.Builder
-	for _, line := range strings.Split(strings.TrimRight(s, "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(s, "\n"), "\n") {
 		sb.WriteString("    " + line + "\n")
 	}
 	return sb.String()
@@ -71,9 +72,7 @@ func seedAuthoredWorld(t *testing.T, mgr *InstanceManager, states *mockStateStor
 		Raw:  []byte(authoredConfigs),
 	}, "seed")
 	data := map[string]string{"mods.txt": "Advize/PlantEverything/1.21.4\n"}
-	for k, v := range extra {
-		data[k] = v
-	}
+	maps.Copy(data, extra)
 	_ = states.Put(ctx, dir+"/mods.yaml", ports.Document{Data: data}, "seed")
 	return inst
 }

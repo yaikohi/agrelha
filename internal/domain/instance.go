@@ -551,20 +551,20 @@ type BackupFile struct {
 }
 
 // FormatGameBackupFileName generates a standard archive name for instance backups for a specific game.
-func FormatGameBackupFileName(profile GameProfile, slug string, num int, tag string) string {
+func FormatGameBackupFileName(profile GameProfile, slug string, instanceNumber int, tag string) string {
 	if _, ok := ProfileFor(profile.ID); !ok {
 		panic(fmt.Sprintf("unknown or unregistered game ID %q", profile.ID))
 	}
 	ts := time.Now().UTC().Format("20060102-150405")
 	if tag != "" {
-		return fmt.Sprintf("%s-%s-%02d-%s-%s.tar.gz", profile.Prefix, slug, num, tag, ts)
+		return fmt.Sprintf("%s-%s-%02d-%s-%s.tar.gz", profile.Prefix, slug, instanceNumber, tag, ts)
 	}
-	return fmt.Sprintf("%s-%s-%02d-%s.tar.gz", profile.Prefix, slug, num, ts)
+	return fmt.Sprintf("%s-%s-%02d-%s.tar.gz", profile.Prefix, slug, instanceNumber, ts)
 }
 
 // FormatBackupFileName generates a standard archive name for instance backups.
-func FormatBackupFileName(slug string, num int, tag string) string {
-	return FormatGameBackupFileName(MinecraftProfile, slug, num, tag)
+func FormatBackupFileName(slug string, instanceNumber int, tag string) string {
+	return FormatGameBackupFileName(MinecraftProfile, slug, instanceNumber, tag)
 }
 
 // BackupSummary aggregates metadata for storage and backup health reporting.
