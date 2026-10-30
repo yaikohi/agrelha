@@ -38,6 +38,13 @@ type Sessions interface {
 	DeleteSession(ctx context.Context, id string) error
 	DeleteSessionsFor(ctx context.Context, subject string) error
 	PurgeExpiredSessions(ctx context.Context, now time.Time) (int, error)
+	AddSessionRole(ctx context.Context, subject string, role domain.Role) error
+	RemoveSessionRole(ctx context.Context, subject string, role domain.Role) error
+	RemoveSessionRoleEverywhere(ctx context.Context, role domain.Role) error
+}
+
+type InstanceOwners interface {
+	InstancesCreatedBy(ctx context.Context, subject string) ([]domain.InstanceID, error)
 }
 
 type RoleRegistry interface {

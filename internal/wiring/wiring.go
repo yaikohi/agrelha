@@ -292,12 +292,15 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		}
 	}
 
-	azOpts := []authz.Option{authz.WithAudit(st)}
+	azOpts := []authz.Option{authz.WithAudit(st), authz.WithInstanceOwners(st)}
 	if reg := buildRoleRegistry(cfg); reg != nil {
 		azOpts = append(azOpts, authz.WithRoleRegistry(reg))
 	}
 	d.Authz = authz.New(st, st, azOpts...)
 
+	if d.Authz != nil {
+		instOpts = append(instOpts, instances.WithSessionRoleRetirer(d.Authz.RetireInstanceRoleFromSessions))
+	}
 	if d.Authz != nil && d.Authz.HasRegistry() {
 		instOpts = append(instOpts,
 			instances.WithInstanceRoleRegistrar(d.Authz.EnsureInstanceRole),
@@ -448,6 +451,9 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		}),
 	)
 
+	if d.Authz != nil {
+		valheimInstOpts = append(valheimInstOpts, instances.WithSessionRoleRetirer(d.Authz.RetireInstanceRoleFromSessions))
+	}
 	if d.Authz != nil && d.Authz.HasRegistry() {
 		valheimInstOpts = append(valheimInstOpts,
 			instances.WithInstanceRoleRegistrar(d.Authz.EnsureInstanceRole),
@@ -703,6 +709,9 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			return ports.ServerRef{Name: depName, Scope: cfg.GModNamespace}
 		}),
 	)
+	if d.Authz != nil {
+		gmodInstOpts = append(gmodInstOpts, instances.WithSessionRoleRetirer(d.Authz.RetireInstanceRoleFromSessions))
+	}
 	if d.Authz != nil && d.Authz.HasRegistry() {
 		gmodInstOpts = append(gmodInstOpts,
 			instances.WithInstanceRoleRegistrar(d.Authz.EnsureInstanceRole),

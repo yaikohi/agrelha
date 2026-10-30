@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -107,4 +108,76 @@ func (s *Store) PurgeExpiredSessions(ctx context.Context, now time.Time) (int, e
 		return 0, nil
 	}
 	return int(n), nil
+}
+
+func (s *Store) mutateSessionRoles(ctx context.Context, subject string, apply func([]domain.Role) []domain.Role) error {
+	query := `SELECT id, roles FROM sessions WHERE expires_at > ?`
+	args := []any{time.Now()}
+	if subject != "" {
+		query += ` AND subject = ?`
+		args = append(args, subject)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("read sessions for role update: %w", err)
+	}
+
+	type pending struct {
+		id    string
+		roles string
+	}
+	var todo []pending
+	for rows.Next() {
+		var id, roles string
+		if err := rows.Scan(&id, &roles); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan session for role update: %w", err)
+		}
+		next := encodeRoles(apply(decodeRoles(roles)))
+		if next != roles {
+			todo = append(todo, pending{id: id, roles: next})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("read sessions for role update: %w", err)
+	}
+	rows.Close()
+
+	for _, t := range todo {
+		if _, err := s.db.ExecContext(ctx, `UPDATE sessions SET roles = ? WHERE id = ?`, t.roles, t.id); err != nil {
+			return fmt.Errorf("update session roles: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) AddSessionRole(ctx context.Context, subject string, role domain.Role) error {
+	if subject == "" || role == "" {
+		return nil
+	}
+	return s.mutateSessionRoles(ctx, subject, func(roles []domain.Role) []domain.Role {
+		if slices.Contains(roles, role) {
+			return roles
+		}
+		return append(roles, role)
+	})
+}
+
+func (s *Store) RemoveSessionRole(ctx context.Context, subject string, role domain.Role) error {
+	if subject == "" || role == "" {
+		return nil
+	}
+	return s.mutateSessionRoles(ctx, subject, func(roles []domain.Role) []domain.Role {
+		return slices.DeleteFunc(roles, func(r domain.Role) bool { return r == role })
+	})
+}
+
+func (s *Store) RemoveSessionRoleEverywhere(ctx context.Context, role domain.Role) error {
+	if role == "" {
+		return nil
+	}
+	return s.mutateSessionRoles(ctx, "", func(roles []domain.Role) []domain.Role {
+		return slices.DeleteFunc(roles, func(r domain.Role) bool { return r == role })
+	})
 }

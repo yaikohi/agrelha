@@ -609,6 +609,7 @@ func (h *Handler) ValheimWizardCreate(c *fiber.Ctx) error {
 	if !p.Admin && h.cfg.Requests != nil {
 		if err := h.cfg.Requests.GrantCreator(c.UserContext(), p.Subject, created.GameID, created.Number, h.cfg.Actor(c)); err != nil {
 			slog.Error("world created but creator not granted access", "number", created.Number, "err", err)
+			shared.SetFlash(c, "err", "World created, but access for other people could not be registered. You can still manage it; sharing it may not work until an admin retries.")
 		}
 	}
 

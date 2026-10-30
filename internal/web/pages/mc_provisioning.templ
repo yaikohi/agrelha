@@ -7,9 +7,10 @@ import (
 	"agrelha/internal/web/shared"
 )
 
-templ MinecraftProvisioning(inst InstanceUI) {
+templ MinecraftProvisioning(inst InstanceUI, flashKind, flashMsg string) {
 	@Layout("Provisioning " + inst.Name) {
 		@components.Nav(components.NavProps{Current: "minecraft", IsAdmin: inst.IsAdmin, SignedIn: true})
+		@flashBanner(flashKind, flashMsg)
 		<div
 			class="mx-auto max-w-2xl space-y-6"
 			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,slow:false,cause:'',problem:'',lb_ip:%q,instanceNumber:%d,detail:%q}", inst.LBIP, inst.Number, shared.ProvisioningDetail(inst.Host)) }

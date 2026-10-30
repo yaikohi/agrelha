@@ -94,10 +94,20 @@ func (a Account) Label() string {
 type Principal struct {
 	Identity
 	Admin bool
+	Owned []InstanceID
 }
 
 func NewPrincipal(id Identity) Principal {
 	return Principal{Identity: id, Admin: id.HasRole(RoleAdmin)}
+}
+
+func (p Principal) WithOwned(owned []InstanceID) Principal {
+	p.Owned = owned
+	return p
+}
+
+func (p Principal) Created(game GameID, number int) bool {
+	return slices.Contains(p.Owned, NewInstanceID(game, number))
 }
 
 func (p Principal) SignedIn() bool { return p.Subject != "" }
@@ -107,6 +117,9 @@ func (p Principal) CanOperate(game GameID, number int) bool {
 		return false
 	}
 	if p.Admin {
+		return true
+	}
+	if p.Created(game, number) {
 		return true
 	}
 	return p.HasRole(InstanceRole(game, number))

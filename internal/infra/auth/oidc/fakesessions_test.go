@@ -2,9 +2,11 @@ package oidc
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
 
@@ -74,6 +76,40 @@ func (f *fakeSessions) PurgeExpiredSessions(_ context.Context, now time.Time) (i
 		}
 	}
 	return n, nil
+}
+
+func (f *fakeSessions) mutateRoles(subject string, apply func([]domain.Role) []domain.Role) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for id, s := range f.rows {
+		if subject != "" && s.Subject != subject {
+			continue
+		}
+		s.Roles = apply(s.Roles)
+		f.rows[id] = s
+	}
+	return nil
+}
+
+func (f *fakeSessions) AddSessionRole(_ context.Context, subject string, role domain.Role) error {
+	return f.mutateRoles(subject, func(roles []domain.Role) []domain.Role {
+		if slices.Contains(roles, role) {
+			return roles
+		}
+		return append(roles, role)
+	})
+}
+
+func (f *fakeSessions) RemoveSessionRole(_ context.Context, subject string, role domain.Role) error {
+	return f.mutateRoles(subject, func(roles []domain.Role) []domain.Role {
+		return slices.DeleteFunc(roles, func(r domain.Role) bool { return r == role })
+	})
+}
+
+func (f *fakeSessions) RemoveSessionRoleEverywhere(_ context.Context, role domain.Role) error {
+	return f.mutateRoles("", func(roles []domain.Role) []domain.Role {
+		return slices.DeleteFunc(roles, func(r domain.Role) bool { return r == role })
+	})
 }
 
 func (f *fakeSessions) count() int {

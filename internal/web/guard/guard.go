@@ -2,6 +2,7 @@ package guard
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
@@ -77,6 +78,15 @@ func Optional(auth ports.Auth, svc *authz.Service) fiber.Handler {
 			return c.Next()
 		}
 		p := domain.NewPrincipal(id)
+		if svc != nil && !p.Admin {
+			owned, err := svc.OwnedBy(c.UserContext(), id.Subject)
+			if err != nil {
+				slog.Error("cannot read worlds created by this account, falling back to granted roles only",
+					"subject", id.Subject, "err", err)
+			} else {
+				p = p.WithOwned(owned)
+			}
+		}
 		c.Locals(shared.PrincipalKey, p)
 		actor := id.Email
 		if actor == "" {

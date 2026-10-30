@@ -61,6 +61,7 @@ type InstanceManager struct {
 	preDeleteHook       func(ctx context.Context, inst domain.Instance)
 	roleRegistrar       func(ctx context.Context, inst domain.Instance) error
 	roleRetirer         func(ctx context.Context, inst domain.Instance) error
+	sessionRoleRetirer  func(ctx context.Context, game domain.GameID, number int) error
 	telemetryProvider   func(ctx context.Context, inst domain.Instance) (players int, known bool)
 	afterSyncHook       func(cm, dep, key string, want func(string) bool)
 	commandExecutor     func(ctx context.Context, inst domain.Instance, cmd string) (string, error)
@@ -178,6 +179,23 @@ func WithInstanceRoleRegistrar(fn func(ctx context.Context, inst domain.Instance
 
 func WithInstanceRoleRetirer(fn func(ctx context.Context, inst domain.Instance) error) Option {
 	return func(m *InstanceManager) { m.roleRetirer = fn }
+}
+
+func WithSessionRoleRetirer(fn func(ctx context.Context, game domain.GameID, number int) error) Option {
+	return func(m *InstanceManager) { m.sessionRoleRetirer = fn }
+}
+
+func (m *InstanceManager) retireSessionRole(ctx context.Context, game domain.GameID, number int, when string) {
+	if m.sessionRoleRetirer == nil || number <= 0 {
+		return
+	}
+	if game == "" {
+		game = m.profile.ID
+	}
+	if err := m.sessionRoleRetirer(ctx, game, number); err != nil {
+		slog.Error("stale access role left in live sessions; a previous holder keeps access to this slot until their session ends",
+			"game", game, "number", number, "when", when, "err", err)
+	}
 }
 
 func WithTelemetryProvider(fn func(ctx context.Context, inst domain.Instance) (players int, known bool)) Option {
@@ -585,6 +603,8 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 		return nil, err
 	}
 
+	m.retireSessionRole(ctx, inst.GameID, inst.Number, "create")
+
 	if m.roleRegistrar != nil {
 		if err := m.roleRegistrar(ctx, inst); err != nil {
 			return nil, fmt.Errorf("reserve access role for instance %02d: %w", inst.Number, err)
@@ -866,6 +886,8 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, instanceNumber int
 	if err := m.repo.Delete(instanceNumber); err != nil {
 		return err
 	}
+
+	m.retireSessionRole(ctx, inst.GameID, instanceNumber, "delete")
 
 	if m.roleRetirer != nil {
 		if err := m.roleRetirer(ctx, *inst); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"agrelha/internal/domain"
@@ -14,6 +15,7 @@ type Service struct {
 	accounts ports.Accounts
 	sessions ports.Sessions
 	registry ports.RoleRegistry
+	owners   ports.InstanceOwners
 	audit    ports.AuditRecorder
 	now      func() time.Time
 }
@@ -26,6 +28,10 @@ func WithRoleRegistry(r ports.RoleRegistry) Option {
 
 func WithAudit(a ports.AuditRecorder) Option {
 	return func(s *Service) { s.audit = a }
+}
+
+func WithInstanceOwners(o ports.InstanceOwners) Option {
+	return func(s *Service) { s.owners = o }
 }
 
 func WithClock(fn func() time.Time) Option {
@@ -105,6 +111,12 @@ func (s *Service) Grant(ctx context.Context, subject string, game domain.GameID,
 	if err := s.registry.GrantRole(ctx, subject, role); err != nil {
 		return fmt.Errorf("grant %s to %s: %w", role, subject, err)
 	}
+	if s.sessions != nil {
+		if err := s.sessions.AddSessionRole(ctx, subject, role); err != nil {
+			slog.Error("granted role did not reach the live session, it applies on next sign-in",
+				"role", role, "subject", subject, "err", err)
+		}
+	}
 	s.record(actor, "grant", fmt.Sprintf("%s -> %s", role, subject))
 	return nil
 }
@@ -116,6 +128,11 @@ func (s *Service) Revoke(ctx context.Context, subject string, game domain.GameID
 	role := domain.InstanceRole(game, number)
 	if err := s.registry.RevokeRole(ctx, subject, role); err != nil {
 		return fmt.Errorf("revoke %s from %s: %w", role, subject, err)
+	}
+	if s.sessions != nil {
+		if err := s.sessions.RemoveSessionRole(ctx, subject, role); err != nil {
+			return fmt.Errorf("revoke %s from %s: role removed in the registry but still live in the session: %w", role, subject, err)
+		}
 	}
 	s.record(actor, "revoke", fmt.Sprintf("%s -> %s", role, subject))
 	return nil
@@ -181,4 +198,18 @@ func (s *Service) ReconcileInstanceRoles(ctx context.Context, insts []domain.Ins
 		}
 	}
 	return created, failed
+}
+
+func (s *Service) OwnedBy(ctx context.Context, subject string) ([]domain.InstanceID, error) {
+	if s == nil || s.owners == nil || subject == "" {
+		return nil, nil
+	}
+	return s.owners.InstancesCreatedBy(ctx, subject)
+}
+
+func (s *Service) RetireInstanceRoleFromSessions(ctx context.Context, game domain.GameID, number int) error {
+	if s == nil || s.sessions == nil {
+		return nil
+	}
+	return s.sessions.RemoveSessionRoleEverywhere(ctx, domain.InstanceRole(game, number))
 }
