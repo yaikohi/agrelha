@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"agrelha/internal/domain"
+	"agrelha/internal/web/shared"
 )
 
 type NavProps struct {
@@ -37,6 +38,7 @@ templ Nav(p NavProps) {
 		<div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
 			<a href="/" class="focus-accent font-display text-3xl font-bold tracking-tight text-ink transition-colors hover:text-accent">Agrelha</a>
 			<div class="flex items-center gap-5 font-pixel text-xs">
+				@ThemeToggle()
 				if p.GrafanaURL != "" && p.IsAdmin {
 					<a href={ templ.SafeURL(p.GrafanaURL) } target="_blank" rel="noopener noreferrer" class="focus-accent text-ink-faint transition-colors hover:text-accent">grafana</a>
 				}
@@ -74,4 +76,26 @@ templ Nav(p NavProps) {
 			</nav>
 		}
 	</header>
+}
+
+templ ThemeToggle() {
+	{{ isLight := shared.ThemeOf(ctx) == "light" }}
+	<button
+		type="button"
+		if isLight {
+			aria-label="Switch to dark theme"
+		} else {
+			aria-label="Switch to light theme"
+		}
+		data-attr-aria-label="$theme == 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
+		data-on:click="$theme = window.agrelhaTheme($theme == 'light' ? 'dark' : 'light')"
+		data-text="$theme == 'light' ? 'dark' : 'light'"
+		class="focus-accent text-ink-faint transition-colors hover:text-accent"
+	>
+		if isLight {
+			dark
+		} else {
+			light
+		}
+	</button>
 }

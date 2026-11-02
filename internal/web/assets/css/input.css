@@ -26,6 +26,8 @@
 	--font-display: "Fraunces", Iowan Old Style, Georgia, serif;
 	--font-pixel: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
+	--radius-control: 2px;
+
 	--color-surface: #1e1713;
 	--color-surface-raised: #2a211b;
 	--color-seam: #120e0b;
@@ -45,7 +47,40 @@
 	--color-tint-moss: #8fa860;
 	--color-tint-flame: #d9733a;
 
-	--radius-control: 2px;
+	--color-lamp-lit: #f4df75;
+	--color-lamp-dim: #efb268;
+	--color-lamp-out: #42352c;
+}
+
+:root {
+	color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+	color-scheme: light;
+
+	--color-surface: #faf6ec;
+	--color-surface-raised: #ffffff;
+	--color-seam: #eae1d3;
+	--color-edge: #a48b67;
+
+	--color-ink: #352a22;
+	--color-ink-muted: #53453a;
+	--color-ink-faint: #726253;
+
+	--color-accent: #734c09;
+	--color-accent-muted: #9b5b11;
+	--color-accent-ink: #fdf6df;
+
+	--color-danger: #cd392b;
+
+	--color-tint-sky: #345b6b;
+	--color-tint-moss: #4e5c32;
+	--color-tint-flame: #a14c22;
+
+	--color-lamp-lit: #6f3b9c;
+	--color-lamp-dim: #9871bb;
+	--color-lamp-out: #cab89c;
 }
 
 /* Rendered mod READMEs. Mod authors write arbitrary Markdown, so this is the one
@@ -123,28 +158,33 @@
 	width: 0.7rem;
 	height: 0.7rem;
 	border-radius: 9999px;
-	background: var(--color-edge);
+	background: var(--color-lamp-out);
 	box-shadow: inset 0 0 0 1px color-mix(in oklab, black 55%, transparent);
 }
 .lamp-out {
-	background: var(--color-edge);
+	background: var(--color-lamp-out);
 }
 .lamp-unknown {
 	background: transparent;
 	box-shadow: inset 0 0 0 1px var(--color-edge);
 }
 .lamp-dim {
-	background: var(--color-accent-muted);
+	background: var(--color-lamp-dim);
 	box-shadow:
 		inset 0 0 0 1px color-mix(in oklab, black 45%, transparent),
-		0 0 10px 0 color-mix(in oklab, var(--color-accent-muted) 14%, transparent);
+		0 0 10px 0 color-mix(in oklab, var(--color-lamp-dim) 14%, transparent);
 }
 .lamp-lit {
-	background: var(--color-accent);
+	background: var(--color-lamp-lit);
 	box-shadow:
 		inset 0 0 0 1px color-mix(in oklab, black 30%, transparent),
-		0 0 0 4px color-mix(in oklab, var(--color-accent) 10%, transparent),
-		0 0 20px 2px color-mix(in oklab, var(--color-accent) 38%, transparent);
+		0 0 0 4px color-mix(in oklab, var(--color-lamp-lit) 10%, transparent),
+		0 0 20px 2px color-mix(in oklab, var(--color-lamp-lit) 38%, transparent);
+}
+
+:root[data-theme="light"] .lamp-dim,
+:root[data-theme="light"] .lamp-lit {
+	box-shadow: inset 0 0 0 1px color-mix(in oklab, black 22%, transparent);
 }
 
 .check {

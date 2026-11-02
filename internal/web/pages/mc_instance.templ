@@ -128,7 +128,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 										<button
 											type="button"
 											data-on:click={ fmt.Sprintf("if (confirm('Delete %s?')) { @post('/api/minecraft/%d/configs/delete?file=%s', {payload: {file: '%s'}})", cfgFile, d.Number, cfgFile, cfgFile) }
-											class="rounded text-danger px-2.5 py-1 text-xs text-danger hover:text-danger hover:text-danger"
+											class="rounded-control border border-edge px-2.5 py-1 font-pixel text-xs text-ink-muted transition-colors hover:border-danger hover:text-danger"
 										>
 											Delete
 										</button>
@@ -269,7 +269,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 										<button
 											type="button"
 											data-on:click={ fmt.Sprintf("if (confirm('Permanently delete backup %s from NAS?')) @post('/api/minecraft/%d/backups/delete?file=%s', {payload: {file: '%s'}})", b.Name, d.Number, b.Name, b.Name) }
-											class="rounded px-1.5 py-1 text-[11px] text-danger hover:text-danger hover:text-danger"
+											class="rounded-control border border-edge px-2 py-0.5 font-pixel text-[11px] text-ink-muted transition-colors hover:border-danger hover:text-danger"
 										>
 											Delete
 										</button>

@@ -62,17 +62,31 @@ them on every incoming line - so there must be a visible way back to the newest 
 	}
 }
 
-func TestTrimmingOnlyHappensWhileFollowing(t *testing.T) {
+func TestTrimmingIsUnconditionalAndPreservesTheReadingPosition(t *testing.T) {
 	layout := readPage(t, "pages/layout.templ")
-	before, _, ok := strings.Cut(layout, "removeChild")
-	if !ok {
+
+	if !strings.Contains(layout, "MAX_LINES") || !strings.Contains(layout, "firstElementChild.remove()") {
 		t.Fatal("the pane no longer caps its line count; a long-running stream would grow the DOM without bound")
 	}
-	guard := strings.LastIndex(before, "if (!follow) return;")
-	observer := strings.LastIndex(before, "MutationObserver")
-	if guard < 0 || guard < observer {
-		t.Error(`lines are trimmed even when the operator has scrolled up.
 
-Removing the oldest lines while someone is reading history shifts the content under them.`)
+	trim := strings.Index(layout, "const trim = ")
+	observer := strings.Index(layout, "MutationObserver")
+	if trim < 0 || observer < 0 || trim > observer {
+		t.Fatal("the trim step is no longer defined ahead of the observer that drives it")
+	}
+
+	body := layout[trim:observer]
+	if strings.Contains(body, "if (!follow) {\n\t\t\t\t\t\t\t\treturn;") {
+		t.Error(`trimming is gated on following again.
+
+An earlier version skipped the cap whenever the operator had scrolled up, so a paused pane on a busy
+stream grew without bound. The cap must apply in both states.`)
+	}
+	if !strings.Contains(body, "scrollHeight") || !strings.Contains(body, "pane.scrollTop = Math.max(") {
+		t.Error(`trimming no longer compensates the scroll position.
+
+Removing the oldest lines shifts content up under a reader who has scrolled back. Capping the DOM is
+only safe because scrollTop is reduced by exactly the height that was removed; without that
+compensation the view yanks on every trim and the old follow-gate was the lesser evil.`)
 	}
 }

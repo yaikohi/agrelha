@@ -88,7 +88,7 @@ func ssePatchElements(c *fiber.Ctx, selector, content string) error {
 // MCWizardModpacksSearch searches for modpacks via ModpackIndex.
 func (h *Handler) MCWizardModpacksSearch(c *fiber.Ctx) error {
 	if h.cfg.SearchModpacks == nil {
-		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full text-xs text-red-400 py-6 text-center">Modpack Index unconfigured</div>`)
+		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full text-xs text-danger py-6 text-center">Modpack Index unconfigured</div>`)
 	}
 
 	var req struct {
@@ -106,15 +106,15 @@ func (h *Handler) MCWizardModpacksSearch(c *fiber.Ctx) error {
 	}
 
 	if q == "" {
-		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full py-8 text-center text-xs text-zinc-500">Type a modpack name above and click Search to browse available packs.</div>`)
+		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full py-8 text-center text-xs text-ink-faint">Type a modpack name above and click Search to browse available packs.</div>`)
 	}
 
 	res, err := h.cfg.SearchModpacks(c.UserContext(), q)
 	if err != nil {
-		return ssePatchElements(c, "#wizard-pack-results", fmt.Sprintf(`<div class="col-span-full text-xs text-red-400 py-6 text-center">Search error: %s</div>`, html.EscapeString(err.Error())))
+		return ssePatchElements(c, "#wizard-pack-results", fmt.Sprintf(`<div class="col-span-full text-xs text-danger py-6 text-center">Search error: %s</div>`, html.EscapeString(err.Error())))
 	}
 	if len(res) == 0 {
-		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full text-xs text-zinc-500 py-8 text-center">No modpacks found matching your search.</div>`)
+		return ssePatchElements(c, "#wizard-pack-results", `<div class="col-span-full text-xs text-ink-faint py-8 text-center">No modpacks found matching your search.</div>`)
 	}
 
 	var sb strings.Builder
@@ -124,21 +124,21 @@ func (h *Handler) MCWizardModpacksSearch(c *fiber.Ctx) error {
 		cleanRefURL := strings.ReplaceAll(p.RefURL, `'`, `\'`)
 
 		sb.WriteString(fmt.Sprintf(`
-			<div class="flex flex-col justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+			<div class="flex flex-col justify-between rounded-xl border border-edge bg-surface p-4">
 				<div>
 					<div class="flex items-center gap-3">
-						<img src="%s" alt="" class="h-10 w-10 rounded-lg bg-zinc-800 object-cover" onerror="this.style.display='none'"/>
+						<img src="%s" alt="" class="h-10 w-10 rounded-lg bg-surface-raised object-cover" onerror="this.style.display='none'"/>
 						<div>
-							<h4 class="text-sm font-semibold text-zinc-100">%s</h4>
-							<p class="text-[10px] text-zinc-400">%d downloads</p>
+							<h4 class="text-sm font-semibold text-ink">%s</h4>
+							<p class="text-[10px] text-ink-faint">%d downloads</p>
 						</div>
 					</div>
-					<p class="mt-2 line-clamp-2 text-xs text-zinc-400">%s</p>
+					<p class="mt-2 line-clamp-2 text-xs text-ink-faint">%s</p>
 				</div>
 				<div class="mt-4 flex justify-end">
 					<button type="button"
 						data-on:click="$pack_name = '%s'; $pack_id = '%d'; $pack_ref = '%s'; $pack_provider = 'curseforge'; $step = 4; @get('/api/minecraft/wizard/pack/facts?id=%d')"
-						class="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-600">
+						class="rounded-lg bg-accent-muted px-3 py-1.5 text-xs font-medium text-accent-ink hover:bg-accent">
 						Select Pack
 					</button>
 				</div>
@@ -152,7 +152,7 @@ func (h *Handler) MCWizardModpacksSearch(c *fiber.Ctx) error {
 // MCWizardModsSearch searches for mods via configured mod provider.
 func (h *Handler) MCWizardModsSearch(c *fiber.Ctx) error {
 	if h.cfg.SearchMods == nil {
-		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-red-400 py-4 text-center">Mod search unconfigured</p>`)
+		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-danger py-4 text-center">Mod search unconfigured</p>`)
 	}
 
 	var req struct {
@@ -172,7 +172,7 @@ func (h *Handler) MCWizardModsSearch(c *fiber.Ctx) error {
 	}
 
 	if q == "" {
-		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-zinc-500 py-4 text-center">Search mods to populate results.</p>`)
+		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-ink-faint py-4 text-center">Search mods to populate results.</p>`)
 	}
 
 	mcVersion := strings.TrimSpace(req.MCVersion)
@@ -188,30 +188,30 @@ func (h *Handler) MCWizardModsSearch(c *fiber.Ctx) error {
 
 	res, err := h.cfg.SearchMods(c.UserContext(), q, mcVersion)
 	if err != nil {
-		return ssePatchElements(c, "#wizard-mod-results", fmt.Sprintf(`<p class="text-xs text-red-400 py-4 text-center">Search error: %s</p>`, html.EscapeString(err.Error())))
+		return ssePatchElements(c, "#wizard-mod-results", fmt.Sprintf(`<p class="text-xs text-danger py-4 text-center">Search error: %s</p>`, html.EscapeString(err.Error())))
 	}
 	if len(res) == 0 {
-		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-zinc-500 py-4 text-center">No mods found matching your search.</p>`)
+		return ssePatchElements(c, "#wizard-mod-results", `<p class="text-xs text-ink-faint py-4 text-center">No mods found matching your search.</p>`)
 	}
 
 	var sb strings.Builder
 	for _, hit := range res {
 		cleanSlug := strings.ReplaceAll(hit.Slug, "'", "\\'")
 		sb.WriteString(fmt.Sprintf(`
-			<div class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 p-2.5">
+			<div class="flex items-center justify-between rounded-lg border border-edge bg-surface p-2.5">
 				<div class="flex items-center gap-2.5 overflow-hidden">
-					<img src="%s" alt="" class="h-7 w-7 rounded bg-zinc-800 object-cover" onerror="this.style.display='none'"/>
+					<img src="%s" alt="" class="h-7 w-7 rounded bg-surface-raised object-cover" onerror="this.style.display='none'"/>
 					<div class="truncate">
 						<div class="flex items-center gap-1.5">
-							<span class="text-xs font-medium text-zinc-200">%s</span>
-							<span class="font-mono text-[10px] text-zinc-500">%s</span>
+							<span class="text-xs font-medium text-ink">%s</span>
+							<span class="font-mono text-[10px] text-ink-faint">%s</span>
 						</div>
-						<p class="truncate text-[10px] text-zinc-400">%s</p>
+						<p class="truncate text-[10px] text-ink-faint">%s</p>
 					</div>
 				</div>
 				<button type="button"
 					data-on:click="if (!$cart.includes('%s')) { $cart = [...$cart, '%s']; @post('/api/minecraft/wizard/cart/check') }"
-					class="shrink-0 rounded bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:bg-emerald-700 hover:text-white">
+					class="shrink-0 rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-ink-muted hover:bg-accent hover:text-accent-ink">
 					+ Add
 				</button>
 			</div>
@@ -248,11 +248,11 @@ func (h *Handler) MCWizardCartCheck(c *fiber.Ctx) error {
 		}
 		cleanSlug := strings.ReplaceAll(slug, "'", "\\'")
 		cartHTML.WriteString(fmt.Sprintf(`
-			<div class="flex items-center justify-between rounded border border-zinc-800 bg-zinc-950 px-2 py-1">
-				<span class="font-mono text-zinc-300">%s</span>
+			<div class="flex items-center justify-between rounded border border-edge bg-surface px-2 py-1">
+				<span class="font-mono text-ink-muted">%s</span>
 				<button type="button"
 					data-on:click="$cart = $cart.filter(function(s){ return s !== '%s' }); @post('/api/minecraft/wizard/cart/check')"
-					class="text-zinc-500 hover:text-red-400">✕</button>
+					class="text-ink-faint hover:text-danger">✕</button>
 			</div>
 		`, slug, cleanSlug))
 	}

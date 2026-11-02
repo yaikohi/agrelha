@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -27,17 +28,17 @@ func streamRedirect(c *fiber.Ctx, target string) error {
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
+	href, err := json.Marshal(target)
+	if err != nil {
+		return c.Redirect(target, fiber.StatusFound)
+	}
 	return c.SendString(fmt.Sprintf(
-		"event: datastar-patch-elements\ndata: mode append\ndata: selector body\ndata: elements <script>window.location.href = %q</script>\n\n",
-		target))
+		"event: datastar-patch-elements\ndata: mode append\ndata: selector body\ndata: elements <script>location.replace(%s)</script>\n\n",
+		string(href)))
 }
 
 func streamToast(c *fiber.Ctx, msg string) error {
-	c.Set("Content-Type", "text/event-stream")
-	c.Set("Cache-Control", "no-cache")
-	c.Set("Connection", "keep-alive")
-	return c.SendString(fmt.Sprintf(
-		"event: datastar-patch-signals\ndata: signals {\"toastKind\":\"err\",\"toastMsg\":%q}\n\n", msg))
+	return shared.SSEToast(c, "err", msg, nil)
 }
 
 func Unauthenticated(c *fiber.Ctx) error {

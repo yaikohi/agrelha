@@ -1,8 +1,11 @@
 package pages
 
 import (
+	"fmt"
+
 	"agrelha/internal/platform/build"
 	"agrelha/internal/web/components"
+	"agrelha/internal/web/shared"
 )
 
 // Base HTML shell. Datastar drives interactivity over SSE (vendored at
@@ -22,11 +25,56 @@ templ LayoutHearth(title string) {
 
 templ layoutShell(title, bodyClass, mainClass string, hearth bool) {
 	<!DOCTYPE html>
-	<html lang="en" class="h-full">
+	<html lang="en" class="h-full" data-theme={ shared.ThemeOf(ctx) }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title } · agrelha</title>
+			<script>
+				(() => {
+					const KEY = "agrelha-theme";
+					const COOKIE = "agrelha_theme";
+					const YEAR = 31536000;
+
+					const normalize = (value) => (value === "light" ? "light" : "dark");
+					const hasCookie = () =>
+						document.cookie.split("; ").some((pair) => pair.startsWith(COOKIE + "="));
+
+					const read = () => {
+						try {
+							return localStorage.getItem(KEY);
+						} catch {
+							return null;
+						}
+					};
+
+					const stored = read();
+					let activeTheme;
+					if (stored === "light" || stored === "dark") {
+						activeTheme = stored;
+					} else if (!hasCookie()) {
+						activeTheme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+					}
+					if (activeTheme) {
+						document.documentElement.setAttribute("data-theme", activeTheme);
+						if (!hasCookie()) {
+							const secure = location.protocol === "https:" ? ";secure" : "";
+							document.cookie = COOKIE + "=" + activeTheme + ";path=/;max-age=" + YEAR + ";samesite=lax" + secure;
+						}
+					}
+
+					window.agrelhaTheme = (next) => {
+						const theme = normalize(next);
+						document.documentElement.setAttribute("data-theme", theme);
+						try {
+							localStorage.setItem(KEY, theme);
+						} catch {}
+						const secure = location.protocol === "https:" ? ";secure" : "";
+						document.cookie = COOKIE + "=" + theme + ";path=/;max-age=" + YEAR + ";samesite=lax" + secure;
+						return theme;
+					};
+				})();
+			</script>
 			<link rel="stylesheet" href="/assets/css/output.css"/>
 			if hearth {
 				<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/Fraunces-Variable.woff2" crossorigin/>
@@ -35,35 +83,36 @@ templ layoutShell(title, bodyClass, mainClass string, hearth bool) {
 			<script type="module" src="/assets/js/datastar.js"></script>
 			if hearth {
 				<script>
-					window.agrelhaCopy = function (text) {
+					window.agrelhaCopy = (text) => {
 						if (navigator.clipboard && window.isSecureContext) {
 							return navigator.clipboard.writeText(text);
 						}
-						var ta = document.createElement("textarea");
-						ta.value = text;
-						ta.setAttribute("readonly", "");
-						ta.style.position = "fixed";
-						ta.style.opacity = "0";
-						document.body.appendChild(ta);
-						ta.select();
+						const field = document.createElement("textarea");
+						field.value = text;
+						field.setAttribute("readonly", "");
+						field.style.position = "fixed";
+						field.style.opacity = "0";
+						document.body.appendChild(field);
+						field.select();
 						try {
-							document.execCommand("copy");
+							return document.execCommand("copy")
+								? Promise.resolve()
+								: Promise.reject(new Error("copy command rejected"));
 						} finally {
-							ta.remove();
+							field.remove();
 						}
-						return Promise.resolve();
 					};
 				</script>
 			}
 		</head>
 		<body
 			class={ "h-full antialiased " + bodyClass }
-			data-signals="{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',online:false,backup:'—',backupinfo:'',updates:0,valheim_updates:0,mc_updates:0,selected:{},toast:'',toastkind:'',mc_players:'—',mc_cpu:'—',mc_mem:'—',mc_uptime:'—',mc_state:'unknown'}"
+			data-signals={ fmt.Sprintf("{players:'—',cpu:'—',mem:'—',uptime:'—',state:'unknown',online:false,backup:'—',backupinfo:'',updates:0,valheim_updates:0,mc_updates:0,selected:{},toast:'',toastkind:'',mc_players:'—',mc_cpu:'—',mc_mem:'—',mc_uptime:'—',mc_state:'unknown',theme:'%s'}", shared.ThemeOf(ctx)) }
 			data-effect="@get('/sse')"
 		>
 			<script>
-				window.addEventListener("pageshow", function (e) {
-					if (e.persisted) {
+				window.addEventListener("pageshow", (event) => {
+					if (event.persisted) {
 						window.location.reload();
 					}
 				});
@@ -76,55 +125,67 @@ templ layoutShell(title, bodyClass, mainClass string, hearth bool) {
 			}
 			@components.Toast()
 			<script>
-				(function () {
-					document.querySelectorAll("[data-log-pane]").forEach(function (el) {
-						var wrap = el.closest("[data-log-pane-wrap]");
-						var status = wrap && wrap.querySelector("[data-log-status]");
-						var jump = wrap && wrap.querySelector("[data-log-jump]");
-						var follow = true;
+				(() => {
+					const MAX_LINES = 500;
+					const BOTTOM_SLACK = 24;
 
-						function atBottom() {
-							return el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-						}
-						function toBottom() {
-							el.scrollTop = el.scrollHeight;
-						}
-						function render() {
+					for (const pane of document.querySelectorAll("[data-log-pane]")) {
+						const wrap = pane.closest("[data-log-pane-wrap]");
+						const status = wrap?.querySelector("[data-log-status]");
+						const jump = wrap?.querySelector("[data-log-jump]");
+						let follow = true;
+
+						const atBottom = () =>
+							pane.scrollHeight - pane.scrollTop - pane.clientHeight < BOTTOM_SLACK;
+						const toBottom = () => {
+							pane.scrollTop = pane.scrollHeight;
+						};
+
+						const render = () => {
 							if (status) {
 								status.textContent = follow ? "Following" : "Paused — scrolled up";
 							}
-							if (jump) {
-								jump.classList.toggle("hidden", follow);
-								jump.classList.toggle("inline-flex", !follow);
-							}
-						}
+							jump?.classList.toggle("hidden", follow);
+							jump?.classList.toggle("inline-flex", !follow);
+						};
 
-						el.addEventListener("scroll", function () {
-							var b = atBottom();
-							if (b !== follow) {
-								follow = b;
+						const trim = () => {
+							if (pane.childElementCount <= MAX_LINES) {
+								return;
+							}
+							const before = pane.scrollHeight;
+							while (pane.childElementCount > MAX_LINES) {
+								pane.firstElementChild.remove();
+							}
+							if (!follow) {
+								pane.scrollTop = Math.max(0, pane.scrollTop - (before - pane.scrollHeight));
+							}
+						};
+
+						pane.addEventListener("scroll", () => {
+							const bottom = atBottom();
+							if (bottom !== follow) {
+								follow = bottom;
 								render();
 							}
 						});
-						if (jump) {
-							jump.addEventListener("click", function () {
-								follow = true;
-								toBottom();
-								render();
-							});
-						}
 
-						new MutationObserver(function () {
-							if (!follow) return;
-							while (el.childElementCount > 500) {
-								el.removeChild(el.firstElementChild);
-							}
+						jump?.addEventListener("click", () => {
+							follow = true;
 							toBottom();
-						}).observe(el, { childList: true });
+							render();
+						});
+
+						new MutationObserver(() => {
+							trim();
+							if (follow) {
+								toBottom();
+							}
+						}).observe(pane, { childList: true });
 
 						render();
 						toBottom();
-					});
+					}
 				})();
 			</script>
 		</body>

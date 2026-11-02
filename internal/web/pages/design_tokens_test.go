@@ -33,6 +33,8 @@ var (
 	docToken        = regexp.MustCompile("`(--(?:color|font|radius)-[a-z0-9-]+)`")
 	docCell         = regexp.MustCompile("`([^`]+)`")
 	themeTokenValue = regexp.MustCompile(`(?m)^\s*(--(?:color|radius)-[a-z0-9-]+):\s*([^;]+);`)
+	themeBlock      = regexp.MustCompile(`(?s)@theme \{(.*?)\n\}`)
+	lightBlock      = regexp.MustCompile(`(?s):root\[data-theme="light"\] \{(.*?)\n\}`)
 )
 
 func TestMigratedTemplatesNameRolesNotColours(t *testing.T) {
@@ -116,15 +118,7 @@ func sortedKeys(m map[string]bool) []string {
 //
 // The list may only shrink: a file on it that has been migrated also fails, so
 // finishing the job is what removes the entry.
-var notYetMigrated = []string{
-	"handlers/console/gmod.go",
-	"handlers/console/minecraft.go",
-	"handlers/console/valheim.go",
-	"handlers/valheim/detail.go",
-	"handlers/valheim/wizard.go",
-	"handlers/wizard/wizard.go",
-	"pages/helpers.go",
-}
+var notYetMigrated = []string{}
 
 func handwrittenGo(t *testing.T) []string {
 	t.Helper()
@@ -208,29 +202,72 @@ func TestDocumentedTokenValuesMatchTheStylesheet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	defined := map[string]string{}
-	for _, m := range themeTokenValue.FindAllStringSubmatch(string(css), -1) {
-		defined[m[1]] = strings.ToLower(strings.TrimSpace(m[2]))
-	}
+	dark := paletteIn(t, string(css), themeBlock)
+	light := paletteIn(t, string(css), lightBlock)
 
 	for line := range strings.SplitSeq(string(doc), "\n") {
 		cells := strings.Split(line, "|")
-		if len(cells) < 4 {
+		if len(cells) < 5 {
 			continue
 		}
 		name := docToken.FindStringSubmatch(cells[1])
 		if name == nil {
 			continue
 		}
-		value := docCell.FindStringSubmatch(cells[2])
-		if value == nil {
-			continue
-		}
-		if got, want := defined[name[1]], strings.ToLower(value[1]); got != want {
-			t.Errorf(`docs/design-system.md says %s is %s, but input.css defines %s.
+		if value := docCell.FindStringSubmatch(cells[2]); value != nil {
+			if got, want := dark[name[1]], strings.ToLower(value[1]); got != want {
+				t.Errorf(`docs/design-system.md says %s is %s in dark, but input.css defines %s.
 
 A table nobody can trust is worse than no table: fix whichever is stale.`,
-				name[1], want, got)
+					name[1], want, got)
+			}
+		}
+
+		declared, hasLight := light[name[1]]
+		if value := docCell.FindStringSubmatch(cells[3]); value != nil {
+			want := strings.ToLower(value[1])
+			if !hasLight {
+				t.Errorf(`docs/design-system.md gives %s a light value of %s, but the light palette does not define it.
+
+A name missing from light silently renders the dark value.`, name[1], want)
+			} else if declared != want {
+				t.Errorf(`docs/design-system.md says %s is %s in light, but input.css defines %s.`,
+					name[1], want, declared)
+			}
+			continue
+		}
+		if strings.Contains(cells[3], "—") && hasLight {
+			t.Errorf(`docs/design-system.md marks %s theme-invariant, but the light palette overrides it with %s.`,
+				name[1], declared)
 		}
 	}
+
+	for tok := range dark {
+		if !strings.HasPrefix(tok, "--color-") {
+			continue
+		}
+		if _, ok := light[tok]; !ok {
+			t.Errorf(`%s exists in the dark palette but not the light one.
+
+Light is an overlay: a missing name does not fail, it silently keeps the dark value.`, tok)
+		}
+	}
+	for tok := range light {
+		if _, ok := dark[tok]; !ok {
+			t.Errorf("%s is overridden for light but never defined in the dark palette", tok)
+		}
+	}
+}
+
+func paletteIn(t *testing.T, css string, block *regexp.Regexp) map[string]string {
+	t.Helper()
+	m := block.FindStringSubmatch(css)
+	if m == nil {
+		t.Fatalf("cannot find the %s palette block in input.css", block)
+	}
+	out := map[string]string{}
+	for _, tok := range themeTokenValue.FindAllStringSubmatch(m[1], -1) {
+		out[tok[1]] = strings.ToLower(strings.TrimSpace(tok[2]))
+	}
+	return out
 }

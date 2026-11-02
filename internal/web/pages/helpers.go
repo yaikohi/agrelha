@@ -136,18 +136,18 @@ func HistoryLabel(kind string) string {
 func HistoryBadge(source, kind string) string {
 	switch kind {
 	case "crash":
-		return "bg-red-900/60 text-red-200"
+		return "text-danger"
 	case "join", "mc-instance-start":
-		return "bg-emerald-900/50 text-emerald-200"
+		return "text-accent"
 	case "leave":
-		return "bg-zinc-800 text-zinc-300"
+		return "text-ink-faint"
 	case "stop", "mod-remove", "admin-revoke", "mc-instance-stop", "mc-instance-delete":
-		return "bg-amber-900/50 text-amber-200"
+		return "text-accent-muted"
 	default:
 		if source == "action" {
-			return "bg-sky-900/50 text-sky-200"
+			return "text-ink-muted"
 		}
-		return "bg-zinc-800 text-zinc-300"
+		return "text-ink-faint"
 	}
 }
 
@@ -455,11 +455,11 @@ func ServersOnlineLabel(online int) string {
 }
 
 func extrasStyle(accent string) string {
-	return "border-zinc-800/80 bg-zinc-900/40"
+	return "border-seam bg-surface-raised/40"
 }
 
 func extrasLabelStyle(accent string) string {
-	return "text-zinc-400"
+	return "text-ink-faint"
 }
 
 // GameCardUI is one game's card. Both cards render through the same component,
@@ -493,7 +493,7 @@ func (g GameCardUI) OnlineCount() int {
 }
 
 func iconStyle(accent string) string {
-	return "bg-zinc-800/60 text-zinc-300 ring-1 ring-zinc-700/60"
+	return "bg-surface-raised/60 text-ink-muted ring-1 ring-edge/60"
 }
 
 // Primary is the instance the card footer acts on.
@@ -736,15 +736,15 @@ func toastActionClick(script string) string {
 func actionStyle(kind string) string {
 	switch kind {
 	case "danger":
-		return "border border-amber-800/50 bg-amber-950/20 text-amber-200 hover:bg-amber-900/40"
+		return "border border-danger/50 bg-danger/10 text-danger hover:bg-danger/20"
 	case "go":
-		return "bg-emerald-800/80 text-emerald-100 hover:bg-emerald-700"
+		return "bg-accent text-accent-ink hover:bg-accent-muted"
 	case "special":
-		return "border border-dashed border-sky-800/60 bg-sky-950/20 text-sky-300 hover:bg-sky-900/30"
+		return "border border-dashed border-edge bg-surface/40 text-ink-muted hover:border-accent hover:text-accent"
 	case "link":
-		return "border border-zinc-800 bg-zinc-800/50 text-zinc-300 hover:bg-zinc-700"
+		return "border border-edge bg-surface-raised/50 text-ink-muted hover:border-accent hover:text-accent"
 	default:
-		return "bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white"
+		return "border border-edge bg-surface-raised text-ink hover:border-accent hover:text-accent"
 	}
 }
 

@@ -13,7 +13,7 @@ func TestLayoutReloadsOnRestoredPage(t *testing.T) {
 	}
 	got := sb.String()
 
-	if !strings.Contains(got, "pageshow") || !strings.Contains(got, "e.persisted") {
+	if !strings.Contains(got, "pageshow") || !strings.Contains(got, ".persisted") {
 		t.Error("every page must refetch when the browser restores it from the back-forward cache; Firefox restores Cache-Control: no-store pages, so a signed-out user would keep seeing the signed-in page")
 	}
 	if !strings.Contains(got, "window.location.reload()") {

@@ -79,8 +79,29 @@ func TestHistoryLabelAndBadge(t *testing.T) {
 			t.Errorf("expected non-empty badge for %s", k)
 		}
 	}
-	if b := HistoryBadge("other", "unknown"); !strings.Contains(b, "zinc") {
-		t.Errorf("expected default badge for unknown, got: %s", b)
+	for _, tc := range []struct{ source, kind, want string }{
+		{"other", "unknown", "text-ink-faint"},
+		{"action", "unknown", "text-ink-muted"},
+		{"any", "crash", "text-danger"},
+		{"any", "join", "text-accent"},
+		{"any", "mc-instance-stop", "text-accent-muted"},
+	} {
+		if b := HistoryBadge(tc.source, tc.kind); b != tc.want {
+			t.Errorf("HistoryBadge(%q, %q) = %q, want %q", tc.source, tc.kind, b, tc.want)
+		}
+	}
+
+	for _, tc := range []struct{ source, kind string }{
+		{"other", "unknown"}, {"action", "unknown"}, {"any", "crash"},
+		{"any", "join"}, {"any", "mc-instance-stop"},
+	} {
+		if b := HistoryBadge(tc.source, tc.kind); strings.Contains(b, "bg-") {
+			t.Errorf(`HistoryBadge(%q, %q) = %q, which fills the badge.
+
+The design carries event status as text colour on an unfilled chip — Screens / Admin — History has
+ten tags and not one has a bound fill. Coloured pills were the old Tailwind-palette style and they
+turned into muddy blocks the moment the light palette existed.`, tc.source, tc.kind, b)
+		}
 	}
 }
 
@@ -435,5 +456,3 @@ func TestToastActionClick(t *testing.T) {
 		}
 	}
 }
-
-

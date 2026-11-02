@@ -46,9 +46,9 @@ func (h *Handler) MCRconCommand(c *fiber.Ctx) error {
 	escapedCmd := html.EscapeString(cmd)
 	escapedResp := html.EscapeString(resp)
 	fragment := fmt.Sprintf(`
-		<div class="border-t border-zinc-800/40 pt-1 mt-1">
-			<span class="text-emerald-400 font-semibold">&gt; %s</span>
-			<pre class="text-zinc-300 font-mono whitespace-pre-wrap mt-0.5">%s</pre>
+		<div class="border-t border-edge/40 pt-1 mt-1">
+			<span class="font-pixel font-semibold text-accent">&gt; %s</span>
+			<pre class="font-pixel whitespace-pre-wrap mt-0.5 text-ink-muted">%s</pre>
 		</div>
 	`, escapedCmd, escapedResp)
 
@@ -69,7 +69,7 @@ func (h *Handler) MCLogsStream(c *fiber.Ctx) error {
 		c.Set("Cache-Control", "no-cache")
 		var buf bytes.Buffer
 		w := bufio.NewWriter(&buf)
-		_ = sse.AppendElement(w, "#console-logs", "<p class=\"text-zinc-500\">Logs unavailable</p>")
+		_ = sse.AppendElement(w, "#console-logs", "<p class=\"text-ink-faint\">Logs unavailable</p>")
 		return c.Send(buf.Bytes())
 	}
 
@@ -84,7 +84,7 @@ func (h *Handler) MCLogsStream(c *fiber.Ctx) error {
 		c.Set("Cache-Control", "no-cache")
 		var buf bytes.Buffer
 		w := bufio.NewWriter(&buf)
-		_ = sse.AppendElement(w, "#console-logs", fmt.Sprintf("<p class=\"text-red-400\">Log stream error: %s</p>", html.EscapeString(err.Error())))
+		_ = sse.AppendElement(w, "#console-logs", fmt.Sprintf("<p class=\"rounded-control bg-surface px-2 py-1 text-danger\">Log stream error: %s</p>", html.EscapeString(err.Error())))
 		return c.Send(buf.Bytes())
 	}
 
@@ -98,7 +98,7 @@ func (h *Handler) MCLogsStream(c *fiber.Ctx) error {
 		scanner := bufio.NewScanner(stream)
 		for scanner.Scan() {
 			line := html.EscapeString(scanner.Text())
-			frag := fmt.Sprintf("<div class=\"text-zinc-300\">%s</div>", line)
+			frag := fmt.Sprintf("<div class=\"text-ink-muted\">%s</div>", line)
 			_ = sse.AppendElement(w, "#console-logs", frag)
 		}
 	})

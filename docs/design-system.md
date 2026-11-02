@@ -19,25 +19,42 @@ template and fails the build on a Tailwind default-palette class or a raw hex.
 
 ## Tokens
 
-| Token | Value | Role |
-|---|---|---|
-| `--font-display` | Fraunces | World names, prose, headings. Warm and slightly wonky |
-| `--font-pixel` | Departure Mono | Addresses, counts, labels — anything a machine produced |
-| `--color-surface` | `#1e1713` | The page ground |
-| `--color-surface-raised` | `#2a211b` | Anything sitting above the ground: inputs, wells, menus |
-| `--color-seam` | `#120e0b` | The line between two ports; recessed areas |
-| `--color-edge` | `#42352c` | A visible border on a raised element; an unlit lamp |
-| `--color-ink` | `#ede3d4` | Primary text |
-| `--color-ink-muted` | `#c2b1a0` | Captions, secondary lines, quiet links |
-| `--color-ink-faint` | `#9c8b7c` | Present but incidental: version tags, colophon |
-| `--color-accent` | `#f4df75` | The ember. Live state, hover, focus, the primary action |
-| `--color-accent-muted` | `#efb268` | A banked ember: reachable but nobody there |
-| `--color-accent-ink` | `#17110e` | Text printed on an accent fill |
-| `--color-danger` | `#d9594c` | Destructive actions only — never a status |
-| `--color-tint-sky` | `#7fa6b8` | Game identity, carried from the profile's accent |
-| `--color-tint-moss` | `#8fa860` | Game identity |
-| `--color-tint-flame` | `#d9733a` | Game identity |
-| `--radius-control` | `2px` | Buttons and inputs. Nothing else is rounded |
+Dark is the default. Light is applied by `data-theme="light"` on `<html>` and
+overrides colours only — type and shape are the same in both. A `—` in the Light
+column means the token is theme-invariant and has no override.
+
+Every colour name in the dark palette must also exist in the light one. A name
+missing from light does not fail: it silently keeps the dark value, which is why
+`TestDocumentedTokenValuesMatchTheStylesheet` asserts the pairing both ways.
+
+| Token | Dark | Light | Role |
+|---|---|---|---|
+| `--font-display` | Fraunces | — | World names, prose, headings. Warm and slightly wonky |
+| `--font-pixel` | Departure Mono | — | Addresses, counts, labels — anything a machine produced |
+| `--color-surface` | `#1e1713` | `#faf6ec` | The page ground |
+| `--color-surface-raised` | `#2a211b` | `#ffffff` | Anything sitting above the ground: inputs, wells, menus |
+| `--color-seam` | `#120e0b` | `#eae1d3` | The line between two ports; recessed areas |
+| `--color-edge` | `#42352c` | `#a48b67` | A visible border on a raised element |
+| `--color-ink` | `#ede3d4` | `#352a22` | Primary text |
+| `--color-ink-muted` | `#c2b1a0` | `#53453a` | Captions, secondary lines, quiet links |
+| `--color-ink-faint` | `#9c8b7c` | `#726253` | Present but incidental: version tags, colophon |
+| `--color-accent` | `#f4df75` | `#734c09` | The ember. Live state, hover, focus, the primary action |
+| `--color-accent-muted` | `#efb268` | `#9b5b11` | A banked ember: reachable but nobody there |
+| `--color-accent-ink` | `#17110e` | `#fdf6df` | Text printed on an accent fill |
+| `--color-danger` | `#d9594c` | `#cd392b` | Destructive actions only — never a status |
+| `--color-tint-sky` | `#7fa6b8` | `#345b6b` | Game identity, carried from the profile's accent |
+| `--color-tint-moss` | `#8fa860` | `#4e5c32` | Game identity |
+| `--color-tint-flame` | `#d9733a` | `#a14c22` | Game identity |
+| `--color-lamp-lit` | `#f4df75` | `#6f3b9c` | A port with people on it |
+| `--color-lamp-dim` | `#efb268` | `#9871bb` | Up, reachable, empty |
+| `--color-lamp-out` | `#42352c` | `#cab89c` | Stopped. Deliberately faint — "off" should read as absent |
+| `--radius-control` | `2px` | — | Buttons and inputs. Nothing else is rounded |
+
+The lamp carries its own three hues rather than borrowing `--color-accent`. In
+dark they happen to hold the same hexes as accent, accent-muted and edge; in
+light they diverge completely (purple against brown). Anything reading only the
+dark column would conclude the lamp *is* the accent, which is why they are
+separate tokens.
 
 ## Components defined in CSS
 

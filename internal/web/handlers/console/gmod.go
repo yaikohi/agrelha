@@ -18,7 +18,7 @@ const gmodLogTail = 1000
 
 func (h *Handler) GModLogsStream(c *fiber.Ctx) error {
 	if h.cfg.GModInstances == nil {
-		return sseMessage(c, "<p class=\"text-zinc-500\">Logs unavailable</p>")
+		return sseMessage(c, "<p class=\"text-ink-faint\">Logs unavailable</p>")
 	}
 
 	instanceNumber, err := strconv.Atoi(c.Params("num"))
@@ -28,7 +28,7 @@ func (h *Handler) GModLogsStream(c *fiber.Ctx) error {
 
 	stream, err := h.gmodStream(instanceNumber)
 	if err != nil {
-		return sseMessage(c, fmt.Sprintf("<p class=\"text-red-400\">Log stream error: %s</p>", html.EscapeString(err.Error())))
+		return sseMessage(c, fmt.Sprintf("<p class=\"rounded-control bg-surface px-2 py-1 text-danger\">Log stream error: %s</p>", html.EscapeString(err.Error())))
 	}
 
 	c.Set("Content-Type", "text/event-stream")
@@ -42,7 +42,7 @@ func (h *Handler) GModLogsStream(c *fiber.Ctx) error {
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for scanner.Scan() {
 			line := html.EscapeString(scanner.Text())
-			_ = sse.AppendElement(w, "#console-logs", fmt.Sprintf("<div class=\"text-zinc-300\">%s</div>", line))
+			_ = sse.AppendElement(w, "#console-logs", fmt.Sprintf("<div class=\"text-ink-muted\">%s</div>", line))
 		}
 	})
 

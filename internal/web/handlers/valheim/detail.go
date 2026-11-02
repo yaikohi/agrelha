@@ -466,9 +466,9 @@ func (h *Handler) ValheimModDetail(c *fiber.Ctx) error {
 	var depsHTML string
 	if len(deps) > 0 {
 		var dsb strings.Builder
-		dsb.WriteString(`<div class="space-y-2"><h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Required Dependencies</h4><div class="flex flex-wrap gap-2">`)
+		dsb.WriteString(`<div class="space-y-2"><h4 class="text-xs font-semibold uppercase tracking-wider text-ink-faint">Required Dependencies</h4><div class="flex flex-wrap gap-2">`)
 		for _, dep := range deps {
-			dsb.WriteString(fmt.Sprintf(`<span class="rounded-lg bg-zinc-800 border border-zinc-700 px-2.5 py-1 font-mono text-xs text-zinc-300">%s</span>`, html.EscapeString(dep)))
+			dsb.WriteString(fmt.Sprintf(`<span class="rounded-lg bg-surface-raised border border-edge px-2.5 py-1 font-mono text-xs text-ink-muted">%s</span>`, html.EscapeString(dep)))
 		}
 		dsb.WriteString(`</div></div>`)
 		depsHTML = dsb.String()
@@ -476,16 +476,16 @@ func (h *Handler) ValheimModDetail(c *fiber.Ctx) error {
 
 	var actionBtn string
 	if isInstalled {
-		actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/remove?slug=%s', {payload: {slug: '%s'}}); $showModDetail = false" class="rounded-lg bg-red-950/60 border border-red-800/60 px-4 py-2 text-xs font-medium text-red-300 hover:bg-red-900/60 transition">Remove Mod</button>`, instanceNumber, jsSlug, jsSlug)
+		actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/remove?slug=%s', {payload: {slug: '%s'}}); $showModDetail = false" class="rounded-lg bg-danger/10 border border-danger/60 px-4 py-2 text-xs font-medium text-danger hover:bg-danger/20 transition">Remove Mod</button>`, instanceNumber, jsSlug, jsSlug)
 	} else {
-		actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/install?slug=%s', {payload: {slug: '%s'}}); $showModDetail = false" class="rounded-lg bg-zinc-100 px-5 py-2 text-xs font-semibold text-zinc-950 hover:bg-white transition shadow-sm">+ Install Mod</button>`, instanceNumber, jsSlug, jsSlug)
+		actionBtn = fmt.Sprintf(`<button type="button" data-on:click="@post('/api/valheim/%d/mods/install?slug=%s', {payload: {slug: '%s'}}); $showModDetail = false" class="rounded-lg bg-accent px-5 py-2 text-xs font-semibold text-accent-ink hover:bg-accent-muted transition shadow-sm">+ Install Mod</button>`, instanceNumber, jsSlug, jsSlug)
 	}
 
 	var readmeContent string
 	if readmeHTML != "" {
-		readmeContent = fmt.Sprintf(`<div class="prose prose-invert prose-sm max-w-none text-zinc-300 leading-relaxed overflow-x-auto">%s</div>`, readmeHTML)
+		readmeContent = fmt.Sprintf(`<div class="md leading-relaxed overflow-x-auto">%s</div>`, readmeHTML)
 	} else {
-		readmeContent = `<p class="text-xs text-zinc-500 py-6 text-center">No README available for this mod package.</p>`
+		readmeContent = `<p class="text-xs text-ink-faint py-6 text-center">No README available for this mod package.</p>`
 	}
 
 	drawerContent := fmt.Sprintf(`
@@ -493,25 +493,25 @@ func (h *Handler) ValheimModDetail(c *fiber.Ctx) error {
 			<!-- Header -->
 			<div class="flex items-start justify-between gap-4">
 				<div class="flex items-start gap-4 min-w-0 flex-1">
-					<img src="%s" alt="" class="h-14 w-14 rounded-xl bg-zinc-800 object-cover shadow-md shrink-0 mt-0.5" onerror="this.style.display='none'"/>
+					<img src="%s" alt="" class="h-14 w-14 rounded-xl bg-surface-raised object-cover shadow-md shrink-0 mt-0.5" onerror="this.style.display='none'"/>
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2 flex-wrap">
-							<h3 class="text-lg font-bold text-zinc-100">%s</h3>
-							<span class="font-mono text-xs text-zinc-400 bg-zinc-800 border border-zinc-700 rounded px-2 py-0.5">%s</span>
-							<span class="font-mono text-xs text-zinc-500">v%s</span>
+							<h3 class="text-lg font-bold text-ink">%s</h3>
+							<span class="font-mono text-xs text-ink-faint bg-surface-raised border border-edge rounded px-2 py-0.5">%s</span>
+							<span class="font-mono text-xs text-ink-faint">v%s</span>
 						</div>
-						<div class="mt-1 flex items-center gap-3 text-xs text-zinc-400">
+						<div class="mt-1 flex items-center gap-3 text-xs text-ink-faint">
 							<span>%s downloads</span>
-							<a href="%s" target="_blank" rel="noopener noreferrer" class="text-zinc-400 hover:text-zinc-200 underline">Thunderstore ↗</a>
+							<a href="%s" target="_blank" rel="noopener noreferrer" class="text-ink-faint hover:text-ink underline">Thunderstore ↗</a>
 						</div>
-						<p class="mt-2 text-xs text-zinc-300 leading-relaxed">%s</p>
+						<p class="mt-2 text-xs text-ink-muted leading-relaxed">%s</p>
 					</div>
 				</div>
-				<button type="button" data-on:click="$showModDetail = false" class="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 text-lg">✕</button>
+				<button type="button" data-on:click="$showModDetail = false" class="rounded-lg p-2 text-ink-faint hover:bg-surface-raised hover:text-ink text-lg">✕</button>
 			</div>
 
 			<!-- Actions Bar -->
-			<div class="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+			<div class="flex items-center justify-between rounded-xl border border-edge bg-surface p-4">
 				<div>
 					%s
 				</div>
@@ -523,8 +523,8 @@ func (h *Handler) ValheimModDetail(c *fiber.Ctx) error {
 
 			<!-- README Content -->
 			<div class="space-y-2">
-				<h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Documentation</h4>
-				<div class="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+				<h4 class="text-xs font-semibold uppercase tracking-wider text-ink-faint">Documentation</h4>
+				<div class="rounded-xl border border-edge bg-surface p-5">
 					%s
 				</div>
 			</div>
@@ -588,9 +588,9 @@ func prettyDeps(raw []string) []string {
 
 func statusBadge(installed bool) string {
 	if installed {
-		return `<span class="inline-flex items-center gap-1.5 rounded-md bg-emerald-950/70 border border-emerald-800/60 px-2.5 py-1 text-xs font-medium text-emerald-300">✓ Installed in this world</span>`
+		return `<span class="inline-flex items-center gap-1.5 rounded-md bg-accent/10 border border-accent/60 px-2.5 py-1 text-xs font-medium text-accent">✓ Installed in this world</span>`
 	}
-	return `<span class="text-xs text-zinc-400">Available to install</span>`
+	return `<span class="text-xs text-ink-faint">Available to install</span>`
 }
 
 func ssePatchElements(c *fiber.Ctx, selector, content string) error {

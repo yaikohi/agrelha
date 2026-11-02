@@ -24,7 +24,7 @@ templ ModDetail(ns, name string, e domain.ModSearchResult, version string, deps 
 					<a href={ templ.SafeURL(tsURL) } target="_blank" rel="noopener" class="text-accent hover:underline">View on Thunderstore ↗</a>
 				</div>
 				if e.IsDeprecated {
-					<p class="mt-2 rounded text-danger px-3 py-2 text-sm text-danger">⚠ This package is marked deprecated on Thunderstore.</p>
+					<p class="mt-2 rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">⚠ This package is marked deprecated on Thunderstore.</p>
 				}
 			</div>
 		</div>

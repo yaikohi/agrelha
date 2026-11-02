@@ -29,7 +29,10 @@ templ panelMasthead(signedIn bool) {
 	} else {
 		<header class="flex flex-wrap items-baseline justify-between gap-4">
 			<h1 class="font-display text-3xl font-semibold tracking-tight text-ink">agrelha</h1>
-			<a href="/auth/login" class="focus-accent font-pixel text-xs text-ink-muted transition-colors hover:text-accent">Sign in</a>
+			<div class="flex items-center gap-5 font-pixel text-xs">
+				@components.ThemeToggle()
+				<a href="/auth/login" class="focus-accent text-ink-muted transition-colors hover:text-accent">Sign in</a>
+			</div>
 			<p class="w-full max-w-prose font-display text-base leading-relaxed text-ink-muted">
 				These servers run on a machine at home. Copy an address, paste it into the game.
 			</p>
