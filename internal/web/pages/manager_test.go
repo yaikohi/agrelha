@@ -276,3 +276,63 @@ func TestManagerActionButtonsCarryInFlightIndicator(t *testing.T) {
 	}
 }
 
+
+func TestAVanillaWorldHidesTheModsLinkOnItsCard(t *testing.T) {
+	eachManager(t, func(t *testing.T, build func([]InstanceUI, BudgetUI) ManagerUI) {
+		inst := valheimInstance()
+		inst.Source = "vanilla"
+
+		if got := labelsOf(build([]InstanceUI{inst}, BudgetUI{}).Ports[0].Links); has(got, "Mods") {
+			t.Errorf(`a vanilla world's card offered %v.
+
+A vanilla world runs no Loader and its mod set can never change, so Mods is a dead end.
+Gaining mods is a new Instance (Duplicate), not an edit.`, got)
+		}
+	})
+}
+
+func TestAModdedWorldKeepsTheModsLinkOnItsCard(t *testing.T) {
+	for _, game := range []string{"valheim", "minecraft"} {
+		t.Run(game, func(t *testing.T) {
+			inst := valheimInstance()
+			inst.Source = "modlist"
+
+			if got := labelsOf(managers[game]([]InstanceUI{inst}, BudgetUI{}).Ports[0].Links); !has(got, "Mods") {
+				t.Errorf("a modded world lost its Mods link; got %v", got)
+			}
+		})
+	}
+}
+
+func TestAnInstanceWithNoRecordedSourceKeepsItsModsLink(t *testing.T) {
+	for _, game := range []string{"valheim", "minecraft"} {
+		t.Run(game, func(t *testing.T) {
+			inst := valheimInstance()
+			inst.Source = ""
+
+			if got := labelsOf(managers[game]([]InstanceUI{inst}, BudgetUI{}).Ports[0].Links); !has(got, "Mods") {
+				t.Errorf(`a world with no recorded Source lost its Mods link; got %v.
+
+Only an explicit "vanilla" Source hides Mods. Rows predating the field must keep
+what they already had rather than silently lose a tab.`, got)
+			}
+		})
+	}
+}
+
+func TestAVanillaWorldSendsAViewerToOverviewNotMods(t *testing.T) {
+	eachManager(t, func(t *testing.T, build func([]InstanceUI, BudgetUI) ManagerUI) {
+		inst := valheimInstance()
+		inst.CanOperate = false
+		inst.IsAdmin = false
+		inst.Source = "vanilla"
+
+		got := labelsOf(build([]InstanceUI{inst}, BudgetUI{}).Ports[0].Links)
+		if len(got) != 1 || got[0] != "overview" {
+			t.Errorf(`a viewer on a vanilla world was offered %v.
+
+mods is the one link a viewer normally gets, but a vanilla world has no mod list to
+read, so that link would leave them with nowhere to go.`, got)
+		}
+	})
+}

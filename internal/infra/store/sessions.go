@@ -42,9 +42,9 @@ func (s *Store) CreateSession(ctx context.Context, sess ports.Session) error {
 		created = time.Now()
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO sessions (id, subject, email, name, roles, id_token, created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, sess.ID, sess.Subject, sess.Email, sess.Name, encodeRoles(sess.Roles), sess.IDToken, created, sess.ExpiresAt)
+		INSERT INTO sessions (id, subject, email, name, username, roles, id_token, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, sess.ID, sess.Subject, sess.Email, sess.Name, sess.Username, encodeRoles(sess.Roles), sess.IDToken, created, sess.ExpiresAt)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
@@ -56,14 +56,14 @@ func (s *Store) LoadSession(ctx context.Context, id string) (*ports.Session, err
 		return nil, nil
 	}
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, subject, email, name, roles, id_token, created_at, expires_at
+		SELECT id, subject, email, name, username, roles, id_token, created_at, expires_at
 		FROM sessions
 		WHERE id = ?
 	`, id)
 
 	var sess ports.Session
 	var roles string
-	if err := row.Scan(&sess.ID, &sess.Subject, &sess.Email, &sess.Name, &roles, &sess.IDToken, &sess.CreatedAt, &sess.ExpiresAt); err != nil {
+	if err := row.Scan(&sess.ID, &sess.Subject, &sess.Email, &sess.Name, &sess.Username, &roles, &sess.IDToken, &sess.CreatedAt, &sess.ExpiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}

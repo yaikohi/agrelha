@@ -17,7 +17,7 @@ func (h *Handler) label(subject string, accounts map[string]string) string {
 	return subject
 }
 
-func toRequestUI(r domain.InstanceRequest, label string) pages.RequestUI {
+func toRequestUI(r domain.InstanceRequest, label string, decidedBy string) pages.RequestUI {
 	mods := 0
 	if s := strings.TrimSpace(r.Mods.Primary); s != "" {
 		mods = len(strings.Fields(s))
@@ -32,7 +32,7 @@ func toRequestUI(r domain.InstanceRequest, label string) pages.RequestUI {
 		Created:   r.CreatedAt.Format(timeFmt),
 		Status:    string(r.Status),
 		Note:      r.Note,
-		DecidedBy: r.DecidedBy,
+		DecidedBy: decidedBy,
 		Number:    r.Number,
 	}
 	if !r.DecidedAt.IsZero() {
@@ -66,7 +66,7 @@ func (h *Handler) RequestsPage(c *fiber.Ctx) error {
 
 	var pending, decided []pages.RequestUI
 	for _, r := range all {
-		ui := toRequestUI(r, h.label(r.Subject, labels))
+		ui := toRequestUI(r, h.label(r.Subject, labels), h.label(r.DecidedBy, labels))
 		if r.Pending() {
 			pending = append(pending, ui)
 			continue

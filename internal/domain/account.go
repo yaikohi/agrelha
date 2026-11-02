@@ -48,10 +48,11 @@ func ParseInstanceRole(r Role) (GameID, int, bool) {
 func IsAgrelhaRole(r Role) bool { return strings.HasPrefix(string(r), rolePrefix) }
 
 type Identity struct {
-	Subject string
-	Email   string
-	Name    string
-	Roles   []Role
+	Subject  string
+	Email    string
+	Name     string
+	Username string
+	Roles    []Role
 }
 
 func (i Identity) HasRole(want Role) bool {
@@ -76,16 +77,19 @@ type Account struct {
 	Subject   string
 	Email     string
 	Name      string
+	Username  string
 	FirstSeen time.Time
 	LastSeen  time.Time
 }
 
 func (a Account) Label() string {
 	switch {
-	case a.Email != "":
-		return a.Email
+	case a.Username != "":
+		return a.Username
 	case a.Name != "":
 		return a.Name
+	case a.Email != "":
+		return a.Email
 	default:
 		return a.Subject
 	}

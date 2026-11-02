@@ -7,12 +7,20 @@ import (
 
 // HistoryEntry records an audit action or system event for display and inspection.
 type HistoryEntry struct {
-	At       time.Time
-	Source   string
-	Kind     string
-	Actor    string
-	Detail   string
-	Incident *Incident
+	At         time.Time
+	Source     string
+	Kind       string
+	Actor      string
+	ActorLabel string
+	Detail     string
+	Incident   *Incident
+}
+
+func (h HistoryEntry) Who() string {
+	if h.ActorLabel != "" {
+		return h.ActorLabel
+	}
+	return h.Actor
 }
 
 // Player represents a player in the Valheim roster and their connection state.

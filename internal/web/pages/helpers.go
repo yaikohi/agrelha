@@ -72,76 +72,97 @@ func Contains(ss []string, s string) bool {
 	return slices.Contains(ss, s)
 }
 
+var historyGames = map[string]string{
+	"mc":      "Minecraft",
+	"valheim": "Valheim",
+	"gmod":    "Garry's Mod",
+}
+
+var historyVerbs = map[string]string{
+	"instance-create":          "World created",
+	"instance-start":           "World started",
+	"instance-stop":            "World stopped",
+	"instance-restart":         "World restarted",
+	"instance-delete":          "World deleted",
+	"instance-resize":          "World resized",
+	"instance-role-orphaned":   "Role orphaned",
+	"instance-request-submit":  "World requested",
+	"instance-request-approve": "Request approved",
+	"instance-request-deny":    "Request denied",
+	"settings-save":            "Settings saved",
+	"config-edit":              "Config saved",
+	"config-delete":            "Config deleted",
+	"mod-install":              "Mod installed",
+	"mod-remove":               "Mod removed",
+	"mod-update":               "Mods updated",
+	"mod-revert":               "Mods reverted",
+	"modpack-switch":           "Modpack switched",
+	"version-set":              "Version changed",
+	"op-grant":                 "Op granted",
+	"op-revoke":                "Op revoked",
+	"whitelist-add":            "Whitelist added",
+	"whitelist-remove":         "Whitelist removed",
+	"whitelist-toggle":         "Whitelist toggled",
+	"admin-grant":              "Admin granted",
+	"admin-revoke":             "Admin revoked",
+	"backup":                   "Backup created",
+	"backup-daily":             "Daily backup",
+	"backup-delete":            "Backup deleted",
+	"backup-restore-inplace":   "Backup restored",
+	"backup-restore-new":       "Restored to a new world",
+	"auto-restart":             "Auto-restarted",
+	"grant":                    "Access granted",
+	"revoke":                   "Access revoked",
+	"revoke-sessions":          "Signed out everywhere",
+	"tier-save":                "Tier saved",
+	"tier-delete":              "Tier deleted",
+	"game-settings-save":       "Game settings saved",
+	"free-creations-set":       "Free creations changed",
+	"join":                     "Player joined",
+	"leave":                    "Player left",
+	"crash":                    "Crash",
+	"start":                    "Server started",
+	"stop":                     "Server stopped",
+	"restart":                  "Server restarted",
+	"update":                   "Server updated",
+}
+
+func splitHistoryKind(kind string) (game, verb string) {
+	for prefix := range historyGames {
+		if rest, ok := strings.CutPrefix(kind, prefix+"-"); ok {
+			return prefix, rest
+		}
+	}
+	return "", kind
+}
+
+func HistoryGame(kind string) string {
+	game, _ := splitHistoryKind(kind)
+	return historyGames[game]
+}
+
 func HistoryLabel(kind string) string {
-	switch kind {
-	case "restart":
-		return "Server restarted"
-	case "stop":
-		return "Server stopped"
-	case "start":
-		return "Server started"
-	case "mod-install":
-		return "Mod installed"
-	case "mod-remove":
-		return "Mod removed"
-	case "admin-grant":
-		return "Admin granted"
-	case "admin-revoke":
-		return "Admin revoked"
-	case "mc-mod-install":
-		return "Minecraft: Mod installed"
-	case "mc-mod-remove":
-		return "Minecraft: Mod removed"
-	case "mc-modpack-switch":
-		return "Minecraft: Modpack switched"
-	case "mc-version-set":
-		return "Minecraft: Version changed"
-	case "mc-op-grant":
-		return "Minecraft: Op granted"
-	case "mc-op-revoke":
-		return "Minecraft: Op revoked"
-	case "mc-whitelist-add":
-		return "Minecraft: Whitelist added"
-	case "mc-whitelist-remove":
-		return "Minecraft: Whitelist removed"
-	case "mc-instance-create":
-		return "Minecraft: Instance created"
-	case "mc-instance-start":
-		return "Minecraft: Instance started"
-	case "mc-instance-stop":
-		return "Minecraft: Instance stopped"
-	case "mc-instance-delete":
-		return "Minecraft: Instance deleted"
-	case "join":
-		return "Player joined"
-	case "leave":
-		return "Player left"
-	case "backup":
-		return "Backup"
-	case "update":
-		return "Server updated"
-	case "valheim-mod-update":
-		return "Mods updated"
-	case "valheim-mod-revert":
-		return "Mods reverted"
-	case "mc-mod-update":
-		return "Minecraft: Mods updated"
-	case "crash":
-		return "Crash"
-	default:
+	_, verb := splitHistoryKind(kind)
+	if label, ok := historyVerbs[verb]; ok {
+		return label
+	}
+	words := strings.ReplaceAll(verb, "-", " ")
+	if words == "" {
 		return kind
 	}
+	return strings.ToUpper(words[:1]) + words[1:]
 }
 
 func HistoryBadge(source, kind string) string {
-	switch kind {
-	case "crash":
+	_, verb := splitHistoryKind(kind)
+	switch verb {
+	case "crash", "instance-role-orphaned":
 		return "text-danger"
-	case "join", "mc-instance-start":
+	case "join", "instance-start", "instance-create", "grant", "op-grant", "admin-grant", "whitelist-add":
 		return "text-accent"
 	case "leave":
 		return "text-ink-faint"
-	case "stop", "mod-remove", "admin-revoke", "mc-instance-stop", "mc-instance-delete":
+	case "instance-stop", "instance-delete", "mod-remove", "revoke", "op-revoke", "admin-revoke", "whitelist-remove", "backup-delete":
 		return "text-accent-muted"
 	default:
 		if source == "action" {
@@ -198,6 +219,8 @@ type InstanceDetailUI struct {
 	// Vanilla worlds run no Loader, so they have no Mods tab: gaining mods is a
 	// new Instance, not an edit (CONTEXT.md).
 	Vanilla              bool
+	FlashKind            string // "err" or "ok"; set when a redirect needs to explain itself
+	FlashMsg             string
 	ActiveTab            string // overview, mods, configs, console, backups, settings
 	InstalledMods        []string
 	ModUpdates           []ModUpdate
@@ -1007,6 +1030,11 @@ func IncidentView(in *domain.Incident) *IncidentUI {
 		LogTail:      in.LogTail,
 	}
 }
+
+// IsVanilla reports whether the World runs without a Loader, mirroring
+// domain.Instance.IsVanilla. Derived from Source rather than carried as its own
+// field so no handler building an InstanceUI can forget to set it.
+func (i InstanceUI) IsVanilla() bool { return i.Source == string(domain.SourceVanilla) }
 
 // modBadge names what a World runs. Vanilla means no Loader at all - on Valheim,
 // no BepInEx, which is the only way achievements stay earnable - so it is worth

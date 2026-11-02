@@ -40,6 +40,11 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Valheim instance not found")
 	}
 
+	if tab == "mods" && inst.IsVanilla() {
+		shared.SetFlash(c, "err", inst.VanillaImmutableErr().Error())
+		return c.Redirect(fmt.Sprintf("/valheim/%d/overview", instanceNumber), fiber.StatusSeeOther)
+	}
+
 	pass := ""
 	seed := ""
 	if inst.Valheim != nil {
@@ -70,6 +75,7 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 		ActiveTab: tab,
 	}
 	d.Vanilla = inst.IsVanilla()
+	d.FlashKind, d.FlashMsg = shared.TakeFlash(c)
 
 	if h.cfg.ServerBuild != nil {
 		if b, err := h.cfg.ServerBuild(inst.Slug, inst.Number); err == nil && b != nil {

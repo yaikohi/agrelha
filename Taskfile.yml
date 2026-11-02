@@ -1,21 +1,23 @@
 version: "3"
 
 vars:
-  CSS_IN: internal/web/assets/css/input.css
-  CSS_OUT: internal/web/assets/css/output.css
-  DATASTAR_JS: internal/web/assets/js/datastar.js
-  DATASTAR_VERSION: 1.0.2 # must match datastar-go protocol (PatchElements/PatchSignals)
+  CSS_DIR: internal/web/assets/css
+  CSS_IN: "{{.CSS_DIR}}/input.css"
+  CSS_OUT: "{{.CSS_DIR}}/output.css"
+  JS_DIR: internal/web/assets/js
+  DATASTAR_JS: "{{.JS_DIR}}/datastar.js"
+  DATASTAR_VERSION: 1.0.2
   FONT_DIR: internal/web/assets/fonts
   DEPARTURE_VERSION: 1.500
   FRAUNCES_VERSION: 5.2.6
   GO_MAIN: ./cmd/agrelha
-  GO_BINARY: main
+  GO_BINARY: ./tmp/main
+  APP_PORT: "8080"
+  PROXY_PORT: "7331"
   VERSION: dev
   IMAGE: registry.ykhi.xyz/agrelha
   TAG_PREFIX: v
   GIT_REMOTE: origin
-  # Both fall back to a placeholder inside the container image build, where
-  # .dockerignore keeps .git out of the context.
   COMMIT:
     sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
   DIRTY:
@@ -33,12 +35,12 @@ tasks:
   setup:
     desc: "Install missing mise tools (go, bun, templ, air)"
     run: once
-    cmds:
-      - mise install
-    status:
-      - mise status --missing
     sources:
       - mise.toml
+    status:
+      - mise status --missing
+    cmds:
+      - mise install
 
   # --- Build ---
   build:
@@ -48,16 +50,16 @@ tasks:
   generate:
     desc: "Generate the Go code behind the .templ files"
     deps: [setup]
+    sources:
+      - "**/*.templ"
+    generates:
+      - "**/*_templ.go"
     cmds:
       - templ generate
 
   go:build:
-    desc: "Generate templ + compile the Go binary"
+    desc: "Compile the Go binary"
     deps: [generate, tailwind:build, assets:datastar, assets:fonts]
-    # Deliberately not fingerprinted with sources/generates. The stamped version
-    # is an input that no source file records, so a fingerprint would report
-    # "up to date" and hand back a binary labelled `dev` after you asked for a
-    # release. Go's own build cache already makes the repeat build cheap.
     cmds:
       - >-
         CGO_ENABLED=0 go build -trimpath
@@ -76,69 +78,79 @@ tasks:
   tailwind:build:
     desc: "Build Tailwind CSS (v4 CLI)"
     deps: [setup, tailwind:deps]
+    sources:
+      - "{{.CSS_IN}}"
+      - "**/*.templ"
+      - "**/*.go"
+    generates:
+      - "{{.CSS_OUT}}"
     cmds:
+      - mkdir -p {{.CSS_DIR}}
       - bunx @tailwindcss/cli -i {{.CSS_IN}} -o {{.CSS_OUT}} --minify
 
   tailwind:deps:
     desc: "Install node modules with bun"
     deps: [setup]
+    sources:
+      - package.json
+    generates:
+      - bun.lock
     cmds:
       - bun install
-    sources:
-      - "package.json"
-    generates:
-      - "bun.lock"
 
   assets:datastar:
-    desc: "Vendor the pinned Datastar browser bundle (no CDN at runtime)"
-    cmds:
-      - curl -fsSL "https://cdn.jsdelivr.net/gh/starfederation/datastar@v{{.DATASTAR_VERSION}}/bundles/datastar.js" -o {{.DATASTAR_JS}}
+    desc: "Vendor pinned Datastar bundle"
     status:
-      # re-download if missing, still a placeholder, or the pinned version changed
-      - grep -q "Datastar v{{.DATASTAR_VERSION}}" {{.DATASTAR_JS}}
+      - test -s {{.DATASTAR_JS}} && grep -q "Datastar v{{.DATASTAR_VERSION}}" {{.DATASTAR_JS}}
+    cmds:
+      - mkdir -p {{.JS_DIR}}
+      - curl -fsSL "https://cdn.jsdelivr.net/gh/starfederation/datastar@v{{.DATASTAR_VERSION}}/bundles/datastar.js" -o {{.DATASTAR_JS}}
 
   assets:fonts:
-    desc: "Vendor the pinned display and pixel faces (no CDN at runtime)"
+    desc: "Vendor pinned web fonts"
+    status:
+      - test -s {{.FONT_DIR}}/DepartureMono-Regular.woff2
+      - test -s {{.FONT_DIR}}/Fraunces-Variable.woff2
     cmds:
       - mkdir -p {{.FONT_DIR}}
       - curl -fsSL "https://cdn.jsdelivr.net/gh/rektdeckard/departure-mono@v{{.DEPARTURE_VERSION}}/public/assets/DepartureMono-Regular.woff2" -o {{.FONT_DIR}}/DepartureMono-Regular.woff2
       - curl -fsSL "https://cdn.jsdelivr.net/npm/@fontsource-variable/fraunces@{{.FRAUNCES_VERSION}}/files/fraunces-latin-wght-normal.woff2" -o {{.FONT_DIR}}/Fraunces-Variable.woff2
-    status:
-      - test -s {{.FONT_DIR}}/DepartureMono-Regular.woff2
-      - test -s {{.FONT_DIR}}/Fraunces-Variable.woff2
 
+  # --- Dev Loop ---
   run:
     desc: "Run the full live-reload dev loop"
-    deps: [assets:datastar, assets:fonts, tailwind:build, generate]
+    deps: [setup, assets:datastar, assets:fonts, tailwind:deps]
     cmds:
       - task: dev
 
   dev:
-    desc: "Run Tailwind, Templ, and Air concurrently"
+    desc: "Run Tailwind, Templ, and Go server concurrently"
     deps:
       - tailwind:watch
       - templ:watch
-      - watch
+      - go:watch
 
   tailwind:watch:
-      desc: "Watch and build Tailwind CSS"
-      deps: [setup, tailwind:deps]
-      cmds:
-        - bunx @tailwindcss/cli -i {{.CSS_IN}} -o {{.CSS_OUT}} --watch --poll
+    desc: "Watch and build Tailwind CSS"
+    deps: [setup, tailwind:deps]
+    cmds:
+      # Removed --poll for lower CPU usage. Add --poll back only if developing inside a mounted VM/Docker
+      - mkdir -p {{.CSS_DIR}}
+      - bunx @tailwindcss/cli -i {{.CSS_IN}} -o {{.CSS_OUT}} --watch
 
   templ:watch:
-      desc: "Watch templ files and proxy backend for browser auto-reload"
-      deps: [setup]
-      cmds:
-        - templ generate --watch --proxy="http://localhost:8080" --proxyport="7331" --open-browser=false
-
-
-  watch:
-    desc: "Live-reload dev loop (air)"
+    desc: "Watch templ files and notify proxy"
     deps: [setup]
+    cmds:
+      - templ generate --watch --proxy="http://localhost:{{.APP_PORT}}" --proxyport="{{.PROXY_PORT}}" --open-browser=false
+
+  go:watch:
+    desc: "Live-reload Go backend via air"
+    deps: [setup, generate]
     cmds:
       - air
 
+  # --- Quality & Test ---
   vet:
     desc: "Run go vet across the module"
     deps: [setup, generate]
@@ -177,31 +189,28 @@ tasks:
       - go tool cover -html=coverage.out -o coverage.html
       - echo "HTML coverage report generated at coverage.html"
 
-  # --- Image ---
+  # --- Image & Release ---
   build:image:
     desc: "Build + push the image, then tag the release. Usage: task build:image TAG=0.28.0"
     deps: [release:check]
     cmds:
       - docker build --build-arg VERSION={{.TAG}} -t {{.IMAGE}}:{{.TAG}} .
       - docker push {{.IMAGE}}:{{.TAG}}
-      # Tag last: a tag for an image that never reached the registry points at
-      # nothing anyone can run. Pass SKIP_TAG=1 for a throwaway push.
       - task: tag
 
   release:check:
     desc: "Verify a version can be released from this tree. Usage: task release:check TAG=0.28.0"
     silent: true
-    # build:image and tag both depend on this; once per invocation is enough.
     run: once
     requires:
       vars: [TAG]
     preconditions:
       - sh: 'echo "{{.TAG}}" | grep -Eq "^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$"'
-        msg: 'TAG must be a semver version such as 0.28.0 — got "{{.TAG}}". The image tag and the git tag are the same string, so a loose one desyncs them.'
+        msg: 'TAG must be a semver version such as 0.28.0 — got "{{.TAG}}".'
       - sh: '[ -n "{{.ALLOW_DIRTY}}" ] || [ -z "$(git status --porcelain)" ]'
-        msg: "Working tree is dirty, so a tag here would describe a state no one else can check out. Commit first, or pass ALLOW_DIRTY=1 to build anyway."
+        msg: "Working tree is dirty. Commit first, or pass ALLOW_DIRTY=1."
       - sh: '! git rev-parse -q --verify "refs/tags/{{.TAG_PREFIX}}{{.TAG}}" >/dev/null || [ "$(git rev-parse "refs/tags/{{.TAG_PREFIX}}{{.TAG}}^{commit}")" = "$(git rev-parse HEAD)" ]'
-        msg: "Tag {{.TAG_PREFIX}}{{.TAG}} already exists on a different commit. Pick a new version rather than moving a tag that may already be deployed."
+        msg: "Tag {{.TAG_PREFIX}}{{.TAG}} already exists on a different commit."
     cmds:
       - 'echo "release:check: {{.TAG}} is releasable from {{.COMMIT}}"'
 
@@ -209,7 +218,6 @@ tasks:
     desc: "Create the annotated git tag for a version. Usage: task tag TAG=0.28.0"
     deps: [release:check]
     status:
-      # Already tagged at this commit: nothing to do, so a re-run is harmless.
       - '[ -n "{{.SKIP_TAG}}" ] || [ "$(git rev-parse -q --verify "refs/tags/{{.TAG_PREFIX}}{{.TAG}}^{commit}" 2>/dev/null)" = "$(git rev-parse HEAD)" ]'
     cmds:
       - git tag -a "{{.TAG_PREFIX}}{{.TAG}}" -m "agrelha {{.TAG}}"
@@ -221,7 +229,7 @@ tasks:
       vars: [TAG]
     preconditions:
       - sh: 'git rev-parse -q --verify "refs/tags/{{.TAG_PREFIX}}{{.TAG}}" >/dev/null'
-        msg: "No local tag {{.TAG_PREFIX}}{{.TAG}} to push — run `task tag TAG={{.TAG}}` first."
+        msg: "No local tag {{.TAG_PREFIX}}{{.TAG}} to push."
     prompt: "Push {{.TAG_PREFIX}}{{.TAG}} to {{.GIT_REMOTE}}? A published tag is effectively permanent."
     cmds:
       - git push {{.GIT_REMOTE}} "{{.TAG_PREFIX}}{{.TAG}}"
@@ -229,5 +237,4 @@ tasks:
   clean:
     desc: "Remove build artifacts"
     cmds:
-      - rm -f {{.GO_BINARY}} {{.CSS_OUT}} coverage.out coverage.html
-      - rm -rf node_modules bun.lock tmp
+      - rm -f {{.GO_BINARY}} {{.CSS_OUT}} coverage

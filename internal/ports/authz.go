@@ -25,6 +25,7 @@ type Session struct {
 	Subject   string
 	Email     string
 	Name      string
+	Username  string
 	Roles     []domain.Role
 	IDToken   string
 	CreatedAt time.Time

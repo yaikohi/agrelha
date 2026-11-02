@@ -3,6 +3,7 @@ package wiring_test
 import (
 	"context"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -190,4 +191,88 @@ func TestMinecraftRestoreEndpoints(t *testing.T) {
 	if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
 		t.Errorf("expected %s to be deleted from disk", backupPath)
 	}
+}
+
+func TestAVanillaWorldsModsTabRedirectsToOverview(t *testing.T) {
+	app, st, mgr, _, _ := setupTestMCServer(t)
+	defer st.Close()
+
+	if _, err := mgr.CreateInstance(context.Background(), domain.Instance{
+		Name:      "Hearthstead",
+		Source:    domain.SourceVanilla,
+		Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"},
+		Tier:      domain.TierSmall,
+	}, domain.ModList{}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/minecraft/1/mods", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusSeeOther {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf(`GET /minecraft/1/mods on a vanilla world = %d, want 303.
+
+The tab is hidden from the card, but a bookmark or typed URL must not land on a
+mods page whose install box can only ever fail. Body: %s`, resp.StatusCode, truncate(string(body)))
+	}
+	if got := resp.Header.Get("Location"); got != "/minecraft/1/overview" {
+		t.Fatalf("redirected to %q, want /minecraft/1/overview", got)
+	}
+
+	flash := ""
+	for _, ck := range resp.Cookies() {
+		if ck.Name == "agrelha_flash" {
+			flash = ck.Value
+		}
+	}
+	if flash == "" {
+		t.Fatal("the redirect set no flash, so the world bounces with no explanation")
+	}
+
+	follow := httptest.NewRequest(fiber.MethodGet, "/minecraft/1/overview", nil)
+	follow.AddCookie(&http.Cookie{Name: "agrelha_flash", Value: flash})
+	ovResp, err := app.Test(follow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ovBody, _ := io.ReadAll(ovResp.Body)
+	if !strings.Contains(string(ovBody), "is a vanilla world") {
+		t.Fatalf(`the overview did not render the flash explaining the bounce.
+
+Body: %s`, truncate(string(ovBody)))
+	}
+}
+
+func TestAModdedWorldStillServesItsModsTab(t *testing.T) {
+	app, st, mgr, _, _ := setupTestMCServer(t)
+	defer st.Close()
+
+	if _, err := mgr.CreateInstance(context.Background(), domain.Instance{
+		Name:   "Ducktopia",
+		Source: domain.SourceModlist,
+		Minecraft: &domain.MinecraftConfig{
+			Loader:    domain.LoaderNeoForge,
+			MCVersion: "1.21.1",
+		},
+		Tier: domain.TierLarge,
+	}, domain.ModList{}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/minecraft/1/mods", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("GET /minecraft/1/mods on a modded world = %d, want 200", resp.StatusCode)
+	}
+}
+
+func truncate(s string) string {
+	if len(s) > 400 {
+		return s[:400] + "..."
+	}
+	return s
 }

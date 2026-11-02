@@ -16,13 +16,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func wantsStream(c *fiber.Ctx) bool {
-	return c.Get("Datastar-Request") == "true" || strings.Contains(c.Get("Accept"), "text/event-stream")
-}
+func wantsStream(c *fiber.Ctx) bool { return shared.WantsStream(c) }
 
-func wantsJSON(c *fiber.Ctx) bool {
-	return strings.Contains(c.Get("Accept"), "application/json")
-}
+func wantsJSON(c *fiber.Ctx) bool { return shared.WantsJSON(c) }
 
 func streamRedirect(c *fiber.Ctx, target string) error {
 	c.Set("Content-Type", "text/event-stream")
@@ -89,9 +85,9 @@ func Optional(auth ports.Auth, svc *authz.Service) fiber.Handler {
 			}
 		}
 		c.Locals(shared.PrincipalKey, p)
-		actor := id.Email
+		actor := id.Subject
 		if actor == "" {
-			actor = id.Subject
+			actor = id.Email
 		}
 		c.Locals("actor", actor)
 		return c.Next()

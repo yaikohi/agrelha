@@ -189,10 +189,11 @@ func (a *Authenticator) Identify(c *fiber.Ctx) (domain.Identity, bool) {
 		subject = s.Email
 	}
 	return domain.Identity{
-		Subject: subject,
-		Email:   s.Email,
-		Name:    s.Username,
-		Roles:   []domain.Role{domain.RoleAdmin, domain.RoleUser},
+		Subject:  subject,
+		Email:    s.Email,
+		Name:     s.Username,
+		Username: s.Username,
+		Roles:    []domain.Role{domain.RoleAdmin, domain.RoleUser},
 	}, true
 }
 

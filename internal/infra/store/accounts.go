@@ -26,13 +26,14 @@ func (s *Store) UpsertAccount(ctx context.Context, a domain.Account) error {
 		first = now
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO accounts (subject, email, name, first_seen, last_seen)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO accounts (subject, email, name, username, first_seen, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(subject) DO UPDATE SET
 			email     = excluded.email,
 			name      = excluded.name,
+			username  = excluded.username,
 			last_seen = excluded.last_seen
-	`, a.Subject, a.Email, a.Name, first, now)
+	`, a.Subject, a.Email, a.Name, a.Username, first, now)
 	if err != nil {
 		return fmt.Errorf("upsert account %q: %w", a.Subject, err)
 	}
@@ -41,13 +42,13 @@ func (s *Store) UpsertAccount(ctx context.Context, a domain.Account) error {
 
 func (s *Store) GetAccount(ctx context.Context, subject string) (*domain.Account, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT subject, email, name, first_seen, last_seen
+		SELECT subject, email, name, username, first_seen, last_seen
 		FROM accounts
 		WHERE subject = ?
 	`, subject)
 
 	var a domain.Account
-	if err := row.Scan(&a.Subject, &a.Email, &a.Name, &a.FirstSeen, &a.LastSeen); err != nil {
+	if err := row.Scan(&a.Subject, &a.Email, &a.Name, &a.Username, &a.FirstSeen, &a.LastSeen); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -58,9 +59,9 @@ func (s *Store) GetAccount(ctx context.Context, subject string) (*domain.Account
 
 func (s *Store) ListAccounts(ctx context.Context) ([]domain.Account, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT subject, email, name, first_seen, last_seen
+		SELECT subject, email, name, username, first_seen, last_seen
 		FROM accounts
-		ORDER BY email ASC, subject ASC
+		ORDER BY username ASC, email ASC, subject ASC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
@@ -70,7 +71,7 @@ func (s *Store) ListAccounts(ctx context.Context) ([]domain.Account, error) {
 	var out []domain.Account
 	for rows.Next() {
 		var a domain.Account
-		if err := rows.Scan(&a.Subject, &a.Email, &a.Name, &a.FirstSeen, &a.LastSeen); err != nil {
+		if err := rows.Scan(&a.Subject, &a.Email, &a.Name, &a.Username, &a.FirstSeen, &a.LastSeen); err != nil {
 			return nil, err
 		}
 		out = append(out, a)

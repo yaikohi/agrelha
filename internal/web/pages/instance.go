@@ -68,7 +68,13 @@ func instanceTabs(game string, instanceNumber int, active string, vanilla, canOp
 		slugs = []string{"overview"}
 	}
 	if !canOperate {
-		slugs = []string{"mods"}
+		// Mods is the one tab a viewer gets, but a Vanilla World has no mod
+		// list - leaving them with no tabs at all - so show Overview instead.
+		if vanilla {
+			slugs = []string{"overview"}
+		} else {
+			slugs = []string{"mods"}
+		}
 	}
 	consoleLabel := tabLabelBySlug["console"]
 	if p, ok := domain.ProfileFor(domain.GameID(game)); ok && !p.Capabilities.Console {

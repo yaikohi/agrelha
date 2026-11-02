@@ -38,6 +38,11 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString("Instance not found")
 	}
 
+	if tab == "mods" && inst.IsVanilla() {
+		shared.SetFlash(c, "err", inst.VanillaImmutableErr().Error())
+		return c.Redirect(fmt.Sprintf("/minecraft/%d/overview", instanceNumber), fiber.StatusSeeOther)
+	}
+
 	packName := ""
 	packRef := ""
 	packProvider := ""
@@ -83,6 +88,7 @@ func (h *Handler) MCInstancePage(c *fiber.Ctx) error {
 		ActiveTab: tab,
 	}
 	d.Vanilla = inst.IsVanilla()
+	d.FlashKind, d.FlashMsg = shared.TakeFlash(c)
 	d.Pack = packName
 
 	if tab == "crashes" && h.cfg.ListIncidents != nil {

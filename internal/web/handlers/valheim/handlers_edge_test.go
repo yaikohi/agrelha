@@ -673,10 +673,14 @@ func TestValheimDetailAllEdges(t *testing.T) {
 	}
 	h.cfg.LastIncident = nil
 
-	// Vanilla instance on mods tab (skips ModUpdateState)
+	// Vanilla instance on mods tab redirects: its mod set can never change, so
+	// the page would only ever offer an install that the domain refuses.
 	respVanillaMods, _ := app.Test(httptest.NewRequest("GET", "/test/page/2/mods", nil))
-	if respVanillaMods.StatusCode != fiber.StatusOK {
-		t.Errorf("expected 200, got %d", respVanillaMods.StatusCode)
+	if respVanillaMods.StatusCode != fiber.StatusSeeOther {
+		t.Errorf("expected 303 for a vanilla world's mods tab, got %d", respVanillaMods.StatusCode)
+	}
+	if got := respVanillaMods.Header.Get("Location"); got != "/valheim/2/overview" {
+		t.Errorf("vanilla mods tab redirected to %q, want /valheim/2/overview", got)
 	}
 
 	// Configs tab

@@ -22,7 +22,7 @@ RUN mise exec -- go mod download
 # Build (templ generate + tailwind + datastar vendor + go build)
 ARG VERSION=dev
 COPY . .
-RUN mise exec -- task build VERSION=${VERSION}
+RUN mise exec -- task build VERSION=${VERSION} GO_BINARY=./main
 
 # --- Prod stage ---
 FROM alpine:3.20 AS prod

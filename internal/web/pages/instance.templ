@@ -8,6 +8,7 @@ templ instancePage(spec instanceSpec, d InstanceDetailUI) {
 		if d.HostUnreachable {
 			@HostUnreachableBanner(d.Host)
 		}
+		@flashBanner(d.FlashKind, d.FlashMsg)
 		@instanceHead(buildInstanceHead(spec, d))
 		{ children... }
 		@panelColophon()

@@ -77,11 +77,14 @@ func (s *Store) PruneEvents(before time.Time) (int64, error) {
 
 func (s *Store) listTimeline(limit int) ([]HistoryEntry, error) {
 	rows, err := s.db.Query(`
-		SELECT at, 'action' AS source, action AS kind, COALESCE(actor,'') AS actor, COALESCE(detail,'') AS detail
-		FROM audit
+		SELECT at, 'action' AS source, action AS kind, COALESCE(actor,'') AS actor, COALESCE(detail,'') AS detail,
+		       COALESCE(NULLIF(acc.username,''), NULLIF(acc.name,''), NULLIF(acc.email,''), COALESCE(audit.actor,'')) AS actor_label
+		FROM audit LEFT JOIN accounts acc ON acc.subject = audit.actor
 		UNION ALL
-		SELECT at, 'event' AS source, kind AS kind, '' AS actor, COALESCE(detail,'') AS detail
-		FROM events WHERE kind NOT IN ('restart','stop','start','mc-restart','mc-stop','mc-start')
+		SELECT at, 'event' AS source, kind AS kind, '' AS actor, COALESCE(detail,'') AS detail, '' AS actor_label
+		FROM events
+		WHERE kind NOT IN (SELECT DISTINCT action FROM audit)
+		  AND kind <> 'crash'
 		ORDER BY at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -92,7 +95,7 @@ func (s *Store) listTimeline(limit int) ([]HistoryEntry, error) {
 	for rows.Next() {
 		var h HistoryEntry
 		var at any
-		if err := rows.Scan(&at, &h.Source, &h.Kind, &h.Actor, &h.Detail); err != nil {
+		if err := rows.Scan(&at, &h.Source, &h.Kind, &h.Actor, &h.Detail, &h.ActorLabel); err != nil {
 			return nil, err
 		}
 		h.At = asTime(at)

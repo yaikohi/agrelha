@@ -113,13 +113,22 @@ func tierFact(inst InstanceUI) string {
 
 func managerLinks(spec managerSpec, inst InstanceUI) []ActionUI {
 	if !inst.CanOperate {
+		// A Vanilla World hands a player nothing to install, so point them at
+		// the World itself instead of a mod list that can never fill.
+		slug := "mods"
+		if inst.IsVanilla() {
+			slug = "overview"
+		}
 		return []ActionUI{{
-			Label: "mods",
-			Href:  fmt.Sprintf("/%s/%d/mods", spec.game, inst.Number),
+			Label: slug,
+			Href:  fmt.Sprintf("/%s/%d/%s", spec.game, inst.Number, slug),
 		}}
 	}
 	out := make([]ActionUI, 0, len(spec.links))
 	for _, l := range spec.links {
+		if l.Href == "mods" && inst.IsVanilla() {
+			continue
+		}
 		out = append(out, ActionUI{
 			Label: l.Label,
 			Href:  fmt.Sprintf("/%s/%d/%s", spec.game, inst.Number, l.Href),

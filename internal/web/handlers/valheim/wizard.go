@@ -77,7 +77,7 @@ func (h *Handler) ValheimWizardModsSearch(c *fiber.Ctx) error {
 	}
 
 	if h.cfg.TS == nil {
-		if strings.Contains(c.Get("Accept"), "application/json") {
+		if shared.WantsJSON(c) {
 			return c.JSON([]any{})
 		}
 		return ssePatchElements(c, "#wizard-valheim-mod-results", `<div class="col-span-full py-8 text-center text-xs text-danger">Thunderstore catalog unconfigured.</div>`)
@@ -85,13 +85,13 @@ func (h *Handler) ValheimWizardModsSearch(c *fiber.Ctx) error {
 
 	results, err := h.cfg.TS.Search(c.UserContext(), q, limit)
 	if err != nil {
-		if strings.Contains(c.Get("Accept"), "application/json") {
+		if shared.WantsJSON(c) {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
 		return ssePatchElements(c, "#wizard-valheim-mod-results", fmt.Sprintf(`<div class="col-span-full py-8 text-center text-xs text-danger">Search failed: %s</div>`, html.EscapeString(err.Error())))
 	}
 
-	if strings.Contains(c.Get("Accept"), "application/json") {
+	if shared.WantsJSON(c) {
 		type hit struct {
 			Name        string `json:"name"`
 			Namespace   string `json:"namespace"`

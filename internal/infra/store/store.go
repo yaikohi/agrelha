@@ -64,7 +64,7 @@ func (s *Store) migrate() error {
 	CREATE TABLE IF NOT EXISTS audit (
 		id         INTEGER PRIMARY KEY AUTOINCREMENT,
 		at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		actor      TEXT NOT NULL,          -- OIDC email
+		actor      TEXT NOT NULL,          -- OIDC subject (legacy rows hold an email)
 		action     TEXT NOT NULL,          -- restart|stop|start|mod-install|admin-grant|...
 		detail     TEXT
 	);
@@ -168,6 +168,7 @@ func (s *Store) migrate() error {
 		subject    TEXT PRIMARY KEY,
 		email      TEXT NOT NULL DEFAULT '',
 		name       TEXT NOT NULL DEFAULT '',
+		username   TEXT NOT NULL DEFAULT '',
 		first_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		last_seen  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -177,6 +178,7 @@ func (s *Store) migrate() error {
 		subject    TEXT NOT NULL,
 		email      TEXT NOT NULL DEFAULT '',
 		name       TEXT NOT NULL DEFAULT '',
+		username   TEXT NOT NULL DEFAULT '',
 		roles      TEXT NOT NULL DEFAULT '',
 		id_token   TEXT NOT NULL DEFAULT '',
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -275,6 +277,9 @@ func (s *Store) migrate() error {
 		`ALTER TABLE gmod_instances ADD COLUMN world_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE incidents ADD COLUMN world_id TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_incidents_world ON incidents(world_id, at DESC)`,
+		`ALTER TABLE accounts ADD COLUMN username TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE sessions ADD COLUMN username TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_action ON audit(action)`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") && !strings.Contains(err.Error(), "already exists") {
 			return err

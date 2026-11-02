@@ -1,6 +1,7 @@
 package oidc
 
 import (
+	"cmp"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -218,6 +219,7 @@ func (a *Authenticator) startSession(c *fiber.Ctx, id domain.Identity, rawIDToke
 		Subject:   id.Subject,
 		Email:     id.Email,
 		Name:      id.Name,
+		Username:  id.Username,
 		Roles:     id.Roles,
 		IDToken:   rawIDToken,
 		CreatedAt: now,
@@ -245,10 +247,11 @@ func (a *Authenticator) Login(c *fiber.Ctx) error {
 	returnTo := sanitizeReturnTo(c.Query("returnTo"))
 	if a.isDev {
 		id := domain.Identity{
-			Subject: "dev-admin",
-			Email:   "admin@local.dev",
-			Name:    "Dev Admin",
-			Roles:   []domain.Role{domain.RoleAdmin, domain.RoleUser},
+			Subject:  "dev-admin",
+			Email:    "admin@local.dev",
+			Name:     "Dev Admin",
+			Username: "dev-admin",
+			Roles:    []domain.Role{domain.RoleAdmin, domain.RoleUser},
 		}
 		if err := a.startSession(c, id, "dev-mock-id-token"); err != nil {
 			return err
@@ -308,20 +311,44 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	}
 
 	var claims struct {
-		Email string                     `json:"email"`
-		Name  string                     `json:"name"`
-		Roles map[string]json.RawMessage `json:"urn:zitadel:iam:org:project:roles"`
+		Email             string                     `json:"email"`
+		Name              string                     `json:"name"`
+		PreferredUsername string                     `json:"preferred_username"`
+		Roles             map[string]json.RawMessage `json:"urn:zitadel:iam:org:project:roles"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "claims parse failed")
 	}
-	if claims.Email == "" {
+	if claims.Email == "" || claims.Name == "" || claims.PreferredUsername == "" {
 		if ui, err := a.provider.UserInfo(ctx, oauth2.StaticTokenSource(oauth2Token)); err == nil {
-			claims.Email = ui.Email
+			var profile struct {
+				Email             string `json:"email"`
+				Name              string `json:"name"`
+				PreferredUsername string `json:"preferred_username"`
+			}
+			if err := ui.Claims(&profile); err != nil {
+				slog.Warn("auth: cannot read userinfo claims", "err", err)
+			}
+			if claims.Email == "" {
+				claims.Email = cmp.Or(profile.Email, ui.Email)
+			}
+			if claims.Name == "" {
+				claims.Name = profile.Name
+			}
+			if claims.PreferredUsername == "" {
+				claims.PreferredUsername = profile.PreferredUsername
+			}
+		} else {
+			slog.Warn("auth: userinfo lookup failed, falling back to id_token claims only", "err", err)
 		}
 	}
 
-	id := domain.Identity{Subject: idToken.Subject, Email: claims.Email, Name: claims.Name}
+	id := domain.Identity{
+		Subject:  idToken.Subject,
+		Email:    claims.Email,
+		Name:     claims.Name,
+		Username: claims.PreferredUsername,
+	}
 	for k := range claims.Roles {
 		id.Roles = append(id.Roles, domain.Role(k))
 	}
@@ -334,7 +361,7 @@ func (a *Authenticator) Callback(c *fiber.Ctx) error {
 	if err := a.startSession(c, id, rawID); err != nil {
 		return err
 	}
-	slog.Info("auth: signed in", "email", id.Email, "roles", id.Roles)
+	slog.Info("auth: signed in", "subject", id.Subject, "username", id.Username, "name", id.Name, "roles", id.Roles)
 	return c.Redirect(returnTo, fiber.StatusFound)
 }
 
@@ -388,9 +415,10 @@ func (a *Authenticator) Identify(c *fiber.Ctx) (domain.Identity, bool) {
 		}
 	}
 	return domain.Identity{
-		Subject: s.Subject,
-		Email:   s.Email,
-		Name:    s.Name,
-		Roles:   s.Roles,
+		Subject:  s.Subject,
+		Email:    s.Email,
+		Name:     s.Name,
+		Username: s.Username,
+		Roles:    s.Roles,
 	}, true
 }

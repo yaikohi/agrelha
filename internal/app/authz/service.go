@@ -60,6 +60,7 @@ func (s *Service) RecordSignIn(ctx context.Context, id domain.Identity) error {
 		Subject:   id.Subject,
 		Email:     id.Email,
 		Name:      id.Name,
+		Username:  id.Username,
 		FirstSeen: now,
 		LastSeen:  now,
 	})
@@ -117,7 +118,7 @@ func (s *Service) Grant(ctx context.Context, subject string, game domain.GameID,
 				"role", role, "subject", subject, "err", err)
 		}
 	}
-	s.record(actor, "grant", fmt.Sprintf("%s -> %s", role, subject))
+	s.record(actor, "grant", s.grantDetail(ctx, game, number, subject))
 	return nil
 }
 
@@ -134,7 +135,7 @@ func (s *Service) Revoke(ctx context.Context, subject string, game domain.GameID
 			return fmt.Errorf("revoke %s from %s: role removed in the registry but still live in the session: %w", role, subject, err)
 		}
 	}
-	s.record(actor, "revoke", fmt.Sprintf("%s -> %s", role, subject))
+	s.record(actor, "revoke", s.grantDetail(ctx, game, number, subject))
 	return nil
 }
 
@@ -145,7 +146,7 @@ func (s *Service) RevokeSessions(ctx context.Context, subject, actor string) err
 	if err := s.sessions.DeleteSessionsFor(ctx, subject); err != nil {
 		return err
 	}
-	s.record(actor, "revoke-sessions", subject)
+	s.record(actor, "revoke-sessions", s.subjectLabel(ctx, subject))
 	return nil
 }
 
@@ -170,6 +171,21 @@ func (s *Service) PurgeExpiredSessions(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	return s.sessions.PurgeExpiredSessions(ctx, s.now())
+}
+
+func (s *Service) subjectLabel(ctx context.Context, subject string) string {
+	if s == nil || s.accounts == nil || subject == "" {
+		return subject
+	}
+	acc, err := s.accounts.GetAccount(ctx, subject)
+	if err != nil || acc == nil {
+		return subject
+	}
+	return acc.Label()
+}
+
+func (s *Service) grantDetail(ctx context.Context, game domain.GameID, number int, subject string) string {
+	return fmt.Sprintf("%s #%02d -> %s", game, number, s.subjectLabel(ctx, subject))
 }
 
 func (s *Service) record(actor, action, detail string) {

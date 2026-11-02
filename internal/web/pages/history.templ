@@ -18,7 +18,12 @@ templ History(entries []domain.HistoryEntry) {
 					<li class="px-4 py-2.5 text-sm">
 						<div class="flex items-center gap-3">
 							<span class="w-24 flex-none text-xs text-ink-faint">{ h.At.Format("Jan 2 15:04") }</span>
-							<span class={ "flex-none rounded px-2 py-0.5 text-xs " + HistoryBadge(h.Source, h.Kind) }>{ HistoryLabel(h.Kind) }</span>
+							if g := HistoryGame(h.Kind); g != "" {
+								<span class="w-20 flex-none rounded-control border border-edge px-1.5 py-0.5 text-center text-[10px] uppercase tracking-wide text-ink-faint">{ g }</span>
+							} else {
+								<span class="w-20 flex-none" aria-hidden="true"></span>
+							}
+							<span class={ "w-44 flex-none truncate rounded px-2 py-0.5 text-xs " + HistoryBadge(h.Source, h.Kind) }>{ HistoryLabel(h.Kind) }</span>
 							<span class="min-w-0 flex-1 truncate text-ink">
 								if h.Incident != nil {
 									<span class="text-ink-faint">{ IncidentWorld(h.Incident) } · </span>
@@ -36,8 +41,8 @@ templ History(entries []domain.HistoryEntry) {
 									Logs
 								</button>
 							}
-							if h.Actor != "" {
-								<span class="flex-none text-xs text-ink-faint">{ h.Actor }</span>
+							if who := h.Who(); who != "" {
+								<span class="flex-none text-xs text-ink-faint" title={ h.Actor }>{ who }</span>
 							}
 						</div>
 						if h.Incident != nil && h.Incident.LogTail != "" {
