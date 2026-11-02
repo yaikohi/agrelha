@@ -135,7 +135,11 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		d.MCRconPool = rcon.NewPool(cfg.MinecraftRconPassword, 3*time.Second)
 	}
 
-	d.StateStore, d.Reconciler, d.Git = buildDeclarativePlane(cfg, st)
+	var planeErr error
+	d.StateStore, d.Reconciler, d.Git, planeErr = buildDeclarativePlane(cfg, st)
+	if planeErr != nil {
+		return d, fmt.Errorf("build declarative plane: %w", planeErr)
+	}
 	routedRec, routeErr := routeReconciler(cfg, d.Reconciler)
 	if routeErr != nil {
 		return d, fmt.Errorf("route reconciler: %w", routeErr)
@@ -950,23 +954,41 @@ func buildThunderstore(ctx context.Context, cfg *config.Config, st *store.Store)
 	return ts
 }
 
-func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStore, ports.Reconciler, *gitops.Committer) {
+// localStateRoot decides where a Docker Host materialises Desired state.
+// LOCAL_STATE_DIR wins; failing that it sits beside DATA_DIR, so a host that
+// configured one directory tree does not silently acquire a second one
+// somewhere else. There is deliberately no fallback beyond that: a plane with
+// nowhere to write discards every declarative change and reports success for
+// it, which is indistinguishable from working until a world refuses to start.
+func localStateRoot(cfg *config.Config) (string, error) {
+	if dir := strings.TrimSpace(cfg.LocalStateDir); dir != "" {
+		return dir, nil
+	}
+	if dir := strings.TrimSpace(cfg.DataDir); dir != "" {
+		return filepath.Join(filepath.Dir(filepath.Clean(dir)), "state"), nil
+	}
+	return "", errors.New("declarative plane: set LOCAL_STATE_DIR (or DATA_DIR) when RUNTIME=docker")
+}
+
+// buildDeclarativePlane selects the StateStore and Reconciler pair for this
+// environment. A plane that cannot be built is returned as an error rather
+// than as a nil store: the caller refuses to come up at all, because a running
+// agrelha whose write path is dead still serves a UI that accepts changes.
+func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStore, ports.Reconciler, *gitops.Committer, error) {
 	if cfg.Runtime == "docker" || cfg.LocalStateDir != "" {
-		stateDir := cfg.LocalStateDir
-		if stateDir == "" {
-			stateDir = "/data/state"
+		stateDir, err := localStateRoot(cfg)
+		if err != nil {
+			return nil, nil, nil, err
 		}
 		reconciler, err := compose.New(compose.WithWorkDir(cfg.ComposeDir), compose.WithDataRoot(cfg.DataDir))
 		if err != nil {
-			slog.Warn("compose reconciler init failed", "err", err)
-			return nil, nil, nil
+			return nil, nil, nil, fmt.Errorf("compose reconciler init: %w", err)
 		}
 		localSS, err := localstate.New(stateDir, localstate.WithDB(st.DB()))
 		if err != nil {
-			slog.Warn("local state store init failed", "err", err)
-			return nil, reconciler, nil
+			return nil, nil, nil, fmt.Errorf("local state store init at %s: %w", stateDir, err)
 		}
-		return localSS, reconciler, nil
+		return localSS, reconciler, nil, nil
 	}
 
 	if cfg.GitToken != "" && cfg.GitRepoURL != "" {
@@ -976,11 +998,11 @@ func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStor
 			AuthorName: cfg.GitAuthorName, AuthorEmail: cfg.GitAuthorEmail,
 			WorkDir: cfg.GitWorkingDir,
 		}
-		return gitstate.New(committer), argocd.New(), committer
+		return gitstate.New(committer), argocd.New(), committer, nil
 	}
 
 	slog.Warn("GIT_REPO_URL/GIT_TOKEN unset: declarative plane is read-only")
-	return unconfigured.New(), argocd.New(), nil
+	return unconfigured.New(), argocd.New(), nil, nil
 }
 
 func dockerHost(cfg *config.Config) (domain.Host, bool) {

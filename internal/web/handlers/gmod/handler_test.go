@@ -13,6 +13,7 @@ import (
 
 	"agrelha/internal/app/instances"
 	"agrelha/internal/domain"
+	"agrelha/internal/infra/state/memory"
 	"agrelha/internal/ports"
 )
 
@@ -95,7 +96,7 @@ func setupTestApp(t *testing.T) (*fiber.App, *Handler) {
 	repo := &fakeInstanceRepo{items: make(map[int]domain.Instance)}
 	mgr := instances.NewInstanceManager(
 		repo,
-		nil,
+		memory.New(),
 		&mockRuntime{},
 		24, 4, 2,
 		"manifests/gmod",

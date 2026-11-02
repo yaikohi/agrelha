@@ -487,7 +487,7 @@ func TestWiring_SyncLoops_ConfigMapDataErrors(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 }
 
-func TestWiring_BuildDeclarativePlane_DefaultDockerDir(t *testing.T) {
+func TestWiring_BuildDeclarativePlane_DerivesStateDirFromDataDir(t *testing.T) {
 	tempDir := t.TempDir()
 	st, err := store.Open(filepath.Join(tempDir, "plane.db"))
 	if err != nil {
@@ -495,17 +495,41 @@ func TestWiring_BuildDeclarativePlane_DefaultDockerDir(t *testing.T) {
 	}
 	defer st.Close()
 
-	// Runtime == "docker" with empty LocalStateDir
+	// Runtime == "docker" with no LOCAL_STATE_DIR: the state root sits beside
+	// DATA_DIR rather than at some unrelated absolute path the host never
+	// granted write access to.
 	cfg := &config.Config{
-		Runtime:       "docker",
-		LocalStateDir: "",
-		ComposeDir:    filepath.Join(tempDir, "compose"),
+		Runtime:    "docker",
+		DataDir:    filepath.Join(tempDir, "data"),
+		ComposeDir: filepath.Join(tempDir, "compose"),
 	}
-	ss, rec, committer := buildDeclarativePlane(cfg, st)
-	if rec == nil || committer != nil {
-		t.Fatalf("expected compose reconciler and nil committer, got rec=%v committer=%v", rec, committer)
+	ss, rec, committer, err := buildDeclarativePlane(cfg, st)
+	if err != nil {
+		t.Fatalf("expected a usable plane, got err=%v", err)
 	}
-	_ = ss
+	if ss == nil || rec == nil || committer != nil {
+		t.Fatalf("expected state store and compose reconciler, nil committer; got ss=%v rec=%v committer=%v", ss, rec, committer)
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "state")); err != nil {
+		t.Errorf("expected state root derived beside DataDir, got %v", err)
+	}
+}
+
+func TestWiring_BuildDeclarativePlane_DockerWithoutAnyDirIsAnError(t *testing.T) {
+	tempDir := t.TempDir()
+	st, err := store.Open(filepath.Join(tempDir, "plane.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// Neither LOCAL_STATE_DIR nor DATA_DIR: there is nowhere to write Desired
+	// state, and guessing a path is what produced a plane that silently
+	// discarded every change.
+	cfg := &config.Config{Runtime: "docker"}
+	if _, _, _, err := buildDeclarativePlane(cfg, st); err == nil {
+		t.Fatalf("expected an error when RUNTIME=docker has no state or data dir")
+	}
 }
 
 func TestWiring_BuildDeclarativePlane_DockerOverridesGit(t *testing.T) {
@@ -524,7 +548,10 @@ func TestWiring_BuildDeclarativePlane_DockerOverridesGit(t *testing.T) {
 		GitToken:      "some-token",
 		GitRepoURL:    "https://codeberg.org/ykhi/yaya-ops.git",
 	}
-	ss, rec, committer := buildDeclarativePlane(cfg, st)
+	ss, rec, committer, err := buildDeclarativePlane(cfg, st)
+	if err != nil {
+		t.Fatalf("expected a usable plane, got err=%v", err)
+	}
 	if ss == nil {
 		t.Fatalf("expected non-nil StateStore")
 	}

@@ -153,11 +153,13 @@ func (h *Handler) MCInstanceSettingsSave(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
+	// mc_version is deliberately absent: changing what an Instance runs is a
+	// new Instance, offered as Duplicate. Accepting it here would reintroduce
+	// the trap through the API that the page no longer offers.
 	var req struct {
-		Name      string `json:"name" form:"name"`
-		MOTD      string `json:"motd" form:"motd"`
-		Tier      string `json:"tier" form:"tier"`
-		MCVersion string `json:"mc_version" form:"mc_version"`
+		Name string `json:"name" form:"name"`
+		MOTD string `json:"motd" form:"motd"`
+		Tier string `json:"tier" form:"tier"`
 	}
 	_ = c.BodyParser(&req)
 
@@ -173,12 +175,7 @@ func (h *Handler) MCInstanceSettingsSave(c *fiber.Ctx) error {
 	if tierStr == "" {
 		tierStr = strings.TrimSpace(c.FormValue("tier"))
 	}
-	mcVer := strings.TrimSpace(req.MCVersion)
-	if mcVer == "" {
-		mcVer = strings.TrimSpace(c.FormValue("mc_version"))
-	}
-
-	if err := h.cfg.MCInstances.UpdateSettings(c.UserContext(), instanceNumber, name, motd, tierStr, mcVer, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.MCInstances.UpdateSettings(c.UserContext(), instanceNumber, name, motd, tierStr, h.cfg.Actor(c)); err != nil {
 		return shared.SSEToast(c, "err", "Failed to update settings: "+err.Error(), nil)
 	}
 

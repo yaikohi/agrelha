@@ -25,7 +25,7 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 	defer st.Close()
 
 	mgr := NewInstanceManager(
-		store.NewInstanceRepo(st), nil, nil, 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded")
+		store.NewInstanceRepo(st), newMockStateStore(), nil, 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded")
 
 	ctx := context.Background()
 

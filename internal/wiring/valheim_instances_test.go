@@ -22,6 +22,7 @@ import (
 	"agrelha/internal/infra/kube"
 	valheimmanifests "agrelha/internal/infra/manifests/valheim"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
+	"agrelha/internal/infra/state/memory"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/wiring"
@@ -51,7 +52,7 @@ func setupTestValheimServer(t *testing.T) (*fiber.App, *store.Store, *instances.
 
 	valheimK8s := k8s.NewWithClientset(cs, "valheim", "valheim")
 	mgr := instances.NewInstanceManager(
-		store.NewValheimInstanceRepo(st), nil, k8sruntime.New(valheimK8s), 16, 4, 2,
+		store.NewValheimInstanceRepo(st), memory.New(), k8sruntime.New(valheimK8s), 16, 4, 2,
 		"manifests/valheim", "192.168.20.224",
 		valheimmanifests.New("ykhi.xyz/gameserver=true", "valheim"),
 		"valheim",

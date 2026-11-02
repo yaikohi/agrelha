@@ -187,7 +187,7 @@ func TestBudgetRejectsRAMOvercommit(t *testing.T) {
 
 	// Budget configured for 16 GiB total, allowing up to 3 running instances
 	mgr := NewInstanceManager(
-		store.NewInstanceRepo(st), nil, nil, 16, 4, 3, "manifests/mc", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
+		store.NewInstanceRepo(st), newMockStateStore(), nil, 16, 4, 3, "manifests/mc", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
 	ctx := context.Background()
 
 	// Instance 1: Large (12 GiB)
@@ -237,7 +237,7 @@ func TestMaxInstancesLimit(t *testing.T) {
 
 	// Max instances = 2
 	mgr := NewInstanceManager(
-		store.NewInstanceRepo(st), nil, nil, 24, 2, 2, "manifests/mc", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
+		store.NewInstanceRepo(st), newMockStateStore(), nil, 24, 2, 2, "manifests/mc", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
 	ctx := context.Background()
 
 	_, err = mgr.CreateInstance(ctx, domain.Instance{Name: "One", Source: domain.SourceVanilla, Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.4"}}, domain.ModList{})

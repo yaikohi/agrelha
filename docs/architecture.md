@@ -357,6 +357,7 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `infra/hostrouter` | Dispatches `ports.Runtime`, `ports.SpecRenderer` and `ports.Reconciler` to a per-Host implementation. Unknown Host is an error, never a fallback. |
 | `infra/state/git` | `ports.StateStore` over `gitops.Committer`. |
 | `infra/state/local` | `ports.StateStore` over local files and SQLite. |
+| `infra/state/memory` | `ports.StateStore` held in process, for tests and throwaway dev runs. Never deployed: nothing survives a restart. |
 | `infra/state/unconfigured` | `ports.StateStore` that reads nothing and refuses writes, for installations with no declarative plane. |
 | `infra/valheimstatus` | Reads the lloesche image's STATUS_HTTP endpoint for a world's live player count. |
 | `infra/store` | Embedded SQLite (modernc, pure Go): player roster and sessions, audit trail, event timeline, incidents, mod index cache, mod restore points, instance rows. |

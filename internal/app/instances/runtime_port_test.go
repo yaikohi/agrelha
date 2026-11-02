@@ -69,7 +69,7 @@ func TestManagerDrivesAnyRuntime(t *testing.T) {
 
 	rt := newFakeRuntime()
 	mgr := NewInstanceManager(
-		store.NewInstanceRepo(st), nil, rt, 24, 4, 2, "manifests/minecraft-modded", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
+		store.NewInstanceRepo(st), newMockStateStore(), rt, 24, 4, 2, "manifests/minecraft-modded", "", manifests.New("", "minecraft-modded"), "minecraft-modded")
 	ctx := context.Background()
 
 	inst, err := mgr.CreateInstance(ctx, domain.Instance{

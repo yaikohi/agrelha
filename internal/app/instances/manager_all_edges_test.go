@@ -618,12 +618,18 @@ func TestManagerUpdateSettingsEdges(t *testing.T) {
 	ctx := context.Background()
 	repo := newFullMockRepo()
 	events := &fullMockAuditAndEvent{}
-	mgr := &InstanceManager{repo: repo, audit: events}
+	mgr := &InstanceManager{
+		repo:             repo,
+		stateStore:       newFullMockStateStore(),
+		renderer:         &fullMockRenderer{},
+		instancesRelPath: "manifests",
+		audit:            events,
+	}
 
 	repo.Upsert(domain.Instance{
 		Number: 1,
 		Name:   "MC1",
-		Source: domain.SourceModpack, // CanSetVersion() == false
+		Source: domain.SourceModpack,
 		Minecraft: &domain.MinecraftConfig{
 			MCVersion: "1.21.1",
 			Pack:      &domain.Pack{Name: "ATM"},
@@ -637,18 +643,29 @@ func TestManagerUpdateSettingsEdges(t *testing.T) {
 	})
 
 	// UpdateSettings
-	if err := mgr.UpdateSettings(ctx, 999, "Name", "motd", "medium", "1.21.1"); err == nil {
+	if err := mgr.UpdateSettings(ctx, 999, "Name", "motd", "medium"); err == nil {
 		t.Errorf("expected error for non-existent instance")
 	}
-	if err := mgr.UpdateSettings(ctx, 1, "NewName", "motd", "medium", "1.21.4"); err == nil {
-		t.Errorf("expected error changing version on modpack-defined world")
+
+	// Saving settings must leave the Minecraft version exactly as it was: it is
+	// not a setting, and the API must refuse it the same way the page does.
+	if err := mgr.UpdateSettings(ctx, 1, "NewName", "motd", "medium"); err != nil {
+		t.Fatalf("unexpected error on UpdateSettings: %v", err)
 	}
+	after, err := repo.Get(1)
+	if err != nil {
+		t.Fatalf("read back instance 1: %v", err)
+	}
+	if after.Minecraft.MCVersion != "1.21.1" {
+		t.Errorf("settings save changed the Minecraft version to %q; it is fixed at creation and changed only by duplicating the world", after.Minecraft.MCVersion)
+	}
+
 	repo.upsertErr = fmt.Errorf("upsert fail")
-	if err := mgr.UpdateSettings(ctx, 2, "NewName", "motd", "medium", "1.21.1"); err == nil {
+	if err := mgr.UpdateSettings(ctx, 2, "NewName", "motd", "medium"); err == nil {
 		t.Errorf("expected error when repo.Upsert fails")
 	}
 	repo.upsertErr = nil
-	if err := mgr.UpdateSettings(ctx, 2, "NewName", "motd", "medium", "1.21.1", "operator"); err != nil {
+	if err := mgr.UpdateSettings(ctx, 2, "NewName", "motd", "medium", "operator"); err != nil {
 		t.Fatalf("unexpected error on UpdateSettings: %v", err)
 	}
 
@@ -1201,11 +1218,14 @@ func TestManagerBackupAndRestoreEdges(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	mgr := &InstanceManager{
-		repo:       repo,
-		jobRunner:  runner,
-		backupsDir: tmpDir,
-		audit:      events,
-		event:      events,
+		repo:             repo,
+		stateStore:       newFullMockStateStore(),
+		renderer:         &fullMockRenderer{},
+		instancesRelPath: "manifests",
+		jobRunner:        runner,
+		backupsDir:       tmpDir,
+		audit:            events,
+		event:            events,
 	}
 
 	repo.Upsert(domain.Instance{
@@ -1392,13 +1412,13 @@ func TestManagerExactEdgeCases(t *testing.T) {
 		t.Errorf("expected error on LBIP collision in CreateInstance")
 	}
 
-	// 5. UpdateSettings version update success
+	// 5. UpdateSettings leaves the Minecraft version alone
 	repo.Upsert(domain.Instance{Number: 60, Name: "MC60", Minecraft: &domain.MinecraftConfig{MCVersion: "1.21.1"}})
-	if err := mgr.UpdateSettings(ctx, 60, "MC60", "motd", "medium", "1.21.4"); err != nil {
-		t.Errorf("unexpected error on UpdateSettings version change: %v", err)
+	if err := mgr.UpdateSettings(ctx, 60, "MC60", "motd", "medium"); err != nil {
+		t.Errorf("unexpected error on UpdateSettings: %v", err)
 	}
-	if inst, _ := repo.Get(60); inst.Minecraft == nil || inst.Minecraft.MCVersion != "1.21.4" {
-		t.Errorf("expected MCVersion 1.21.4, got %v", inst.Minecraft)
+	if inst, _ := repo.Get(60); inst.Minecraft == nil || inst.Minecraft.MCVersion != "1.21.1" {
+		t.Errorf("expected MCVersion to stay at 1.21.1, got %v", inst.Minecraft)
 	}
 
 	// 6. ReplaceMods afterSyncHook predicate returning true

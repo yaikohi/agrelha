@@ -469,19 +469,23 @@ func TestWiring_Build_FallbacksAndErrors(t *testing.T) {
 		t.Errorf("expected bundle even when K8s is nil, got %v, %v", bBundle, err)
 	}
 
-	// Test local state store init failure
+	// An unwritable state dir must fail the build outright. Returning a nil
+	// store instead let a misconfigured Docker Host come up and report every
+	// declarative write as a success it never performed.
 	cfgBadLocal := &config.Config{
 		Runtime:       "docker",
 		LocalStateDir: "/dev/null/impossible/dir",
 	}
-	ss, _, _ := buildDeclarativePlane(cfgBadLocal, st)
-	if ss != nil {
-		t.Errorf("expected nil state store when LocalStateDir is unwritable")
+	if _, _, _, err := buildDeclarativePlane(cfgBadLocal, st); err == nil {
+		t.Errorf("expected an error when LocalStateDir is unwritable")
 	}
 
 	// Test unconfigured declarative plane
 	cfgUnconfigured := &config.Config{}
-	ssUnconf, recUnconf, committer := buildDeclarativePlane(cfgUnconfigured, st)
+	ssUnconf, recUnconf, committer, err := buildDeclarativePlane(cfgUnconfigured, st)
+	if err != nil {
+		t.Errorf("unconfigured plane is a valid configuration, got err=%v", err)
+	}
 	if ssUnconf == nil || recUnconf == nil || committer != nil {
 		t.Errorf("expected unconfigured state store and nil committer")
 	}

@@ -19,6 +19,12 @@ import (
 
 const defaultLBBaseIP = ""
 
+// ErrNoStateStore reports that the declarative plane has no StateStore, so
+// Desired state cannot be recorded. Every write that reaches it is refused
+// rather than discarded, because the operator asked for a change and must be
+// told it did not happen.
+var ErrNoStateStore = errors.New("declarative plane has no state store")
+
 // InstanceStat holds cached per-instance stats for players, status, and uptime.
 type InstanceStat struct {
 	Players      int
@@ -650,14 +656,14 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 	return &inst, nil
 }
 
+const (
+	configsFileName = "configs.yaml"
+	modsFileName    = "mods.yaml"
+)
+
 // writeManifests renders an Instance and commits the result to the declarative
 // plane. Callers must pass the Instance's CURRENT mods: rendering with an empty
 // ModList would rewrite mods.yaml and strip every mod from the world.
-//
-// Without a state store there is nowhere to write, so this is a no-op rather
-// than a silent partial render.
-const configsFileName = "configs.yaml"
-
 func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instance, mods domain.ModList, commitMsg string) error {
 	return m.writeManifestsConverging(ctx, inst, mods, commitMsg, true)
 }
@@ -667,22 +673,48 @@ func (m *InstanceManager) writeManifests(ctx context.Context, inst domain.Instan
 // a stopped world wants: editing its Mod list should not start it. Start is
 // level-triggered, so it picks the change up when the operator asks for it.
 func (m *InstanceManager) writeManifestsConverging(ctx context.Context, inst domain.Instance, mods domain.ModList, commitMsg string, converge bool) error {
+	return m.writeRendered(ctx, inst, mods, commitMsg, converge, configsFileName)
+}
+
+// writeSettingsManifests re-renders an Instance after an edit to its settings.
+// It preserves the authored files outright - including mods.yaml, which is
+// Desired state owned by the mods pages. A settings save has not read the mod
+// list and must not regenerate it: rendering from an empty ModList would strip
+// every mod from the world. Reading the list from the runtime instead would
+// make saving a name depend on the cluster already holding the Instance's mods
+// ConfigMap, which it does not between creation and the first sync.
+func (m *InstanceManager) writeSettingsManifests(ctx context.Context, inst domain.Instance, commitMsg string) error {
+	return m.writeRendered(ctx, inst, domain.ModList{}, commitMsg, false, configsFileName, modsFileName)
+}
+
+// writeRendered renders inst and records the result as Desired state. Files
+// named in preserve keep whatever the state store already holds, so a render
+// never overwrites a file some other page authors.
+//
+// Without a state store there is nowhere to write, so this fails rather than
+// rendering into the void. Returning nil here once let every Start on a
+// misconfigured Docker Host report success without materialising or converging
+// anything: the world was marked running and the container was never touched.
+func (m *InstanceManager) writeRendered(ctx context.Context, inst domain.Instance, mods domain.ModList, commitMsg string, converge bool, preserve ...string) error {
 	files, err := m.renderer.Render(inst, mods)
 	if err != nil {
 		return fmt.Errorf("render manifests: %w", err)
 	}
 	if m.stateStore == nil {
-		return nil
+		return fmt.Errorf("instance %d on %s: %w", inst.Number, inst.EffectiveHost(), ErrNoStateStore)
 	}
 	dirRel := m.instanceDirFor(inst)
 	docs := make(map[string]ports.Document, len(files))
 	for fname, content := range files {
 		docs[fname] = ports.Document{Raw: content}
 	}
-	if _, rendered := docs[configsFileName]; rendered {
-		existing, getErr := m.stateStore.Get(ctx, dirRel+"/"+configsFileName)
-		if getErr == nil && len(existing.Data) > 0 && len(existing.Raw) > 0 {
-			docs[configsFileName] = ports.Document{Raw: existing.Raw}
+	for _, fname := range preserve {
+		if _, rendered := docs[fname]; !rendered {
+			continue
+		}
+		existing, getErr := m.stateStore.Get(ctx, dirRel+"/"+fname)
+		if getErr == nil && len(existing.Raw) > 0 && (fname != configsFileName || len(existing.Data) > 0) {
+			docs[fname] = ports.Document{Raw: existing.Raw}
 		}
 	}
 	if err := m.stateStore.PutTree(ctx, dirRel, docs, commitMsg); err != nil {
@@ -949,7 +981,33 @@ func (m *InstanceManager) RestartInstance(ctx context.Context, instanceNumber in
 	return nil
 }
 
-func (m *InstanceManager) UpdateSettings(ctx context.Context, instanceNumber int, name, motd, tier, mcVersion string, actor ...string) error {
+// persistSettings records edited settings as Desired state and then to the
+// database. It stops short of converging: editing a stopped world must not
+// start it, and Start is level-triggered, so it picks the change up when the
+// operator asks for it. Writing the database alone is not enough - the env the
+// container reads is rendered from the manifests, so a database-only save
+// leaves the UI reporting a value the server has never seen.
+func (m *InstanceManager) persistSettings(ctx context.Context, inst domain.Instance, actor []string) error {
+	commitMsg := fmt.Sprintf("%s: update instance %02d settings", m.gamePrefix(), inst.Number)
+	if err := m.writeSettingsManifests(ctx, inst, commitMsg); err != nil {
+		return fmt.Errorf("update instance %d settings: %w", inst.Number, err)
+	}
+	if err := m.repo.Upsert(inst); err != nil {
+		return fmt.Errorf("update instance %d settings: %w", inst.Number, err)
+	}
+
+	saveAction := fmt.Sprintf("%s-settings-save", m.gamePrefix())
+	if m.audit != nil {
+		_ = m.audit.RecordAudit(actorOrHyphen(actor), saveAction, fmt.Sprintf("Updated settings for #%02d", inst.Number))
+	}
+	return nil
+}
+
+// UpdateSettings edits the things about a Minecraft Instance that are safe to
+// change under a played World. The Minecraft version is not among them:
+// changing what an Instance runs is a new Instance, so it is offered as
+// Duplicate and refused here even when the API is called directly.
+func (m *InstanceManager) UpdateSettings(ctx context.Context, instanceNumber int, name, motd, tier string, actor ...string) error {
 	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
@@ -964,27 +1022,7 @@ func (m *InstanceManager) UpdateSettings(ctx context.Context, instanceNumber int
 	inst.MOTD = motd
 	inst.Tier = domain.NormalizeTier(tier)
 
-	if mcVersion != "" {
-		if inst.Minecraft == nil {
-			inst.Minecraft = &domain.MinecraftConfig{}
-		}
-		if mcVersion != inst.Minecraft.MCVersion {
-			if !inst.CanSetVersion() {
-				return inst.PackOwnedFieldErr("Minecraft version")
-			}
-			inst.Minecraft.MCVersion = mcVersion
-		}
-	}
-
-	if err := m.repo.Upsert(*inst); err != nil {
-		return fmt.Errorf("update instance %d settings: %w", instanceNumber, err)
-	}
-
-	saveAction := fmt.Sprintf("%s-settings-save", m.gamePrefix())
-	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), saveAction, fmt.Sprintf("Updated settings for #%02d", instanceNumber))
-	}
-	return nil
+	return m.persistSettings(ctx, *inst, actor)
 }
 
 func (m *InstanceManager) UpdateValheimSettings(ctx context.Context, instanceNumber int, name, motd, tier, password string, actor ...string) error {
@@ -1008,15 +1046,7 @@ func (m *InstanceManager) UpdateValheimSettings(ctx context.Context, instanceNum
 		inst.Valheim.Password = password
 	}
 
-	if err := m.repo.Upsert(*inst); err != nil {
-		return fmt.Errorf("update instance %d settings: %w", instanceNumber, err)
-	}
-
-	saveAction := fmt.Sprintf("%s-settings-save", m.gamePrefix())
-	if m.audit != nil {
-		_ = m.audit.RecordAudit(actorOrHyphen(actor), saveAction, fmt.Sprintf("Updated settings for #%02d", instanceNumber))
-	}
-	return nil
+	return m.persistSettings(ctx, *inst, actor)
 }
 
 func (m *InstanceManager) GetInstalledMods(ctx context.Context, instanceNumber int) ([]string, error) {

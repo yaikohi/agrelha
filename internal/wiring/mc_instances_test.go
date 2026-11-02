@@ -25,6 +25,7 @@ import (
 	"agrelha/internal/infra/manifests"
 	"agrelha/internal/infra/rcon"
 	k8sruntime "agrelha/internal/infra/runtime/k8s"
+	"agrelha/internal/infra/state/memory"
 	"agrelha/internal/infra/store"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/wiring"
@@ -55,7 +56,7 @@ func setupTestMCServer(t *testing.T) (*fiber.App, *store.Store, *instances.Insta
 	)
 
 	mck8s := k8s.NewWithClientset(cs, "minecraft-modded", "minecraft-modded")
-	mgr := instances.NewInstanceManager(store.NewInstanceRepo(st), nil, k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded")
+	mgr := instances.NewInstanceManager(store.NewInstanceRepo(st), memory.New(), k8sruntime.New(mck8s), 24, 4, 2, "manifests/minecraft-modded", "192.168.20.224", manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded")
 
 	cfg := &config.Config{
 		MinecraftNamespace:  "minecraft-modded",
