@@ -64,9 +64,6 @@ func BuildPanel(games []DashboardGameUI) PanelUI {
 }
 
 func (p PanelPortUI) LampClass() string {
-	if p.Row.OnlineSignal != "" {
-		return "lamp"
-	}
 	switch {
 	case p.Row.Online && p.Row.PlayersKnown && p.Row.Players > 0:
 		return "lamp lamp-lit"
@@ -75,6 +72,22 @@ func (p PanelPortUI) LampClass() string {
 	default:
 		return "lamp lamp-out"
 	}
+}
+
+func (p PanelPortUI) SignalsInit() string {
+	if p.Row.OnlineSignal == "" {
+		return ""
+	}
+	parts := []string{
+		fmt.Sprintf("%s:%t", p.Row.OnlineSignal, p.Row.Online),
+	}
+	if p.Row.PlayersSignal != "" {
+		parts = append(parts, fmt.Sprintf("%s:%d", p.Row.PlayersSignal, p.Row.Players))
+	}
+	if p.Row.UptimeSignal != "" {
+		parts = append(parts, fmt.Sprintf("%s:'%s'", p.Row.UptimeSignal, EscapeJS(p.Row.Uptime)))
+	}
+	return "{" + strings.Join(parts, ",") + "}"
 }
 
 func (p PanelPortUI) LampSignals() string {

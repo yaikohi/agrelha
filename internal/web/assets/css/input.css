@@ -182,9 +182,16 @@
 		0 0 20px 2px color-mix(in oklab, var(--color-lamp-lit) 38%, transparent);
 }
 
+:root[data-theme="light"] .lamp,
 :root[data-theme="light"] .lamp-dim,
-:root[data-theme="light"] .lamp-lit {
-	box-shadow: inset 0 0 0 1px color-mix(in oklab, black 22%, transparent);
+:root[data-theme="light"] .lamp-lit,
+:root[data-theme="light"] .lamp-out {
+	box-shadow: none;
+}
+
+:root[data-theme="light"] .lamp-unknown {
+	background: transparent;
+	box-shadow: inset 0 0 0 1px var(--color-edge);
 }
 
 .check {

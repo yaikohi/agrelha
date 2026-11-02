@@ -68,8 +68,12 @@ func TestLampReportsPresenceNotJustReachability(t *testing.T) {
 
 func TestLampBindsToSignalsWhenTheyExist(t *testing.T) {
 	p := PanelPortUI{Row: ServerRowUI{OnlineSignal: "online", PlayersSignal: "players"}}
-	if p.LampClass() != "lamp" {
-		t.Errorf("a signal-driven lamp must not bake in a state class, got %q", p.LampClass())
+	if p.LampClass() != "lamp lamp-out" {
+		t.Errorf("expected lamp lamp-out for offline row, got %q", p.LampClass())
+	}
+	pOnline := PanelPortUI{Row: ServerRowUI{OnlineSignal: "online", PlayersSignal: "players", Online: true}}
+	if pOnline.LampClass() != "lamp lamp-dim" {
+		t.Errorf("expected lamp lamp-dim for online row without active players, got %q", pOnline.LampClass())
 	}
 	expr := p.LampSignals()
 	for _, want := range []string{"lamp-lit", "lamp-dim", "lamp-out", "$online", "$players"} {
@@ -84,6 +88,27 @@ func TestLampBindsToSignalsWhenTheyExist(t *testing.T) {
 	}
 	if (PanelPortUI{Row: ServerRowUI{}}).LampSignals() != "" {
 		t.Error("a server-rendered row must not emit a data-class expression")
+	}
+}
+
+func TestSignalsInit(t *testing.T) {
+	withAll := PanelPortUI{Row: ServerRowUI{
+		OnlineSignal:  "inst_minecraft_2_online",
+		Online:        true,
+		PlayersSignal: "inst_minecraft_2_players",
+		Players:       3,
+		UptimeSignal:  "inst_minecraft_2_uptime",
+		Uptime:        "2h",
+	}}
+	got := withAll.SignalsInit()
+	want := "{inst_minecraft_2_online:true,inst_minecraft_2_players:3,inst_minecraft_2_uptime:'2h'}"
+	if got != want {
+		t.Errorf("SignalsInit() = %q, want %q", got, want)
+	}
+
+	noSignals := PanelPortUI{Row: ServerRowUI{}}
+	if got := noSignals.SignalsInit(); got != "" {
+		t.Errorf("SignalsInit() for unsignaled row = %q, want empty string", got)
 	}
 }
 
