@@ -170,7 +170,17 @@ func WithPreStopHook(fn func(ctx context.Context, inst domain.Instance)) Option 
 }
 
 func WithPreDeleteHook(fn func(ctx context.Context, inst domain.Instance)) Option {
-	return func(m *InstanceManager) { m.preDeleteHook = fn }
+	return func(m *InstanceManager) {
+		prev := m.preDeleteHook
+		if prev == nil {
+			m.preDeleteHook = fn
+			return
+		}
+		m.preDeleteHook = func(ctx context.Context, inst domain.Instance) {
+			prev(ctx, inst)
+			fn(ctx, inst)
+		}
+	}
 }
 
 func WithInstanceRoleRegistrar(fn func(ctx context.Context, inst domain.Instance) error) Option {
@@ -582,6 +592,9 @@ func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instan
 
 	if inst.GameID == "" {
 		inst.GameID = profile.ID
+	}
+	if inst.WorldID == "" {
+		inst.WorldID = domain.NewID()
 	}
 
 	if strings.TrimSpace(inst.Name) == "" {

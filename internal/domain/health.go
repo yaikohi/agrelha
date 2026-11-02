@@ -10,6 +10,7 @@ import (
 // the operator asked for) and of Availability (whether players can connect now).
 type Incident struct {
 	ID           int64     `json:"id"`
+	WorldID      string    `json:"world_id"`
 	GameID       GameID    `json:"game_id"`
 	Number       int       `json:"number"`
 	At           time.Time `json:"at"`

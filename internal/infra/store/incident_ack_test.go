@@ -23,15 +23,16 @@ func TestDismissingAFailureStopsItDemandingAttention(t *testing.T) {
 	s := ackStore(t)
 	ctx := context.Background()
 
+	wid := domain.NewID()
 	id, err := s.RecordIncident(ctx, domain.Incident{
-		GameID: domain.GameValheim, Number: 2, At: time.Now().Add(-time.Hour),
+		WorldID: wid, GameID: domain.GameValheim, Number: 2, At: time.Now().Add(-time.Hour),
 		ExitCode: 137, OOMKilled: true, Reason: "OOMKilled",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if got, err := s.LastUnacknowledgedIncident(ctx, domain.GameValheim, 2); err != nil || got == nil {
+	if got, err := s.LastUnacknowledgedIncident(ctx, wid); err != nil || got == nil {
 		t.Fatalf("a fresh failure must surface on the Overview; got %v err %v", got, err)
 	}
 
@@ -39,7 +40,7 @@ func TestDismissingAFailureStopsItDemandingAttention(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := s.LastUnacknowledgedIncident(ctx, domain.GameValheim, 2)
+	got, err := s.LastUnacknowledgedIncident(ctx, wid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,14 +56,15 @@ func TestADismissedFailureStaysInTheHistory(t *testing.T) {
 	s := ackStore(t)
 	ctx := context.Background()
 
+	wid := domain.NewID()
 	id, _ := s.RecordIncident(ctx, domain.Incident{
-		GameID: domain.GameValheim, Number: 2, At: time.Now().Add(-time.Hour), ExitCode: 1,
+		WorldID: wid, GameID: domain.GameValheim, Number: 2, At: time.Now().Add(-time.Hour), ExitCode: 1,
 	})
 	if err := s.AcknowledgeIncident(ctx, id); err != nil {
 		t.Fatal(err)
 	}
 
-	list, err := s.ListIncidents(ctx, domain.GameValheim, 2, 20, false)
+	list, err := s.ListIncidents(ctx, wid, 20, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +79,7 @@ func TestADismissedFailureStaysInTheHistory(t *testing.T) {
 func TestDismissingIsIdempotent(t *testing.T) {
 	s := ackStore(t)
 	ctx := context.Background()
-	id, _ := s.RecordIncident(ctx, domain.Incident{GameID: domain.GameValheim, Number: 1, At: time.Now(), ExitCode: 1})
+	id, _ := s.RecordIncident(ctx, domain.Incident{WorldID: "wid-1", GameID: domain.GameValheim, Number: 1, At: time.Now(), ExitCode: 1})
 	if err := s.AcknowledgeIncident(ctx, id); err != nil {
 		t.Fatal(err)
 	}
@@ -89,13 +91,14 @@ func TestDismissingIsIdempotent(t *testing.T) {
 func TestANewFailureAfterDismissalSurfacesAgain(t *testing.T) {
 	s := ackStore(t)
 	ctx := context.Background()
-	old, _ := s.RecordIncident(ctx, domain.Incident{GameID: domain.GameValheim, Number: 1, At: time.Now().Add(-2 * time.Hour), ExitCode: 1})
+	wid := domain.NewID()
+	old, _ := s.RecordIncident(ctx, domain.Incident{WorldID: wid, GameID: domain.GameValheim, Number: 1, At: time.Now().Add(-2 * time.Hour), ExitCode: 1})
 	_ = s.AcknowledgeIncident(ctx, old)
 
-	if _, err := s.RecordIncident(ctx, domain.Incident{GameID: domain.GameValheim, Number: 1, At: time.Now(), ExitCode: 137}); err != nil {
+	if _, err := s.RecordIncident(ctx, domain.Incident{WorldID: wid, GameID: domain.GameValheim, Number: 1, At: time.Now(), ExitCode: 137}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.LastUnacknowledgedIncident(ctx, domain.GameValheim, 1)
+	got, err := s.LastUnacknowledgedIncident(ctx, wid)
 	if err != nil || got == nil {
 		t.Fatalf("a crash that happened after a dismissal must surface; got %v err %v", got, err)
 	}
@@ -109,15 +112,16 @@ func TestTheCrashLedgerSortsBothWays(t *testing.T) {
 	ctx := context.Background()
 	base := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 
+	wid := domain.NewID()
 	for i, at := range []time.Time{base, base.Add(2 * time.Hour), base.Add(4 * time.Hour)} {
 		if _, err := s.RecordIncident(ctx, domain.Incident{
-			GameID: domain.GameValheim, Number: 9, At: at, ExitCode: int32(i + 1),
+			WorldID: wid, GameID: domain.GameValheim, Number: 9, At: at, ExitCode: int32(i + 1),
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	newest, err := s.ListIncidents(ctx, domain.GameValheim, 9, 20, false)
+	newest, err := s.ListIncidents(ctx, wid, 20, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +129,7 @@ func TestTheCrashLedgerSortsBothWays(t *testing.T) {
 		t.Fatalf("default order must be newest first; got %d rows starting %v", len(newest), newest[0].At)
 	}
 
-	oldest, err := s.ListIncidents(ctx, domain.GameValheim, 9, 20, true)
+	oldest, err := s.ListIncidents(ctx, wid, 20, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,15 +142,16 @@ func TestSortingIsDoneInTheQueryNotAfterTheLimit(t *testing.T) {
 	s := ackStore(t)
 	ctx := context.Background()
 	base := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	wid := domain.NewID()
 	for i := range 5 {
 		if _, err := s.RecordIncident(ctx, domain.Incident{
-			GameID: domain.GameValheim, Number: 8, At: base.Add(time.Duration(i) * time.Hour), ExitCode: int32(i),
+			WorldID: wid, GameID: domain.GameValheim, Number: 8, At: base.Add(time.Duration(i) * time.Hour), ExitCode: int32(i),
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	oldest, err := s.ListIncidents(ctx, domain.GameValheim, 8, 2, true)
+	oldest, err := s.ListIncidents(ctx, wid, 2, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,8 +167,9 @@ func TestTheWatcherStillSeesDismissedFailuresSoItDoesNotRecordThemTwice(t *testi
 	s := ackStore(t)
 	ctx := context.Background()
 
+	wid := domain.NewID()
 	id, err := s.RecordIncident(ctx, domain.Incident{
-		GameID: domain.GameValheim, Number: 4, At: time.Now().Add(-time.Hour), ExitCode: 137, RestartCount: 2,
+		WorldID: wid, GameID: domain.GameValheim, Number: 4, At: time.Now().Add(-time.Hour), ExitCode: 137, RestartCount: 2,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +178,7 @@ func TestTheWatcherStillSeesDismissedFailuresSoItDoesNotRecordThemTwice(t *testi
 		t.Fatal(err)
 	}
 
-	last, err := s.LastIncident(ctx, domain.GameValheim, 4)
+	last, err := s.LastIncident(ctx, wid)
 	if err != nil {
 		t.Fatal(err)
 	}

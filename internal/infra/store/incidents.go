@@ -4,31 +4,38 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"time"
 
 	"agrelha/internal/domain"
 )
 
 func (s *Store) RecordIncident(ctx context.Context, in domain.Incident) (int64, error) {
+	if in.WorldID == "" {
+		slog.Warn("store: recording incident without world_id; crash is orphaned", "game", in.GameID, "number", in.Number)
+	}
 	if in.At.IsZero() {
 		in.At = time.Now()
 	}
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO incidents (game_id, number, at, restart_count, exit_code, reason, oom_killed, log_tail)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		string(in.GameID), in.Number, in.At, in.RestartCount, in.ExitCode, in.Reason, in.OOMKilled, in.LogTail)
+		`INSERT INTO incidents (world_id, game_id, number, at, restart_count, exit_code, reason, oom_killed, log_tail)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		in.WorldID, string(in.GameID), in.Number, in.At, in.RestartCount, in.ExitCode, in.Reason, in.OOMKilled, in.LogTail)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-func (s *Store) LastIncident(ctx context.Context, game domain.GameID, number int) (*domain.Incident, error) {
+func (s *Store) LastIncident(ctx context.Context, worldID string) (*domain.Incident, error) {
+	if worldID == "" {
+		return nil, nil
+	}
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,'')
-		 FROM incidents WHERE game_id = ? AND number = ?
+		`SELECT id, world_id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,'')
+		 FROM incidents WHERE world_id = ?
 		 ORDER BY at DESC, id DESC LIMIT 1`,
-		string(game), number)
+		worldID)
 
 	in, err := scanIncident(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -40,7 +47,10 @@ func (s *Store) LastIncident(ctx context.Context, game domain.GameID, number int
 	return &in, nil
 }
 
-func (s *Store) ListIncidents(ctx context.Context, game domain.GameID, number, limit int, oldestFirst bool) ([]domain.Incident, error) {
+func (s *Store) ListIncidents(ctx context.Context, worldID string, limit int, oldestFirst bool) ([]domain.Incident, error) {
+	if worldID == "" {
+		return nil, nil
+	}
 	if limit <= 0 {
 		limit = 20
 	}
@@ -49,9 +59,9 @@ func (s *Store) ListIncidents(ctx context.Context, game domain.GameID, number, l
 		order = "at ASC, id ASC"
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,''), acknowledged_at
-		 FROM incidents WHERE game_id = ? AND number = ? ORDER BY `+order+` LIMIT ?`,
-		string(game), number, limit)
+		`SELECT id, world_id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,''), acknowledged_at
+		 FROM incidents WHERE world_id = ? ORDER BY `+order+` LIMIT ?`,
+		worldID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +82,7 @@ func scanIncidentWithAck(sc scanner) (domain.Incident, error) {
 	var in domain.Incident
 	var game string
 	var ack sql.NullTime
-	err := sc.Scan(&in.ID, &game, &in.Number, &in.At, &in.RestartCount, &in.ExitCode, &in.Reason, &in.OOMKilled, &in.LogTail, &ack)
+	err := sc.Scan(&in.ID, &in.WorldID, &game, &in.Number, &in.At, &in.RestartCount, &in.ExitCode, &in.Reason, &in.OOMKilled, &in.LogTail, &ack)
 	in.GameID = domain.GameID(game)
 	in.Acknowledged = ack.Valid
 	return in, err
@@ -85,7 +95,7 @@ type scanner interface {
 func scanIncident(sc scanner) (domain.Incident, error) {
 	var in domain.Incident
 	var game string
-	err := sc.Scan(&in.ID, &game, &in.Number, &in.At, &in.RestartCount, &in.ExitCode, &in.Reason, &in.OOMKilled, &in.LogTail)
+	err := sc.Scan(&in.ID, &in.WorldID, &game, &in.Number, &in.At, &in.RestartCount, &in.ExitCode, &in.Reason, &in.OOMKilled, &in.LogTail)
 	in.GameID = domain.GameID(game)
 	return in, err
 }
@@ -96,12 +106,15 @@ func (s *Store) AcknowledgeIncident(ctx context.Context, id int64) error {
 	return err
 }
 
-func (s *Store) LastUnacknowledgedIncident(ctx context.Context, game domain.GameID, number int) (*domain.Incident, error) {
+func (s *Store) LastUnacknowledgedIncident(ctx context.Context, worldID string) (*domain.Incident, error) {
+	if worldID == "" {
+		return nil, nil
+	}
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,'')
-		 FROM incidents WHERE game_id = ? AND number = ? AND acknowledged_at IS NULL
+		`SELECT id, world_id, game_id, number, at, restart_count, exit_code, COALESCE(reason,''), oom_killed, COALESCE(log_tail,'')
+		 FROM incidents WHERE world_id = ? AND acknowledged_at IS NULL
 		 ORDER BY at DESC, id DESC LIMIT 1`,
-		string(game), number)
+		worldID)
 
 	in, err := scanIncident(row)
 	if errors.Is(err, sql.ErrNoRows) {

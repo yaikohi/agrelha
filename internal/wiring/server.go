@@ -434,8 +434,8 @@ func buildValheimHandler(cfg *config.Config, d Deps, applyValheimAfterSync func(
 
 	return valheimhttp.New(valheimhttp.Config{
 		Requests:              d.Requests,
-		LastIncident:          incidentReader(d, domain.GameValheim),
-		ListIncidents:         incidentLister(d, domain.GameValheim),
+		LastIncident:          incidentReader(d),
+		ListIncidents:         incidentLister(d),
 		DismissIncident:       incidentDismisser(d),
 		ServerBuild:           serverBuild,
 		ValheimInstances:      d.ValheimInstances,
@@ -579,8 +579,8 @@ func buildMinecraftHandler(cfg *config.Config, d Deps, applyMCAfterSync func(str
 	}
 
 	return minecrafthttp.New(minecrafthttp.Config{
-		LastIncident:            incidentReader(d, domain.GameMinecraft),
-		ListIncidents:           incidentLister(d, domain.GameMinecraft),
+		LastIncident:            incidentReader(d),
+		ListIncidents:           incidentLister(d),
 		DismissIncident:         incidentDismisser(d),
 		MCInstances:             d.MCInstances,
 		Requests:                d.Requests,
@@ -837,8 +837,8 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 
 func buildGModHandler(cfg *config.Config, d Deps) *gmodhttp.Handler {
 	return gmodhttp.New(gmodhttp.Config{
-		LastIncident:    incidentReader(d, domain.GameGMod),
-		ListIncidents:   incidentLister(d, domain.GameGMod),
+		LastIncident:    incidentReader(d),
+		ListIncidents:   incidentLister(d),
 		DismissIncident: incidentDismisser(d),
 		Instances:       d.GModInstances,
 		Workshop:        d.Steam,
@@ -850,21 +850,21 @@ func buildGModHandler(cfg *config.Config, d Deps) *gmodhttp.Handler {
 // incidentReader exposes the last recorded failure of an Instance to the web
 // layer. Without a store there are no incidents, and the panel simply does not
 // render.
-func incidentReader(d Deps, game domain.GameID) func(context.Context, int) (*domain.Incident, error) {
+func incidentReader(d Deps) func(context.Context, string) (*domain.Incident, error) {
 	if d.Store == nil {
 		return nil
 	}
-	return func(ctx context.Context, number int) (*domain.Incident, error) {
-		return d.Store.LastUnacknowledgedIncident(ctx, game, number)
+	return func(ctx context.Context, worldID string) (*domain.Incident, error) {
+		return d.Store.LastUnacknowledgedIncident(ctx, worldID)
 	}
 }
 
-func incidentLister(d Deps, game domain.GameID) func(context.Context, int, int, bool) ([]domain.Incident, error) {
+func incidentLister(d Deps) func(context.Context, string, int, bool) ([]domain.Incident, error) {
 	if d.Store == nil {
 		return nil
 	}
-	return func(ctx context.Context, number, limit int, oldestFirst bool) ([]domain.Incident, error) {
-		return d.Store.ListIncidents(ctx, game, number, limit, oldestFirst)
+	return func(ctx context.Context, worldID string, limit int, oldestFirst bool) ([]domain.Incident, error) {
+		return d.Store.ListIncidents(ctx, worldID, limit, oldestFirst)
 	}
 }
 

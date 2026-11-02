@@ -608,17 +608,17 @@ func TestWiring_SchedulersAndBackfillEdgeCases(t *testing.T) {
 	startValheimScheduler(ctx, cfg, d)
 
 	// incidentReader with nil Store
-	nilIncidentFn := incidentReader(Deps{}, domain.GameMinecraft)
+	nilIncidentFn := incidentReader(Deps{})
 	if nilIncidentFn != nil {
 		t.Errorf("expected nil incident reader when store is nil")
 	}
 
 	// incidentReader with non-nil Store
-	incFn := incidentReader(Deps{Store: st}, domain.GameMinecraft)
+	incFn := incidentReader(Deps{Store: st})
 	if incFn == nil {
 		t.Fatalf("expected non-nil incident reader")
 	}
-	inc, err := incFn(context.Background(), 1)
+	inc, err := incFn(context.Background(), "world-1")
 	if err != nil || inc != nil {
 		t.Errorf("expected nil incident, got %v, %v", inc, err)
 	}

@@ -2,8 +2,6 @@ package requests
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -55,11 +53,6 @@ func New(store ports.InstanceRequests, opts ...Option) *Service {
 	return s
 }
 
-func newID() string {
-	b := make([]byte, 12)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}
 
 func (s *Service) CreatedBy(ctx context.Context, subject string) (int, error) {
 	if s == nil || s.list == nil || subject == "" {
@@ -114,7 +107,7 @@ func (s *Service) Submit(ctx context.Context, subject string, inst domain.Instan
 		}
 	}
 	req := domain.InstanceRequest{
-		ID:        newID(),
+		ID:        domain.NewID(),
 		Subject:   subject,
 		GameID:    inst.GameID,
 		Name:      inst.Name,

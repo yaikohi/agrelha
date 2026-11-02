@@ -664,7 +664,7 @@ func TestValheimDetailAllEdges(t *testing.T) {
 	}
 
 	// LastIncident error branch
-	h.cfg.LastIncident = func(ctx context.Context, number int) (*domain.Incident, error) {
+	h.cfg.LastIncident = func(ctx context.Context, worldID string) (*domain.Incident, error) {
 		return nil, errors.New("incident db error")
 	}
 	respIncErr, _ := app.Test(httptest.NewRequest("GET", "/test/page/1/overview", nil))

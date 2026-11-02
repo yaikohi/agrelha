@@ -48,8 +48,8 @@ const instanceStatsTTL = 15 * time.Second
 // Config specifies dependencies for the Valheim instances handlers.
 type Config struct {
 	Requests         *requests.Service
-	LastIncident     func(ctx context.Context, number int) (*domain.Incident, error)
-	ListIncidents    func(ctx context.Context, number, limit int, oldestFirst bool) ([]domain.Incident, error)
+	LastIncident     func(ctx context.Context, worldID string) (*domain.Incident, error)
+	ListIncidents    func(ctx context.Context, worldID string, limit int, oldestFirst bool) ([]domain.Incident, error)
 	DismissIncident  func(ctx context.Context, id int64) error
 	ValheimInstances *instances.InstanceManager
 	ValheimConfigs   *appbepinex.Service

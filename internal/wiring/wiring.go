@@ -174,6 +174,12 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		instances.WithBackupsDir(cfg.BackupsDir),
 		instances.WithGlobalConfigsPath(cfg.MinecraftConfigsPath),
 	)
+	if st != nil {
+		instOpts = append(instOpts, instances.WithPreDeleteHook(func(ctx context.Context, inst domain.Instance) {
+			_ = st.ClearPresence(inst.Number)
+			_ = st.ClearRestorePoint(inst.GameID, inst.Number)
+		}))
+	}
 	if d.MR != nil {
 		instOpts = append(instOpts, instances.WithDependencyResolver(d.MR.ResolveRequiredDependencies))
 	}
@@ -461,6 +467,13 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 	}
 
+	if st != nil {
+		valheimInstOpts = append(valheimInstOpts, instances.WithPreDeleteHook(func(ctx context.Context, inst domain.Instance) {
+			_ = st.ClearPresence(inst.Number)
+			_ = st.ClearRestorePoint(inst.GameID, inst.Number)
+		}))
+	}
+
 	valheimInstOpts = append(valheimInstOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(defaultHostFor(cfg, "valheim")))
 	if cfg.DataDir != "" {
 		valheimInstOpts = append(valheimInstOpts, instances.WithPreConverge(func(ctx context.Context, inst domain.Instance) error {
@@ -717,6 +730,13 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			instances.WithInstanceRoleRegistrar(d.Authz.EnsureInstanceRole),
 			instances.WithInstanceRoleRetirer(d.Authz.RetireInstanceRole),
 		)
+	}
+
+	if st != nil {
+		gmodInstOpts = append(gmodInstOpts, instances.WithPreDeleteHook(func(ctx context.Context, inst domain.Instance) {
+			_ = st.ClearPresence(inst.Number)
+			_ = st.ClearRestorePoint(inst.GameID, inst.Number)
+		}))
 	}
 
 	gmodInstOpts = append(gmodInstOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(defaultHostFor(cfg, "gmod")))

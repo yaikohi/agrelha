@@ -2,6 +2,7 @@ package health
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -22,6 +23,11 @@ type fakeSource struct {
 
 func (f *fakeSource) GameID() domain.GameID { return f.game }
 func (f *fakeSource) ListInstances(context.Context) ([]domain.Instance, error) {
+	for i := range f.instances {
+		if f.instances[i].WorldID == "" {
+			f.instances[i].WorldID = fmt.Sprintf("world-%d", f.instances[i].Number)
+		}
+	}
 	return f.instances, nil
 }
 func (f *fakeSource) RuntimeStatus(_ context.Context, instanceNumber int) (ports.Status, error) {
@@ -36,17 +42,17 @@ func (f *fakeSource) CrashLogs(_ context.Context, instanceNumber int, _ int64, s
 }
 
 type fakeRecorder struct {
-	last      map[int]*domain.Incident
+	last      map[string]*domain.Incident
 	recorded  []domain.Incident
 	eventKind []string
 }
 
-func (r *fakeRecorder) LastIncident(_ context.Context, _ domain.GameID, instanceNumber int) (*domain.Incident, error) {
-	return r.last[instanceNumber], nil
+func (r *fakeRecorder) LastIncident(_ context.Context, worldID string) (*domain.Incident, error) {
+	return r.last[worldID], nil
 }
 func (r *fakeRecorder) RecordIncident(_ context.Context, in domain.Incident) (int64, error) {
 	r.recorded = append(r.recorded, in)
-	r.last[in.Number] = &in
+	r.last[in.WorldID] = &in
 	return int64(len(r.recorded)), nil
 }
 func (r *fakeRecorder) RecordEvent(kind, _ string) error {
@@ -54,7 +60,7 @@ func (r *fakeRecorder) RecordEvent(kind, _ string) error {
 	return nil
 }
 
-func newRec() *fakeRecorder { return &fakeRecorder{last: map[int]*domain.Incident{}} }
+func newRec() *fakeRecorder { return &fakeRecorder{last: map[string]*domain.Incident{}} }
 
 func TestHealthyInstanceRecordsNothing(t *testing.T) {
 	src := &fakeSource{
@@ -200,11 +206,11 @@ type failingRecorder struct {
 	recordErr bool
 }
 
-func (r *failingRecorder) LastIncident(ctx context.Context, g domain.GameID, instanceNumber int) (*domain.Incident, error) {
+func (r *failingRecorder) LastIncident(ctx context.Context, worldID string) (*domain.Incident, error) {
 	if r.lastErr {
 		return nil, context.Canceled
 	}
-	return r.fakeRecorder.LastIncident(ctx, g, instanceNumber)
+	return r.fakeRecorder.LastIncident(ctx, worldID)
 }
 
 func (r *failingRecorder) RecordIncident(ctx context.Context, in domain.Incident) (int64, error) {

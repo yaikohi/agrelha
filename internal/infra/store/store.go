@@ -32,6 +32,9 @@ func Open(path string) (*Store, error) {
 	if err := s.backfillInstanceResources(); err != nil {
 		return nil, err
 	}
+	if err := s.backfillWorldIDs(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -73,6 +76,7 @@ func (s *Store) migrate() error {
 	);
 	CREATE TABLE IF NOT EXISTS incidents (
 		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		world_id      TEXT NOT NULL DEFAULT '',
 		game_id       TEXT NOT NULL,
 		number        INTEGER NOT NULL,
 		at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -113,6 +117,7 @@ func (s *Store) migrate() error {
 	);
 	CREATE TABLE IF NOT EXISTS mc_instances (
 		number        INTEGER PRIMARY KEY,               -- 1 to 4
+		world_id      TEXT NOT NULL DEFAULT '',
 		name          TEXT NOT NULL,
 		slug          TEXT NOT NULL,
 		seed          TEXT,
@@ -135,6 +140,7 @@ func (s *Store) migrate() error {
 	);
 	CREATE TABLE IF NOT EXISTS valheim_instances (
 		number        INTEGER PRIMARY KEY,
+		world_id      TEXT NOT NULL DEFAULT '',
 		name          TEXT NOT NULL,
 		slug          TEXT NOT NULL,
 		seed          TEXT,
@@ -207,6 +213,7 @@ func (s *Store) migrate() error {
 	);
 	CREATE TABLE IF NOT EXISTS gmod_instances (
 		number            INTEGER PRIMARY KEY,
+		world_id          TEXT NOT NULL DEFAULT '',
 		name              TEXT NOT NULL,
 		slug              TEXT NOT NULL,
 		seed              TEXT,
@@ -263,8 +270,13 @@ func (s *Store) migrate() error {
 		`ALTER TABLE mc_instances ADD COLUMN host TEXT NOT NULL DEFAULT 'cluster'`,
 		`ALTER TABLE gmod_instances ADD COLUMN host TEXT NOT NULL DEFAULT 'cluster'`,
 		`ALTER TABLE incidents ADD COLUMN acknowledged_at TIMESTAMP`,
+		`ALTER TABLE mc_instances ADD COLUMN world_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE valheim_instances ADD COLUMN world_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE gmod_instances ADD COLUMN world_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE incidents ADD COLUMN world_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_incidents_world ON incidents(world_id, at DESC)`,
 	} {
-		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		if _, err := s.db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") && !strings.Contains(err.Error(), "already exists") {
 			return err
 		}
 	}

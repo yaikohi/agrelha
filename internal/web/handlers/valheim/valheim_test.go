@@ -770,7 +770,7 @@ func TestValheimDetailTabsAndActions(t *testing.T) {
 	}
 
 	// Configure LastIncident and ValheimGame
-	h.cfg.LastIncident = func(ctx context.Context, number int) (*domain.Incident, error) {
+	h.cfg.LastIncident = func(ctx context.Context, worldID string) (*domain.Incident, error) {
 		return &domain.Incident{
 			ID:           1,
 			GameID:       domain.GameValheim,

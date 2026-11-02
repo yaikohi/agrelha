@@ -83,13 +83,13 @@ func (h *Handler) ValheimInstancePage(c *fiber.Ctx) error {
 	if tab == "crashes" && h.cfg.ListIncidents != nil {
 		oldestFirst := c.Query("sort") == "oldest"
 		d.IncidentsOldestFirst = oldestFirst
-		if list, err := h.cfg.ListIncidents(c.UserContext(), inst.Number, 200, oldestFirst); err == nil {
+		if list, err := h.cfg.ListIncidents(c.UserContext(), inst.WorldID, 200, oldestFirst); err == nil {
 			d.Incidents = pages.IncidentViews(list)
 		}
 	}
 
 	if h.cfg.LastIncident != nil {
-		if in, err := h.cfg.LastIncident(c.UserContext(), inst.Number); err == nil && in != nil {
+		if in, err := h.cfg.LastIncident(c.UserContext(), inst.WorldID); err == nil && in != nil {
 			var startedAt time.Time
 			if h.cfg.ValheimInstances != nil {
 				if st, serr := h.cfg.ValheimInstances.RuntimeStatus(c.UserContext(), inst.Number); serr == nil {

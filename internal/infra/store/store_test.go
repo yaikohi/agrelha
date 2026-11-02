@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -601,10 +602,10 @@ func TestStore_ClosedStoreErrors(t *testing.T) {
 	if _, err := s.RecordIncident(ctx, domain.Incident{GameID: domain.GameMinecraft, Number: 1, Reason: "oom"}); err == nil {
 		t.Error("expected error from RecordIncident on closed store")
 	}
-	if _, err := s.LastIncident(ctx, domain.GameMinecraft, 1); err == nil {
+	if _, err := s.LastIncident(ctx, "wid-1"); err == nil {
 		t.Error("expected error from LastIncident on closed store")
 	}
-	if _, err := s.ListIncidents(ctx, domain.GameMinecraft, 1, 10, false); err == nil {
+	if _, err := s.ListIncidents(ctx, "wid-1", 10, false); err == nil {
 		t.Error("expected error from ListIncidents on closed store")
 	}
 
@@ -680,3 +681,98 @@ func TestStore_ClosedStoreErrors(t *testing.T) {
 		t.Error("expected error from vhRepo.Get on closed store")
 	}
 }
+
+func TestMigrateFromPreAGR61Schema(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Create legacy tables exactly as they existed before AGR-61 (without world_id column)
+	_, err = db.Exec(`
+	CREATE TABLE incidents (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		game_id       TEXT NOT NULL,
+		number        INTEGER NOT NULL,
+		at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		restart_count INTEGER NOT NULL DEFAULT 0,
+		exit_code     INTEGER NOT NULL DEFAULT 0,
+		reason        TEXT,
+		oom_killed    INTEGER NOT NULL DEFAULT 0,
+		log_tail      TEXT
+	);
+	CREATE INDEX idx_incidents_instance ON incidents(game_id, number, at DESC);
+	CREATE TABLE mc_instances (
+		number        INTEGER PRIMARY KEY,
+		name          TEXT NOT NULL,
+		slug          TEXT NOT NULL,
+		tier          TEXT NOT NULL DEFAULT 'medium',
+		created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE TABLE valheim_instances (
+		number        INTEGER PRIMARY KEY,
+		name          TEXT NOT NULL,
+		slug          TEXT NOT NULL,
+		tier          TEXT NOT NULL DEFAULT 'medium',
+		created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE TABLE gmod_instances (
+		number            INTEGER PRIMARY KEY,
+		name              TEXT NOT NULL,
+		slug              TEXT NOT NULL,
+		tier              TEXT NOT NULL DEFAULT 'medium',
+		mem_request_gib   INTEGER NOT NULL DEFAULT 0,
+		mem_limit_gib     INTEGER NOT NULL DEFAULT 0,
+		cpu_request_milli INTEGER NOT NULL DEFAULT 0,
+		cpu_limit_milli   INTEGER NOT NULL DEFAULT 0,
+		created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE TABLE mod_restore_points (
+		game_id   TEXT NOT NULL,
+		number    INTEGER NOT NULL,
+		at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		previous  TEXT NOT NULL,
+		applied   TEXT NOT NULL,
+		PRIMARY KEY (game_id, number)
+	);
+	INSERT INTO mc_instances (number, name, slug, created_at) VALUES (1, 'Legacy MC', 'legacy-mc', '2026-01-01 00:00:00');
+	INSERT INTO incidents (game_id, number, at, reason) VALUES ('minecraft', 1, '2026-01-01 12:00:00', 'crash 1');
+	INSERT INTO mod_restore_points (game_id, number, previous, applied) VALUES ('valheim', 99, 'prev', 'appl');
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	// Now open using store.Open, which runs migrate() and backfills
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open store on legacy schema failed: %v", err)
+	}
+	defer s.Close()
+
+	var worldID string
+	if err := s.DB().QueryRow("SELECT world_id FROM mc_instances WHERE number = 1").Scan(&worldID); err != nil {
+		t.Fatalf("failed to query migrated world_id: %v", err)
+	}
+	if worldID == "" {
+		t.Errorf("migrated instance has empty world_id")
+	}
+
+	incs, err := s.ListIncidents(context.Background(), worldID, 10, false)
+	if err != nil {
+		t.Fatalf("failed to list incidents: %v", err)
+	}
+	if len(incs) != 1 {
+		t.Errorf("expected 1 migrated incident, got %d", len(incs))
+	}
+
+	var orphanedRestorePoints int
+	if err := s.DB().QueryRow("SELECT COUNT(*) FROM mod_restore_points WHERE number = 99").Scan(&orphanedRestorePoints); err != nil {
+		t.Fatalf("failed to query orphaned restore points: %v", err)
+	}
+	if orphanedRestorePoints != 0 {
+		t.Errorf("expected orphaned restore points to be swept, but found %d", orphanedRestorePoints)
+	}
+}
+

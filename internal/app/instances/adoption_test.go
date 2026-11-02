@@ -72,6 +72,9 @@ func TestAdoptLegacyValheim(t *testing.T) {
 	if adopted.Tier != domain.TierMedium {
 		t.Errorf("expected medium tier, got %s", adopted.Tier)
 	}
+	if adopted.WorldID == "" {
+		t.Errorf("expected non-empty WorldID on adopted instance")
+	}
 
 	// 2. Second invocation should be a no-op and return existing slot 1
 	second, err := AdoptLegacyValheim(ctx, repo, rt, legacyRef, "192.168.20.224", "Different Name")

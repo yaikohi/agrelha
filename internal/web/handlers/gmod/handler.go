@@ -20,8 +20,8 @@ import (
 
 type Config struct {
 	Instances       *instances.InstanceManager
-	LastIncident    func(ctx context.Context, number int) (*domain.Incident, error)
-	ListIncidents   func(ctx context.Context, number, limit int, oldestFirst bool) ([]domain.Incident, error)
+	LastIncident    func(ctx context.Context, worldID string) (*domain.Incident, error)
+	ListIncidents   func(ctx context.Context, worldID string, limit int, oldestFirst bool) ([]domain.Incident, error)
 	DismissIncident func(ctx context.Context, id int64) error
 	Workshop        ports.WorkshopResolver
 	Requests        *requests.Service
@@ -341,7 +341,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 	}
 
 	if h.cfg.LastIncident != nil {
-		if in, ierr := h.cfg.LastIncident(c.UserContext(), inst.Number); ierr == nil && in != nil {
+		if in, ierr := h.cfg.LastIncident(c.UserContext(), inst.WorldID); ierr == nil && in != nil {
 			var startedAt time.Time
 			if h.cfg.Instances != nil {
 				if st, serr := h.cfg.Instances.RuntimeStatus(c.UserContext(), inst.Number); serr == nil {
@@ -357,7 +357,7 @@ func (h *Handler) InstancePage(c *fiber.Ctx) error {
 	if tab == "crashes" && h.cfg.ListIncidents != nil {
 		oldestFirst := c.Query("sort") == "oldest"
 		d.IncidentsOldestFirst = oldestFirst
-		if list, lerr := h.cfg.ListIncidents(c.UserContext(), inst.Number, 200, oldestFirst); lerr == nil {
+		if list, lerr := h.cfg.ListIncidents(c.UserContext(), inst.WorldID, 200, oldestFirst); lerr == nil {
 			d.Incidents = pages.IncidentViews(list)
 		}
 	}

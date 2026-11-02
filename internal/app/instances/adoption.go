@@ -54,6 +54,7 @@ func AdoptLegacyValheim(
 	}
 
 	inst := domain.Instance{
+		WorldID:    domain.NewID(),
 		GameID:     domain.GameValheim,
 		Number:     1,
 		Name:       serverName,

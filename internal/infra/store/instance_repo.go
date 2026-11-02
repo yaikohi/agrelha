@@ -166,12 +166,13 @@ var gameRecordMappers = map[domain.GameID]GameRecordMapper{
 
 func mapCoreFromRecord(rec InstanceRecord, gameID domain.GameID) domain.Instance {
 	return domain.Instance{
-		GameID: gameID,
-		Number: rec.Number,
-		Name:   rec.Name,
-		Slug:   rec.Slug,
-		Source: domain.NormalizeSource(rec.Source),
-		Tier:   domain.NormalizeTier(rec.Tier),
+		WorldID: rec.WorldID,
+		GameID:  gameID,
+		Number:  rec.Number,
+		Name:    rec.Name,
+		Slug:    rec.Slug,
+		Source:  domain.NormalizeSource(rec.Source),
+		Tier:    domain.NormalizeTier(rec.Tier),
 		Resources: domain.Resources{
 			MemRequestGiB:   rec.MemRequestGiB,
 			MemLimitGiB:     rec.MemLimitGiB,
@@ -192,6 +193,7 @@ func mapCoreFromRecord(rec InstanceRecord, gameID domain.GameID) domain.Instance
 func mapCoreToRecord(inst domain.Instance) InstanceRecord {
 	return InstanceRecord{
 		Number:          inst.Number,
+		WorldID:         inst.WorldID,
 		Name:            inst.Name,
 		Slug:            inst.Slug,
 		Source:          string(inst.Source),

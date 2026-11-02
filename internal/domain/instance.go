@@ -1,12 +1,21 @@
 package domain
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// NewID mints a new 12-byte cryptographically random hex identifier.
+func NewID() string {
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
 
 type InstanceState string
 
@@ -56,6 +65,7 @@ func (g GModConfig) CollectionID() string {
 }
 
 type Instance struct {
+	WorldID    string
 	GameID     GameID
 	Number     int
 	Name       string

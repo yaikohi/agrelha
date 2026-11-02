@@ -8,6 +8,7 @@ import (
 
 type InstanceRecord struct {
 	Number          int
+	WorldID         string
 	Name            string
 	Slug            string
 	Seed            string

@@ -30,7 +30,7 @@ type Source interface {
 
 // Recorder persists what the watcher finds.
 type Recorder interface {
-	LastIncident(ctx context.Context, game domain.GameID, number int) (*domain.Incident, error)
+	LastIncident(ctx context.Context, worldID string) (*domain.Incident, error)
 	RecordIncident(ctx context.Context, in domain.Incident) (int64, error)
 	RecordEvent(kind, detail string) error
 }
@@ -103,9 +103,9 @@ func (w *Watcher) checkOne(ctx context.Context, src Source, inst domain.Instance
 		return false
 	}
 
-	last, err := w.rec.LastIncident(ctx, src.GameID(), inst.Number)
+	last, err := w.rec.LastIncident(ctx, inst.WorldID)
 	if err != nil {
-		slog.Warn("health: cannot read last incident", "game", src.GameID(), "instance", inst.Number, "err", err)
+		slog.Warn("health: cannot read last incident", "game", src.GameID(), "instance", inst.Number, "world_id", inst.WorldID, "err", err)
 		return false
 	}
 	if !isNew(st.Failure, last) {
@@ -113,6 +113,7 @@ func (w *Watcher) checkOne(ctx context.Context, src Source, inst domain.Instance
 	}
 
 	in := domain.Incident{
+		WorldID:      inst.WorldID,
 		GameID:       src.GameID(),
 		Number:       inst.Number,
 		At:           time.Now(),

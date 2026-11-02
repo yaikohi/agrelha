@@ -1,8 +1,10 @@
 package store
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"agrelha/internal/domain"
 )
@@ -127,5 +129,118 @@ func TestBackfillIsIdempotent(t *testing.T) {
 	}
 	if first != 1 || second != 0 {
 		t.Errorf("backfill should touch 1 row then 0, got %d then %d", first, second)
+	}
+}
+
+func TestBackfillWorldIDsAndSweeps(t *testing.T) {
+	st := openTemp(t)
+	ctx := context.Background()
+
+	// Seed instance in slot 1 with empty world_id and a fixed created_at in the past
+	occupantCreated := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	if _, err := st.db.Exec(`
+		INSERT INTO mc_instances (number, world_id, name, slug, tier, state, created_at, last_used)
+		VALUES (1, '', 'OldWorld', 'oldworld', 'medium', 'stopped', ?, ?)`,
+		occupantCreated.Format("2006-01-02 15:04:05"), occupantCreated.Format("2006-01-02 15:04:05")); err != nil {
+		t.Fatalf("seed instance: %v", err)
+	}
+
+	// Incident 1: 2 hours before occupantCreated (from a prior deleted occupant of slot 1)
+	priorAt := occupantCreated.Add(-2 * time.Hour)
+	if _, err := st.RecordIncident(ctx, domain.Incident{
+		GameID: domain.GameMinecraft, Number: 1, At: priorAt, Reason: "OldCrash",
+	}); err != nil {
+		t.Fatalf("record prior incident: %v", err)
+	}
+
+	// Incident 2: 2 hours after occupantCreated (belongs to the current occupant)
+	currentAt := occupantCreated.Add(2 * time.Hour)
+	if _, err := st.RecordIncident(ctx, domain.Incident{
+		GameID: domain.GameMinecraft, Number: 1, At: currentAt, Reason: "CurrentCrash",
+	}); err != nil {
+		t.Fatalf("record current incident: %v", err)
+	}
+
+	// Ephemeral data: active restore point for slot 1, orphaned restore point for slot 2
+	if err := st.SaveRestorePoint(domain.GameMinecraft, 1, []string{"prev1"}, []string{"appl1"}); err != nil {
+		t.Fatalf("save restore point 1: %v", err)
+	}
+	if err := st.SaveRestorePoint(domain.GameMinecraft, 2, []string{"prev2"}, []string{"appl2"}); err != nil {
+		t.Fatalf("save restore point 2: %v", err)
+	}
+
+	// Ephemeral data: presence for active Valheim slot 1 and presence for orphaned slot 99
+	if _, err := st.db.Exec(`
+		INSERT INTO valheim_instances (number, world_id, name, slug, tier, state)
+		VALUES (1, '', 'Val1', 'val1', 'medium', 'stopped')`); err != nil {
+		t.Fatalf("seed valheim instance: %v", err)
+	}
+	if err := st.SetOnline(1, "steam-1", true); err != nil {
+		t.Fatalf("set online slot 1: %v", err)
+	}
+	if err := st.SetOnline(99, "steam-2", true); err != nil {
+		t.Fatalf("set online slot 99: %v", err)
+	}
+
+	// Execute backfill
+	if err := st.backfillWorldIDs(); err != nil {
+		t.Fatalf("backfillWorldIDs: %v", err)
+	}
+
+	// Check mc_instances slot 1 world_id
+	inst, err := st.GetInstance(1)
+	if err != nil || inst == nil {
+		t.Fatalf("get instance: %v", err)
+	}
+	if inst.WorldID == "" {
+		t.Fatalf("instance world_id was not backfilled")
+	}
+
+	// Verify incidents:
+	// Only the incident at currentAt should belong to inst.WorldID
+	incidents, err := st.ListIncidents(ctx, inst.WorldID, 10, false)
+	if err != nil {
+		t.Fatalf("list incidents for backfilled world: %v", err)
+	}
+	if len(incidents) != 1 {
+		t.Fatalf("expected 1 incident for backfilled world, got %d", len(incidents))
+	}
+	if incidents[0].Reason != "CurrentCrash" {
+		t.Errorf("expected CurrentCrash, got %s", incidents[0].Reason)
+	}
+
+	// Prior incident must stay orphaned (empty world_id)
+	var priorCount int
+	if err := st.db.QueryRow(`SELECT count(*) FROM incidents WHERE COALESCE(world_id, '') = '' AND reason = 'OldCrash'`).Scan(&priorCount); err != nil || priorCount != 1 {
+		t.Errorf("prior incident should remain orphaned, got count=%d, err=%v", priorCount, err)
+	}
+
+	// Verify restore points: slot 1 preserved, orphaned slot 2 removed
+	rp1, err := st.RestorePoint(domain.GameMinecraft, 1)
+	if err != nil || rp1 == nil {
+		t.Errorf("active restore point for slot 1 should survive: %v", err)
+	}
+	rp2, err := st.RestorePoint(domain.GameMinecraft, 2)
+	if err != nil || rp2 != nil {
+		t.Errorf("orphaned restore point for slot 2 should be wiped: %v", rp2)
+	}
+
+	// Verify presence: slot 1 preserved, orphaned slot 99 wiped
+	p1, err := st.CountOnlineForInstance(1)
+	if err != nil || p1 != 1 {
+		t.Errorf("active presence for slot 1 should survive, got count=%d", p1)
+	}
+	p99, err := st.CountOnlineForInstance(99)
+	if err != nil || p99 != 0 {
+		t.Errorf("orphaned presence for slot 99 should be wiped, got count=%d", p99)
+	}
+
+	// Verify idempotency: running backfill again leaves instance world_id untouched
+	if err := st.backfillWorldIDs(); err != nil {
+		t.Fatalf("second backfillWorldIDs: %v", err)
+	}
+	inst2, err := st.GetInstance(1)
+	if err != nil || inst2 == nil || inst2.WorldID != inst.WorldID {
+		t.Fatalf("world_id changed on second backfill: was %q, now %v", inst.WorldID, inst2)
 	}
 }

@@ -37,6 +37,9 @@ func coreInstanceColumns() []instanceColumn {
 		{name: "number", sel: "number",
 			bind: func(r *InstanceRecord) any { return r.Number },
 			dest: func(r *InstanceRecord) any { return &r.Number }},
+		textCol("world_id",
+			func(r *InstanceRecord) any { return r.WorldID },
+			func(r *InstanceRecord) any { return &r.WorldID }),
 		{name: "name", sel: "name",
 			bind: func(r *InstanceRecord) any { return r.Name },
 			dest: func(r *InstanceRecord) any { return &r.Name }},
@@ -187,6 +190,11 @@ func (t instanceTable) upsertSQL() string {
 		holes = append(holes, "?")
 		switch c.name {
 		case "number":
+		case "world_id":
+			// First writer wins: a later save must not overwrite or blank the world_id.
+			sets = append(sets, fmt.Sprintf(
+				"world_id = CASE WHEN %s.world_id = '' THEN excluded.world_id ELSE %s.world_id END",
+				t.name, t.name))
 		case "created_by":
 			// First writer wins: a later save must not blank the creator.
 			sets = append(sets, fmt.Sprintf(
