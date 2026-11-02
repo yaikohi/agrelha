@@ -153,9 +153,6 @@ func (h *Handler) MCInstanceSettingsSave(c *fiber.Ctx) error {
 		return shared.SSEToast(c, "err", "Invalid instance number.", nil)
 	}
 
-	// mc_version is deliberately absent: changing what an Instance runs is a
-	// new Instance, offered as Duplicate. Accepting it here would reintroduce
-	// the trap through the API that the page no longer offers.
 	var req struct {
 		Name string `json:"name" form:"name"`
 		MOTD string `json:"motd" form:"motd"`

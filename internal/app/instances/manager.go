@@ -1003,10 +1003,6 @@ func (m *InstanceManager) persistSettings(ctx context.Context, inst domain.Insta
 	return nil
 }
 
-// UpdateSettings edits the things about a Minecraft Instance that are safe to
-// change under a played World. The Minecraft version is not among them:
-// changing what an Instance runs is a new Instance, so it is offered as
-// Duplicate and refused here even when the API is called directly.
 func (m *InstanceManager) UpdateSettings(ctx context.Context, instanceNumber int, name, motd, tier string, actor ...string) error {
 	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
