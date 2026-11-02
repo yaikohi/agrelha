@@ -5,12 +5,15 @@ package gitops
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -21,47 +24,185 @@ type Committer struct {
 	RepoURL, Branch         string
 	Username, Token         string
 	AuthorName, AuthorEmail string
+	WorkDir                 string        // optional explicit path for working clone
+	ReadTTL                 time.Duration // cache TTL for read operations (defaults to 5s if zero)
+
+	mu        sync.Mutex
+	repo      *git.Repository
+	actualDir string
+	autoClean bool
+	lastSync  time.Time
 }
 
-// Patch clones the repo, applies `transform` to configmap `dataKey` inside the
-// YAML file at relPath, and commits+pushes if the value changed. Returns
-// (changed, error). A no-op transform makes no commit.
-func (c *Committer) Patch(ctx context.Context, relPath, dataKey, commitMsg string,
-	transform func(current string) (string, error)) (bool, error) {
-	autoCommitMsg := "auto - " + commitMsg
-	dir, err := os.MkdirTemp("", "agrelha-git-")
-	if err != nil {
-		return false, err
+func (c *Committer) auth() *githttp.BasicAuth {
+	if c.Username == "" && c.Token == "" {
+		return nil
 	}
-	defer os.RemoveAll(dir)
+	return &githttp.BasicAuth{Username: c.Username, Password: c.Token}
+}
 
-	auth := &githttp.BasicAuth{Username: c.Username, Password: c.Token}
-	repo, err := git.PlainCloneContext(ctx, dir, false, &git.CloneOptions{
+func (c *Committer) readTTL() time.Duration {
+	if c.ReadTTL > 0 {
+		return c.ReadTTL
+	}
+	return 5 * time.Second
+}
+
+func (c *Committer) ensureCloneLocked(ctx context.Context) (*git.Repository, bool, error) {
+	if c.repo != nil && c.actualDir != "" {
+		return c.repo, false, nil
+	}
+
+	dir := c.WorkDir
+	autoClean := false
+	if dir == "" {
+		var err error
+		dir, err = os.MkdirTemp("", "agrelha-gitops-")
+		if err != nil {
+			return nil, false, err
+		}
+		autoClean = true
+	} else {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, false, err
+		}
+	}
+
+	repo, err := git.PlainOpen(dir)
+	if err == nil {
+		c.repo = repo
+		c.actualDir = dir
+		c.autoClean = autoClean
+		return repo, false, nil
+	}
+
+	repo, err = git.PlainCloneContext(ctx, dir, false, &git.CloneOptions{
 		URL:           c.RepoURL,
-		Auth:          auth,
+		Auth:          c.auth(),
 		ReferenceName: plumbing.NewBranchReferenceName(c.Branch),
 		SingleBranch:  true,
 		Depth:         1,
 	})
 	if err != nil {
-		return false, fmt.Errorf("clone: %w", err)
+		if autoClean {
+			_ = os.RemoveAll(dir)
+		}
+		return nil, false, fmt.Errorf("clone: %w", err)
 	}
 
-	full := filepath.Join(dir, relPath)
+	c.repo = repo
+	c.actualDir = dir
+	c.autoClean = autoClean
+	c.lastSync = time.Now()
+	return repo, true, nil
+}
+
+func (c *Committer) cleanWorktreeLocked() {
+	if c.repo == nil {
+		return
+	}
+	if wt, err := c.repo.Worktree(); err == nil {
+		_ = wt.Reset(&git.ResetOptions{Mode: git.HardReset})
+		_ = wt.Clean(&git.CleanOptions{Dir: true})
+	}
+}
+
+func (c *Committer) syncRemoteLocked(ctx context.Context) error {
+	repo, cloned, err := c.ensureCloneLocked(ctx)
+	if err != nil {
+		return err
+	}
+	if cloned {
+		return nil
+	}
+
+	err = repo.FetchContext(ctx, &git.FetchOptions{
+		Auth:       c.auth(),
+		RemoteName: "origin",
+		Depth:      1,
+		RefSpecs: []config.RefSpec{
+			config.RefSpec(fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", c.Branch, c.Branch)),
+		},
+	})
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return fmt.Errorf("fetch: %w", err)
+	}
+
+	remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName("origin", c.Branch), true)
+	if err != nil {
+		remoteRef, err = repo.Reference(plumbing.NewBranchReferenceName(c.Branch), true)
+		if err != nil {
+			return fmt.Errorf("resolve ref: %w", err)
+		}
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	if err := wt.Reset(&git.ResetOptions{
+		Commit: remoteRef.Hash(),
+		Mode:   git.HardReset,
+	}); err != nil {
+		return fmt.Errorf("reset: %w", err)
+	}
+
+	_ = wt.Clean(&git.CleanOptions{Dir: true})
+	c.lastSync = time.Now()
+	return nil
+}
+
+// Close removes the working clone if it was automatically created in a temporary directory.
+func (c *Committer) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.autoClean && c.actualDir != "" {
+		err := os.RemoveAll(c.actualDir)
+		c.actualDir = ""
+		c.repo = nil
+		return err
+	}
+	return nil
+}
+
+// Patch updates a ConfigMap data key in place, committing and pushing if changed.
+// It synchronizes against the remote branch on the persistent working clone.
+func (c *Committer) Patch(ctx context.Context, relPath, dataKey, commitMsg string,
+	transform func(current string) (string, error)) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.syncRemoteLocked(ctx); err != nil {
+		return false, err
+	}
+
+	headRef, err := c.repo.Head()
+	var headBefore plumbing.Hash
+	if err == nil {
+		headBefore = headRef.Hash()
+	}
+
+	full := filepath.Join(c.actualDir, relPath)
 	raw, err := os.ReadFile(full)
 	if err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	node := findConfigMapValue(&doc, dataKey)
 	if node == nil {
+		c.cleanWorktreeLocked()
 		return false, fmt.Errorf("data key %q not found in %s", dataKey, relPath)
 	}
 	updated, err := transform(node.Value)
 	if err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	if updated == node.Value {
@@ -71,26 +212,37 @@ func (c *Committer) Patch(ctx context.Context, relPath, dataKey, commitMsg strin
 
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	if err := os.WriteFile(full, out, 0o644); err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 
-	wt, err := repo.Worktree()
+	wt, err := c.repo.Worktree()
 	if err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	if _, err := wt.Add(relPath); err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	sig := &object.Signature{Name: c.AuthorName, Email: c.AuthorEmail, When: time.Now()}
+	autoCommitMsg := "auto - " + commitMsg
 	if _, err := wt.Commit(autoCommitMsg, &git.CommitOptions{Author: sig, Committer: sig}); err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
-	if err := repo.PushContext(ctx, &git.PushOptions{Auth: auth}); err != nil {
+	if err := c.repo.PushContext(ctx, &git.PushOptions{Auth: c.auth()}); err != nil {
+		if !headBefore.IsZero() {
+			_ = wt.Reset(&git.ResetOptions{Commit: headBefore, Mode: git.HardReset})
+			_ = wt.Clean(&git.CleanOptions{Dir: true})
+		}
 		return false, fmt.Errorf("push: %w", err)
 	}
+	c.lastSync = time.Now()
 	return true, nil
 }
 

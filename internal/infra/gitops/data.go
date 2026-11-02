@@ -12,7 +12,6 @@ import (
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"gopkg.in/yaml.v3"
 )
 
@@ -78,38 +77,37 @@ func (c *Committer) mutate(ctx context.Context, relPath, commitMsg string, fn fu
 }
 
 func (c *Committer) mutateRaw(ctx context.Context, relPath, commitMsg string, fn func(root *yaml.Node) (bool, error)) (bool, error) {
-	dir, err := os.MkdirTemp("", "agrelha-git-")
-	if err != nil {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.syncRemoteLocked(ctx); err != nil {
 		return false, err
 	}
-	defer os.RemoveAll(dir)
 
-	auth := &githttp.BasicAuth{Username: c.Username, Password: c.Token}
-	repo, err := git.PlainCloneContext(ctx, dir, false, &git.CloneOptions{
-		URL:           c.RepoURL,
-		Auth:          auth,
-		ReferenceName: plumbing.NewBranchReferenceName(c.Branch),
-		SingleBranch:  true,
-		Depth:         1,
-	})
-	if err != nil {
-		return false, fmt.Errorf("clone: %w", err)
+	headRef, err := c.repo.Head()
+	var headBefore plumbing.Hash
+	if err == nil {
+		headBefore = headRef.Hash()
 	}
 
-	full := filepath.Join(dir, relPath)
+	full := filepath.Join(c.actualDir, relPath)
 	raw, err := os.ReadFile(full)
 	if err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	if len(doc.Content) == 0 {
+		c.cleanWorktreeLocked()
 		return false, fmt.Errorf("empty yaml %s", relPath)
 	}
 	changed, err := fn(doc.Content[0])
 	if err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	if !changed {
@@ -118,26 +116,36 @@ func (c *Committer) mutateRaw(ctx context.Context, relPath, commitMsg string, fn
 
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	if err := os.WriteFile(full, out, 0o644); err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 
-	wt, err := repo.Worktree()
+	wt, err := c.repo.Worktree()
 	if err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	if _, err := wt.Add(relPath); err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
 	sig := &object.Signature{Name: c.AuthorName, Email: c.AuthorEmail, When: time.Now()}
 	if _, err := wt.Commit(commitMsg, &git.CommitOptions{Author: sig, Committer: sig}); err != nil {
+		c.cleanWorktreeLocked()
 		return false, err
 	}
-	if err := repo.PushContext(ctx, &git.PushOptions{Auth: auth}); err != nil {
+	if err := c.repo.PushContext(ctx, &git.PushOptions{Auth: c.auth()}); err != nil {
+		if !headBefore.IsZero() {
+			_ = wt.Reset(&git.ResetOptions{Commit: headBefore, Mode: git.HardReset})
+			_ = wt.Clean(&git.CleanOptions{Dir: true})
+		}
 		return false, fmt.Errorf("push: %w", err)
 	}
+	c.lastSync = time.Now()
 	return true, nil
 }
 
@@ -223,27 +231,19 @@ func sameMapping(a, b []*yaml.Node) bool {
 	return true
 }
 
-// ReadFile reads raw bytes of relPath from the remote branch.
+// ReadFile reads raw bytes of relPath from the working clone, refetching from the
+// remote branch if the working clone is older than ReadTTL.
 func (c *Committer) ReadFile(ctx context.Context, relPath string) ([]byte, error) {
-	dir, err := os.MkdirTemp("", "agrelha-git-read-")
-	if err != nil {
-		return nil, err
-	}
-	defer os.RemoveAll(dir)
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	auth := &githttp.BasicAuth{Username: c.Username, Password: c.Token}
-	_, err = git.PlainCloneContext(ctx, dir, false, &git.CloneOptions{
-		URL:           c.RepoURL,
-		Auth:          auth,
-		ReferenceName: plumbing.NewBranchReferenceName(c.Branch),
-		SingleBranch:  true,
-		Depth:         1,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("clone: %w", err)
+	if c.repo == nil || time.Since(c.lastSync) >= c.readTTL() {
+		if err := c.syncRemoteLocked(ctx); err != nil {
+			return nil, err
+		}
 	}
 
-	full := filepath.Join(dir, relPath)
+	full := filepath.Join(c.actualDir, relPath)
 	return os.ReadFile(full)
 }
 

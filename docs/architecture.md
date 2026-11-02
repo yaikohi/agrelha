@@ -243,14 +243,14 @@ Both planes are pluggable, and the composition root picks per environment
 
 | configuration | StateStore | Reconciler |
 |---|---|---|
-| `GIT_REPO_URL` + `GIT_TOKEN` set | `state/git` | `reconcile/argocd` |
 | `RUNTIME=docker`, or `LOCAL_STATE_DIR` set | `state/local` | `reconcile/compose` |
+| `GIT_REPO_URL` + `GIT_TOKEN` set (and `RUNTIME!=docker`) | `state/git` | `reconcile/argocd` |
 | neither | `state/unconfigured` (reads nothing, refuses writes) | `reconcile/argocd` |
 
-The Runtime is chosen separately, by `RUNTIME` alone: `runtime/docker` when it
-is `docker`, `runtime/k8s` otherwise. The two planes are configured
-independently, so a Docker runtime with a git state store is a legal — if
-unusual — combination.
+`RUNTIME` is the leading configuration: when `RUNTIME=docker`, the local state
+store and compose reconciler are selected unconditionally, ignoring any Git
+credentials. For Kubernetes (`runtime/k8s`), GitOps (`state/git`) is selected
+when `GIT_REPO_URL` and `GIT_TOKEN` are set.
 
 Three consequences worth knowing, each with its own ADR:
 

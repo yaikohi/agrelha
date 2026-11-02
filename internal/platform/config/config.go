@@ -34,6 +34,7 @@ type Config struct {
 	GitToken        string
 	GitAuthorName   string
 	GitAuthorEmail  string
+	GitWorkingDir   string
 	ModsPath        string
 	AdminsPath      string
 	ThunderstoreAPI string
@@ -186,6 +187,7 @@ func Load() *Config {
 		GitToken:        envSecret("GIT_TOKEN", envSecret("CODEBERG_TOKEN", "")),
 		GitAuthorName:   env("GIT_AUTHOR_NAME", "agrelha"),
 		GitAuthorEmail:  env("GIT_AUTHOR_EMAIL", "agrelha@localhost"),
+		GitWorkingDir:   env("GIT_WORKING_DIR", ""),
 		ModsPath:        env("MODS_PATH", "manifests/valheim/mods.yaml"),
 		AdminsPath:      env("ADMINS_PATH", "manifests/valheim/admins.yaml"),
 		ThunderstoreAPI: env("THUNDERSTORE_API", "https://thunderstore.io/c/valheim/api/v1"),

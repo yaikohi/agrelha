@@ -951,15 +951,6 @@ func buildThunderstore(ctx context.Context, cfg *config.Config, st *store.Store)
 }
 
 func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStore, ports.Reconciler, *gitops.Committer) {
-	if cfg.GitToken != "" && cfg.GitRepoURL != "" {
-		committer := &gitops.Committer{
-			RepoURL: cfg.GitRepoURL, Branch: cfg.GitBranch,
-			Username: cfg.GitUsername, Token: cfg.GitToken,
-			AuthorName: cfg.GitAuthorName, AuthorEmail: cfg.GitAuthorEmail,
-		}
-		return gitstate.New(committer), argocd.New(), committer
-	}
-
 	if cfg.Runtime == "docker" || cfg.LocalStateDir != "" {
 		stateDir := cfg.LocalStateDir
 		if stateDir == "" {
@@ -976,6 +967,16 @@ func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStor
 			return nil, reconciler, nil
 		}
 		return localSS, reconciler, nil
+	}
+
+	if cfg.GitToken != "" && cfg.GitRepoURL != "" {
+		committer := &gitops.Committer{
+			RepoURL: cfg.GitRepoURL, Branch: cfg.GitBranch,
+			Username: cfg.GitUsername, Token: cfg.GitToken,
+			AuthorName: cfg.GitAuthorName, AuthorEmail: cfg.GitAuthorEmail,
+			WorkDir: cfg.GitWorkingDir,
+		}
+		return gitstate.New(committer), argocd.New(), committer
 	}
 
 	slog.Warn("GIT_REPO_URL/GIT_TOKEN unset: declarative plane is read-only")

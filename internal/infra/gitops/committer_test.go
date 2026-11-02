@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -820,4 +821,79 @@ func TestCommitter_PushFailures(t *testing.T) {
 		}
 	})
 }
+
+func TestPersistentWorkingClone(t *testing.T) {
+	ctx := context.Background()
+	remote := newRemote(t, map[string]string{
+		"manifests/cm.yaml": initialConfigMapYAML,
+	})
+	workDir := t.TempDir()
+	committer := &Committer{
+		RepoURL:     remote,
+		Branch:      testBranch,
+		AuthorName:  "agrelha",
+		AuthorEmail: "agrelha@example.test",
+		WorkDir:     workDir,
+		ReadTTL:     10 * time.Second,
+	}
+	defer committer.Close()
+
+	// 1. Initial read clones into workDir
+	b1, err := committer.ReadFile(ctx, "manifests/cm.yaml")
+	if err != nil {
+		t.Fatalf("first ReadFile failed: %v", err)
+	}
+	if !strings.Contains(string(b1), "player1") {
+		t.Fatalf("expected player1 in read, got: %s", string(b1))
+	}
+	if committer.actualDir != workDir {
+		t.Fatalf("expected actualDir = %q, got %q", workDir, committer.actualDir)
+	}
+
+	// Verify .git exists in workDir
+	if _, err := os.Stat(filepath.Join(workDir, ".git")); err != nil {
+		t.Fatalf("expected .git directory in workDir: %v", err)
+	}
+
+	// 2. Subsequent read within TTL reads without failing even if remote is removed
+	b2, err := committer.ReadFile(ctx, "manifests/cm.yaml")
+	if err != nil {
+		t.Fatalf("second ReadFile failed: %v", err)
+	}
+	if string(b1) != string(b2) {
+		t.Fatalf("read contents differed across cached reads")
+	}
+
+	// 3. Write updates workDir and pushes to remote
+	changed, err := committer.Patch(ctx, "manifests/cm.yaml", "whitelist.txt", "add player2", func(cur string) (string, error) {
+		return cur + "player2\n", nil
+	})
+	if err != nil || !changed {
+		t.Fatalf("Patch failed: changed=%v, err=%v", changed, err)
+	}
+
+	// Read immediately from committer sees player2 (read-your-own-writes)
+	b3, err := committer.ReadFile(ctx, "manifests/cm.yaml")
+	if err != nil {
+		t.Fatalf("post-patch ReadFile failed: %v", err)
+	}
+	if !strings.Contains(string(b3), "player2") {
+		t.Fatalf("expected player2 in read immediately following patch, got: %s", string(b3))
+	}
+
+	// 4. Failed mutation cleans worktree
+	_, err = committer.Patch(ctx, "manifests/cm.yaml", "whitelist.txt", "fail", func(string) (string, error) {
+		// Dirty a file in workDir
+		_ = os.WriteFile(filepath.Join(workDir, "manifests", "dirty.txt"), []byte("dirty"), 0o644)
+		return "", errors.New("deliberate failure")
+	})
+	if err == nil {
+		t.Fatal("expected error from failing patch")
+	}
+	// Verify dirty file was cleaned
+	if _, err := os.Stat(filepath.Join(workDir, "manifests", "dirty.txt")); !os.IsNotExist(err) {
+		t.Error("expected dirty file to be cleaned up after failed patch")
+	}
+}
+
 

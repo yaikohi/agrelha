@@ -502,7 +502,38 @@ func TestWiring_BuildDeclarativePlane_DefaultDockerDir(t *testing.T) {
 		ComposeDir:    filepath.Join(tempDir, "compose"),
 	}
 	ss, rec, committer := buildDeclarativePlane(cfg, st)
-	t.Logf("buildDeclarativePlane docker default: ss=%v rec=%v committer=%v", ss, rec, committer)
+	if rec == nil || committer != nil {
+		t.Fatalf("expected compose reconciler and nil committer, got rec=%v committer=%v", rec, committer)
+	}
+	_ = ss
+}
+
+func TestWiring_BuildDeclarativePlane_DockerOverridesGit(t *testing.T) {
+	tempDir := t.TempDir()
+	st, err := store.Open(filepath.Join(tempDir, "plane.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	// Even if GitToken and GitRepoURL are set, RUNTIME=docker MUST lead
+	cfg := &config.Config{
+		Runtime:       "docker",
+		LocalStateDir: filepath.Join(tempDir, "state"),
+		ComposeDir:    filepath.Join(tempDir, "compose"),
+		GitToken:      "some-token",
+		GitRepoURL:    "https://codeberg.org/ykhi/yaya-ops.git",
+	}
+	ss, rec, committer := buildDeclarativePlane(cfg, st)
+	if ss == nil {
+		t.Fatalf("expected non-nil StateStore")
+	}
+	if rec == nil {
+		t.Fatalf("expected non-nil Reconciler")
+	}
+	if committer != nil {
+		t.Fatalf("expected nil committer when RUNTIME=docker, got %v", committer)
+	}
 }
 
 func TestWiring_BuildAuth_OIDCSuccess(t *testing.T) {
