@@ -136,6 +136,7 @@ func New(cfg ServerConfig) *fiber.App {
 		ServerHeader:   "agrelha",
 		AppName:        "agrelha",
 		ReadBufferSize: 32 * 1024,
+		BodyLimit:      64 * 1024 * 1024,
 	})
 	RegisterRoutes(app, cfg)
 	return app

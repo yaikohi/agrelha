@@ -144,3 +144,11 @@ func TestRoutes_LogoutLeavesSignedOutFlash(t *testing.T) {
 		t.Errorf("flash = %q, want %q", got, "ok|Signed out.")
 	}
 }
+
+func TestRoutes_BodyLimit(t *testing.T) {
+	app := web.New(web.ServerConfig{})
+	expected := 64 * 1024 * 1024
+	if app.Config().BodyLimit != expected {
+		t.Errorf("app.Config().BodyLimit = %d, want %d", app.Config().BodyLimit, expected)
+	}
+}
