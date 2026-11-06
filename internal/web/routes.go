@@ -27,23 +27,27 @@ import (
 
 // ServerConfig defines the handlers and authentication provider used to mount web routes.
 type ServerConfig struct {
-	Auth      ports.Auth
-	Authz     *authz.Service
-	Access    *access.Handler
-	Backups   *backupshttp.Handler
-	Console   *consolehttp.Handler
-	Content   *contenthttp.Handler
-	Dashboard *dashboardhttp.Handler
-	GMod      *gmodhttp.Handler
-	Grants    *grantshttp.Handler
-	Overview  *overviewhttp.Handler
-	Minecraft *minecrafthttp.Handler
-	Valheim   *valheimhttp.Handler
-	Wizard    *wizardhttp.Handler
+	TraceMiddleware fiber.Handler
+	Auth            ports.Auth
+	Authz           *authz.Service
+	Access          *access.Handler
+	Backups         *backupshttp.Handler
+	Console         *consolehttp.Handler
+	Content         *contenthttp.Handler
+	Dashboard       *dashboardhttp.Handler
+	GMod            *gmodhttp.Handler
+	Grants          *grantshttp.Handler
+	Overview        *overviewhttp.Handler
+	Minecraft       *minecrafthttp.Handler
+	Valheim         *valheimhttp.Handler
+	Wizard          *wizardhttp.Handler
 }
 
 // RegisterRoutes attaches middleware and all endpoints (public and protected) to the Fiber app.
 func RegisterRoutes(app *fiber.App, cfg ServerConfig) {
+	if cfg.TraceMiddleware != nil {
+		app.Use(cfg.TraceMiddleware)
+	}
 	app.Use(shared.RequestLogger())
 	app.Use(guard.Optional(cfg.Auth, cfg.Authz))
 	app.Get("/healthz", func(c *fiber.Ctx) error { return c.SendString("ok") })

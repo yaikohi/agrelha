@@ -85,6 +85,7 @@ type pending struct {
 // Checker keeps a per-Instance Report, applies the updates the operator picks,
 // and holds the single step back from the last apply.
 type Checker struct {
+	trace    JobTracer
 	insts    Instances
 	cat      Catalog
 	restore  RestorePoints
@@ -97,7 +98,20 @@ type Checker struct {
 }
 
 // Option configures a Checker.
+// JobTracer wraps one scheduled run so the composition root can observe it.
+type JobTracer func(ctx context.Context, name string, run func(context.Context))
+
+func noJobTrace(ctx context.Context, _ string, run func(context.Context)) { run(ctx) }
+
 type Option func(*Checker)
+
+func WithJobTracer(t JobTracer) Option {
+	return func(x *Checker) {
+		if t != nil {
+			x.trace = t
+		}
+	}
+}
 
 // WithInterval overrides how often the background refresh runs.
 func WithInterval(d time.Duration) Option {
@@ -128,6 +142,7 @@ func New(insts Instances, cat Catalog, opts ...Option) *Checker {
 		interval: defaultInterval,
 		snap:     map[int]snapshot{},
 		pend:     map[int]pending{},
+		trace:    noJobTrace,
 	}
 	for _, o := range opts {
 		o(c)
@@ -150,7 +165,7 @@ func (c *Checker) Start(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				c.Refresh(ctx)
+				c.trace(ctx, "modupdates.refresh", c.Refresh)
 			}
 		}
 	}()

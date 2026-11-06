@@ -71,10 +71,10 @@ func (h *Handler) renderAccessPage(c *fiber.Ctx, activeGame string) error {
 			ops = o
 			whitelist = w
 		}
-		if pl, err := h.cfg.MCAccess.OnlinePlayers(); err == nil {
+		if pl, err := h.cfg.MCAccess.OnlinePlayers(c.UserContext()); err == nil {
 			onlinePlayers = pl
 		}
-		if enf, err := h.cfg.MCAccess.WhitelistEnforced(); err == nil {
+		if enf, err := h.cfg.MCAccess.WhitelistEnforced(c.UserContext()); err == nil {
 			whitelistEnforced = enf
 		}
 	}

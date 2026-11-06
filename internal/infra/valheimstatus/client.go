@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const DefaultTimeout = 3 * time.Second
+
 type Status struct {
 	ServerName  string `json:"server_name"`
 	PlayerCount int    `json:"player_count"`
@@ -27,7 +29,7 @@ func WithURL(fn func(service string) string) Option { return func(c *Client) { c
 
 func New(namespace string, opts ...Option) *Client {
 	c := &Client{
-		http: &http.Client{Timeout: 3 * time.Second},
+		http: &http.Client{Timeout: DefaultTimeout},
 		urlFn: func(service string) string {
 			return fmt.Sprintf("http://%s.%s.svc.cluster.local:9001/status.json", service, namespace)
 		},

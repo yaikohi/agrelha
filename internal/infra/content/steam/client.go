@@ -14,6 +14,8 @@ import (
 	"agrelha/internal/ports"
 )
 
+const DefaultTimeout = 15 * time.Second
+
 var _ ports.WorkshopResolver = (*Client)(nil)
 
 type Client struct {
@@ -40,7 +42,7 @@ func New(apiKey string, opts ...Option) *Client {
 	c := &Client{
 		baseURL: "https://api.steampowered.com",
 		apiKey:  apiKey,
-		http:    &http.Client{Timeout: 15 * time.Second},
+		http:    &http.Client{Timeout: DefaultTimeout},
 	}
 	for _, opt := range opts {
 		opt(c)

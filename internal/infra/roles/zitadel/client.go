@@ -24,6 +24,8 @@ import (
 	"agrelha/internal/ports"
 )
 
+const DefaultTimeout = 20 * time.Second
+
 type Config struct {
 	Issuer     string
 	APIBaseURL string
@@ -80,7 +82,7 @@ func New(cfg Config) (*Client, error) {
 	}
 	hc := cfg.HTTPClient
 	if hc == nil {
-		hc = &http.Client{Timeout: 20 * time.Second}
+		hc = &http.Client{Timeout: DefaultTimeout}
 	}
 	return &Client{base: base, tokenURL: tokenURL, issuer: issuer, projectID: cfg.ProjectID, key: k, http: hc}, nil
 }

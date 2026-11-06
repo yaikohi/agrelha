@@ -1,6 +1,7 @@
 package access
 
 import (
+	"context"
 	"testing"
 
 	"agrelha/internal/infra/rcon"
@@ -10,10 +11,10 @@ import (
 func TestAccessManagerWithoutConsole(t *testing.T) {
 	m := NewAccessManager(nil, "manifests/access.yaml", nil)
 
-	if _, err := m.OnlinePlayers(); err == nil {
+	if _, err := m.OnlinePlayers(context.Background()); err == nil {
 		t.Error("OnlinePlayers with no console: want an error, got nil")
 	}
-	if _, err := m.WhitelistEnforced(); err == nil {
+	if _, err := m.WhitelistEnforced(context.Background()); err == nil {
 		t.Error("WhitelistEnforced with no console: want an error, got nil")
 	}
 }
@@ -24,7 +25,7 @@ func TestAccessManagerSurvivesTypedNilConsole(t *testing.T) {
 
 	m := NewAccessManager(nil, "manifests/access.yaml", console)
 
-	if _, err := m.OnlinePlayers(); err == nil {
+	if _, err := m.OnlinePlayers(context.Background()); err == nil {
 		t.Error("OnlinePlayers with a typed-nil console: want an error, got nil")
 	}
 }

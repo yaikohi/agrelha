@@ -2,6 +2,7 @@ package rcon
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -21,26 +22,50 @@ const (
 
 var ErrNotConfigured = errors.New("rcon: no password configured")
 
+// Tracer observes one RCON command. It returns a derived context and a finish
+// func that receives the command's error, which callers routinely discard.
+type Tracer func(ctx context.Context, name string) (context.Context, func(error))
+
+type Option func(*Client)
+
+func WithTracer(t Tracer) Option {
+	return func(c *Client) {
+		if t != nil {
+			c.trace = t
+		}
+	}
+}
+
+func noTrace(ctx context.Context, _ string) (context.Context, func(error)) {
+	return ctx, func(error) {}
+}
+
 type Client struct {
 	addr     string
 	password string
 	timeout  time.Duration
+	trace    Tracer
 
 	mu    sync.Mutex
 	conn  net.Conn
 	reqID int32
 }
 
-func NewClient(addr, password string, timeout time.Duration) *Client {
+func NewClient(addr, password string, timeout time.Duration, opts ...Option) *Client {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	return &Client{
+	c := &Client{
 		addr:     addr,
 		password: password,
 		timeout:  timeout,
 		reqID:    1,
+		trace:    noTrace,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 func (c *Client) connect() error {
@@ -120,32 +145,52 @@ func (c *Client) readPacket() (int32, int32, string, error) {
 }
 
 // Execute sends an RCON command to the server and returns the console response.
-func (c *Client) Execute(cmd string) (string, error) {
+// Callers routinely discard the error, so failures are recorded on the span.
+func (c *Client) Execute(ctx context.Context, cmd string) (string, error) {
 	if c == nil {
 		return "", ErrNotConfigured
 	}
+
+	_, end := c.trace(ctx, "rcon.execute "+commandVerb(cmd))
+	var failed error
+	defer func() { end(failed) }()
+
+	fail := func(err error) (string, error) {
+		failed = err
+		return "", err
+	}
+
+	if err := ctx.Err(); err != nil {
+		return fail(err)
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if err := c.connect(); err != nil {
-		return "", err
+		return fail(err)
 	}
 
 	c.reqID++
 	if err := c.writePacket(c.reqID, packetTypeExecCommand, cmd); err != nil {
 		c.conn.Close()
 		c.conn = nil
-		return "", fmt.Errorf("rcon send cmd: %w", err)
+		return fail(fmt.Errorf("rcon send cmd: %w", err))
 	}
 
 	_, _, response, err := c.readPacket()
 	if err != nil {
 		c.conn.Close()
 		c.conn = nil
-		return "", fmt.Errorf("rcon read response: %w", err)
+		return fail(fmt.Errorf("rcon read response: %w", err))
 	}
 
 	return response, nil
+}
+
+func commandVerb(cmd string) string {
+	verb, _, _ := strings.Cut(strings.TrimSpace(cmd), " ")
+	return verb
 }
 
 func (c *Client) Close() error {
@@ -165,14 +210,16 @@ func (c *Client) Close() error {
 type Pool struct {
 	password string
 	timeout  time.Duration
+	opts     []Option
 	mu       sync.Mutex
 	clients  map[string]*Client
 }
 
-func NewPool(password string, timeout time.Duration) *Pool {
+func NewPool(password string, timeout time.Duration, opts ...Option) *Pool {
 	return &Pool{
 		password: password,
 		timeout:  timeout,
+		opts:     opts,
 		clients:  make(map[string]*Client),
 	}
 }
@@ -183,7 +230,7 @@ func (p *Pool) ClientFor(addr string) *Client {
 	if c, ok := p.clients[addr]; ok {
 		return c
 	}
-	c := NewClient(addr, p.password, p.timeout)
+	c := NewClient(addr, p.password, p.timeout, p.opts...)
 	p.clients[addr] = c
 	return c
 }

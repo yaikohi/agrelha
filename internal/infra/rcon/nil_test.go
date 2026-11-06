@@ -2,6 +2,7 @@ package rcon
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -13,7 +14,7 @@ import (
 
 func TestNilClientDoesNotPanic(t *testing.T) {
 	var c *Client
-	if _, err := c.Execute("/list"); !errors.Is(err, ErrNotConfigured) {
+	if _, err := c.Execute(context.Background(), "/list"); !errors.Is(err, ErrNotConfigured) {
 		t.Errorf("Execute on nil client: got %v, want ErrNotConfigured", err)
 	}
 	if err := c.Close(); err != nil {
@@ -102,7 +103,7 @@ func TestRCONClientAndPool(t *testing.T) {
 		t.Errorf("expected cached client from pool")
 	}
 
-	resp, err := client.Execute("whitelist list")
+	resp, err := client.Execute(context.Background(), "whitelist list")
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestRCONClientAndPool(t *testing.T) {
 	}
 
 	// Repeated execute on open conn
-	resp2, err := client.Execute("save-all")
+	resp2, err := client.Execute(context.Background(), "save-all")
 	if err != nil || resp2 != "ok: save-all" {
 		t.Errorf("execute2 resp = %q, err = %v", resp2, err)
 	}
@@ -127,16 +128,15 @@ func TestRCONClientAndPool(t *testing.T) {
 
 	// 2. Auth failure
 	badClient := NewClient(addr, "wrongpassword", 2*time.Second)
-	_, err = badClient.Execute("list")
+	_, err = badClient.Execute(context.Background(), "list")
 	if err == nil || !strings.Contains(err.Error(), "authentication failed") {
 		t.Errorf("expected auth failure error, got: %v", err)
 	}
 
 	// 3. Dial failure
 	deadClient := NewClient("127.0.0.1:1", "secretpass", 100*time.Millisecond)
-	_, err = deadClient.Execute("list")
+	_, err = deadClient.Execute(context.Background(), "list")
 	if err == nil {
 		t.Errorf("expected dial error on closed port")
 	}
 }
-

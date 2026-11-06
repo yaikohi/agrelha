@@ -99,6 +99,16 @@ func WithBaseURL(u string) SocketClientOption {
 }
 
 // NewSocketClient creates a client talking to the Docker daemon over unix socket.
+const DefaultTimeout = 30 * time.Second
+
+func SocketTransport(socketPath string) *http.Transport {
+	return &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+		},
+	}
+}
+
 func NewSocketClient(socketPath string, opts ...SocketClientOption) *SocketClient {
 	if socketPath == "" {
 		if host := os.Getenv("DOCKER_HOST"); host != "" {
@@ -111,14 +121,8 @@ func NewSocketClient(socketPath string, opts ...SocketClientOption) *SocketClien
 		socketPath = DefaultSocketPath
 	}
 
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
-		},
-	}
-
 	sc := &SocketClient{
-		http:       &http.Client{Transport: transport, Timeout: 30 * time.Second},
+		http:       &http.Client{Transport: SocketTransport(socketPath), Timeout: DefaultTimeout},
 		baseURL:    "http://localhost",
 		apiVersion: DefaultAPIVersion,
 	}

@@ -1,8 +1,11 @@
 package wiring
 
 import (
+	"agrelha/internal/platform/httpclient"
+	"agrelha/internal/platform/tracing"
 	"context"
 	"fmt"
+	"github.com/gofiber/contrib/otelfiber/v2"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -112,19 +115,20 @@ func BuildServer(ctx context.Context, cfg *config.Config, d Deps) *fiber.App {
 	})
 
 	return web.New(web.ServerConfig{
-		Auth:      d.Auth,
-		Authz:     d.Authz,
-		Grants:    grantsH,
-		Overview:  overviewH,
-		Access:    accessH,
-		Backups:   backupsH,
-		Console:   consoleH,
-		Content:   contentH,
-		Dashboard: dashboardH,
-		GMod:      gmodH,
-		Minecraft: minecraftH,
-		Valheim:   valheimH,
-		Wizard:    wizardH,
+		TraceMiddleware: traceMiddleware(),
+		Auth:            d.Auth,
+		Authz:           d.Authz,
+		Grants:          grantsH,
+		Overview:        overviewH,
+		Access:          accessH,
+		Backups:         backupsH,
+		Console:         consoleH,
+		Content:         contentH,
+		Dashboard:       dashboardH,
+		GMod:            gmodH,
+		Minecraft:       minecraftH,
+		Valheim:         valheimH,
+		Wizard:          wizardH,
 	})
 }
 
@@ -253,7 +257,7 @@ func startMinecraftScheduler(ctx context.Context, cfg *config.Config, d Deps) *a
 		_, err := d.MCInstances.ExecuteCommand(ctx, inst.Number, cmd)
 		return err
 	}))
-	sched := appbackups.New(d.MCInstances, d.MCK8s, opts...)
+	sched := appbackups.New(d.MCInstances, d.MCK8s, append(opts, appbackups.WithJobTracer(tracing.Job))...)
 	sched.Start(ctx)
 	return sched
 }
@@ -331,7 +335,7 @@ func startValheimScheduler(ctx context.Context, cfg *config.Config, d Deps) *app
 			appbackups.WithEvent(d.Store),
 		)
 	}
-	sched := appbackups.New(d.ValheimInstances, d.K8s, opts...)
+	sched := appbackups.New(d.ValheimInstances, d.K8s, append(opts, appbackups.WithJobTracer(tracing.Job))...)
 	sched.Start(ctx)
 	return sched
 }
@@ -463,6 +467,7 @@ func buildContentHandler(cfg *config.Config, d Deps, applyAfterSync func(string,
 		readme = d.Store
 	}
 	return contenthttp.New(contenthttp.Config{
+		ImageTransport: httpclient.Transport(),
 		StateStore:     d.StateStore,
 		Audit:          audit,
 		ReadmeCache:    readme,
@@ -939,4 +944,14 @@ func gmodConsoleLog(dataRoot string) func(context.Context, int, int) (io.ReadClo
 		dir := compose.InstanceDataDir(dataRoot, domain.NewInstanceID(domain.GameGMod, instanceNumber), "")
 		return logtail.Follow(ctx, filepath.Join(dir, domain.GModConsoleLogRelPath), tailLines)
 	}
+}
+
+func traceMiddleware() fiber.Handler {
+	if !tracing.Enabled() {
+		return nil
+	}
+	return otelfiber.Middleware(
+		otelfiber.WithoutMetrics(true),
+		otelfiber.WithNext(func(c *fiber.Ctx) bool { return shared.Untraced(c.Path()) }),
+	)
 }

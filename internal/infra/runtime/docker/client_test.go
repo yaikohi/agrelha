@@ -31,9 +31,10 @@ func TestNewSocketClient_EnvironmentAndOptions(t *testing.T) {
 		t.Fatal("expected non-nil client")
 	}
 
-	// Test DialContext invocation on transport
-	tr, ok := c2.http.Transport.(*http.Transport)
-	if !ok || tr.DialContext == nil {
+	// The client's transport may be wrapped for tracing, so the socket dialer is
+	// asserted on the exported constructor that builds it.
+	tr := SocketTransport("/tmp/test-docker.sock")
+	if tr.DialContext == nil {
 		t.Fatal("expected http.Transport with DialContext")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

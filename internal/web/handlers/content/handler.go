@@ -25,6 +25,7 @@ type Config struct {
 	TS             ports.PackageCatalog
 	Actor          func(*fiber.Ctx) string
 	ApplyAfterSync func(cmName, key string, check func(string) bool)
+	ImageTransport http.RoundTripper
 }
 
 // Handler serves routes and operations for mod metadata, configs, and exports.
@@ -94,7 +95,7 @@ func (h *Handler) ImageProxy(c *fiber.Ctx) error {
 	req.Header.Set("User-Agent", "agrelha-image-proxy")
 	req.Header.Set("Accept", "image/*")
 
-	resp, err := imgHTTP.Do(req)
+	resp, err := h.imageClient().Do(req)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadGateway, "fetch failed")
 	}
@@ -140,4 +141,13 @@ func PublicHost(host string) bool {
 		}
 	}
 	return true
+}
+
+func (h *Handler) imageClient() *http.Client {
+	if h == nil || h.cfg.ImageTransport == nil {
+		return imgHTTP
+	}
+	c := *imgHTTP
+	c.Transport = h.cfg.ImageTransport
+	return &c
 }

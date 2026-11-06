@@ -49,18 +49,34 @@ type Client struct {
 	http    *http.Client
 }
 
-func New(baseURL, apiKey string) *Client {
+const DefaultTimeout = 20 * time.Second
+
+type Option func(*Client)
+
+func WithHTTPClient(h *http.Client) Option {
+	return func(c *Client) {
+		if h != nil {
+			c.http = h
+		}
+	}
+}
+
+func New(baseURL, apiKey string, opts ...Option) *Client {
 	if strings.TrimSpace(apiKey) == "" {
 		return nil
 	}
 	if baseURL == "" {
 		baseURL = "https://api.curseforge.com/v1"
 	}
-	return &Client{
+	c := &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
-		http:    &http.Client{Timeout: 20 * time.Second},
+		http:    &http.Client{Timeout: DefaultTimeout},
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // Ready reports whether CurseForge can be asked anything at all.

@@ -1,197 +1,386 @@
 # Tracing agrelha
 
-The app half of **Phase 5** of the yaya-ops observability runbook
-(`yaya-ops/docs/observability-expansion-runbook.md`). That document covers Tempo, the Grafana
-datasource and the correlation wiring; this one covers the Go changes. Designed in a `/grill-me`
-session 2026-11-06. **Designed, not built.**
+The app half of **Phase 5** of `yaya-ops/docs/observability-expansion-runbook.md`, which covers Tempo
+and the Grafana wiring.
+
+**Status: implemented in the working tree, not deployed.** The code below exists and is green
+(`go build`, `go vet`, 74 packages / 0 failures). Nothing is committed, Tempo does not exist yet, and
+no span has reached a collector. Tracing is **off** until `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so
+merging this changes no behaviour on its own.
+
+## Where agrelha actually runs
+
+This decides most of what follows, so it goes first.
+
+agrelha runs on **fogo**, a NixOS host at `192.168.20.31`, as a **native systemd service** built with
+`buildGoModule` (`fogo/modules/agrelha.nix` — `ExecStart = "${agrelhaPkg}/bin/agrelha"`,
+`User = agrelha`). It is **not** in the Kubernetes cluster and **not** itself in a container;
+`deploy/docker-compose.yml` in this repo is for other people running agrelha, not for fogo.
+
+`RUNTIME = "docker"` is set, and `internal/wiring/wiring.go` branches hard on it:
+
+| What | Where | Consequence |
+|---|---|---|
+| `buildRuntime` returns the Docker runtime immediately | `wiring.go:1067` | the k8s branch is never reached, so **`internal/infra/kube/` is dead code here** |
+| `buildDeclarativePlane` returns a **nil** `*gitops.Committer` | `wiring.go:995` | **`internal/infra/gitops/` is dead code here**; state is `localstate` + SQLite |
+| the Compose reconciler is used, `Async() == false` | `reconcile/compose/reconciler.go:131` | convergence is synchronous, so a trace covers it end to end |
+
+`KUBECONFIG` is still provisioned in the nix module. Given the above it is **vestigial**, left from
+when agrelha drove the cluster.
+
+### The git-plane story, corrected
+
+An earlier draft justified tracing as a way to diagnose "the git plane has been silent since
+2026-10-21". **That was never a fault.** agrelha stopped committing because `RUNTIME=docker` does not
+construct a committer — the silence is `wiring.go:995`. agrelha used to hold a git token and commit to
+`yaya-ops` so Argo CD would reconcile the cluster; the move to fogo and Compose removed the need, and
+the token with it. The four commits by `agrelha <agrelha@localhost>` on 2026-11-02 predate the
+changeover.
+
+So tracing is not about a mystery. It is about the work agrelha actually does on fogo.
 
 ## Why
 
-To answer *"where did that hang"* about agrelha's **outbound** work. agrelha is one process, so there
-is no distributed call graph to reconstruct — but almost all of its interesting latency is in calls
-that leave the process: git clone/fetch/push against the gitops plane, the Kubernetes API, and eleven
-content APIs.
+To answer *"where did that go"* for agrelha's outbound work, which on fogo is three things:
 
-The concrete motivator: **the git plane has been silent since 2026-10-21** and the root cause is
-still unknown. A span around the committer path distinguishes the three possibilities that logs
-currently cannot — the push *fails*, the push *hangs*, or the commit path is *never reached*. That
-diagnosis is the exit criterion for this work, not a side effect of it.
+1. **Content APIs** — eleven HTTP clients (CurseForge, Modrinth, Thunderstore, Steam, …). Where mod
+   installs and update checks spend their time, and mostly invisible before this.
+2. **The Docker socket** — every start, stop and container action on the Valheim, Minecraft and
+   Garry's Mod servers. This replaced the Kubernetes API as the control path.
+3. **RCON** — the admin and whitelist path for Minecraft and Garry's Mod, where errors are discarded
+   by the caller.
 
 ### What this deliberately is not
 
-- **Not metric→trace.** Grafana jumps from a metric spike to a trace via *exemplars*, which are a
-  Prometheus construct. There is no Prometheus server by design — `/metrics` is scraped by Telegraf
-  into InfluxDB (`measurement=prometheus`). Exemplars have nowhere to live. Clicking a latency spike
-  to get the slow trace **will not work**, and that is a known trade, not a defect.
-- **Not domain spans everywhere.** Only the two non-HTTP outbound paths get hand-written spans.
-  Spans for "mod install", "world create" or wizard steps get added when a specific question needs
-  one.
-- **Not cluster tracing.** No apiserver/kubelet spans, no mesh. See the runbook.
+- **No `gitops.*` or `kube.*` spans.** Both packages are dead under `RUNTIME=docker`.
+- **Not metric→trace.** Grafana jumps metric→trace with *exemplars*, a Prometheus construct. fogo's
+  Telegraf ships metrics to InfluxDB (`fogo/modules/observability.nix`), which has nowhere to put one.
+  Clicking a latency spike to get a trace **will not work**, by design.
+- **No domain spans everywhere.** Mod install, world create and wizard steps get spans when a
+  specific question needs one.
+- **One outbound call is knowingly untraced:** `modpack.ResolveNeoForgeVersion`
+  (`internal/app/modpack/mrpack.go`) is a free function in `app` with no injection seam and eight call
+  sites. Adding a client parameter for one best-effort metadata lookup was not worth it.
+
+## The one architectural constraint
+
+This repo's layer table (`docs/architecture.md`) *permits* `app` and `infra` to import `platform`,
+but at the time this work started **neither did, in a single file** — the convention is that platform
+belongs to the composition root and inner layers receive what they need, exactly as the architecture
+doc says of `config`: *"Everything else takes narrow functional options or ports instead, so no
+adapter or service can reach for a global config value."*
+
+A first attempt had 16 inner-layer files importing `platform/tracing` and `platform/httpclient`
+directly. That passed the ratchet and still inverted the dependency direction, so it was redone:
+**every observability dependency is injected from `internal/wiring`**, through each package's own
+functional-option pattern, with a no-op default.
+
+The invariant, and how to check it:
+
+```bash
+grep -rl 'agrelha/internal/platform' internal/app internal/infra   # must print nothing
+```
+
+`internal/web` keeps two tracked files importing `platform/build` — pre-existing, version constants in
+templates, unrelated.
 
 ## Dependencies
 
-Verified to compile together against this module (`go 1.25.1`, Fiber `v2.52.9`) — a throwaway module
-with exactly these versions passed `go build` and `go vet` with exit 0 on 2026-11-06:
+Verified to compile together against this module (`go 1.25.1`, Fiber `v2.52.9`):
 
 | Module | Version |
 |---|---|
 | `github.com/gofiber/contrib/otelfiber/v2` | `v2.2.3` |
 | `go.opentelemetry.io/otel` | `v1.47.0` |
 | `go.opentelemetry.io/otel/sdk` | `v1.47.0` |
-| `go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc` | `v1.47.0` |
+| `go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp` | `v1.47.0` |
 | `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp` | `v0.72.0` |
 
-> **The version skew is real but harmless.** `otelfiber v2.2.3` declares `otel v1.19.0` and
-> `fiber v2.52.6` in its own `go.mod`. Go's minimal-version-selection resolves *upward* to
-> `otel v1.47.0` and `fiber v2.52.9`, and the OTel Go trace API is stable across v1, so it compiles.
-> This was checked by building, not assumed — **re-check it on any `otel` major bump**, because
-> `otelfiber` is not actively tracking OTel releases.
+**OTLP over HTTP, not gRPC.** agrelha is off-cluster and reaches Tempo through a Traefik route with
+basic auth; HTTP carries that in a header, gRPC through an auth middleware is more trouble than it
+buys.
 
-## The changes
+> `otelfiber v2.2.3` declares `otel v1.19.0` and `fiber v2.52.6` in its own `go.mod`. Minimal-version
+> selection resolves upward and the OTel Go trace API is stable across v1, so it compiles — checked by
+> building, not assumed. **Re-check on an `otel` major bump**; otelfiber is not actively tracking OTel
+> releases. Note `otelfiber.WithServerName` does **not** exist in v2.2.3 (the real options are
+> `WithNext`, `WithoutMetrics`, `WithTracerProvider`, `WithSpanNameFormatter`, `WithPort`,
+> `WithPropagators`, `WithCollectClientIP`, `WithCustomAttributes`, `WithCustomMetricAttributes`,
+> `WithMeterProvider`).
+
+## The two new platform packages
+
+Both import only stdlib and OTel — nothing from this module — so they satisfy the platform rule.
+
+**`internal/platform/tracing`**
+
+| Symbol | Purpose |
+|---|---|
+| `Enabled() bool` | true when `OTEL_EXPORTER_OTLP_ENDPOINT` is set |
+| `Init(ctx, version, commit) (shutdown, error)` | builds the provider; a no-op shutdown when disabled |
+| `Tracer(name) trace.Tracer` | `otel.Tracer("agrelha/" + name)` |
+| `Job(ctx, name, fn)` | runs `fn` inside a root span called `job.<name>` |
+| `Starter(component)` | returns `func(ctx, name) (ctx, func(error))` — start/finish pair that records the error |
+| `ServiceName` | `"agrelha"` |
+
+**`internal/platform/httpclient`**
+
+| Symbol | Purpose |
+|---|---|
+| `Wrap(base) http.RoundTripper` | `otelhttp` over `base` (nil → `http.DefaultTransport`) |
+| `Transport() http.RoundTripper` | `Wrap(nil)` |
+| `New(timeout) *http.Client` | instrumented client with that timeout |
+
+Both are referenced **only** from `internal/wiring` and `cmd/`.
+
+## What was built
 
 ### 1. Tracer provider — `cmd/agrelha/main.go`
 
-A `tracing.Init(ctx) (shutdown func(context.Context) error, err error)` helper, called from `main`
-before the server starts, with its shutdown deferred alongside the existing graceful-shutdown path.
+`tracing.Init(ctx, build.Version, build.Commit)` runs after `logging.Setup`, with its shutdown
+deferred using the existing `shutdownTimeout`. Exporter `otlptracehttp` configured entirely from the
+standard `OTEL_*` environment variables, `AlwaysSample()` (100%), resource carrying `service.name`,
+`service.version`, `vcs.revision` and `host.name` from `os.Hostname()`.
 
-- Exporter: `otlptracegrpc`, endpoint from `OTEL_EXPORTER_OTLP_ENDPOINT`.
-- Sampler: `sdktrace.AlwaysSample()` — **100%**. The thing being hunted is rare; sampling defeats the
-  purpose. Revisit only if volume makes it expensive.
-- Resource: `service.name=agrelha`, plus `service.version` and `service.instance.id` from the existing
-  `internal/build` vars (`build.Version`, `build.Commit`) so a span says which build produced it.
-- **Degrade quietly.** If the exporter cannot reach Tempo, agrelha must still start and serve. An
-  observability backend being down is not an outage of the thing being observed — the OTLP exporter
-  retries in the background and `Init` must not be fatal.
+**It degrades quietly.** A failing `Init` logs `slog.Warn("tracing disabled", …)` and agrelha starts
+anyway; an unreachable Tempo is not an outage of the thing being observed. The startup line now also
+reports `"tracing", tracing.Enabled()`.
 
-### 2. Structured logging — `cmd/agrelha/main.go` + `internal/web/shared/logging.go`
+### 2. Structured logging — `internal/web/shared/logging.go`
 
-Two changes, and this is what makes the whole thing navigable:
+JSON logging was **already built** (`internal/platform/logging/logging.go:14` does
+`slog.NewJSONHandler` + `SetDefault`, selected by `LOG_FORMAT`) and **already enabled** on fogo
+(`agrelha.nix:105`). An earlier draft specified this work; it existed.
 
-- **`main.go` sets `slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, …)))`.** Today no handler
-  is installed, so the default emits `2026/11/06 12:00:00 INFO msg key=value` — a Go `log` timestamp
-  prefix in front of logfmt pairs, which Loki's parser will not cleanly eat. The Tempo→Loki jump
-  queries `| json | trace_id="…"`, so the lines have to be JSON.
-- **`logging.go` logs `trace_id` instead of `rid`.** `rid` is `reqCounter.Add(1)`, a per-process
-  counter: it resets to 1 on every restart and collides across pod restarts, so it cannot correlate
-  anything beyond a single process lifetime. The trace ID is globally unique and is the join key
-  Grafana uses. Take it from the span context:
-  `trace.SpanContextFromContext(c.UserContext()).TraceID().String()`.
+What changed: the request logger now adds **`trace_id`**, conditionally, in the same shape as the
+file's existing optional fields:
 
-> Keep `rid` *as well* if the shorter value is useful when reading raw logs — but `trace_id` is the
-> field the datasource links on.
-
-### 3. Inbound HTTP — `internal/web/routes.go`
-
-`otelfiber.Middleware(...)` registered alongside `RequestLogger`.
-
-**The SSE route must be excluded.** `internal/web/handlers/dashboard/handler.go` opens a long-lived
-Datastar SSE stream (`"sse open"` / `"sse close"`, stream `"main"`) that stays open for minutes or
-hours. Wrapped naively, that is **one span per connection**, held open for the connection's life —
-which shows in Tempo as a single useless multi-hour bar and never closes until the client navigates
-away. This is the most common way Fiber auto-instrumentation looks broken.
-
-Use `otelfiber.WithNext(func(c *fiber.Ctx) bool { … })` to skip it (verified present in v2.2.3).
-
-**Factor the skip list.** `logging.go:21` already skips `/healthz`, `/metrics` and `/assets`. The
-tracing middleware needs the same set plus the SSE path. Extract **one** predicate both call rather
-than maintaining two lists — two lists that disagree is precisely the drift documented in
-`docs/drift.md`, and the token work in this repo exists because of that pattern.
-
-If per-frame visibility inside a stream is ever wanted, span the *work a frame triggers*, never the
-connection.
-
-### 4. Outbound HTTP — the eleven clients
-
-Wrap each client's transport: `http.Client{Transport: otelhttp.NewTransport(base)}`. This yields a
-child span per outbound request with method, URL, status and duration, for free.
-
-| Package |
-|---|
-| `internal/infra/content/modrinth/client.go` |
-| `internal/infra/content/curseforge/client.go` |
-| `internal/infra/content/thunderstore/client.go` |
-| `internal/infra/content/steam/client.go` |
-| `internal/infra/content/modpackindex/client.go` |
-| `internal/infra/content/mcversions/client.go` |
-| `internal/infra/valheimstatus/client.go` |
-| `internal/infra/roles/zitadel/client.go` |
-| `internal/infra/runtime/docker/client.go` |
-| `internal/web/handlers/content/handler.go` |
-| `internal/app/modpack/mrpack.go` |
-
-Requests must carry the request's context (`c.UserContext()` in Fiber) or the child spans orphan.
-
-### 5. Outbound non-HTTP — the paths that actually matter
-
-Auto-instrumentation **cannot** see these, which is exactly why the git-plane problem is still open:
-the handler would look fast with a silent gap where the commit should be.
-
-`ctx` is already the first parameter throughout both packages, so this costs no signature churn.
-
-**`internal/infra/gitops/`** — span these, named `gitops.*`:
-
-| Function | File | Why it matters |
-|---|---|---|
-| `ensureCloneLocked` | `committer.go:51` | clone / open — first place a hang can sit |
-| `syncRemoteLocked` | `committer.go:110` | fetch / reset against the remote |
-| `Patch` | `committer.go:172` | the commit+push path |
-| `WriteDirectory` | `dir.go:19` | |
-| `DeleteDirectory` | `dir.go:108` | |
-| `SetData` / `DeleteData` / `ReplaceData` / `ReplaceConfigMap` | `data.go:18,24,30,39` | |
-| `mutateRaw` | `data.go:79` | the shared mutate→commit core |
-
-Record on the commit/push spans: the target path, the commit message, whether a change was actually
-produced (these return `(bool, error)` — **a `false` is the "nothing to commit" case and is the prime
-suspect for silence**), and the error.
-
-**`internal/infra/kube/client.go`** — span the operations, named `kube.*`: `Restart`,
-`RestartDeployment`, `Scale`, `Replicas`, `DeploymentReplicas`, `CreateBackupJob`,
-`CreateRestoreJob`, `activeDeploymentName`.
-
-### 6. The ratchet — a guard test
-
-There are **eleven** HTTP clients today, so a twelfth is near-certain, and the failure mode is
-silent: someone adds a client, forgets the transport, and it is untraced forever with nothing
-complaining.
-
-This repo already defends against omission this way — `internal/arch/arch_test.go` fails the build
-when a package has no row in the architecture doc, and
-`internal/web/pages/design_tokens_test.go:93` fails it when a CSS token has no documentation row,
-**bidirectionally**. Add the same move for tracing:
-
-1. Every `internal/infra/**/client.go` that constructs an `http.Client` must reference
-   `otelhttp.NewTransport`.
-2. Every package named as traced in this document must still exist (catches the doc rotting).
-
-> **Named weakness:** this greps source, so it checks *spelling, not behaviour*. A client that wraps
-> its transport but is never called still passes, and a client that builds its transport through a
-> helper the regex doesn't match fails spuriously. It is still worth having, because the risk being
-> defended against is **omission**, not misuse. `design_tokens_test.go` makes the same trade and has
-> earned its keep.
-
-### 7. Deployment — `yaya-ops`
-
-One env var on the agrelha Deployment:
-
-```yaml
-- name: OTEL_EXPORTER_OTLP_ENDPOINT
-  value: http://tempo.observability.svc.cluster.local:4317
+```go
+if tid := traceID(c); tid != "" {
+    lg = lg.With("trace_id", tid)
+}
 ```
+
+with `traceID` reading `trace.SpanContextFromContext(c.UserContext())`. Conditional on purpose —
+otherwise every line carries `trace_id:""` while tracing is off. `rid` is kept: it stays useful when
+reading raw logs, but it is `reqCounter.Add(1)`, a per-process counter that resets on restart, so
+`trace_id` is the field Grafana joins on.
+
+### 3. Inbound HTTP — injected, not registered in `web`
+
+`internal/web/routes.go` does **not** know about OTel. `ServerConfig` gained:
+
+```go
+TraceMiddleware fiber.Handler
+```
+
+registered first in `RegisterRoutes` when non-nil. `internal/wiring/server.go` builds it:
+
+```go
+func traceMiddleware() fiber.Handler {
+	if !tracing.Enabled() {
+		return nil
+	}
+	return otelfiber.Middleware(
+		otelfiber.WithoutMetrics(true),
+		otelfiber.WithNext(func(c *fiber.Ctx) bool { return shared.Untraced(c.Path()) }),
+	)
+}
+```
+
+`WithoutMetrics(true)` matters: otelfiber emits OTel **metrics** by default, which would start a
+second metrics pipeline beside `/metrics` → Telegraf → InfluxDB.
+
+**The SSE route is excluded.** `handlers/dashboard/handler.go:311` opens a long-lived Datastar stream;
+the live journal on fogo shows one closing at `"dur_ms":460016` — **7.7 minutes**. Wrapped naively
+that is a single 7.7-minute span. The exclusion is measured, not precautionary.
+
+The skip list is factored in `shared/logging.go`, deliberately as **two** predicates, because the sets
+differ by one path:
+
+```go
+func Unobserved(path string) bool  // /healthz, /metrics, /assets  — the logger skips these
+func Untraced(path string) bool    // Unobserved + /sse            — tracing also skips SSE
+```
+
+A single shared list would have silently stopped logging `/sse` requests, which fogo logs today.
+
+### 4. Outbound HTTP — one constructor, injected everywhere
+
+Rather than a guard test policing twelve copies of `&http.Client{…}`, every client now takes one.
+Each adapter gained an exported `DefaultTimeout` so wiring references the policy instead of
+duplicating the number:
+
+| Package | `DefaultTimeout` | Seam |
+|---|---|---|
+| `content/modrinth` | 15s | `WithHTTPClient` (new) |
+| `content/curseforge` | 20s | `WithHTTPClient` (new) |
+| `content/thunderstore` | 15s | `WithHTTPClient` (new) |
+| `content/modpackindex` | 20s | `WithHTTPClient` (new) |
+| `content/mcversions` | 15s | `WithHTTPClient` (new) |
+| `content/steam` | 15s | `WithHTTPClient` (existed) |
+| `valheimstatus` | 3s | `WithHTTPClient` (existed) |
+| `roles/zitadel` | 20s | `Config.HTTPClient` (existed) |
+| `runtime/docker` | 30s | `WithHTTPClient` (existed) + `SocketTransport` (new) |
+
+Wiring supplies `httpclient.New(pkg.DefaultTimeout)`; the default inside each package is a plain,
+uninstrumented client, so tests and other embedders are unaffected.
+
+**The Docker socket is the highest-value item.** `SocketTransport(path)` is now exported, so wiring
+wraps it:
+
+```go
+dockerruntime.NewSocketClient(cfg.DockerSocket,
+    dockerruntime.WithHTTPClient(&http.Client{
+        Transport: httpclient.Wrap(dockerruntime.SocketTransport(cfg.DockerSocket)),
+        Timeout:   dockerruntime.DefaultTimeout,
+    }))
+```
+
+It is a plain `*http.Transport` with a unix `DialContext`, so `otelhttp` wraps it like any other and
+real method/path/status land on the span; only the URL host is synthetic. Exporting the constructor
+also let `client_test.go` keep asserting the dial invariant without reaching into the struct.
+
+Two more: `thunderstore.warm` now reuses `c.http` (its context already carries `indexTimeout`, so the
+one-off client was redundant), and the image fetcher takes `Config.ImageTransport http.RoundTripper`
+— transport only, because `imgHTTP`'s `CheckRedirect` is a security control (https-only, public hosts)
+that must not be replaceable by an injected client.
+
+### 5. Outbound non-HTTP — RCON
+
+`internal/infra/rcon` does not import `platform`. It declares its own seam:
+
+```go
+type Tracer func(ctx context.Context, name string) (context.Context, func(error))
+func WithTracer(t Tracer) Option
+```
+
+defaulting to `noTrace`, threaded through `NewClient` and `Pool` (so pooled clients inherit it).
+Wiring passes `tracing.Starter("rcon")`. Span name is `rcon.execute <verb>`.
+
+**Only the verb is recorded**, via `commandVerb(cmd)` — `/op`, `/whitelist` — never the full command,
+which carries usernames.
+
+The reason this is worth a port change: `internal/app/access/access.go` **discards these errors** at
+six call sites.
+
+```go
+_, _ = a.rcon.Execute(ctx, "/op "+username)   // access.go:114, and :156 :194 :195 :237 :238
+```
+
+The finish func receives the error even when the caller drops it, so the span is the only place that
+failure surfaces.
+
+What the signature change cost, in full — larger than first estimated:
+`Console.Execute(ctx, cmd)` on the port (`internal/ports/runtime.go:155`), `rcon.Client.Execute`,
+three test fakes, **and three `AccessManager` methods that had no context at all**
+(`OnlinePlayers`, `WhitelistEnforced`, `SetWhitelistEnforced`) plus their five callers, and
+`wiring.go`'s `rconExec` closure. Everything had a context in scope one frame up, so nothing needed
+`context.TODO()`.
+
+> `shortcut: Execute takes ctx for the span and cancellation, but the per-call timeout is still the
+> construction-time one on Client. Upgrade to a per-call deadline if a hung RCON ever blocks a
+> request.`
+
+### 6. Background jobs — an injected tracer per scheduler
+
+Everything above is request-scoped. **Five loops run on timers with no request behind them**, and
+would otherwise produce nothing, or parentless single spans. Each declares the same local seam —
+
+```go
+type JobTracer func(ctx context.Context, name string, run func(context.Context))
+func WithJobTracer(t JobTracer) Option
+```
+
+— defaulting to `noJobTrace` (which just calls `run(ctx)`), with wiring passing `tracing.Job`:
+
+| Package | Entry point | Span |
+|---|---|---|
+| `app/modupdates` | `Checker.Start` → `Refresh` | `job.modupdates.refresh` |
+| `app/restarts` | `Queue.Run` → `tick` | `job.restarts.tick` |
+| `app/backups` | `BackupScheduler.Start` → `RunDaily` | `job.backups.daily` |
+| `app/health` | `Watcher.Start` → `Check` | `job.health.check` |
+| `app/ingest` | `Supervisor.Run` → `Reconcile` | `job.ingest.reconcile` |
+
+Each took a `context.Context` and passed **the same process-lifetime context** into every tick, with
+no span in it. **This is where the value is:** `modupdates` is the job that hammers the content APIs
+on a timer, and `restarts`/`backups` drive the Docker socket. A request-only design would trace the
+operator clicking buttons and miss everything agrelha does on its own.
+
+`backups` spans `RunDaily` rather than the tick, because the tick is mostly a clock check that does
+nothing — spanning it would emit an empty span every 15 minutes.
+
+**Two long-lived loops are excluded**, for the same reason as the SSE route: `occupancy.Watch`
+(`tracker.go:71`) is a per-instance stream consumer, and `logtail.Follow` (`logtail.go:22`) returns an
+open stream. Neither is a tick job.
+
+### 7. Tests for the seams
+
+`internal/app/health/jobtracer_test.go` and `internal/infra/rcon/tracer_test.go`. Both were verified
+to **fail when the seam is bypassed**, which is the only thing that makes them worth having:
+
+| Break introduced | Test output |
+|---|---|
+| call `w.Check(ctx)` directly instead of through the tracer | `job tracer was never invoked; Start does not route ticks through it` |
+| swallow the error instead of passing it to the finish func | `tracer finish got nil error; a failing command must be reported even though callers discard it` |
+
+Also covered: both no-tracer defaults still run, and `Execute` returns `context.Canceled` for a
+cancelled context.
+
+The **existing** ratchet did its job too: `internal/arch.TestPackageTable` failed twice during this
+work, once for each new platform package, until `docs/architecture.md` gained a row. Those rows are
+part of this change.
+
+### 8. Deployment — `fogo/modules/agrelha.nix` (not yet done)
+
+Not a Kubernetes Deployment. Two entries in the systemd service's `environment` block, beside the
+existing `LOG_FORMAT = "json"`:
+
+```nix
+OTEL_EXPORTER_OTLP_ENDPOINT = "https://tempo.ykhi.xyz";
+OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf";
+```
+
+The basic-auth credential does **not** belong in `environment` — it is readable in
+`/proc/<pid>/environ` and the nix store. It goes in the existing sops env template, which the service
+already loads via `EnvironmentFile`:
+
+```nix
+sops.secrets.tempo_push_basic = { owner = "agrelha"; };
+
+sops.templates."agrelha.env".content = ''
+  …existing lines…
+  OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic ${config.sops.placeholder.tempo_push_basic}
+'';
+```
+
+Store the pre-encoded `user:password` base64 as the secret so the template does no encoding.
+
+## What remains
+
+1. **Tempo + the push route + the Grafana datasource** — Phase 5a of the yaya-ops runbook. Nothing
+   here can be seen until that exists.
+2. **The `tempo-push-auth` Secret** in the cluster and its password in fogo's sops store.
+3. **The two nix env entries** above.
+4. Then take the readings in "Done means".
 
 ## Done means
 
 1. **Infrastructural** — a request produces a trace in Grafana; the span→logs button lands on that
    request's log lines; a log line's TraceID links back to the span.
-2. **Diagnostic**, gated behind 1 — trigger a world or config write and read the waterfall. The trace
-   must show which of **clone → mutate → commit → push** fails, hangs, or is never entered.
+2. **Both halves of the program are covered**, gated behind 1:
+   - an operator action (start a Valheim server) shows the waterfall, including the `docker` socket
+     call;
+   - a **background** `modupdates` tick produces its own root span with the content-API spans parented
+     under it — not bare parentless spans.
+3. **An RCON admin action is visible** — `/op` on a Minecraft world yields an `rcon.execute /op` span,
+   and a forced failure appears on it instead of being discarded.
 
-**This is not finished at step 1.** The justification for the whole phase was a standing, unexplained
-failure; shipping the instrument without taking the reading would leave the actual question exactly
-where it was.
+## Verification done so far
 
-## Build order
+- `go build ./...`, `go vet ./...` clean; `go test ./...` — **74 packages, 0 failures**.
+- `grep -rl 'agrelha/internal/platform' internal/app internal/infra` prints nothing.
+- Both new tests shown to fail when their seam is bypassed.
+- Dependency set compiled together before being adopted.
 
-1. `tracing.Init` + the `slog` JSON switch (verifiable alone: spans appear for inbound requests).
-2. `otelhttp` on the eleven clients + the guard test.
-3. Manual `gitops.*` and `kube.*` spans.
-4. Take the git-plane reading.
+Not verified: no span has reached a collector, because Tempo does not exist yet.

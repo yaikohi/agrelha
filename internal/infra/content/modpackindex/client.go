@@ -29,15 +29,31 @@ type Client struct {
 	verFetched time.Time
 }
 
-func New(baseURL string) *Client {
+const DefaultTimeout = 20 * time.Second
+
+type Option func(*Client)
+
+func WithHTTPClient(h *http.Client) Option {
+	return func(c *Client) {
+		if h != nil {
+			c.http = h
+		}
+	}
+}
+
+func New(baseURL string, opts ...Option) *Client {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	return &Client{
+	c := &Client{
 		baseURL:   strings.TrimRight(baseURL, "/"),
 		userAgent: DefaultUserAgent,
-		http:      &http.Client{Timeout: 20 * time.Second},
+		http:      &http.Client{Timeout: DefaultTimeout},
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 type ModpackSummary struct {

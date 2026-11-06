@@ -31,7 +31,20 @@ type InstanceLookup func(ctx context.Context, instanceNumber int) (*domain.Insta
 
 type EventRecorder func(kind, detail string)
 
+// JobTracer wraps one scheduled run so the composition root can observe it.
+type JobTracer func(ctx context.Context, name string, run func(context.Context))
+
+func noJobTrace(ctx context.Context, _ string, run func(context.Context)) { run(ctx) }
+
 type Option func(*Queue)
+
+func WithJobTracer(t JobTracer) Option {
+	return func(x *Queue) {
+		if t != nil {
+			x.trace = t
+		}
+	}
+}
 
 func WithOccupancy(fn Occupancy) Option    { return func(q *Queue) { q.players = fn } }
 func WithRestarter(fn Restarter) Option    { return func(q *Queue) { q.restart = fn } }
@@ -42,6 +55,7 @@ func WithInterval(d time.Duration) Option  { return func(q *Queue) { q.interval 
 func WithClock(fn func() time.Time) Option { return func(q *Queue) { q.now = fn } }
 
 type Queue struct {
+	trace   JobTracer
 	mu      sync.Mutex
 	pending map[int]Pending
 
@@ -59,6 +73,7 @@ func New(opts ...Option) *Queue {
 		pending:  map[int]Pending{},
 		interval: 30 * time.Second,
 		now:      time.Now,
+		trace:    noJobTrace,
 	}
 	for _, o := range opts {
 		o(q)
@@ -157,7 +172,7 @@ func (q *Queue) Run(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				q.tick(ctx)
+				q.trace(ctx, "restarts.tick", q.tick)
 			}
 		}
 	}()

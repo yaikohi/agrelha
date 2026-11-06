@@ -186,7 +186,7 @@ func (h *Handler) MCAccessWhitelistToggle(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Access manager unconfigured"})
 	}
 
-	current, err := h.cfg.MCAccess.WhitelistEnforced()
+	current, err := h.cfg.MCAccess.WhitelistEnforced(c.UserContext())
 	if err != nil {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Failed to query whitelist status: "+err.Error())
@@ -196,7 +196,7 @@ func (h *Handler) MCAccessWhitelistToggle(c *fiber.Ctx) error {
 	}
 
 	target := !current
-	if err := h.cfg.MCAccess.SetWhitelistEnforced(target, h.cfg.Actor(c)); err != nil {
+	if err := h.cfg.MCAccess.SetWhitelistEnforced(c.UserContext(), target, h.cfg.Actor(c)); err != nil {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Failed to toggle whitelist: "+err.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)

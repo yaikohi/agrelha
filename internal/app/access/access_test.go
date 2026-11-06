@@ -54,7 +54,7 @@ type mockConsole struct {
 	err      error
 }
 
-func (c *mockConsole) Execute(cmd string) (string, error) {
+func (c *mockConsole) Execute(_ context.Context, cmd string) (string, error) {
 	c.commands = append(c.commands, cmd)
 	if c.err != nil {
 		return "", c.err
@@ -239,7 +239,7 @@ func TestAccessManagerOnlinePlayersAndParseList(t *testing.T) {
 	// OnlinePlayers via RCON
 	console := &mockConsole{response: raw}
 	mgr := NewAccessManager(nil, "", console)
-	online, err := mgr.OnlinePlayers()
+	online, err := mgr.OnlinePlayers(context.Background())
 	if err != nil || len(online) != 3 {
 		t.Fatalf("OnlinePlayers failed: online=%v, err=%v", online, err)
 	}
@@ -249,7 +249,7 @@ func TestAccessManagerWhitelistEnforced(t *testing.T) {
 	// 1. Probe when already on
 	consoleOn := &mockConsole{response: "Whitelist is already turned on"}
 	mgrOn := NewAccessManager(nil, "", consoleOn)
-	enforced, err := mgrOn.WhitelistEnforced()
+	enforced, err := mgrOn.WhitelistEnforced(context.Background())
 	if err != nil || !enforced {
 		t.Errorf("expected enforced=true, got: %v, err=%v", enforced, err)
 	}
@@ -257,7 +257,7 @@ func TestAccessManagerWhitelistEnforced(t *testing.T) {
 	// 2. Probe when previously off
 	consoleOff := &mockConsole{response: "Whitelist is now turned on"}
 	mgrOff := NewAccessManager(nil, "", consoleOff)
-	enforced, err = mgrOff.WhitelistEnforced()
+	enforced, err = mgrOff.WhitelistEnforced(context.Background())
 	if err != nil || enforced {
 		t.Errorf("expected enforced=false, got: %v, err=%v", enforced, err)
 	}
@@ -271,14 +271,14 @@ func TestAccessManagerWhitelistEnforced(t *testing.T) {
 	consoleToggle := &mockConsole{}
 	mgrToggle := NewAccessManager(nil, "", consoleToggle, WithAudit(audit))
 
-	if err := mgrToggle.SetWhitelistEnforced(true, "admin"); err != nil {
+	if err := mgrToggle.SetWhitelistEnforced(context.Background(), true, "admin"); err != nil {
 		t.Fatalf("SetWhitelistEnforced(true) failed: %v", err)
 	}
 	if len(consoleToggle.commands) != 1 || consoleToggle.commands[0] != "/whitelist on" {
 		t.Errorf("expected /whitelist on, got: %v", consoleToggle.commands)
 	}
 
-	if err := mgrToggle.SetWhitelistEnforced(false, "admin"); err != nil {
+	if err := mgrToggle.SetWhitelistEnforced(context.Background(), false, "admin"); err != nil {
 		t.Fatalf("SetWhitelistEnforced(false) failed: %v", err)
 	}
 	if len(consoleToggle.commands) != 2 || consoleToggle.commands[1] != "/whitelist off" {
@@ -327,10 +327,10 @@ func TestAccessManagerNilStoreAndErrors(t *testing.T) {
 	if _, err := nilMgr.RemoveWhitelist(ctx, "steve"); err != ports.ErrNotImplemented {
 		t.Errorf("expected ErrNotImplemented for RemoveWhitelist, got %v", err)
 	}
-	if _, err := nilMgr.WhitelistEnforced(); err == nil {
+	if _, err := nilMgr.WhitelistEnforced(context.Background()); err == nil {
 		t.Errorf("expected error for WhitelistEnforced without rcon")
 	}
-	if err := nilMgr.SetWhitelistEnforced(true); err == nil {
+	if err := nilMgr.SetWhitelistEnforced(context.Background(), true); err == nil {
 		t.Errorf("expected error for SetWhitelistEnforced without rcon")
 	}
 
@@ -368,7 +368,7 @@ func TestAccessManagerNilStoreAndErrors(t *testing.T) {
 	// 5. WhitelistEnforced via rcon error
 	consoleErr := &mockConsole{err: context.Canceled}
 	rconErrMgr := NewAccessManager(nil, "", consoleErr)
-	if _, err := rconErrMgr.WhitelistEnforced(); err == nil {
+	if _, err := rconErrMgr.WhitelistEnforced(context.Background()); err == nil {
 		t.Errorf("expected error from WhitelistEnforced on console error")
 	}
 }
@@ -416,7 +416,7 @@ func TestModManagerNilStoreAndErrors(t *testing.T) {
 	consoleErr := &mockConsole{err: context.Canceled}
 	auditRec := &mockAuditRecorder{}
 	errMgr := NewAccessManager(nilDocStore, "path", consoleErr, WithAudit(auditRec))
-	if err := errMgr.SetWhitelistEnforced(true, ""); err == nil {
+	if err := errMgr.SetWhitelistEnforced(context.Background(), true, ""); err == nil {
 		t.Errorf("expected error in SetWhitelistEnforced when rcon fails")
 	}
 	// GrantOp with empty actor
@@ -425,5 +425,3 @@ func TestModManagerNilStoreAndErrors(t *testing.T) {
 		t.Errorf("expected '-' actor, got: %v", auditRec.entries)
 	}
 }
-
-

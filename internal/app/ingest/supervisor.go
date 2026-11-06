@@ -19,6 +19,7 @@ type InstanceLogStreamer interface {
 }
 
 type Supervisor struct {
+	trace     JobTracer
 	lister    InstanceLister
 	streamer  InstanceLogStreamer
 	store     presenceStore
@@ -28,14 +29,34 @@ type Supervisor struct {
 	wg        sync.WaitGroup
 }
 
-func NewSupervisor(lister InstanceLister, streamer InstanceLogStreamer, store presenceStore, pollDelay time.Duration) *Supervisor {
-	return &Supervisor{
+// JobTracer wraps one scheduled run so the composition root can observe it.
+type JobTracer func(ctx context.Context, name string, run func(context.Context))
+
+func noJobTrace(ctx context.Context, _ string, run func(context.Context)) { run(ctx) }
+
+type Option func(*Supervisor)
+
+func WithJobTracer(t JobTracer) Option {
+	return func(s *Supervisor) {
+		if t != nil {
+			s.trace = t
+		}
+	}
+}
+
+func NewSupervisor(lister InstanceLister, streamer InstanceLogStreamer, store presenceStore, pollDelay time.Duration, opts ...Option) *Supervisor {
+	s := &Supervisor{
 		lister:    lister,
 		streamer:  streamer,
 		store:     store,
 		pollDelay: pollDelay,
 		workers:   make(map[int]context.CancelFunc),
+		trace:     noJobTrace,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func (s *Supervisor) Run(ctx context.Context) {
@@ -49,7 +70,7 @@ func (s *Supervisor) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.Reconcile(ctx)
+			s.trace(ctx, "ingest.reconcile", s.Reconcile)
 		}
 	}
 }

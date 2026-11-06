@@ -394,6 +394,8 @@ this list and `go list ./internal/...` disagree, in either direction.
 | `platform/build` | Version, commit and build date stamped in at link time. |
 | `platform/config` | Environment configuration. Importable only by the composition root. |
 | `platform/logging` | slog setup: level and format. |
+| `platform/httpclient` | `http.Client` / `RoundTripper` constructors with OTel instrumentation already attached. Every outbound HTTP client goes through this. |
+| `platform/tracing` | OpenTelemetry tracer setup: OTLP/HTTP exporter, resource, propagators. Off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set. |
 | `wiring` | The composition root. The only package that decides which adapter satisfies which port, and the only one that may see every layer. |
 
 ## Adding something new
