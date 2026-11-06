@@ -34,6 +34,14 @@ func TestOpenAndMigrateIdempotency(t *testing.T) {
 	}
 }
 
+func TestStore_MaxOpenConns(t *testing.T) {
+	s := newTestStore(t)
+
+	if got := s.DB().Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("expected MaxOpenConnections == 1, got %d", got)
+	}
+}
+
 func TestUpsertSeenAndPlayerRoster(t *testing.T) {
 	s := newTestStore(t)
 
