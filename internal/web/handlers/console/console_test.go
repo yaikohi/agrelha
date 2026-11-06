@@ -268,58 +268,127 @@ func TestMinecraftLifecycleWithRuntime(t *testing.T) {
 	}
 }
 
-func TestSSELogs(t *testing.T) {
-	rt := &fakeRuntime{logLines: "server started\nplayer joined\n"}
-	h := New(Config{
-		ValheimRuntime: rt,
-		MCRuntime:      rt,
-	})
-	app := fiber.New()
-	h.Register(app)
+type pipeLogStream struct {
+	pr     *io.PipeReader
+	pw     *io.PipeWriter
+	closed chan struct{}
+}
 
-	// Valheim logs stream
-	reqVh := httptest.NewRequest(http.MethodGet, "/sse/logs?server=valheim", nil)
-	respVh, err := app.Test(reqVh)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bodyVh, _ := io.ReadAll(respVh.Body)
-	if !strings.Contains(string(bodyVh), "server started") {
-		t.Errorf("valheim logs = %s, want server started", string(bodyVh))
-	}
-
-	// Minecraft logs stream
-	reqMC := httptest.NewRequest(http.MethodGet, "/sse/logs?server=minecraft", nil)
-	respMC, err := app.Test(reqMC)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bodyMC, _ := io.ReadAll(respMC.Body)
-	if !strings.Contains(string(bodyMC), "player joined") {
-		t.Errorf("mc logs = %s, want player joined", string(bodyMC))
-	}
-
-	// Runtime error on logs
-	rtErr := &fakeRuntime{err: errors.New("cannot fetch logs")}
-	hErr := New(Config{ValheimRuntime: rtErr})
-	appErr := fiber.New()
-	hErr.Register(appErr)
-	respErr, _ := appErr.Test(httptest.NewRequest(http.MethodGet, "/sse/logs?server=valheim", nil))
-	bodyErr, _ := io.ReadAll(respErr.Body)
-	if len(bodyErr) != 0 {
-		t.Errorf("expected empty body on log fetch error, got %s", string(bodyErr))
-	}
-
-	// Nil runtime
-	hNil := New(Config{})
-	appNil := fiber.New()
-	hNil.Register(appNil)
-	respNil, _ := appNil.Test(httptest.NewRequest(http.MethodGet, "/sse/logs?server=valheim", nil))
-	bodyNil, _ := io.ReadAll(respNil.Body)
-	if len(bodyNil) != 0 {
-		t.Errorf("expected empty body on nil runtime, got %s", string(bodyNil))
+func newPipeLogStream() *pipeLogStream {
+	pr, pw := io.Pipe()
+	return &pipeLogStream{
+		pr:     pr,
+		pw:     pw,
+		closed: make(chan struct{}),
 	}
 }
+
+func (p *pipeLogStream) Read(b []byte) (int, error) {
+	return p.pr.Read(b)
+}
+
+func (p *pipeLogStream) Close() error {
+	select {
+	case <-p.closed:
+	default:
+		close(p.closed)
+	}
+	_ = p.pw.Close()
+	return p.pr.Close()
+}
+
+func TestStreamLogs_Disconnect(t *testing.T) {
+	h := New(Config{})
+	app := fiber.New()
+	var fastCtx fasthttp.RequestCtx
+	c := app.AcquireCtx(&fastCtx)
+	defer app.ReleaseCtx(c)
+
+	stream := newPipeLogStream()
+
+	if err := h.streamLogs(c, stream, "#console-logs"); err != nil {
+		t.Fatalf("streamLogs returned error: %v", err)
+	}
+
+	// Write first line
+	go func() {
+		_, _ = stream.pw.Write([]byte("line 1\n"))
+	}()
+
+	// Read first line from response body stream
+	bodyStream := fastCtx.Response.BodyStream()
+	if bodyStream == nil {
+		t.Fatal("expected bodyStream to be set")
+	}
+
+	buf := make([]byte, 512)
+	n, err := bodyStream.Read(buf)
+	if err != nil {
+		t.Fatalf("read error: %v", err)
+	}
+	if !strings.Contains(string(buf[:n]), "line 1") {
+		t.Fatalf("expected line 1 in output, got: %s", string(buf[:n]))
+	}
+
+	// Simulate client disconnect by closing body stream
+	if err := fastCtx.Response.CloseBodyStream(); err != nil {
+		t.Fatalf("close body stream error: %v", err)
+	}
+
+	// Write another line to trigger write failure in streamer loop
+	go func() {
+		_, _ = stream.pw.Write([]byte("line 2\n"))
+	}()
+
+	// The streamer must detect the write failure, exit, and close the underlying log stream
+	select {
+	case <-stream.closed:
+		// Success: stream was closed promptly on client disconnect
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for stream.Close() after client disconnect")
+	}
+}
+
+func TestStreamLogs_Success(t *testing.T) {
+	h := New(Config{})
+	app := fiber.New()
+	var fastCtx fasthttp.RequestCtx
+	c := app.AcquireCtx(&fastCtx)
+	defer app.ReleaseCtx(c)
+
+	lines := "first line\nsecond line <escaped>\n"
+	stream := io.NopCloser(strings.NewReader(lines))
+
+	if err := h.streamLogs(c, stream, "#console-logs"); err != nil {
+		t.Fatalf("streamLogs returned error: %v", err)
+	}
+
+	var buf strings.Builder
+	if err := fastCtx.Response.BodyWriteTo(&buf); err != nil {
+		t.Fatalf("BodyWriteTo error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "first line") || !strings.Contains(out, "&lt;escaped&gt;") {
+		t.Errorf("unexpected output: %s", out)
+	}
+	if !strings.Contains(out, "selector #console-logs") {
+		t.Errorf("expected selector in output, got: %s", out)
+	}
+}
+
+func TestStreamLogs_NilStream(t *testing.T) {
+	h := New(Config{})
+	app := fiber.New()
+	var fastCtx fasthttp.RequestCtx
+	c := app.AcquireCtx(&fastCtx)
+	defer app.ReleaseCtx(c)
+
+	if err := h.streamLogs(c, nil, "#console-logs"); err != nil {
+		t.Fatalf("streamLogs with nil stream returned error: %v", err)
+	}
+}
+
 
 func TestMCRconAndLogs(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
@@ -528,19 +597,5 @@ func TestConsoleEdges(t *testing.T) {
 		t.Errorf("expected Logs unavailable, got: %s", string(bodyLogs))
 	}
 
-	// 4. SSELogs write failure (client-gone)
-	rt := &fakeRuntime{logLines: "line 1\nline 2\n"}
-	hSSE := New(Config{
-		ValheimRuntime: rt,
-		ValheimRef:     ports.ServerRef{Name: "valheim", Scope: "valheim"},
-	})
-	var sseCtx fasthttp.RequestCtx
-	cSSE := app.AcquireCtx(&sseCtx)
-	defer app.ReleaseCtx(cSSE)
-
-	if err := hSSE.SSELogs(cSSE); err != nil {
-		t.Fatal(err)
-	}
-	_ = sseCtx.Response.CloseBodyStream()
-	time.Sleep(50 * time.Millisecond)
 }
+
