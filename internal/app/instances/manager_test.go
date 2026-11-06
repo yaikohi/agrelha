@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -147,6 +148,7 @@ func TestInstanceManagerCRUDAndBudget(t *testing.T) {
 // fs.ErrNotExist rather than an empty document, a document written as Raw reads
 // back with its Data parsed, and PutTree removes files it was not given.
 type mockStateStore struct {
+	mu    sync.Mutex
 	files map[string][]byte
 }
 
@@ -155,6 +157,8 @@ func newMockStateStore() *mockStateStore {
 }
 
 func (m *mockStateStore) Get(ctx context.Context, path string) (ports.Document, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	raw, ok := m.files[path]
 	if !ok {
 		return ports.Document{}, fmt.Errorf("mock state store: %s: %w", path, fs.ErrNotExist)
@@ -163,11 +167,15 @@ func (m *mockStateStore) Get(ctx context.Context, path string) (ports.Document, 
 }
 
 func (m *mockStateStore) Put(ctx context.Context, path string, doc ports.Document, msg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.files[path] = encodeDoc(doc)
 	return nil
 }
 
 func (m *mockStateStore) Patch(ctx context.Context, path string, msg string, mutate func(doc *ports.Document) (bool, error)) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	doc := ports.Document{Data: map[string]string{}}
 	if raw, ok := m.files[path]; ok {
 		doc = ports.Document{Data: parseDataMap(raw), Raw: raw}
@@ -185,6 +193,8 @@ func (m *mockStateStore) Patch(ctx context.Context, path string, msg string, mut
 }
 
 func (m *mockStateStore) Delete(ctx context.Context, path string, msg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for p := range m.files {
 		if p == path || strings.HasPrefix(p, path+"/") {
 			delete(m.files, p)
@@ -196,6 +206,8 @@ func (m *mockStateStore) Delete(ctx context.Context, path string, msg string) er
 // PutTree mirrors the real contract: the directory ends up holding exactly the
 // documents it was given, so a renderer that stops emitting a file deletes it.
 func (m *mockStateStore) PutTree(ctx context.Context, dirPath string, docs map[string]ports.Document, msg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for p := range m.files {
 		if strings.HasPrefix(p, dirPath+"/") && !strings.Contains(strings.TrimPrefix(p, dirPath+"/"), "/") {
 			delete(m.files, p)
@@ -209,11 +221,15 @@ func (m *mockStateStore) PutTree(ctx context.Context, dirPath string, docs map[s
 
 // seed writes a document the way a repository would already contain it.
 func (m *mockStateStore) seed(path string, data map[string]string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.files[path] = encodeDoc(ports.Document{Data: data})
 }
 
 // doc reads a path back, or the zero Document when it does not exist.
 func (m *mockStateStore) doc(path string) ports.Document {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	raw, ok := m.files[path]
 	if !ok {
 		return ports.Document{}
@@ -222,6 +238,8 @@ func (m *mockStateStore) doc(path string) ports.Document {
 }
 
 func (m *mockStateStore) has(path string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	_, ok := m.files[path]
 	return ok
 }
@@ -872,4 +890,178 @@ func TestDockerHostWorldDoesNotInvokeSourceReconciler(t *testing.T) {
 		t.Fatalf("sourceReconciler was invoked for Docker-Host instance %d on ListInstances; at 2am an outage causes stale cluster deployment env vars to overwrite local compose state files", inst.Number)
 	}
 }
+
+func TestCreateInstance_ConcurrentBudget(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test store: %v", err)
+	}
+	defer st.Close()
+
+	// Limit maxInstances to 2 so out of 4 concurrent requests, exactly 2 succeed and 2 are rejected by budget checks.
+	mgr := NewInstanceManager(
+		store.NewInstanceRepo(st),
+		newMockStateStore(),
+		nil,
+		24, 2, 2,
+		"manifests/minecraft-modded",
+		"192.168.20.224",
+		manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"),
+		"minecraft-modded",
+	)
+
+	ctx := context.Background()
+	const numGoroutines = 4
+
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	startGate := make(chan struct{})
+	type result struct {
+		inst *domain.Instance
+		err  error
+	}
+	results := make([]result, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			<-startGate
+			inst, err := mgr.CreateInstance(ctx, domain.Instance{
+				Name:   fmt.Sprintf("World-%d", idx),
+				Source: domain.SourceVanilla,
+				Minecraft: &domain.MinecraftConfig{
+					MCVersion: "1.21.4",
+				},
+				Tier: domain.TierSmall,
+			}, domain.ModList{})
+			results[idx] = result{inst: inst, err: err}
+		}(i)
+	}
+
+	close(startGate)
+	wg.Wait()
+
+	var successes int
+	var budgetErrors int
+	assignedNumbers := make(map[int]bool)
+
+	for _, res := range results {
+		if res.err == nil {
+			successes++
+			if res.inst == nil {
+				t.Fatalf("expected non-nil instance on success")
+			}
+			if assignedNumbers[res.inst.Number] {
+				t.Errorf("duplicate instance number %d assigned", res.inst.Number)
+			}
+			assignedNumbers[res.inst.Number] = true
+		} else {
+			if strings.Contains(res.err.Error(), "maximum limit") || strings.Contains(res.err.Error(), "budget") {
+				budgetErrors++
+			} else {
+				t.Errorf("unexpected error: %v", res.err)
+			}
+		}
+	}
+
+	if successes != 2 {
+		t.Errorf("expected exactly 2 successful creations, got %d", successes)
+	}
+	if budgetErrors != 2 {
+		t.Errorf("expected exactly 2 budget errors, got %d", budgetErrors)
+	}
+}
+
+func TestStartInstance_ConcurrentBudget(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test store: %v", err)
+	}
+	defer st.Close()
+
+	// maxRunning = 1, maxInstances = 2
+	mgr := NewInstanceManager(
+		store.NewInstanceRepo(st),
+		newMockStateStore(),
+		nil,
+		24, 2, 1,
+		"manifests/minecraft-modded",
+		"192.168.20.224",
+		manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"),
+		"minecraft-modded",
+	)
+
+	ctx := context.Background()
+
+	// Create 2 instances
+	_, err = mgr.CreateInstance(ctx, domain.Instance{
+		Name:   "World-1",
+		Source: domain.SourceVanilla,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.4",
+		},
+		Tier: domain.TierSmall,
+	}, domain.ModList{})
+	if err != nil {
+		t.Fatalf("failed to create instance 1: %v", err)
+	}
+
+	_, err = mgr.CreateInstance(ctx, domain.Instance{
+		Name:   "World-2",
+		Source: domain.SourceVanilla,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "1.21.4",
+		},
+		Tier: domain.TierSmall,
+	}, domain.ModList{})
+	if err != nil {
+		t.Fatalf("failed to create instance 2: %v", err)
+	}
+
+	const numGoroutines = 2
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	startGate := make(chan struct{})
+	errorsCh := make(chan error, numGoroutines)
+
+	for i := 1; i <= numGoroutines; i++ {
+		go func(instanceNumber int) {
+			defer wg.Done()
+			<-startGate
+			err := mgr.StartInstance(ctx, instanceNumber)
+			errorsCh <- err
+		}(i)
+	}
+
+	close(startGate)
+	wg.Wait()
+	close(errorsCh)
+
+	var successes int
+	var budgetErrors int
+	for err := range errorsCh {
+		if err == nil {
+			successes++
+		} else {
+			if strings.Contains(err.Error(), "maximum of 1 running instances reached") || strings.Contains(err.Error(), "budget") {
+				budgetErrors++
+			} else {
+				t.Errorf("unexpected error: %v", err)
+			}
+		}
+	}
+
+	if successes != 1 {
+		t.Errorf("expected exactly 1 successful start, got %d", successes)
+	}
+	if budgetErrors != 1 {
+		t.Errorf("expected exactly 1 budget error, got %d", budgetErrors)
+	}
+}
+
+
 
