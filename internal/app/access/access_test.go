@@ -2,11 +2,13 @@ package access
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
 
@@ -421,8 +423,8 @@ func TestModManagerNilStoreAndErrors(t *testing.T) {
 		t.Errorf("expected error in SetWhitelistEnforced when rcon fails")
 	}
 	// GrantOp with empty actor
-	_, _ = errMgr.GrantOp(ctx, "playerWithoutActor")
-	if len(auditRec.entries) == 0 || auditRec.entries[len(auditRec.entries)-1] != "-:mc-op-grant:playerWithoutActor" {
+	_, _ = errMgr.GrantOp(ctx, "playerNoActor")
+	if len(auditRec.entries) == 0 || auditRec.entries[len(auditRec.entries)-1] != "-:mc-op-grant:playerNoActor" {
 		t.Errorf("expected '-' actor, got: %v", auditRec.entries)
 	}
 }
