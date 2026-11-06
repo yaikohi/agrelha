@@ -29,6 +29,7 @@ type mockStore struct {
 	mu           sync.Mutex
 	cleared      []int
 	seen         []string
+	sessions     map[string]int
 	online       map[string]bool
 	events       []string
 	errClear     error
@@ -48,6 +49,12 @@ func (m *mockStore) UpsertSeen(instance int, id, character string, joined bool) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.seen = append(m.seen, fmt.Sprintf("%d:%s:%s", instance, id, character))
+	if joined {
+		if m.sessions == nil {
+			m.sessions = make(map[string]int)
+		}
+		m.sessions[id]++
+	}
 	return m.errUpsert
 }
 
@@ -224,3 +231,105 @@ func TestSupervisorReconciliationAndWorkerLifecycle(t *testing.T) {
 		t.Fatalf("stopAll must cancel all workers, got %d active", len(sup.ActiveWorkers()))
 	}
 }
+
+func TestConsume_NoReplayDuplicateSessions(t *testing.T) {
+	steamID := "76561198000000001"
+	instance := 3
+	clearActivePresence(instance)
+	t.Cleanup(func() {
+		clearActivePresence(instance)
+	})
+
+	// Initial stream: player connects and chooses character
+	initialLog := strings.Join([]string{
+		"Got connection SteamID " + steamID,
+		"Got character ZDOID from Ragnar : 123",
+	}, "\n")
+
+	s1 := &mockStreamer{
+		streamFn: func(ctx context.Context, tail int64) (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader(initialLog)), nil
+		},
+	}
+
+	st := &mockStore{}
+	if err := consume(context.Background(), instance, s1, st); err != nil {
+		t.Fatalf("first consume failed: %v", err)
+	}
+
+	if st.sessions[steamID] != 1 {
+		t.Fatalf("expected 1 session after initial connect, got %d", st.sessions[steamID])
+	}
+	if !st.online[fmt.Sprintf("%d:%s", instance, steamID)] {
+		t.Fatalf("expected player to be online")
+	}
+
+	// Stream reconnects and replays the last 200 lines which includes the ongoing session connect line
+	replayedLog := strings.Join([]string{
+		"Got connection SteamID " + steamID,
+		"Got character ZDOID from Ragnar : 123",
+		"Some periodic world save message",
+	}, "\n")
+
+	s2 := &mockStreamer{
+		streamFn: func(ctx context.Context, tail int64) (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader(replayedLog)), nil
+		},
+	}
+
+	if err := consume(context.Background(), instance, s2, st); err != nil {
+		t.Fatalf("second consume (reconnect replay) failed: %v", err)
+	}
+
+	// Session count should remain 1 for this ongoing session
+	if st.sessions[steamID] != 1 {
+		t.Fatalf("expected session count to remain 1 on stream reconnect replay, got %d", st.sessions[steamID])
+	}
+
+	// Events should only have 1 join event
+	joinEvents := 0
+	for _, ev := range st.events {
+		if ev == "join:"+steamID {
+			joinEvents++
+		}
+	}
+	if joinEvents != 1 {
+		t.Fatalf("expected exactly 1 join event, got %d (events: %v)", joinEvents, st.events)
+	}
+
+	// Now disconnect the player
+	dcLog := strings.Join([]string{
+		"Closing socket " + steamID,
+	}, "\n")
+	s3 := &mockStreamer{
+		streamFn: func(ctx context.Context, tail int64) (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader(dcLog)), nil
+		},
+	}
+	if err := consume(context.Background(), instance, s3, st); err != nil {
+		t.Fatalf("third consume (disconnect) failed: %v", err)
+	}
+
+	if st.online[fmt.Sprintf("%d:%s", instance, steamID)] {
+		t.Fatalf("expected player to be offline after disconnect")
+	}
+
+	// Player connects again in a new session
+	newSessionLog := strings.Join([]string{
+		"Got connection SteamID " + steamID,
+		"Got character ZDOID from Ragnar : 456",
+	}, "\n")
+	s4 := &mockStreamer{
+		streamFn: func(ctx context.Context, tail int64) (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader(newSessionLog)), nil
+		},
+	}
+	if err := consume(context.Background(), instance, s4, st); err != nil {
+		t.Fatalf("fourth consume (new session) failed: %v", err)
+	}
+
+	if st.sessions[steamID] != 2 {
+		t.Fatalf("expected 2 sessions after new connect, got %d", st.sessions[steamID])
+	}
+}
+
