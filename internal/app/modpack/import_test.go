@@ -68,8 +68,8 @@ func TestParseMrpack(t *testing.T) {
 	if w.Loader != "fabric" {
 		t.Errorf("expected loader fabric, got %q", w.Loader)
 	}
-	if len(w.Slugs) != 1 || w.Slugs[0] != "sodium" {
-		t.Errorf("expected slug sodium, got %v", w.Slugs)
+	if len(w.Slugs) != 1 || w.Slugs[0] != "sodium-fabric" {
+		t.Errorf("expected slug sodium-fabric, got %v", w.Slugs)
 	}
 }
 
@@ -319,5 +319,31 @@ mods:
 	}
 	if len(wManifest.Slugs) != 2 {
 		t.Errorf("expected 2 slugs, got %v", wManifest.Slugs)
+	}
+}
+
+func TestCleanModSlug(t *testing.T) {
+	tests := []struct {
+		filename string
+		want     string
+	}{
+		{"fabric-api-0.92.0.jar", "fabric-api"},
+		{"better-end-4.0.jar", "better-end"},
+		{"cloth-config-13.0.121.jar", "cloth-config"},
+		{"jei-1.21.1.jar", "jei"},
+		{"mods/fabric-api-0.92.0.jar", "fabric-api"},
+		{"mods/jei-1.21.1.jar", "jei"},
+		{"plain.jar", "plain"},
+		{".jar", ""},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			got := cleanModSlug(tt.filename)
+			if got != tt.want {
+				t.Errorf("cleanModSlug(%q) = %q, want %q", tt.filename, got, tt.want)
+			}
+		})
 	}
 }

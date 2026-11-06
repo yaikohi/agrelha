@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -67,13 +68,8 @@ func ParseMrpack(r io.ReaderAt, size int64) (*ImportedWorld, error) {
 	var slugs []string
 	for _, f := range idx.Files {
 		// Clean file path (e.g. "mods/jei-1.21.1.jar" -> "jei")
-		base := filepath.Base(f.Path)
-		base = strings.TrimSuffix(base, ".jar")
-		if idx := strings.Index(base, "-"); idx != -1 {
-			base = base[:idx]
-		}
-		if base != "" {
-			slugs = append(slugs, base)
+		if slug := cleanModSlug(f.Path); slug != "" {
+			slugs = append(slugs, slug)
 		}
 	}
 	world.Slugs = slugs
@@ -147,14 +143,9 @@ func ParsePrismZip(r io.ReaderAt, size int64) (*ImportedWorld, error) {
 
 	var slugs []string
 	for _, f := range zr.File {
-		if strings.Contains(f.Name, "mods/") && strings.HasSuffix(f.Name, ".jar") {
-			base := filepath.Base(f.Name)
-			base = strings.TrimSuffix(base, ".jar")
-			if idx := strings.Index(base, "-"); idx != -1 {
-				base = base[:idx]
-			}
-			if base != "" {
-				slugs = append(slugs, base)
+		if strings.Contains(f.Name, "mods/") && strings.HasSuffix(strings.ToLower(f.Name), ".jar") {
+			if slug := cleanModSlug(f.Name); slug != "" {
+				slugs = append(slugs, slug)
 			}
 		}
 	}
@@ -260,4 +251,26 @@ func ParseR2Z(r io.ReaderAt, size int64) (*ImportedWorld, error) {
 		RawMods: strings.Join(tsManifest.Dependencies, "\n"),
 	}
 	return world, nil
+}
+
+var modVersionRegex = regexp.MustCompile(`-[vV]?[0-9]`)
+
+// cleanModSlug extracts the base mod slug from a jar filename or path,
+// stripping version numbers while preserving hyphenated mod names
+// (e.g. "fabric-api-0.92.0.jar" -> "fabric-api", "jei-1.21.1.jar" -> "jei").
+func cleanModSlug(filename string) string {
+	base := filepath.Base(filename)
+	if base == "." || base == "/" || base == "" {
+		return ""
+	}
+	base = strings.TrimSuffix(base, ".jar")
+	base = strings.TrimSuffix(base, ".JAR")
+	if loc := modVersionRegex.FindStringIndex(base); loc != nil {
+		base = base[:loc[0]]
+	}
+	base = strings.TrimSpace(base)
+	if base == "." {
+		return ""
+	}
+	return base
 }
