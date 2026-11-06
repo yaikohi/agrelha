@@ -19,6 +19,7 @@ type Config struct {
 	History          ports.HistoryReader
 	Players          ports.PlayerReader
 	StateStore       ports.StateStore
+	HasGit           bool
 	Actor            func(*fiber.Ctx) string
 	ApplyAfterSync   func(cmName, key string, want func(string) bool)
 }

@@ -2,7 +2,9 @@ package access
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"agrelha/internal/ports"
@@ -46,18 +48,31 @@ func (a *AccessManager) ListAccess(ctx context.Context) (ops []string, whitelist
 	if a.accessReader != nil {
 		return a.accessReader(ctx)
 	}
-	if a.store == nil {
+	if a.store == nil && a.rcon == nil {
 		return nil, nil, ports.ErrNotImplemented
 	}
-	doc, err := a.store.Get(ctx, a.path)
-	if err != nil {
-		return nil, nil, err
+	var storeErr error
+	if a.store != nil {
+		doc, err := a.store.Get(ctx, a.path)
+		if err == nil {
+			if doc.Data != nil {
+				ops = ParseUsers(doc.Data["ops.txt"])
+				whitelist = ParseUsers(doc.Data["whitelist.txt"])
+			}
+			return ops, whitelist, nil
+		}
+		storeErr = err
 	}
-	if doc.Data != nil {
-		ops = ParseUsers(doc.Data["ops.txt"])
-		whitelist = ParseUsers(doc.Data["whitelist.txt"])
+	if a.rcon != nil {
+		if res, err := a.rcon.Execute(ctx, "/whitelist list"); err == nil {
+			whitelist = ParsePlayerList(res)
+			return ops, whitelist, nil
+		}
 	}
-	return ops, whitelist, nil
+	if a.store == nil || errors.Is(storeErr, os.ErrNotExist) {
+		return nil, nil, nil
+	}
+	return nil, nil, storeErr
 }
 
 // ParseUsers extracts clean usernames from ops.txt or whitelist.txt.
@@ -83,36 +98,60 @@ func actorOrHyphen(actor []string) string {
 // GrantOp adds a user to ops.txt in Git and executes live /op via RCON.
 func (a *AccessManager) GrantOp(ctx context.Context, username string, actor ...string) (bool, error) {
 	username = strings.TrimSpace(username)
+	if username == "" {
+		return false, fmt.Errorf("username is required")
+	}
 	msg := fmt.Sprintf("mc-access: op %s", username)
 
-	if a.store == nil {
-		return false, ports.ErrNotImplemented
-	}
-	changed, err := a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
-		cur := ""
-		if doc.Data != nil {
-			cur = doc.Data["ops.txt"]
-		}
-		for _, u := range ParseUsers(cur) {
-			if strings.EqualFold(u, username) {
-				return false, nil
+	var changed bool
+	var storeErr error
+	if a.store != nil {
+		changed, storeErr = a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
+			cur := ""
+			if doc.Data != nil {
+				cur = doc.Data["ops.txt"]
 			}
-		}
-		body := strings.TrimRight(cur, "\n")
-		if doc.Data == nil {
-			doc.Data = make(map[string]string)
-		}
-		doc.Data["ops.txt"] = strings.TrimLeft(body+"\n"+username, "\n") + "\n"
-		return true, nil
-	})
-	if err != nil {
-		return false, err
+			for _, u := range ParseUsers(cur) {
+				if strings.EqualFold(u, username) {
+					return false, nil
+				}
+			}
+			body := strings.TrimRight(cur, "\n")
+			if doc.Data == nil {
+				doc.Data = make(map[string]string)
+			}
+			doc.Data["ops.txt"] = strings.TrimLeft(body+"\n"+username, "\n") + "\n"
+			return true, nil
+		})
 	}
 
-	// Live RCON dispatch (best-effort)
+	var rconErr error
 	if a.rcon != nil {
-		_, _ = a.rcon.Execute(ctx, "/op "+username)
+		res, err := a.rcon.Execute(ctx, "/op "+username)
+		if err != nil {
+			rconErr = err
+		} else {
+			if strings.Contains(strings.ToLower(res), "already") {
+				changed = false
+			} else if a.store == nil || storeErr != nil {
+				changed = true
+			}
+		}
 	}
+
+	if a.store == nil && a.rcon == nil {
+		return false, ports.ErrNotImplemented
+	}
+	if storeErr != nil && (a.rcon == nil || rconErr != nil) {
+		if rconErr != nil {
+			return false, fmt.Errorf("store patch: %v; rcon: %w", storeErr, rconErr)
+		}
+		return false, storeErr
+	}
+	if a.store == nil && rconErr != nil {
+		return false, rconErr
+	}
+
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-op-grant", username)
 	}
@@ -122,39 +161,64 @@ func (a *AccessManager) GrantOp(ctx context.Context, username string, actor ...s
 // RevokeOp removes a user from ops.txt in Git and executes live /deop via RCON.
 func (a *AccessManager) RevokeOp(ctx context.Context, username string, actor ...string) (bool, error) {
 	username = strings.TrimSpace(username)
+	if username == "" {
+		return false, fmt.Errorf("username is required")
+	}
 	msg := fmt.Sprintf("mc-access: deop %s", username)
 
-	if a.store == nil {
-		return false, ports.ErrNotImplemented
-	}
-	changed, err := a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
-		cur := ""
-		if doc.Data != nil {
-			cur = doc.Data["ops.txt"]
-		}
-		var lines []string
-		found := false
-		for line := range strings.SplitSeq(cur, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if strings.EqualFold(trimmed, username) {
-				found = true
-				continue
+	var changed bool
+	var storeErr error
+	if a.store != nil {
+		changed, storeErr = a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
+			cur := ""
+			if doc.Data != nil {
+				cur = doc.Data["ops.txt"]
 			}
-			lines = append(lines, line)
-		}
-		if !found {
-			return false, nil
-		}
-		doc.Data["ops.txt"] = strings.Join(lines, "\n")
-		return true, nil
-	})
-	if err != nil {
-		return false, err
+			var lines []string
+			found := false
+			for line := range strings.SplitSeq(cur, "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.EqualFold(trimmed, username) {
+					found = true
+					continue
+				}
+				lines = append(lines, line)
+			}
+			if !found {
+				return false, nil
+			}
+			doc.Data["ops.txt"] = strings.Join(lines, "\n")
+			return true, nil
+		})
 	}
 
+	var rconErr error
 	if a.rcon != nil {
-		_, _ = a.rcon.Execute(ctx, "/deop "+username)
+		res, err := a.rcon.Execute(ctx, "/deop "+username)
+		if err != nil {
+			rconErr = err
+		} else {
+			if strings.Contains(strings.ToLower(res), "not an op") {
+				changed = false
+			} else if a.store == nil || storeErr != nil {
+				changed = true
+			}
+		}
 	}
+
+	if a.store == nil && a.rcon == nil {
+		return false, ports.ErrNotImplemented
+	}
+	if storeErr != nil && (a.rcon == nil || rconErr != nil) {
+		if rconErr != nil {
+			return false, fmt.Errorf("store patch: %v; rcon: %w", storeErr, rconErr)
+		}
+		return false, storeErr
+	}
+	if a.store == nil && rconErr != nil {
+		return false, rconErr
+	}
+
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-op-revoke", username)
 	}
@@ -164,36 +228,61 @@ func (a *AccessManager) RevokeOp(ctx context.Context, username string, actor ...
 // AddWhitelist adds a user to whitelist.txt in Git and executes /whitelist add via RCON.
 func (a *AccessManager) AddWhitelist(ctx context.Context, username string, actor ...string) (bool, error) {
 	username = strings.TrimSpace(username)
+	if username == "" {
+		return false, fmt.Errorf("username is required")
+	}
 	msg := fmt.Sprintf("mc-access: whitelist add %s", username)
 
-	if a.store == nil {
-		return false, ports.ErrNotImplemented
-	}
-	changed, err := a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
-		cur := ""
-		if doc.Data != nil {
-			cur = doc.Data["whitelist.txt"]
-		}
-		for _, u := range ParseUsers(cur) {
-			if strings.EqualFold(u, username) {
-				return false, nil
+	var changed bool
+	var storeErr error
+	if a.store != nil {
+		changed, storeErr = a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
+			cur := ""
+			if doc.Data != nil {
+				cur = doc.Data["whitelist.txt"]
 			}
-		}
-		body := strings.TrimRight(cur, "\n")
-		if doc.Data == nil {
-			doc.Data = make(map[string]string)
-		}
-		doc.Data["whitelist.txt"] = strings.TrimLeft(body+"\n"+username, "\n") + "\n"
-		return true, nil
-	})
-	if err != nil {
-		return false, err
+			for _, u := range ParseUsers(cur) {
+				if strings.EqualFold(u, username) {
+					return false, nil
+				}
+			}
+			body := strings.TrimRight(cur, "\n")
+			if doc.Data == nil {
+				doc.Data = make(map[string]string)
+			}
+			doc.Data["whitelist.txt"] = strings.TrimLeft(body+"\n"+username, "\n") + "\n"
+			return true, nil
+		})
 	}
 
+	var rconErr error
 	if a.rcon != nil {
-		_, _ = a.rcon.Execute(ctx, "/whitelist add "+username)
-		_, _ = a.rcon.Execute(ctx, "/whitelist reload")
+		res, err := a.rcon.Execute(ctx, "/whitelist add "+username)
+		if err != nil {
+			rconErr = err
+		} else {
+			if strings.Contains(strings.ToLower(res), "already") {
+				changed = false
+			} else if a.store == nil || storeErr != nil {
+				changed = true
+			}
+			_, _ = a.rcon.Execute(ctx, "/whitelist reload")
+		}
 	}
+
+	if a.store == nil && a.rcon == nil {
+		return false, ports.ErrNotImplemented
+	}
+	if storeErr != nil && (a.rcon == nil || rconErr != nil) {
+		if rconErr != nil {
+			return false, fmt.Errorf("store patch: %v; rcon: %w", storeErr, rconErr)
+		}
+		return false, storeErr
+	}
+	if a.store == nil && rconErr != nil {
+		return false, rconErr
+	}
+
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-add", username)
 	}
@@ -203,40 +292,65 @@ func (a *AccessManager) AddWhitelist(ctx context.Context, username string, actor
 // RemoveWhitelist removes a user from whitelist.txt in Git and executes /whitelist remove via RCON.
 func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string, actor ...string) (bool, error) {
 	username = strings.TrimSpace(username)
+	if username == "" {
+		return false, fmt.Errorf("username is required")
+	}
 	msg := fmt.Sprintf("mc-access: whitelist remove %s", username)
 
-	if a.store == nil {
-		return false, ports.ErrNotImplemented
-	}
-	changed, err := a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
-		cur := ""
-		if doc.Data != nil {
-			cur = doc.Data["whitelist.txt"]
-		}
-		var lines []string
-		found := false
-		for line := range strings.SplitSeq(cur, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if strings.EqualFold(trimmed, username) {
-				found = true
-				continue
+	var changed bool
+	var storeErr error
+	if a.store != nil {
+		changed, storeErr = a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
+			cur := ""
+			if doc.Data != nil {
+				cur = doc.Data["whitelist.txt"]
 			}
-			lines = append(lines, line)
-		}
-		if !found {
-			return false, nil
-		}
-		doc.Data["whitelist.txt"] = strings.Join(lines, "\n")
-		return true, nil
-	})
-	if err != nil {
-		return false, err
+			var lines []string
+			found := false
+			for line := range strings.SplitSeq(cur, "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.EqualFold(trimmed, username) {
+					found = true
+					continue
+				}
+				lines = append(lines, line)
+			}
+			if !found {
+				return false, nil
+			}
+			doc.Data["whitelist.txt"] = strings.Join(lines, "\n")
+			return true, nil
+		})
 	}
 
+	var rconErr error
 	if a.rcon != nil {
-		_, _ = a.rcon.Execute(ctx, "/whitelist remove "+username)
-		_, _ = a.rcon.Execute(ctx, "/whitelist reload")
+		res, err := a.rcon.Execute(ctx, "/whitelist remove "+username)
+		if err != nil {
+			rconErr = err
+		} else {
+			if strings.Contains(strings.ToLower(res), "not whitelisted") {
+				changed = false
+			} else if a.store == nil || storeErr != nil {
+				changed = true
+			}
+			_, _ = a.rcon.Execute(ctx, "/whitelist reload")
+		}
 	}
+
+	if a.store == nil && a.rcon == nil {
+		return false, ports.ErrNotImplemented
+	}
+	if storeErr != nil && (a.rcon == nil || rconErr != nil) {
+		if rconErr != nil {
+			return false, fmt.Errorf("store patch: %v; rcon: %w", storeErr, rconErr)
+		}
+		return false, storeErr
+	}
+	if a.store == nil && rconErr != nil {
+		return false, rconErr
+	}
+
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-remove", username)
 	}

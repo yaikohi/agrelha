@@ -16,6 +16,13 @@ func isHTMLForm(c *fiber.Ctx) bool {
 
 const mcRedirectTarget = "/access?game=minecraft"
 
+func (h *Handler) accessSuffix() string {
+	if h.cfg.HasGit {
+		return "live applied via RCON and committed to Git."
+	}
+	return "live applied via RCON."
+}
+
 func (h *Handler) MCAccessPage(c *fiber.Ctx) error {
 	return c.Redirect(mcRedirectTarget, fiber.StatusTemporaryRedirect)
 }
@@ -49,7 +56,7 @@ func (h *Handler) MCAccessGrantOp(c *fiber.Ctx) error {
 
 	if isHTMLForm(c) {
 		if changed {
-			shared.SetFlash(c, "ok", "Granted operator status to "+user+" — live applied via RCON and committed to Git.")
+			shared.SetFlash(c, "ok", "Granted operator status to "+user+" — "+h.accessSuffix())
 		} else {
 			shared.SetFlash(c, "ok", user+" is already an operator.")
 		}
@@ -88,7 +95,7 @@ func (h *Handler) MCAccessRevokeOp(c *fiber.Ctx) error {
 
 	if isHTMLForm(c) {
 		if changed {
-			shared.SetFlash(c, "ok", "Revoked operator status from "+user+" — live applied via RCON and committed to Git.")
+			shared.SetFlash(c, "ok", "Revoked operator status from "+user+" — "+h.accessSuffix())
 		} else {
 			shared.SetFlash(c, "ok", user+" is not an operator.")
 		}
@@ -127,7 +134,7 @@ func (h *Handler) MCAccessAddWhitelist(c *fiber.Ctx) error {
 
 	if isHTMLForm(c) {
 		if changed {
-			shared.SetFlash(c, "ok", "Added "+user+" to whitelist — live applied via RCON and committed to Git.")
+			shared.SetFlash(c, "ok", "Added "+user+" to whitelist — "+h.accessSuffix())
 		} else {
 			shared.SetFlash(c, "ok", user+" is already whitelisted.")
 		}
@@ -166,7 +173,7 @@ func (h *Handler) MCAccessRemoveWhitelist(c *fiber.Ctx) error {
 
 	if isHTMLForm(c) {
 		if changed {
-			shared.SetFlash(c, "ok", "Removed "+user+" from whitelist — live applied via RCON and committed to Git.")
+			shared.SetFlash(c, "ok", "Removed "+user+" from whitelist — "+h.accessSuffix())
 		} else {
 			shared.SetFlash(c, "ok", user+" was not in whitelist.")
 		}

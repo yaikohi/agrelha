@@ -167,6 +167,12 @@ func Load() *Config {
 	gmodMaxInstances := envInt("GMOD_MAX_INSTANCES", 4)
 	gmodMaxRunning := envInt("GMOD_MAX_RUNNING", 2)
 
+	rt := env("RUNTIME", "k8s")
+	mcRconDefault := "minecraft-modded.minecraft-modded.svc.cluster.local:25575"
+	if rt == "docker" {
+		mcRconDefault = "127.0.0.1:25575"
+	}
+
 	return &Config{
 		ListenAddr: env("LISTEN_ADDR", ":8080"),
 		DBPath:     env("DB_PATH", "/data/agrelha.db"),
@@ -204,7 +210,7 @@ func Load() *Config {
 		MinecraftConfigsPath:  env("MINECRAFT_CONFIGS_PATH", "manifests/minecraft-modded/configs.yaml"),
 		MinecraftNamespace:    env("MINECRAFT_NAMESPACE", "minecraft-modded"),
 		MinecraftDeployment:   env("MINECRAFT_DEPLOYMENT", "minecraft-modded"),
-		MinecraftRconAddr:     env("MINECRAFT_RCON_ADDR", "minecraft-modded.minecraft-modded.svc.cluster.local:25575"),
+		MinecraftRconAddr:     env("MINECRAFT_RCON_ADDR", mcRconDefault),
 		MinecraftRconPassword: env("MINECRAFT_RCON_PASSWORD", ""),
 		ModrinthAPI:           env("MODRINTH_API", "https://api.modrinth.com/v2"),
 		CurseForgeAPI:         env("CURSEFORGE_API", "https://api.curseforge.com/v1"),
@@ -236,7 +242,7 @@ func Load() *Config {
 		GModLBBaseIP:       env("GMOD_LB_BASE_IP", "192.168.20.230"),
 		GModInstancesPath:  env("GMOD_INSTANCES_PATH", "manifests/gmod"),
 
-		Runtime:           env("RUNTIME", "k8s"),
+		Runtime:           rt,
 		DockerHostName:    env("DOCKER_HOST_NAME", ""),
 		DockerHostAddress: env("DOCKER_HOST_ADDRESS", ""),
 		DefaultHost:       env("DEFAULT_HOST", ""),

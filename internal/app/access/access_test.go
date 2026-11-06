@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -425,3 +426,94 @@ func TestModManagerNilStoreAndErrors(t *testing.T) {
 		t.Errorf("expected '-' actor, got: %v", auditRec.entries)
 	}
 }
+
+func TestReadJSONUsers(t *testing.T) {
+	// 1. Missing file returns nil, nil
+	users, err := ReadJSONUsers("non-existent-path.json")
+	if err != nil || users != nil {
+		t.Errorf("expected nil, nil for non-existent file, got %v, %v", users, err)
+	}
+
+	// 2. Valid whitelist.json or ops.json
+	tmp := t.TempDir()
+	wlFile := tmp + "/whitelist.json"
+	content := `[
+		{"uuid": "1111-2222", "name": "notch"},
+		{"uuid": "3333-4444", "name": "jeb_"},
+		{"uuid": "5555-6666", "name": "   "}
+	]`
+	if err := os.WriteFile(wlFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	users, err = ReadJSONUsers(wlFile)
+	if err != nil {
+		t.Fatalf("unexpected error reading json users: %v", err)
+	}
+	if len(users) != 2 || users[0] != "notch" || users[1] != "jeb_" {
+		t.Errorf("unexpected users: %v", users)
+	}
+}
+
+func TestAccessManagerStandaloneRCON(t *testing.T) {
+	ctx := context.Background()
+	console := &mockConsole{response: "Added player1 to the whitelist"}
+	audit := &mockAuditRecorder{}
+
+	// Standalone AccessManager with RCON and no StateStore (e.g. Docker mode)
+	mgr := NewAccessManager(nil, "", console, WithAudit(audit))
+
+	// 1. AddWhitelist via RCON
+	changed, err := mgr.AddWhitelist(ctx, "player1", "admin")
+	if err != nil || !changed {
+		t.Fatalf("AddWhitelist via RCON failed: changed=%v, err=%v", changed, err)
+	}
+	if len(console.commands) < 2 || console.commands[0] != "/whitelist add player1" {
+		t.Errorf("expected RCON /whitelist add player1, got: %v", console.commands)
+	}
+
+	// 2. RemoveWhitelist via RCON
+	console.commands = nil
+	console.response = "Removed player1 from the whitelist"
+	changed, err = mgr.RemoveWhitelist(ctx, "player1", "admin")
+	if err != nil || !changed {
+		t.Fatalf("RemoveWhitelist via RCON failed: changed=%v, err=%v", changed, err)
+	}
+	if len(console.commands) < 2 || console.commands[0] != "/whitelist remove player1" {
+		t.Errorf("expected RCON /whitelist remove player1, got: %v", console.commands)
+	}
+
+	// 3. GrantOp via RCON
+	console.commands = nil
+	console.response = "Made player1 a server operator"
+	changed, err = mgr.GrantOp(ctx, "player1", "admin")
+	if err != nil || !changed {
+		t.Fatalf("GrantOp via RCON failed: changed=%v, err=%v", changed, err)
+	}
+	if len(console.commands) != 1 || console.commands[0] != "/op player1" {
+		t.Errorf("expected RCON /op player1, got: %v", console.commands)
+	}
+
+	// 4. RevokeOp via RCON
+	console.commands = nil
+	console.response = "Made player1 no longer a server operator"
+	changed, err = mgr.RevokeOp(ctx, "player1", "admin")
+	if err != nil || !changed {
+		t.Fatalf("RevokeOp via RCON failed: changed=%v, err=%v", changed, err)
+	}
+	if len(console.commands) != 1 || console.commands[0] != "/deop player1" {
+		t.Errorf("expected RCON /deop player1, got: %v", console.commands)
+	}
+
+	// 5. ListAccess queries /whitelist list via RCON
+	console.commands = nil
+	console.response = "There are 2 whitelisted players: notch, jeb_"
+	ops, wl, err := mgr.ListAccess(ctx)
+	if err != nil {
+		t.Fatalf("ListAccess via RCON failed: %v", err)
+	}
+	if len(wl) != 2 || wl[0] != "notch" || wl[1] != "jeb_" {
+		t.Errorf("expected 2 whitelisted players from RCON, got: %v", wl)
+	}
+	_ = ops
+}
+

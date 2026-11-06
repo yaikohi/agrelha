@@ -350,6 +350,7 @@ func buildAccessHandler(d Deps, applyAfterSync func(string, string, func(string)
 		History:          d.Store,
 		Players:          d.Store,
 		StateStore:       d.StateStore,
+		HasGit:           d.Git != nil,
 		Actor:            actor,
 		ApplyAfterSync:   applyAfterSync,
 	})
