@@ -2,6 +2,7 @@ package valheim
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -114,6 +115,7 @@ func (h *Handler) ValheimInstanceStart(c *fiber.Ctx) error {
 	}
 
 	if err := h.cfg.ValheimInstances.StartInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
+		slog.Error("valheim start instance failed", "instance", instanceNumber, "err", err)
 		return shared.SSEToast(c, "err", "Start failed: "+err.Error(), nil)
 	}
 
@@ -132,6 +134,7 @@ func (h *Handler) ValheimInstanceStop(c *fiber.Ctx) error {
 	}
 
 	if err := h.cfg.ValheimInstances.StopInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
+		slog.Error("valheim stop instance failed", "instance", instanceNumber, "err", err)
 		return shared.SSEToast(c, "err", "Stop failed: "+err.Error(), nil)
 	}
 

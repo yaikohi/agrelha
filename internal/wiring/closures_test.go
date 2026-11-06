@@ -667,3 +667,36 @@ func TestWiring_ValheimVersionResolver_Branches(t *testing.T) {
 		t.Errorf("unexpected error for cached package: %v", err)
 	}
 }
+
+// Instance 1 on a Docker host must never fall back to the legacy single
+// "valheim" Deployment name: it becomes the compose project and the container
+// name the runtime inspects, so the fallback both collided with the real
+// container ("name is already in use") and reported a healthy world Stopped.
+func TestValheimServerRef_LegacyFallbackIsClusterOnly(t *testing.T) {
+	cfg := &config.Config{ValheimDeployment: "valheim", ValheimNamespace: "valheim"}
+	// No Deployments registered, so DeploymentReplicas always errors - the
+	// condition that used to trigger the fallback unconditionally.
+	k8sClient := k8s.NewWithClientset(fakek8s.NewSimpleClientset(), "valheim", "valheim")
+
+	cases := []struct {
+		name string
+		inst domain.Instance
+		want string
+	}{
+		{"instance 1 on a docker host", domain.Instance{Number: 1, Slug: "lareira-v2", Host: "fogo"}, "valheim-lareira-v2-01"},
+		{"instance 1 in the cluster", domain.Instance{Number: 1, Slug: "lareira-v2", Host: domain.HostCluster}, "valheim"},
+		{"instance 1 with no host recorded", domain.Instance{Number: 1, Slug: "lareira-v2"}, "valheim"},
+		{"instance 2 on a docker host", domain.Instance{Number: 2, Slug: "boppo", Host: "fogo"}, "valheim-boppo-02"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := valheimServerRef(cfg, k8sClient, tc.inst).Name; got != tc.want {
+				t.Errorf("valheimServerRef = %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	if got := valheimServerRef(cfg, nil, domain.Instance{Number: 1, Slug: "lareira-v2", Host: domain.HostCluster}).Name; got != "valheim-lareira-v2-01" {
+		t.Errorf("without a k8s client, valheimServerRef = %q, want the per-instance name", got)
+	}
+}

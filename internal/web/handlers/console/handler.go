@@ -3,10 +3,12 @@ package console
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	"agrelha/internal/app/instances"
@@ -140,8 +142,13 @@ func (h *Handler) guard(action, okMsg string, fn func(context.Context) error) fi
 	}
 }
 
-func (h *Handler) streamLogs(c *fiber.Ctx, stream io.ReadCloser, selector string) error {
+func (h *Handler) streamLogs(c *fiber.Ctx, stream io.ReadCloser, selector string, cancel ...context.CancelFunc) error {
 	if stream == nil {
+		for _, cn := range cancel {
+			if cn != nil {
+				cn()
+			}
+		}
 		return nil
 	}
 	c.Set("Content-Type", "text/event-stream")
@@ -149,7 +156,14 @@ func (h *Handler) streamLogs(c *fiber.Ctx, stream io.ReadCloser, selector string
 	c.Set("Connection", "keep-alive")
 
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		defer stream.Close()
+		defer func() {
+			for _, cn := range cancel {
+				if cn != nil {
+					cn()
+				}
+			}
+			_ = stream.Close()
+		}()
 
 		scanner := bufio.NewScanner(stream)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -163,5 +177,12 @@ func (h *Handler) streamLogs(c *fiber.Ctx, stream io.ReadCloser, selector string
 	})
 
 	return nil
+}
+
+func logStreamError(err error) string {
+	if errors.Is(err, ports.ErrServerNotFound) || strings.Contains(err.Error(), "No such container") || strings.Contains(err.Error(), "status 404") {
+		return "<p class=\"text-ink-muted\">Server is not running. Start the server to generate logs.</p>"
+	}
+	return fmt.Sprintf("<p class=\"rounded-control bg-surface px-2 py-1 text-danger\">Log stream error: %s</p>", html.EscapeString(err.Error()))
 }
 

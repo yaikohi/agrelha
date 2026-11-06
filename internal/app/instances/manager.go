@@ -845,7 +845,10 @@ func (m *InstanceManager) StartInstance(ctx context.Context, instanceNumber int,
 		if profile.Capabilities.Mods {
 			var modsErr error
 			if mods, modsErr = m.GetModList(ctx, instanceNumber); modsErr != nil {
-				return fmt.Errorf("start instance %d: converge: read mod list: %w", inst.Number, modsErr)
+				if !errors.Is(modsErr, fs.ErrNotExist) && !errors.Is(modsErr, os.ErrNotExist) {
+					return fmt.Errorf("start instance %d: converge: read mod list: %w", inst.Number, modsErr)
+				}
+				mods = domain.ModList{}
 			}
 		}
 		commitMsg := fmt.Sprintf("%s: start instance %02d (converge)", m.gamePrefix(), inst.Number)
@@ -1089,6 +1092,9 @@ func (m *InstanceManager) GetCurseForgeMods(ctx context.Context, instanceNumber 
 	path := m.instanceDir(instanceNumber) + "/mods.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	var out []string
@@ -1534,6 +1540,9 @@ func (m *InstanceManager) ListConfigs(ctx context.Context, instanceNumber int) (
 	path := m.instanceDir(instanceNumber) + "/configs.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	files := make([]string, 0, len(doc.Data))
@@ -1580,7 +1589,7 @@ func (m *InstanceManager) ListConfigDataFor(ctx context.Context, inst domain.Ins
 func (m *InstanceManager) configDataAt(ctx context.Context, path string) (map[string]string, error) {
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err
@@ -1602,6 +1611,9 @@ func (m *InstanceManager) GetConfig(ctx context.Context, instanceNumber int, fil
 	path := m.instanceDir(instanceNumber) + "/configs.yaml"
 	doc, err := m.stateStore.Get(ctx, path)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
 		return "", err
 	}
 	if doc.Data != nil {
@@ -1678,6 +1690,9 @@ func (m *InstanceManager) ListGlobalConfigs(ctx context.Context) ([]string, erro
 	}
 	doc, err := m.stateStore.Get(ctx, m.globalConfigsPath)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	files := make([]string, 0, len(doc.Data))
@@ -1701,6 +1716,9 @@ func (m *InstanceManager) GetGlobalConfig(ctx context.Context, filename string) 
 	}
 	doc, err := m.stateStore.Get(ctx, m.globalConfigsPath)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
 		return "", err
 	}
 	if doc.Data != nil {

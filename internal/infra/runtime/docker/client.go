@@ -263,6 +263,9 @@ func (c *SocketClient) ContainerLogs(ctx context.Context, id string, opts ports.
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: logs container %s: status %d: %s", ports.ErrServerNotFound, id, resp.StatusCode, strings.TrimSpace(string(body)))
+		}
 		return nil, fmt.Errorf("logs container %s: status %d: %s", id, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 

@@ -21,11 +21,12 @@ import (
 )
 
 type fakeRuntime struct {
-	restarted bool
-	stopped   bool
-	started   bool
-	err       error
-	logLines  string
+	restarted   bool
+	stopped     bool
+	started     bool
+	err         error
+	logLines    string
+	lastLogsCtx context.Context
 }
 
 func (f *fakeRuntime) Start(ctx context.Context, ref ports.ServerRef) error {
@@ -56,6 +57,7 @@ func (f *fakeRuntime) Metrics(ctx context.Context, ref ports.ServerRef) (ports.M
 	return ports.Metrics{}, nil
 }
 func (f *fakeRuntime) Logs(ctx context.Context, ref ports.ServerRef, opts ports.LogOptions) (io.ReadCloser, error) {
+	f.lastLogsCtx = ctx
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -544,7 +546,16 @@ func TestValheimLogsStream(t *testing.T) {
 		t.Errorf("valheim stream err response = %s", string(bodyErr))
 	}
 
-	// 4. Unconfigured instances
+	// 4. Container not found (404 / ErrServerNotFound)
+	rt.err = ports.ErrServerNotFound
+	reqNotFound := httptest.NewRequest(http.MethodGet, "/api/valheim/1/logs", nil)
+	respNotFound, _ := app.Test(reqNotFound)
+	bodyNotFound, _ := io.ReadAll(respNotFound.Body)
+	if !strings.Contains(string(bodyNotFound), "Server is not running. Start the server to generate logs.") {
+		t.Errorf("valheim not found response = %s, want friendly message", string(bodyNotFound))
+	}
+
+	// 5. Unconfigured instances
 	hUnconf := New(Config{})
 	appUnconf := fiber.New()
 	hUnconf.Register(appUnconf)

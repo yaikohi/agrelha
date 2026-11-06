@@ -251,8 +251,8 @@ func TestComposeReconciler_ResolveDir_And_WriteAndConverge(t *testing.T) {
 
 func TestDefaultExecutor_Invocation(t *testing.T) {
 	ctx := context.Background()
-	// Call defaultExecutor with invalid args so docker compose fails and exercises error formatting
-	err := defaultExecutor(ctx, t.TempDir(), "nonexistent-command-12345")
+	// Call DefaultExecutor with invalid args so docker compose fails and exercises error formatting
+	err := DefaultExecutor(ctx, t.TempDir(), "nonexistent-command-12345")
 	if err == nil {
 		t.Fatal("expected error from invalid docker compose command, got nil")
 	}

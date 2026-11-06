@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"fmt"
-	"html"
 	"io"
 	"strconv"
 
@@ -26,12 +24,14 @@ func (h *Handler) GModLogsStream(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid number")
 	}
 
-	stream, err := h.gmodStream(c.UserContext(), instanceNumber)
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := h.gmodStream(ctx, instanceNumber)
 	if err != nil {
-		return sseMessage(c, fmt.Sprintf("<p class=\"rounded-control bg-surface px-2 py-1 text-danger\">Log stream error: %s</p>", html.EscapeString(err.Error())))
+		cancel()
+		return sseMessage(c, logStreamError(err))
 	}
 
-	return h.streamLogs(c, stream, "#console-logs")
+	return h.streamLogs(c, stream, "#console-logs", cancel)
 }
 
 func sseMessage(c *fiber.Ctx, frag string) error {

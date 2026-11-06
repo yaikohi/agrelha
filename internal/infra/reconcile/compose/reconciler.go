@@ -83,7 +83,7 @@ func validatePaths(workDir, dataRoot string) error {
 func New(opts ...Option) (*Reconciler, error) {
 	r := &Reconciler{
 		workDir:  ".",
-		executor: defaultExecutor,
+		executor: DefaultExecutor,
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -102,7 +102,8 @@ func MustNew(opts ...Option) *Reconciler {
 	return r
 }
 
-func defaultExecutor(ctx context.Context, workDir string, args ...string) error {
+// DefaultExecutor is the default command executor used by Reconciler.
+var DefaultExecutor Executor = func(ctx context.Context, workDir string, args ...string) error {
 	cmd := exec.CommandContext(ctx, "docker", append([]string{"compose"}, args...)...)
 	if workDir != "" {
 		cmd.Dir = workDir

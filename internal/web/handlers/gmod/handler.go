@@ -387,6 +387,7 @@ func (h *Handler) InstanceStart(c *fiber.Ctx) error {
 	}
 
 	if err := h.cfg.Instances.StartInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
+		slog.Error("gmod start instance failed", "instance", instanceNumber, "err", err)
 		return shared.SSEToast(c, "err", "Start failed: "+err.Error(), nil)
 	}
 
@@ -404,6 +405,7 @@ func (h *Handler) InstanceStop(c *fiber.Ctx) error {
 	}
 
 	if err := h.cfg.Instances.StopInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
+		slog.Error("gmod stop instance failed", "instance", instanceNumber, "err", err)
 		return shared.SSEToast(c, "err", "Stop failed: "+err.Error(), nil)
 	}
 

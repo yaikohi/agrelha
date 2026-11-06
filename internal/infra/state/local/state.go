@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,9 +30,10 @@ type Revision struct {
 
 // Adapter persists desired state to local files with optional revision history in SQLite.
 type Adapter struct {
-	rootDir string
-	db      *sql.DB
-	mu      sync.Mutex
+	rootDir      string
+	fallbackDirs []string
+	db           *sql.DB
+	mu           sync.Mutex
 }
 
 // Option configures an Adapter.
@@ -41,6 +43,19 @@ type Option func(*Adapter)
 func WithDB(db *sql.DB) Option {
 	return func(a *Adapter) {
 		a.db = db
+	}
+}
+
+// WithFallbackDirs configures directories to consult when a file is absent in rootDir.
+func WithFallbackDirs(dirs ...string) Option {
+	return func(a *Adapter) {
+		for _, d := range dirs {
+			if strings.TrimSpace(d) != "" {
+				if abs, err := filepath.Abs(d); err == nil {
+					a.fallbackDirs = append(a.fallbackDirs, abs)
+				}
+			}
+		}
 	}
 }
 
@@ -108,7 +123,30 @@ func (a *Adapter) Get(ctx context.Context, path string) (ports.Document, error) 
 
 	raw, err := os.ReadFile(full)
 	if err != nil {
-		return ports.Document{}, err
+		if (errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist)) && len(a.fallbackDirs) > 0 {
+			cleaned := filepath.Clean(path)
+			for _, fb := range a.fallbackDirs {
+				candidates := []string{
+					filepath.Join(fb, cleaned),
+				}
+				if strings.HasPrefix(cleaned, "compose/") {
+					candidates = append(candidates, filepath.Join(fb, strings.TrimPrefix(cleaned, "compose/")))
+				}
+				for _, c := range candidates {
+					if b, rErr := os.ReadFile(c); rErr == nil {
+						raw = b
+						err = nil
+						break
+					}
+				}
+				if err == nil {
+					break
+				}
+			}
+		}
+		if err != nil {
+			return ports.Document{}, err
+		}
 	}
 
 	var doc yaml.Node

@@ -448,4 +448,48 @@ func TestLocalStateStore_MoreErrorBranches(t *testing.T) {
 	}
 }
 
+func TestLocalStateStore_FallbackDirs(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	rootDir := filepath.Join(tmp, "state")
+	fallbackDir := filepath.Join(tmp, "compose")
+
+	// Create legacy compose file
+	legacyFile := filepath.Join(fallbackDir, "valheim", "instance-01", "mods.yaml")
+	if err := os.MkdirAll(filepath.Dir(legacyFile), 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := "apiVersion: v1\nkind: ConfigMap\ndata:\n  mods.txt: \"mod-a\\nmod-b\"\n"
+	if err := os.WriteFile(legacyFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter, err := New(rootDir, WithFallbackDirs(fallbackDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Get with compose/ prefix resolves from fallback
+	doc, err := adapter.Get(ctx, "compose/valheim/instance-01/mods.yaml")
+	if err != nil {
+		t.Fatalf("expected fallback to find doc, got: %v", err)
+	}
+	if doc.Data["mods.txt"] != "mod-a\nmod-b" {
+		t.Errorf("expected mod-a\nmod-b, got %q", doc.Data["mods.txt"])
+	}
+
+	// 2. Put writes to rootDir, taking precedence over fallback
+	updatedDoc := ports.Document{Data: map[string]string{"mods.txt": "mod-c"}}
+	if err := adapter.Put(ctx, "compose/valheim/instance-01/mods.yaml", updatedDoc, "update"); err != nil {
+		t.Fatal(err)
+	}
+	gotNew, err := adapter.Get(ctx, "compose/valheim/instance-01/mods.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotNew.Data["mods.txt"] != "mod-c" {
+		t.Errorf("expected mod-c from rootDir, got %q", gotNew.Data["mods.txt"])
+	}
+}
+
 

@@ -119,6 +119,21 @@ var buildMrpack = modpack.BuildMrpack
 // Build is the composition root: it is the only place that decides which
 // adapter satisfies which port. Everything it returns is already constructed,
 // so server handlers perform no I/O and can be handed fakes in a test.
+// valheimServerRef addresses one world. Instance 1 predates per-instance
+// Deployments and may still be the single "valheim" Deployment - but only in
+// the cluster. On a Docker host that name is a compose project that owns
+// nothing, so falling back to it both hid the real container behind a
+// "Stopped" badge and made every converge collide with its own container name.
+func valheimServerRef(cfg *config.Config, k8sc *k8s.Client, inst domain.Instance) ports.ServerRef {
+	depName := inst.DeploymentName(domain.ValheimProfile)
+	if inst.Number == 1 && cfg.ValheimDeployment != "" && k8sc != nil && inst.EffectiveHost().IsCluster() {
+		if _, _, err := k8sc.DeploymentReplicas(context.Background(), depName); err != nil {
+			return ports.ServerRef{Name: cfg.ValheimDeployment, Scope: cfg.ValheimNamespace}
+		}
+	}
+	return ports.ServerRef{Name: depName, Scope: cfg.ValheimNamespace}
+}
+
 func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	var d Deps
 
@@ -485,13 +500,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 	valheimInstOpts = append(valheimInstOpts,
 		instances.WithServerRefResolver(func(inst domain.Instance) ports.ServerRef {
-			depName := inst.DeploymentName(domain.ValheimProfile)
-			if inst.Number == 1 && cfg.ValheimDeployment != "" && d.K8s != nil {
-				if _, _, err := d.K8s.DeploymentReplicas(context.Background(), depName); err != nil {
-					return ports.ServerRef{Name: cfg.ValheimDeployment, Scope: cfg.ValheimNamespace}
-				}
-			}
-			return ports.ServerRef{Name: depName, Scope: cfg.ValheimNamespace}
+			return valheimServerRef(cfg, d.K8s, inst)
 		}),
 	)
 
@@ -1019,7 +1028,11 @@ func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStor
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("compose reconciler init: %w", err)
 		}
-		localSS, err := localstate.New(stateDir, localstate.WithDB(st.DB()))
+		localSS, err := localstate.New(
+			stateDir,
+			localstate.WithDB(st.DB()),
+			localstate.WithFallbackDirs(cfg.ComposeDir, filepath.Dir(cfg.ComposeDir)),
+		)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("local state store init at %s: %w", stateDir, err)
 		}

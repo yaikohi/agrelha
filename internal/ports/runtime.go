@@ -20,6 +20,8 @@ import (
 // instead of pretending to work.
 var ErrNotImplemented = errors.New("not implemented by this runtime")
 
+var ErrServerNotFound = errors.New("server not found")
+
 var ErrUnknownHost = errors.New("no runtime, renderer or reconciler is registered for this host")
 
 // ServerRef identifies one game server to a runtime without saying how it is

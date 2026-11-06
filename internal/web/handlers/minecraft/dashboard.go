@@ -160,6 +160,7 @@ func (h *Handler) MCInstanceStart(c *fiber.Ctx) error {
 	}
 
 	if err := h.cfg.MCInstances.StartInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
+		slog.Error("minecraft start instance failed", "instance", instanceNumber, "err", err)
 		return shared.SSEToast(c, "err", "Failed to start world: "+err.Error(), nil)
 	}
 
@@ -178,6 +179,7 @@ func (h *Handler) MCInstanceStop(c *fiber.Ctx) error {
 	}
 
 	if err := h.cfg.MCInstances.StopInstance(c.UserContext(), instanceNumber, h.cfg.Actor(c)); err != nil {
+		slog.Error("minecraft stop instance failed", "instance", instanceNumber, "err", err)
 		return shared.SSEToast(c, "err", "Failed to stop world: "+err.Error(), nil)
 	}
 

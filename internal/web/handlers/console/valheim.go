@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"fmt"
-	"html"
 	"strconv"
 
 	"agrelha/internal/web/pages"
@@ -61,15 +59,17 @@ func (h *Handler) ValheimLogsStream(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid number")
 	}
 
-	stream, err := h.cfg.ValheimInstances.InstanceLogs(c.UserContext(), instanceNumber, 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := h.cfg.ValheimInstances.InstanceLogs(ctx, instanceNumber, 100)
 	if err != nil {
+		cancel()
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")
 		var buf bytes.Buffer
 		w := bufio.NewWriter(&buf)
-		_ = sse.AppendElement(w, "#console-logs", fmt.Sprintf("<p class=\"rounded-control bg-surface px-2 py-1 text-danger\">Log stream error: %s</p>", html.EscapeString(err.Error())))
+		_ = sse.AppendElement(w, "#console-logs", logStreamError(err))
 		return c.Send(buf.Bytes())
 	}
 
-	return h.streamLogs(c, stream, "#console-logs")
+	return h.streamLogs(c, stream, "#console-logs", cancel)
 }
