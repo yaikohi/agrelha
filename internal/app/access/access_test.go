@@ -519,3 +519,64 @@ func TestAccessManagerStandaloneRCON(t *testing.T) {
 	_ = ops
 }
 
+func TestAccessManager_UsernameValidation(t *testing.T) {
+	ctx := context.Background()
+
+	invalidUsernames := []struct {
+		name     string
+		username string
+	}{
+		{name: "newline injection", username: "steve\n/op malicious"},
+		{name: "semicolon / commands", username: "player;kick all"},
+		{name: "too long (>16 chars)", username: "player_with_a_name_that_is_far_too_long"},
+		{name: "spaces", username: "user name"},
+		{name: "symbols", username: "steve!"},
+		{name: "empty", username: ""},
+	}
+
+	for _, tt := range invalidUsernames {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &mockStateStore{
+				docs: map[string]ports.Document{
+					"manifests/neoforge-access.yaml": {
+						Data: map[string]string{
+							"ops.txt":       "",
+							"whitelist.txt": "",
+						},
+					},
+				},
+			}
+			console := &mockConsole{}
+			mgr := NewAccessManager(store, "manifests/neoforge-access.yaml", console)
+
+			// GrantOp
+			if _, err := mgr.GrantOp(ctx, tt.username, "admin"); !errors.Is(err, domain.ErrInvalidMinecraftUsername) {
+				t.Errorf("GrantOp(%q) error = %v, want %v", tt.username, err, domain.ErrInvalidMinecraftUsername)
+			}
+			// RevokeOp
+			if _, err := mgr.RevokeOp(ctx, tt.username, "admin"); !errors.Is(err, domain.ErrInvalidMinecraftUsername) {
+				t.Errorf("RevokeOp(%q) error = %v, want %v", tt.username, err, domain.ErrInvalidMinecraftUsername)
+			}
+			// AddWhitelist
+			if _, err := mgr.AddWhitelist(ctx, tt.username, "admin"); !errors.Is(err, domain.ErrInvalidMinecraftUsername) {
+				t.Errorf("AddWhitelist(%q) error = %v, want %v", tt.username, err, domain.ErrInvalidMinecraftUsername)
+			}
+			// RemoveWhitelist
+			if _, err := mgr.RemoveWhitelist(ctx, tt.username, "admin"); !errors.Is(err, domain.ErrInvalidMinecraftUsername) {
+				t.Errorf("RemoveWhitelist(%q) error = %v, want %v", tt.username, err, domain.ErrInvalidMinecraftUsername)
+			}
+
+			// Ensure neither store was modified nor console commands were executed
+			if len(console.commands) != 0 {
+				t.Errorf("expected 0 console commands, got: %v", console.commands)
+			}
+			if store.docs["manifests/neoforge-access.yaml"].Data["ops.txt"] != "" {
+				t.Errorf("expected ops.txt unchanged, got: %q", store.docs["manifests/neoforge-access.yaml"].Data["ops.txt"])
+			}
+			if store.docs["manifests/neoforge-access.yaml"].Data["whitelist.txt"] != "" {
+				t.Errorf("expected whitelist.txt unchanged, got: %q", store.docs["manifests/neoforge-access.yaml"].Data["whitelist.txt"])
+			}
+		})
+	}
+}
+

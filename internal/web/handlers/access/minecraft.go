@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/web/shared"
 
 	"github.com/gofiber/fiber/v2"
@@ -37,12 +38,12 @@ func (h *Handler) MCAccessGrantOp(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Access manager unconfigured"})
 	}
 	user := strings.TrimSpace(c.FormValue("username"))
-	if user == "" {
+	if err := domain.ValidateMinecraftUsername(user); err != nil {
 		if isHTMLForm(c) {
-			shared.SetFlash(c, "err", "username is required")
+			shared.SetFlash(c, "err", err.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username is required"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	changed, err := h.cfg.MCAccess.GrantOp(c.UserContext(), user, h.cfg.Actor(c))
@@ -76,12 +77,12 @@ func (h *Handler) MCAccessRevokeOp(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Access manager unconfigured"})
 	}
 	user := strings.TrimSpace(c.FormValue("username"))
-	if user == "" {
+	if err := domain.ValidateMinecraftUsername(user); err != nil {
 		if isHTMLForm(c) {
-			shared.SetFlash(c, "err", "username is required")
+			shared.SetFlash(c, "err", err.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username is required"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	changed, err := h.cfg.MCAccess.RevokeOp(c.UserContext(), user, h.cfg.Actor(c))
@@ -115,12 +116,12 @@ func (h *Handler) MCAccessAddWhitelist(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Access manager unconfigured"})
 	}
 	user := strings.TrimSpace(c.FormValue("username"))
-	if user == "" {
+	if err := domain.ValidateMinecraftUsername(user); err != nil {
 		if isHTMLForm(c) {
-			shared.SetFlash(c, "err", "username is required")
+			shared.SetFlash(c, "err", err.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username is required"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	changed, err := h.cfg.MCAccess.AddWhitelist(c.UserContext(), user, h.cfg.Actor(c))
@@ -154,12 +155,12 @@ func (h *Handler) MCAccessRemoveWhitelist(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Access manager unconfigured"})
 	}
 	user := strings.TrimSpace(c.FormValue("username"))
-	if user == "" {
+	if err := domain.ValidateMinecraftUsername(user); err != nil {
 		if isHTMLForm(c) {
-			shared.SetFlash(c, "err", "username is required")
+			shared.SetFlash(c, "err", err.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
 		}
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "username is required"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	changed, err := h.cfg.MCAccess.RemoveWhitelist(c.UserContext(), user, h.cfg.Actor(c))

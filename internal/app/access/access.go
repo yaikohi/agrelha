@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"agrelha/internal/domain"
 	"agrelha/internal/ports"
 )
 
@@ -97,9 +98,8 @@ func actorOrHyphen(actor []string) string {
 
 // GrantOp adds a user to ops.txt in Git and executes live /op via RCON.
 func (a *AccessManager) GrantOp(ctx context.Context, username string, actor ...string) (bool, error) {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return false, fmt.Errorf("username is required")
+	if err := domain.ValidateMinecraftUsername(username); err != nil {
+		return false, err
 	}
 	msg := fmt.Sprintf("mc-access: op %s", username)
 
@@ -160,9 +160,8 @@ func (a *AccessManager) GrantOp(ctx context.Context, username string, actor ...s
 
 // RevokeOp removes a user from ops.txt in Git and executes live /deop via RCON.
 func (a *AccessManager) RevokeOp(ctx context.Context, username string, actor ...string) (bool, error) {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return false, fmt.Errorf("username is required")
+	if err := domain.ValidateMinecraftUsername(username); err != nil {
+		return false, err
 	}
 	msg := fmt.Sprintf("mc-access: deop %s", username)
 
@@ -227,9 +226,8 @@ func (a *AccessManager) RevokeOp(ctx context.Context, username string, actor ...
 
 // AddWhitelist adds a user to whitelist.txt in Git and executes /whitelist add via RCON.
 func (a *AccessManager) AddWhitelist(ctx context.Context, username string, actor ...string) (bool, error) {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return false, fmt.Errorf("username is required")
+	if err := domain.ValidateMinecraftUsername(username); err != nil {
+		return false, err
 	}
 	msg := fmt.Sprintf("mc-access: whitelist add %s", username)
 
@@ -291,9 +289,8 @@ func (a *AccessManager) AddWhitelist(ctx context.Context, username string, actor
 
 // RemoveWhitelist removes a user from whitelist.txt in Git and executes /whitelist remove via RCON.
 func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string, actor ...string) (bool, error) {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return false, fmt.Errorf("username is required")
+	if err := domain.ValidateMinecraftUsername(username); err != nil {
+		return false, err
 	}
 	msg := fmt.Sprintf("mc-access: whitelist remove %s", username)
 
