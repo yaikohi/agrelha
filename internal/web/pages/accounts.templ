@@ -29,7 +29,7 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 		@components.Nav(components.NavProps{Current: "accounts", IsAdmin: true, SignedIn: true})
 		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
-				<h1 class="text-2xl font-semibold text-ink">Accounts & Grants</h1>
+				<h1 class="font-display text-2xl font-semibold text-ink">Accounts & Grants</h1>
 				<p class="mt-1 text-xs text-ink-muted">
 					Who can sign in to agrelha, and which worlds each of them may operate.
 				</p>
@@ -65,7 +65,7 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 									<div class="flex items-center gap-2">
 										<span class="text-sm font-medium text-ink">{ a.Label }</span>
 										if a.Admin {
-											<span class="rounded-full border border-accent px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+											<span class="rounded-control border border-accent px-2 py-0.5 font-pixel text-[11px] font-medium uppercase tracking-wide text-accent">
 												Admin
 											</span>
 										}
@@ -79,7 +79,7 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 									<input type="hidden" name="subject" value={ a.Subject }/>
 									<button
 										type="submit"
-										class="rounded-control border border-edge bg-surface-raised px-3 py-1.5 text-xs text-ink-muted hover:text-danger hover:text-danger transition"
+										class="focus-accent rounded-control border border-edge bg-surface-raised px-3 py-1.5 font-pixel text-xs text-ink-muted transition-colors hover:border-danger hover:text-danger"
 									>
 										Sign out everywhere
 									</button>
@@ -100,7 +100,7 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 												<button
 													type="submit"
 													title="Revoke this grant"
-													class="inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface-raised px-2.5 py-1 text-xs text-ink hover:text-danger hover:text-danger transition"
+													class="focus-accent inline-flex items-center gap-1.5 rounded-control border border-edge bg-surface-raised px-2.5 py-1 font-pixel text-xs text-ink transition-colors hover:border-danger hover:text-danger"
 												>
 													<span>{ g.Label }</span>
 													<span class="text-ink-faint">&times;</span>
@@ -115,7 +115,7 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 										<input type="hidden" name="subject" value={ a.Subject }/>
 										<select
 											name="target"
-											class="rounded-control border border-edge bg-seam/70 px-2.5 py-1.5 text-xs text-ink focus:text-accent "
+											class="focus-accent rounded-control border border-edge bg-seam/70 px-2.5 py-1.5 font-pixel text-xs text-ink focus:text-accent"
 										>
 											for _, o := range instances {
 												<option value={ o.Target }>{ o.Label }</option>
@@ -123,7 +123,7 @@ templ Accounts(accounts []AccountUI, instances []InstanceOptionUI, registryReady
 										</select>
 										<button
 											type="submit"
-											class="rounded-control border border-accent px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent hover:text-accent-ink transition"
+											class="focus-accent rounded-control border border-accent px-3 py-1.5 font-pixel text-xs font-medium text-accent transition-colors hover:bg-accent hover:text-accent-ink"
 										>
 											Grant access
 										</button>

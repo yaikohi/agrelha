@@ -92,7 +92,7 @@ templ panelPort(p PanelPortUI) {
 			if p.Row.JoinURL != "" || p.Row.DownloadURL != "" || p.Row.BrowseURL != "" {
 				<div class="mt-4 flex flex-wrap items-center gap-2">
 					if p.Row.JoinURL != "" {
-						<a href={ templ.SafeURL(p.Row.JoinURL) } class="focus-accent rounded-control bg-accent px-3 py-1.5 font-pixel text-xs text-accent-ink transition-colors hover:bg-ink hover:text-ink">{ p.Row.JoinLabel }</a>
+						<a href={ templ.SafeURL(p.Row.JoinURL) } class={ components.ButtonClass(components.VariantFilled) }>{ p.Row.JoinLabel }</a>
 					}
 					if p.Row.DownloadURL != "" {
 						<a href={ templ.SafeURL(p.Row.DownloadURL) } download class="focus-accent rounded-control border border-edge px-3 py-1.5 font-pixel text-xs text-ink transition-colors hover:border-accent hover:text-accent">

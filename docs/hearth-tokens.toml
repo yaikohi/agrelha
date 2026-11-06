@@ -1,0 +1,697 @@
+# Hearth — design tokens, reconciled
+#
+# One export covering BOTH sources that define Hearth: the Penpot design file
+# and the shipping CSS. Neither is a superset of the other, so every token
+# carries where it lives and whether the two agree.
+#
+# status      agreed      | same value in Penpot and in code
+#             conflict    | in both, values disagree — read `conflict`
+#             design-only | in Penpot, absent from code
+#             code-only   | in code, absent from Penpot
+# ships_as    css-var     | a custom property declared in input.css @theme
+#             observed    | real in the code as literals/Tailwind utilities, not a var
+#             none        | design-side only, nothing in the product yet
+#
+# `penpot` and `css_var` give the token's spelling on each side. drift.md notes
+# a rename at every hop checked at none; this file is the mapping.
+
+[meta]
+name = "Hearth"
+version = 2
+exported = "2026-11-06"
+reconciles = ["penpot", "code"]
+primary_theme = "dark"
+themes = ["dark", "light"]
+
+[source.penpot]
+role = "design source of truth"
+file = "Agrelha - Website"
+sets = "hearth-dark (46 tokens) + hearth-light (17, a name-parity colour overlay)"
+verified = "2026-11-06 — read live via Penpot MCP, 63/63 values confirmed"
+
+[source.code]
+role = "what actually ships"
+file = "internal/web/assets/css/input.css"
+declares = "17 colours x 2 themes, 2 font families, 1 radius — 20 custom properties"
+note = "everything else below marked `observed` is real in the code but not a custom property"
+
+# -------------------------------------------------------------------------
+# Colour — 17 tokens. The one family where both sources agree completely.
+# Penpot nests the lamp (color.lamp.lit); code flattens it (--color-lamp-lit).
+# -------------------------------------------------------------------------
+
+[[color]]
+name = "surface"
+dark = "#1e1713"
+light = "#faf6ec"
+css_var = "--color-surface"
+penpot = "color.surface"
+status = "agreed"
+ships_as = "css-var"
+usage = "The page ground. Body background in both themes."
+
+[[color]]
+name = "surface-raised"
+dark = "#2a211b"
+light = "#ffffff"
+css_var = "--color-surface-raised"
+penpot = "color.surface-raised"
+status = "agreed"
+ships_as = "css-var"
+usage = "Inputs, wells, menus sitting above the ground. ink reads 12.4:1 on it in dark, 14.0:1 in light."
+
+[[color]]
+name = "seam"
+dark = "#120e0b"
+light = "#eae1d3"
+css_var = "--color-seam"
+penpot = "color.seam"
+status = "agreed"
+ships_as = "css-var"
+usage = "Line between ports; recessed areas. Also the ground for code blocks and striped table rows."
+
+[[color]]
+name = "edge"
+dark = "#42352c"
+light = "#a48b67"
+css_var = "--color-edge"
+penpot = "color.edge"
+status = "agreed"
+ships_as = "css-var"
+usage = "Visible border on raised elements; unlit lamp. Only 1.5:1 on surface in dark — below the 3:1 minimum for a UI boundary."
+
+[[color]]
+name = "ink"
+dark = "#ede3d4"
+light = "#352a22"
+css_var = "--color-ink"
+penpot = "color.ink"
+status = "agreed"
+ships_as = "css-var"
+usage = "Primary text. 13.9:1 on surface in dark, 12.9:1 in light."
+
+[[color]]
+name = "ink-muted"
+dark = "#c2b1a0"
+light = "#53453a"
+css_var = "--color-ink-muted"
+penpot = "color.ink-muted"
+status = "agreed"
+ships_as = "css-var"
+usage = "Captions, secondary lines, quiet links. 8.5:1 on surface in both themes."
+
+[[color]]
+name = "ink-faint"
+dark = "#9c8b7c"
+light = "#726253"
+css_var = "--color-ink-faint"
+penpot = "color.ink-faint"
+status = "agreed"
+ships_as = "css-var"
+usage = "Incidental metadata: version tags, colophon. 5.4:1 on surface — the floor of the ink ramp."
+
+[[color]]
+name = "accent"
+dark = "#f4df75"
+light = "#734c09"
+css_var = "--color-accent"
+penpot = "color.accent"
+status = "agreed"
+ships_as = "css-var"
+usage = "The ember. Live state, hover, focus ring, primary action. Not a status colour."
+
+[[color]]
+name = "accent-muted"
+dark = "#efb268"
+light = "#9b5b11"
+css_var = "--color-accent-muted"
+penpot = "color.accent-muted"
+status = "agreed"
+ships_as = "css-var"
+usage = "Banked ember: reachable but empty socket. 5.0:1 on surface in light — do not drop it further."
+
+[[color]]
+name = "accent-ink"
+dark = "#17110e"
+light = "#fdf6df"
+css_var = "--color-accent-ink"
+penpot = "color.accent-ink"
+status = "agreed"
+ships_as = "css-var"
+usage = "Text printed on an accent fill. 13.9:1 on accent in dark, 7.0:1 in light."
+
+[[color]]
+name = "danger"
+dark = "#d9594c"
+light = "#cd392b"
+css_var = "--color-danger"
+penpot = "color.danger"
+status = "agreed"
+ships_as = "css-var"
+usage = "Destructive actions only — never a status. 4.6:1 on surface in both themes."
+
+[[color]]
+name = "tint-sky"
+dark = "#7fa6b8"
+light = "#345b6b"
+css_var = "--color-tint-sky"
+penpot = "color.tint-sky"
+status = "agreed"
+ships_as = "css-var"
+usage = "Minecraft game identity. Identity only; never carries state."
+
+[[color]]
+name = "tint-moss"
+dark = "#8fa860"
+light = "#4e5c32"
+css_var = "--color-tint-moss"
+penpot = "color.tint-moss"
+status = "agreed"
+ships_as = "css-var"
+usage = "Valheim game identity. Identity only; never carries state."
+
+[[color]]
+name = "tint-flame"
+dark = "#d9733a"
+light = "#a14c22"
+css_var = "--color-tint-flame"
+penpot = "color.tint-flame"
+status = "agreed"
+ships_as = "css-var"
+usage = "Garry's Mod game identity. Sits close to danger in hue — never use it for a destructive control."
+
+[[color]]
+name = "lamp-lit"
+dark = "#f4df75"
+light = "#6f3b9c"
+css_var = "--color-lamp-lit"
+penpot = "color.lamp.lit"
+status = "agreed"
+ships_as = "css-var"
+usage = "Availability: players can connect. Tracks accent in dark but deliberately diverges to violet in light, where a brown ember reads as off."
+
+[[color]]
+name = "lamp-dim"
+dark = "#efb268"
+light = "#9871bb"
+css_var = "--color-lamp-dim"
+penpot = "color.lamp.dim"
+status = "agreed"
+ships_as = "css-var"
+usage = "Availability: starting, installing mods, or generating a world."
+
+[[color]]
+name = "lamp-out"
+dark = "#42352c"
+light = "#cab89c"
+css_var = "--color-lamp-out"
+penpot = "color.lamp.out"
+status = "agreed"
+ships_as = "css-var"
+usage = "Availability: offline. Distinguished from unknown, which is an outline with no fill."
+
+# -------------------------------------------------------------------------
+# Type — families, weights, the size ladder, letter spacing
+# The size ladder is the sharpest disagreement in the system: Penpot holds a
+# 6-step px ladder; the code sizes type in rem and only 2 of 8 styles land on it.
+# -------------------------------------------------------------------------
+
+[[font_family]]
+name = "display"
+value = "\"Fraunces\", Iowan Old Style, Georgia, serif"
+penpot = "font.display"
+penpot_value = "Fraunces,serif"
+css_var = "--font-display"
+status = "conflict"
+ships_as = "css-var"
+conflict = "same primary face, different fallback stack — Penpot carries only the generic, code carries the full stack. Code is the one browsers load; Penpot should adopt its stack."
+usage = "display = Fraunces, everything but telemetry. pixel = Departure Mono, telemetry and the wordmark."
+
+[[font_family]]
+name = "pixel"
+value = "\"Departure Mono\", ui-monospace, SFMono-Regular, Menlo, monospace"
+penpot = "font.pixel"
+penpot_value = "\"Departure Mono\",monospace"
+css_var = "--font-pixel"
+status = "conflict"
+ships_as = "css-var"
+conflict = "same primary face, different fallback stack — Penpot carries only the generic, code carries the full stack. Code is the one browsers load; Penpot should adopt its stack."
+usage = "display = Fraunces, everything but telemetry. pixel = Departure Mono, telemetry and the wordmark."
+
+[[font_file]]
+name = "Fraunces"
+file = "fonts/Fraunces-Variable.woff2"
+weight = "100 900"
+served_from = "/assets/fonts/Fraunces-Variable.woff2"
+status = "agreed"
+ships_as = "observed"
+usage = "Declared by @font-face in input.css, not a custom property. Real file, self-hosted."
+
+[[font_file]]
+name = "Departure Mono"
+file = "fonts/DepartureMono-Regular.woff2"
+weight = "400"
+served_from = "/assets/fonts/DepartureMono-Regular.woff2"
+status = "agreed"
+ships_as = "observed"
+usage = "Declared by @font-face in input.css, not a custom property. Real file, self-hosted."
+
+[[font_weight]]
+name = "weight-normal"
+value = "400"
+penpot = "font.weight.normal"
+status = "agreed"
+ships_as = "observed"
+usage = "Tailwind font-normal, 6 uses. A Penpot token the code honours without naming."
+
+[[font_weight]]
+name = "weight-medium"
+value = "500"
+penpot = "font.weight.medium"
+status = "agreed"
+ships_as = "observed"
+usage = "Tailwind font-medium, 97 uses. A Penpot token the code honours without naming."
+
+[[font_weight]]
+name = "weight-semibold"
+value = "600"
+penpot = "font.weight.semibold"
+status = "agreed"
+ships_as = "observed"
+usage = "Tailwind font-semibold, 93 uses. A Penpot token the code honours without naming."
+
+[[font_weight]]
+name = "weight-bold"
+value = "700"
+penpot = "font.weight.bold"
+status = "agreed"
+ships_as = "observed"
+usage = "Tailwind font-bold, 6 uses. A Penpot token the code honours without naming."
+
+[[font_size]]
+name = "text-xs"
+value = "12px"
+penpot = "text.xs"
+status = "design-only"
+ships_as = "none"
+usage = "Penpot's px type ladder. No shipping style sits on this step."
+
+[[font_size]]
+name = "text-sm"
+value = "14px"
+penpot = "text.sm"
+status = "agreed"
+ships_as = "observed"
+used_by = "telemetry"
+usage = "Penpot's px type ladder."
+
+[[font_size]]
+name = "text-base"
+value = "16px"
+penpot = "text.base"
+status = "agreed"
+ships_as = "observed"
+used_by = "prose-h4"
+usage = "Penpot's px type ladder."
+
+[[font_size]]
+name = "text-xl"
+value = "20px"
+penpot = "text.xl"
+status = "design-only"
+ships_as = "none"
+usage = "Penpot's px type ladder. No shipping style sits on this step."
+
+[[font_size]]
+name = "text-2xl"
+value = "24px"
+penpot = "text.2xl"
+status = "design-only"
+ships_as = "none"
+usage = "Penpot's px type ladder. No shipping style sits on this step."
+
+[[font_size]]
+name = "text-3xl"
+value = "30px"
+penpot = "text.3xl"
+status = "design-only"
+ships_as = "none"
+usage = "Penpot's px type ladder. No shipping style sits on this step."
+
+[[type_style]]
+name = "prose-h1"
+group = "Prose"
+family = "display"
+font_size = "1.55rem"
+computed_px = 24.8
+line_height = "1.3"
+font_weight = 600
+status = "conflict"
+ships_as = "observed"
+conflict = "24.8px sits off Penpot's ladder (12/14/16/20/24/30) — nearest step is not exact."
+usage = "A composition, not a primitive. Penpot holds no composite type tokens."
+
+[[type_style]]
+name = "prose-h2"
+group = "Prose"
+family = "display"
+font_size = "1.3rem"
+computed_px = 20.8
+line_height = "1.3"
+font_weight = 600
+status = "conflict"
+ships_as = "observed"
+conflict = "20.8px sits off Penpot's ladder (12/14/16/20/24/30) — nearest step is not exact."
+usage = "A composition, not a primitive. Penpot holds no composite type tokens."
+
+[[type_style]]
+name = "prose-h3"
+group = "Prose"
+family = "display"
+font_size = "1.12rem"
+computed_px = 17.92
+line_height = "1.3"
+font_weight = 600
+status = "conflict"
+ships_as = "observed"
+conflict = "17.92px sits off Penpot's ladder (12/14/16/20/24/30) — nearest step is not exact."
+usage = "A composition, not a primitive. Penpot holds no composite type tokens."
+
+[[type_style]]
+name = "prose-h4"
+group = "Prose"
+family = "display"
+font_size = "1rem"
+computed_px = 16.0
+line_height = "1.3"
+font_weight = 600
+status = "agreed"
+ships_as = "observed"
+penpot_ladder_step = "text-base"
+usage = "A composition, not a primitive. Penpot holds no composite type tokens."
+
+[[type_style]]
+name = "prose-h5"
+group = "Prose"
+family = "display"
+font_size = "0.9rem"
+computed_px = 14.4
+line_height = "1.3"
+font_weight = 600
+status = "conflict"
+ships_as = "observed"
+conflict = "14.4px sits off Penpot's ladder (12/14/16/20/24/30) — nearest step is not exact."
+usage = "A composition, not a primitive. Penpot holds no composite type tokens."
+
+[[type_style]]
+name = "prose-body"
+group = "Prose"
+family = "display"
+font_size = "0.925rem"
+computed_px = 14.8
+line_height = "1.65"
+font_weight = 400
+status = "conflict"
+ships_as = "observed"
+conflict = "14.8px sits off Penpot's ladder (12/14/16/20/24/30) — nearest step is not exact."
+usage = "A composition, not a primitive. Penpot holds no composite type tokens."
+
+[[type_style]]
+name = "telemetry"
+group = "Telemetry"
+family = "pixel"
+font_size = "0.875rem"
+computed_px = 14.0
+line_height = "1.4"
+font_weight = 400
+letter_spacing = "0.02em"
+status = "agreed"
+ships_as = "observed"
+penpot_ladder_step = "text-sm"
+usage = "A composition, not a primitive. Penpot holds no composite type tokens."
+
+[[type_style]]
+name = "telemetry-small"
+group = "Telemetry"
+family = "pixel"
+font_size = "0.6875rem"
+computed_px = 11.0
+line_height = "1.4"
+font_weight = 400
+letter_spacing = "0.02em"
+status = "conflict"
+ships_as = "observed"
+conflict = "11.0px sits off Penpot's ladder (12/14/16/20/24/30) — nearest step is not exact."
+usage = "A composition, not a primitive. Penpot holds no composite type tokens."
+
+[[letter_spacing]]
+name = "letter-spacing-pixel"
+value = "0.02em"
+penpot = "letter-spacing.pixel"
+status = "agreed"
+ships_as = "observed"
+usage = "Applied to the pixel face in input.css. Note 60 untokenized Tailwind tracking-* uses sit beside it (tracking-tight 24, wider 19, wide 11, widest 6)."
+
+# -------------------------------------------------------------------------
+# Radius, border width, opacity
+# -------------------------------------------------------------------------
+
+[[radius]]
+name = "radius-control"
+value = "2px"
+penpot = "radius.control"
+css_var = "--radius-control"
+status = "agreed"
+ships_as = "css-var"
+usage = "Buttons, inputs, checkboxes, code blocks, images. The only radius in the system — Hearth is a square system, and the lamp is the sole exception."
+
+[[radius]]
+name = "radius-full"
+value = "9999px"
+status = "code-only"
+ships_as = "observed"
+usage = "The lamp, and pills. Observed as Tailwind's rounded-full (45 uses) — real and intentional, but not yet a token in input.css."
+
+[[border_width]]
+name = "border-hairline"
+value = "1px"
+penpot = "border.hairline"
+status = "agreed"
+ships_as = "observed"
+usage = "Tailwind's bare `border` default — the standard hairline on raised elements."
+
+[[border_width]]
+name = "border-tab"
+value = "2px"
+penpot = "border.tab"
+status = "agreed"
+ships_as = "observed"
+usage = "The 2px marker on a selected tab or active row (border-l-2 / border-b-2, 6 uses)."
+
+[[opacity]]
+name = "opacity-disabled"
+value = "0.55"
+penpot = "opacity.disabled"
+status = "conflict"
+ships_as = "observed"
+conflict = "input.css sets opacity 0.55 for the disabled state, but updates.templ uses disabled:opacity-40 in 3 places. Two disabled opacities ship."
+usage = "The disabled control."
+
+# -------------------------------------------------------------------------
+# Spacing — 12 steps. Penpot holds all 12; the previous export documented 10.
+# space-3-5 and space-10 are in Penpot AND in the code; only the docs had lost them.
+# -------------------------------------------------------------------------
+
+[[spacing]]
+name = "space-0-5"
+value = "2px"
+penpot = "space.0-5"
+status = "agreed"
+ships_as = "observed"
+usage = "Hairline insets and icon nudges. 57 uses. Equals radius-control, which is why a 2px gap reads as part of the border."
+
+[[spacing]]
+name = "space-1"
+value = "4px"
+penpot = "space.1"
+status = "agreed"
+ships_as = "observed"
+usage = "Gap between a lamp and its label; tight inline runs. 111 uses."
+
+[[spacing]]
+name = "space-1-5"
+value = "6px"
+penpot = "space.1-5"
+status = "agreed"
+ships_as = "observed"
+usage = "Vertical padding of the default (sm) button. 72 uses."
+
+[[spacing]]
+name = "space-2"
+value = "8px"
+penpot = "space.2"
+status = "agreed"
+ships_as = "observed"
+usage = "Gap inside a control; vertical padding of md and lg buttons. 185 uses — joint most common."
+
+[[spacing]]
+name = "space-2-5"
+value = "10px"
+penpot = "space.2-5"
+status = "agreed"
+ships_as = "observed"
+usage = "The odd step out: 49 uses, almost all horizontal padding on tags and pills."
+
+[[spacing]]
+name = "space-3"
+value = "12px"
+penpot = "space.3"
+status = "agreed"
+ships_as = "observed"
+usage = "Horizontal padding of the default button and every input. 185 uses — joint most common."
+
+[[spacing]]
+name = "space-3-5"
+value = "14px"
+penpot = "space.3-5"
+status = "agreed"
+ships_as = "observed"
+usage = "14px, 10 utility uses. drift.md called step 3.5 off-scale; it is a real Penpot token — the scale was wrong, not the code."
+
+[[spacing]]
+name = "space-4"
+value = "16px"
+penpot = "space.4"
+status = "agreed"
+ships_as = "observed"
+usage = "Padding of a compact panel; row rhythm. 167 uses."
+
+[[spacing]]
+name = "space-5"
+value = "20px"
+penpot = "space.5"
+status = "agreed"
+ships_as = "observed"
+usage = "Padding of the standard panel. 46 uses."
+
+[[spacing]]
+name = "space-6"
+value = "24px"
+penpot = "space.6"
+status = "agreed"
+ships_as = "observed"
+usage = "Row padding and the horizontal gutter a RowList pulls back against. 142 uses."
+
+[[spacing]]
+name = "space-8"
+value = "32px"
+penpot = "space.8"
+status = "agreed"
+ships_as = "observed"
+usage = "Padding of a full-width page panel; space above a section head. 60 uses."
+
+[[spacing]]
+name = "space-10"
+value = "40px"
+penpot = "space.10"
+status = "agreed"
+ships_as = "observed"
+usage = "40px, 31 utility uses. In Penpot and heavily used, yet absent from the previous export."
+
+# -------------------------------------------------------------------------
+# Motion and stacking — code-only. Penpot holds none of this.
+# Hearth barely moves. Three durations cover every transition in the product; anything longer than 150ms is a bug in an operator console.
+# -------------------------------------------------------------------------
+
+[[duration]]
+name = "duration-press"
+value = "60ms"
+status = "code-only"
+ships_as = "observed"
+usage = "The 0.97 scale on a pressed button. Short enough to feel like contact rather than animation."
+
+[[duration]]
+name = "duration-tick"
+value = "90ms"
+status = "code-only"
+ships_as = "observed"
+usage = "The checkbox tick scaling in. The only motion in the system a user can interrupt."
+
+[[duration]]
+name = "duration-color"
+value = "150ms"
+status = "code-only"
+ships_as = "observed"
+usage = "Hover and focus colour changes. Tailwind's transition-colors default, made explicit."
+
+[[easing]]
+name = "ease-standard"
+value = "cubic-bezier(0.2, 0, 0, 1)"
+status = "code-only"
+ships_as = "observed"
+usage = "Every transition in Hearth. Fast out of the gate, settles long — motion that reports a state change rather than performing one."
+
+[[zindex]]
+name = "z-raised"
+value = "10"
+status = "code-only"
+ships_as = "observed"
+usage = "Content lifted above a sibling inside the same panel: a drawer's own body over its backdrop."
+
+[[zindex]]
+name = "z-sticky"
+value = "30"
+status = "code-only"
+ships_as = "observed"
+usage = "Headers and bars that stay put while their region scrolls."
+
+[[zindex]]
+name = "z-overlay"
+value = "50"
+status = "code-only"
+ships_as = "observed"
+usage = "The drawer and its full-screen backdrop. Nothing in Hearth sits above this."
+
+# -------------------------------------------------------------------------
+# Unresolved — what a reconciliation pass still has to decide
+# -------------------------------------------------------------------------
+
+[[unresolved]]
+item = "font-family fallback stack"
+detail = "Penpot carries `Fraunces,serif`; code carries the full `\"Fraunces\", Iowan Old Style, Georgia, serif`. Pick one — code's is the tested one."
+resolution = "adopt code's stack into Penpot"
+
+[[unresolved]]
+item = "type size ladder"
+detail = "6 of 8 shipping styles sit off Penpot's px ladder (17.92, 20.8, 24.8, 14.4, 14.8 and 11px). Either the ladder gains steps or the styles move onto it."
+resolution = "decide which side bends"
+
+[[unresolved]]
+item = "disabled opacity"
+detail = "0.55 in input.css vs opacity-40 in updates.templ (3 uses)."
+resolution = "make it one value"
+
+[[unresolved]]
+item = "untokenized letter spacing"
+detail = "60 Tailwind tracking-* uses with no token behind them."
+resolution = "tokenize or remove"
+
+[[unresolved]]
+item = "untokenized 4px radius"
+detail = "Bare Tailwind `rounded` (4px) appears 43 times beside radius-control (2px) and radius-full. Nothing chose 4px."
+resolution = "remove — Hearth is a square system"
+
+[[unresolved]]
+item = "off-scale spacing"
+detail = "space-7 (28px, 10 uses) and space-24 (96px, 4 uses) are in neither source."
+resolution = "add to Penpot or remove from code"
+
+[[unresolved]]
+item = "edge contrast"
+detail = "edge is 1.5:1 on surface in dark — below the 3:1 floor for a UI boundary. Carried from the source, not fixed here."
+resolution = "raise the dark value"
+
+[[unresolved]]
+item = "motion and stacking absent from Penpot"
+detail = "duration, easing and zIndex ship but are not designed. 7 tokens."
+resolution = "add to Penpot or accept as code-owned"

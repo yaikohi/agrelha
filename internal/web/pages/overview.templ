@@ -47,7 +47,7 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 	@Layout("Overview") {
 		@components.Nav(components.NavProps{Current: "overview", IsAdmin: true, SignedIn: true})
 		<div class="mb-6">
-			<h1 class="text-2xl font-semibold text-ink">Overview</h1>
+			<h1 class="font-display text-2xl font-semibold text-ink">Overview</h1>
 			<p class="mt-1 text-xs text-ink-muted">
 				Every world across every game, the hardware each one runs on, and the limits that apply.
 			</p>
@@ -72,17 +72,17 @@ templ Overview(worlds []OverviewWorldUI, games []OverviewGameUI, allowance int, 
 						<div class="rounded-control border border-edge bg-seam/50 p-4">
 							<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
 								<div class="flex flex-wrap items-center gap-2">
-									<span class="rounded-full border border-edge bg-surface-raised px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink">
+									<span class="rounded-control border border-edge bg-surface-raised px-2 py-0.5 font-pixel text-[11px] uppercase tracking-wide text-ink">
 										{ w.Game }
 									</span>
 									<span class="text-sm font-medium text-ink">{ fmt.Sprintf("%02d %s", w.Number, w.Name) }</span>
-									<span class="text-[11px] text-ink-faint">{ w.State }</span>
+									<span class="font-pixel text-[11px] text-ink-faint">{ w.State }</span>
 									if w.Drifts {
-										<span class="rounded-full border border-accent px-2 py-0.5 text-[10px] text-accent">
+										<span class="rounded-control border border-accent px-2 py-0.5 font-pixel text-[11px] text-accent">
 											off { w.Tier }
 										</span>
 									} else {
-										<span class="text-[11px] text-ink-faint">{ w.Tier }</span>
+										<span class="font-pixel text-[11px] text-ink-faint">{ w.Tier }</span>
 									}
 								</div>
 								if w.Drifts && w.TierLabel != "" {

@@ -26,9 +26,6 @@ type InputProps struct {
 
 func (p InputProps) inputClasses() string {
 	base := InputClass()
-	if p.Mono {
-		base += ""
-	}
 	if p.Disabled {
 		base += " cursor-not-allowed text-ink-faint"
 	}

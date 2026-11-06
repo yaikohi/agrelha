@@ -50,8 +50,27 @@ func TestButton(t *testing.T) {
 		}
 	})
 
+	t.Run("renders button with filled variant and accessible hover", func(t *testing.T) {
+		var buf bytes.Buffer
+		comp := Button(ButtonProps{
+			Variant: VariantFilled,
+			Size:    SizeMd,
+			Text:    "Join World",
+		})
+		if err := comp.Render(ctx, &buf); err != nil {
+			t.Fatalf("failed to render: %v", err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, "bg-accent") || !strings.Contains(out, "text-accent-ink") {
+			t.Errorf("expected bg-accent and text-accent-ink, got %q", out)
+		}
+		if !strings.Contains(out, "hover:bg-ink hover:text-surface") {
+			t.Errorf("expected hover:bg-ink hover:text-surface, got %q", out)
+		}
+	})
+
 	t.Run("only the danger variant reads as destructive", func(t *testing.T) {
-		for _, v := range []Variant{VariantPrimary, VariantSuccess, VariantWarning} {
+		for _, v := range []Variant{VariantPrimary, VariantFilled, VariantSuccess, VariantWarning} {
 			var buf bytes.Buffer
 			_ = Button(ButtonProps{Variant: v, Text: "Go"}).Render(ctx, &buf)
 			if strings.Contains(buf.String(), "danger") {

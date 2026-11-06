@@ -83,6 +83,10 @@ public panel. Where several actions are peers, as with one manager button per
 game on the hub, they are outlined instead. Three solid accent blocks on one
 page stop the colour meaning "live".
 
+Use `Button(ButtonProps{Variant: VariantFilled})` or `ButtonClass(VariantFilled)`
+for this primary action. It inverts on hover (`hover:bg-ink hover:text-surface`)
+to preserve readable contrast.
+
 ## What is not a token
 
 `--color-danger` is the only status colour, and it marks *actions*, not state.

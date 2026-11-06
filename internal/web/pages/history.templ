@@ -8,22 +8,22 @@ import "fmt"
 templ History(entries []domain.HistoryEntry) {
 	@Layout("History") {
 		@components.Nav(components.NavProps{Current: "history", IsAdmin: true, SignedIn: true})
-		<h1 class="mb-2 text-2xl font-semibold">History</h1>
-		<p class="mb-6 text-xs text-ink-faint">Recent actions (who did what) and server events (joins, backups, crashes). Times are UTC.</p>
+		<h1 class="mb-2 font-display text-2xl font-semibold text-ink">History</h1>
+		<p class="mb-6 font-display text-xs text-ink-faint">Recent actions (who did what) and server events (joins, backups, crashes). Times are UTC.</p>
 		if len(entries) == 0 {
-			<p class="rounded bg-surface-raised p-4 text-sm text-ink-faint">No activity recorded yet.</p>
+			<p class="rounded-control bg-surface-raised p-4 text-sm text-ink-faint">No activity recorded yet.</p>
 		} else {
-			<ul class="divide-y divide-seam overflow-hidden rounded bg-surface-raised" data-signals="{openIncident: 0}">
+			<ul class="divide-y divide-seam overflow-hidden rounded-control border border-edge bg-surface-raised" data-signals="{openIncident: 0}">
 				for i, h := range entries {
 					<li class="px-4 py-2.5 text-sm">
 						<div class="flex items-center gap-3">
-							<span class="w-24 flex-none text-xs text-ink-faint">{ h.At.Format("Jan 2 15:04") }</span>
+							<span class="w-24 flex-none font-pixel text-xs text-ink-faint">{ h.At.Format("Jan 2 15:04") }</span>
 							if g := HistoryGame(h.Kind); g != "" {
-								<span class="w-20 flex-none rounded-control border border-edge px-1.5 py-0.5 text-center text-[10px] uppercase tracking-wide text-ink-faint">{ g }</span>
+								<span class="w-20 flex-none rounded-control border border-edge px-1.5 py-0.5 text-center font-pixel text-[11px] uppercase tracking-wide text-ink-faint">{ g }</span>
 							} else {
 								<span class="w-20 flex-none" aria-hidden="true"></span>
 							}
-							<span class={ "w-44 flex-none truncate rounded px-2 py-0.5 text-xs " + HistoryBadge(h.Source, h.Kind) }>{ HistoryLabel(h.Kind) }</span>
+							<span class={ "w-44 flex-none truncate rounded-control px-2 py-0.5 font-pixel text-xs " + HistoryBadge(h.Source, h.Kind) }>{ HistoryLabel(h.Kind) }</span>
 							<span class="min-w-0 flex-1 truncate text-ink">
 								if h.Incident != nil {
 									<span class="text-ink-faint">{ IncidentWorld(h.Incident) } · </span>
@@ -36,7 +36,7 @@ templ History(entries []domain.HistoryEntry) {
 								<button
 									type="button"
 									data-on:click={ fmt.Sprintf("$openIncident = $openIncident === %d ? 0 : %d", i+1, i+1) }
-									class="flex-none rounded border border-edge px-2 py-0.5 text-xs text-ink-muted hover:bg-surface-raised hover:text-ink"
+									class="focus-accent flex-none rounded-control border border-edge px-2.5 py-1 font-pixel text-xs text-ink-muted transition-colors hover:border-accent hover:text-accent"
 								>
 									Logs
 								</button>

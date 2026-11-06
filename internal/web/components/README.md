@@ -32,6 +32,7 @@ and fails the build on a Tailwind default-palette class or a raw hex.
 
 ## Variants
 
+`VariantFilled` renders the single filled accent button permitted per page (see `docs/design-system.md`).
 `VariantPrimary` and `VariantSuccess` render the accent outline. `VariantSecondary`,
 `VariantGhost` and `VariantLink` stay quiet. **Only `VariantDanger` reads as
 destructive** — stopping a world is not destructive, and colouring it like Delete

@@ -285,21 +285,7 @@ templ ValheimWizard(budget BudgetUI) {
 				</div>
 			</div>
 
-			<!-- Slide-over Mod Detail Drawer Modal in Wizard -->
-			<div
-				data-show="$showWizardModDetail"
-				class="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300"
-				style="display: none;"
-			>
-				<!-- Backdrop dismiss click -->
-				<div class="fixed inset-0" data-on:click="$showWizardModDetail = false"></div>
-				<!-- Drawer Panel -->
-				<div class="relative z-10 w-full max-w-2xl bg-surface-raised border-l border-edge overflow-y-auto h-full flex flex-col">
-					<div id="wizard-valheim-mod-detail-content">
-						<div class="p-8 text-center text-ink-faint text-sm animate-pulse">Loading mod details...</div>
-					</div>
-				</div>
-			</div>
+			@components.Drawer("showWizardModDetail", "wizard-valheim-mod-detail-content", "Loading mod details…")
 		</div>
 	}
 }

@@ -5,6 +5,7 @@ type Size string
 
 const (
 	VariantPrimary   Variant = "primary"
+	VariantFilled    Variant = "filled"
 	VariantSecondary Variant = "secondary"
 	VariantSuccess   Variant = "success"
 	VariantWarning   Variant = "warning"
@@ -54,6 +55,8 @@ func TextareaClass() string {
 
 func variantClass(v Variant) string {
 	switch v {
+	case VariantFilled:
+		return "border border-accent bg-accent text-accent-ink hover:bg-ink hover:text-surface"
 	case VariantDanger:
 		return "border border-edge text-ink-muted hover:border-danger hover:text-danger"
 	case VariantSecondary, VariantGhost:

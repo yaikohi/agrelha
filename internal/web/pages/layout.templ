@@ -76,34 +76,30 @@ templ layoutShell(title, bodyClass, mainClass string, hearth bool) {
 				})();
 			</script>
 			<link rel="stylesheet" href="/assets/css/output.css"/>
-			if hearth {
-				<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/Fraunces-Variable.woff2" crossorigin/>
-				<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/DepartureMono-Regular.woff2" crossorigin/>
-			}
+			<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/Fraunces-Variable.woff2" crossorigin/>
+			<link rel="preload" as="font" type="font/woff2" href="/assets/fonts/DepartureMono-Regular.woff2" crossorigin/>
 			<script type="module" src="/assets/js/datastar.js"></script>
-			if hearth {
-				<script>
-					window.agrelhaCopy = (text) => {
-						if (navigator.clipboard && window.isSecureContext) {
-							return navigator.clipboard.writeText(text);
-						}
-						const field = document.createElement("textarea");
-						field.value = text;
-						field.setAttribute("readonly", "");
-						field.style.position = "fixed";
-						field.style.opacity = "0";
-						document.body.appendChild(field);
-						field.select();
-						try {
-							return document.execCommand("copy")
-								? Promise.resolve()
-								: Promise.reject(new Error("copy command rejected"));
-						} finally {
-							field.remove();
-						}
-					};
-				</script>
-			}
+			<script>
+				window.agrelhaCopy = (text) => {
+					if (navigator.clipboard && window.isSecureContext) {
+						return navigator.clipboard.writeText(text);
+					}
+					const field = document.createElement("textarea");
+					field.value = text;
+					field.setAttribute("readonly", "");
+					field.style.position = "fixed";
+					field.style.opacity = "0";
+					document.body.appendChild(field);
+					field.select();
+					try {
+						return document.execCommand("copy")
+							? Promise.resolve()
+							: Promise.reject(new Error("copy command rejected"));
+					} finally {
+						field.remove();
+					}
+				};
+			</script>
 		</head>
 		<body
 			class={ "h-full antialiased " + bodyClass }

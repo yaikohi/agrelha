@@ -21,7 +21,7 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 	@Layout("World requests") {
 		@components.Nav(components.NavProps{Current: "requests", IsAdmin: true, SignedIn: true})
 		<div class="mb-6">
-			<h1 class="text-2xl font-semibold text-ink">World requests</h1>
+			<h1 class="font-display text-2xl font-semibold text-ink">World requests</h1>
 			<p class="mt-1 text-xs text-ink-muted">
 				An account that already runs a world must ask before creating another. Approving one creates the world and grants them access to it.
 			</p>
@@ -33,7 +33,7 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 				<h2 class="text-sm font-semibold uppercase tracking-wider text-ink">
 					Awaiting your decision
 					if len(pending) > 0 {
-						<span class="ml-2 rounded-full border border-accent px-2 py-0.5 text-[10px] font-medium text-accent">
+						<span class="ml-2 rounded-control border border-accent px-2 py-0.5 font-pixel text-[11px] font-medium text-accent">
 							{ len(pending) }
 						</span>
 					}
@@ -51,7 +51,7 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 							<div class="flex flex-wrap items-start justify-between gap-3">
 								<div>
 									<div class="flex items-center gap-2">
-										<span class="rounded-full border border-edge bg-surface-raised px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink">
+										<span class="rounded-control border border-edge bg-surface-raised px-2 py-0.5 font-pixel text-[11px] uppercase tracking-wide text-ink">
 											{ r.Game }
 										</span>
 										<span class="text-sm font-medium text-ink">{ r.Name }</span>
@@ -113,11 +113,11 @@ templ Requests(pending []RequestUI, decided []RequestUI, flashKind, flashMsg str
 							</div>
 							<div class="flex items-center gap-3">
 								if r.Status == "approved" {
-									<span class="rounded-full border border-accent px-2 py-0.5 text-[10px] text-accent">approved</span>
+									<span class="rounded-control border border-accent px-2 py-0.5 font-pixel text-[11px] text-accent">approved</span>
 								} else {
-									<span class="rounded-full border border-edge bg-surface-raised px-2 py-0.5 text-[10px] text-ink-muted">denied</span>
+									<span class="rounded-control border border-edge bg-surface-raised px-2 py-0.5 font-pixel text-[11px] text-ink-muted">denied</span>
 								}
-								<span class="text-[11px] text-ink-faint">{ r.Decided }</span>
+								<span class="font-pixel text-[11px] text-ink-faint">{ r.Decided }</span>
 							</div>
 						</div>
 					}
