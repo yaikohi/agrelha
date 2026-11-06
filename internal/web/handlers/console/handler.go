@@ -1,7 +1,10 @@
 package console
 
 import (
+	"bufio"
 	"context"
+	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"time"
@@ -10,6 +13,7 @@ import (
 	"agrelha/internal/ports"
 	"agrelha/internal/web/metrics"
 	"agrelha/internal/web/shared"
+	"agrelha/internal/web/sse"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -52,7 +56,6 @@ func New(cfg Config) *Handler {
 func (h *Handler) Register(router fiber.Router) {
 	router.Get("/valheim", h.ValheimConsole)
 	router.Get("/valheim/console", h.ValheimConsole)
-	router.Get("/sse/logs", h.SSELogs)
 	router.Post("/server/restart", h.ServerRestart)
 	router.Post("/server/update", h.ServerUpdate)
 	router.Post("/server/stop", h.ServerStop)
@@ -136,3 +139,29 @@ func (h *Handler) guard(action, okMsg string, fn func(context.Context) error) fi
 		return shared.SSEToast(c, "ok", okMsg, nil)
 	}
 }
+
+func (h *Handler) streamLogs(c *fiber.Ctx, stream io.ReadCloser, selector string) error {
+	if stream == nil {
+		return nil
+	}
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+
+	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		defer stream.Close()
+
+		scanner := bufio.NewScanner(stream)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			line := html.EscapeString(scanner.Text())
+			frag := fmt.Sprintf("<div class=\"text-ink-muted\">%s</div>", line)
+			if err := sse.AppendElement(w, selector, frag); err != nil {
+				return
+			}
+		}
+	})
+
+	return nil
+}
+

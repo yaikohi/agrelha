@@ -3,7 +3,6 @@ package console
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"html"
 	"strconv"
@@ -78,7 +77,7 @@ func (h *Handler) MCLogsStream(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid number")
 	}
 
-	stream, err := h.cfg.MCInstances.InstanceLogs(context.Background(), instanceNumber, 100)
+	stream, err := h.cfg.MCInstances.InstanceLogs(c.UserContext(), instanceNumber, 100)
 	if err != nil {
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")
@@ -88,20 +87,5 @@ func (h *Handler) MCLogsStream(c *fiber.Ctx) error {
 		return c.Send(buf.Bytes())
 	}
 
-	c.Set("Content-Type", "text/event-stream")
-	c.Set("Cache-Control", "no-cache")
-	c.Set("Connection", "keep-alive")
-
-	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		defer stream.Close()
-
-		scanner := bufio.NewScanner(stream)
-		for scanner.Scan() {
-			line := html.EscapeString(scanner.Text())
-			frag := fmt.Sprintf("<div class=\"text-ink-muted\">%s</div>", line)
-			_ = sse.AppendElement(w, "#console-logs", frag)
-		}
-	})
-
-	return nil
+	return h.streamLogs(c, stream, "#console-logs")
 }
