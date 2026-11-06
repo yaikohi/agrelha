@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"agrelha/internal/domain"
@@ -51,6 +52,7 @@ type InstanceManager struct {
 	profile           domain.GameProfile
 	backupsPVC        string
 	serverRefResolver func(inst domain.Instance) ports.ServerRef
+	budgetMu          sync.Mutex
 
 	audit               ports.AuditRecorder
 	event               ports.EventRecorder
@@ -558,6 +560,9 @@ func (m *InstanceManager) GetInstance(ctx context.Context, instanceNumber int) (
 // CreateInstance provisions a new Instance. mods arrives split by Provider
 // because each Provider's entries reach the server in its own file.
 func (m *InstanceManager) CreateInstance(ctx context.Context, inst domain.Instance, mods domain.ModList, actor ...string) (*domain.Instance, error) {
+	m.budgetMu.Lock()
+	defer m.budgetMu.Unlock()
+
 	if inst.Host == "" && m.defaultHost != "" {
 		inst.Host = m.defaultHost
 	}
@@ -803,6 +808,9 @@ func (m *InstanceManager) ApplyTier(ctx context.Context, instanceNumber int, tie
 }
 
 func (m *InstanceManager) StartInstance(ctx context.Context, instanceNumber int, actor ...string) error {
+	m.budgetMu.Lock()
+	defer m.budgetMu.Unlock()
+
 	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
 		return err
