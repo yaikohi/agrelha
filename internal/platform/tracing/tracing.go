@@ -44,7 +44,7 @@ func Init(ctx context.Context, version, commit string) (func(context.Context) er
 
 	res, err := resource.Merge(
 		resource.Default(),
-		resource.NewWithAttributes(semconv.SchemaURL, attrs...),
+		resource.NewSchemaless(attrs...),
 	)
 	if err != nil {
 		return noop, err

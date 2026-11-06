@@ -160,9 +160,32 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		if d.MCRcon != nil {
 			console = d.MCRcon
 		}
-		d.MCAccess = mcaccess.NewAccessManager(d.StateStore, cfg.MinecraftAccessPath, console,
-			mcaccess.WithAudit(st),
-		)
+		var mcAccessOpts []mcaccess.AccessOption
+		mcAccessOpts = append(mcAccessOpts, mcaccess.WithAudit(st))
+		if cfg.Runtime == "docker" || d.Git == nil {
+			mcAccessOpts = append(mcAccessOpts, mcaccess.WithAccessReader(func(ctx context.Context) ([]string, []string, error) {
+				mcDataDir := compose.InstanceDataDir(cfg.DataDir, domain.NewInstanceID(domain.GameMinecraft, 1), "minecraft-01")
+				dataVol := filepath.Join(mcDataDir, "data")
+				wl, wlErr := mcaccess.ReadJSONUsers(filepath.Join(dataVol, "whitelist.json"))
+				ops, opErr := mcaccess.ReadJSONUsers(filepath.Join(dataVol, "ops.json"))
+				if wlErr == nil && opErr == nil && (len(wl) > 0 || len(ops) > 0) {
+					return ops, wl, nil
+				}
+				if console != nil {
+					if res, err := console.Execute(ctx, "/whitelist list"); err == nil {
+						wl = mcaccess.ParsePlayerList(res)
+						return ops, wl, nil
+					}
+				}
+				if d.StateStore != nil {
+					if doc, err := d.StateStore.Get(ctx, cfg.MinecraftAccessPath); err == nil && doc.Data != nil {
+						return mcaccess.ParseUsers(doc.Data["ops.txt"]), mcaccess.ParseUsers(doc.Data["whitelist.txt"]), nil
+					}
+				}
+				return ops, wl, nil
+			}))
+		}
+		d.MCAccess = mcaccess.NewAccessManager(d.StateStore, cfg.MinecraftAccessPath, console, mcAccessOpts...)
 	}
 
 	rt := routeRuntime(cfg, buildRuntime(cfg, &d))
@@ -207,6 +230,14 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				if !strings.Contains(target, ":") {
 					target = target + ":25575"
 				}
+				res, err = d.MCRconPool.ClientFor(target).Execute(ctx, cmd)
+			}
+			if err != nil && (cfg.Runtime == "docker" || !inst.EffectiveHost().IsCluster()) {
+				rconPort, _ := domain.HostPortFor(domain.MinecraftProfile, inst.EffectiveHost(), inst.Number, domain.MinecraftRconPort)
+				if rconPort == 0 {
+					rconPort = domain.MinecraftRconPort
+				}
+				target := fmt.Sprintf("127.0.0.1:%d", rconPort)
 				res, err = d.MCRconPool.ClientFor(target).Execute(ctx, cmd)
 			}
 			return res, err
