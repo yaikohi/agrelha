@@ -226,6 +226,141 @@ func TestRcon_Pool(t *testing.T) {
 	}
 }
 
+func TestRcon_Pool_Evict(t *testing.T) {
+	addr, cleanup := mockRconServer(t, "mypass")
+	defer cleanup()
+
+	pool := NewPool("mypass", time.Second)
+	client := pool.ClientFor(addr)
+
+	// Execute to establish underlying connection
+	if _, err := client.Execute(context.Background(), "whitelist list"); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	client.mu.Lock()
+	rawConn := client.conn
+	client.mu.Unlock()
+	if rawConn == nil {
+		t.Fatal("expected active connection before eviction")
+	}
+
+	// Evict should close connection and remove from pool.clients
+	if err := pool.Evict(addr); err != nil {
+		t.Fatalf("Evict failed: %v", err)
+	}
+
+	pool.mu.Lock()
+	_, inMap := pool.clients[addr]
+	pool.mu.Unlock()
+	if inMap {
+		t.Error("expected evicted addr to be removed from pool.clients")
+	}
+
+	client.mu.Lock()
+	connAfter := client.conn
+	client.mu.Unlock()
+	if connAfter != nil {
+		t.Error("expected client.conn to be nil after eviction")
+	}
+
+	// Verify underlying connection is closed
+	buf := make([]byte, 1)
+	_ = rawConn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	if _, err := rawConn.Read(buf); err == nil {
+		t.Error("expected read on closed connection to fail")
+	}
+
+	// Evicting already evicted or non-existent address should be a no-op
+	if err := pool.Evict(addr); err != nil {
+		t.Errorf("expected nil error on repeated Evict, got: %v", err)
+	}
+	if err := pool.Evict("nonexistent:1234"); err != nil {
+		t.Errorf("expected nil error on nonexistent Evict, got: %v", err)
+	}
+}
+
+func TestRcon_Pool_Close(t *testing.T) {
+	addr1, cleanup1 := mockRconServer(t, "mypass")
+	defer cleanup1()
+	addr2, cleanup2 := mockRconServer(t, "mypass")
+	defer cleanup2()
+
+	pool := NewPool("mypass", time.Second)
+	c1 := pool.ClientFor(addr1)
+	c2 := pool.ClientFor(addr2)
+
+	if _, err := c1.Execute(context.Background(), "cmd1"); err != nil {
+		t.Fatalf("c1 Execute failed: %v", err)
+	}
+	if _, err := c2.Execute(context.Background(), "cmd2"); err != nil {
+		t.Fatalf("c2 Execute failed: %v", err)
+	}
+
+	c1.mu.Lock()
+	conn1 := c1.conn
+	c1.mu.Unlock()
+	c2.mu.Lock()
+	conn2 := c2.conn
+	c2.mu.Unlock()
+
+	if conn1 == nil || conn2 == nil {
+		t.Fatal("expected both clients to have open connections")
+	}
+
+	if err := pool.Close(); err != nil {
+		t.Fatalf("pool Close failed: %v", err)
+	}
+
+	pool.mu.Lock()
+	numClients := len(pool.clients)
+	pool.mu.Unlock()
+	if numClients != 0 {
+		t.Errorf("expected pool.clients to be empty, got length %d", numClients)
+	}
+
+	c1.mu.Lock()
+	conn1After := c1.conn
+	c1.mu.Unlock()
+	if conn1After != nil {
+		t.Error("expected c1.conn to be nil after pool.Close()")
+	}
+
+	c2.mu.Lock()
+	conn2After := c2.conn
+	c2.mu.Unlock()
+	if conn2After != nil {
+		t.Error("expected c2.conn to be nil after pool.Close()")
+	}
+
+	// Verify both connections were closed
+	buf := make([]byte, 1)
+	_ = conn1.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	if _, err := conn1.Read(buf); err == nil {
+		t.Error("expected read on conn1 to fail after pool.Close()")
+	}
+	_ = conn2.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	if _, err := conn2.Read(buf); err == nil {
+		t.Error("expected read on conn2 to fail after pool.Close()")
+	}
+
+	// Repeated Close should be no-op
+	if err := pool.Close(); err != nil {
+		t.Errorf("expected nil error on repeated Close, got: %v", err)
+	}
+}
+
+func TestRcon_Pool_Nil(t *testing.T) {
+	var pool *Pool
+	if err := pool.Evict("127.0.0.1:25575"); err != nil {
+		t.Errorf("Evict on nil pool should be nil, got: %v", err)
+	}
+	if err := pool.Close(); err != nil {
+		t.Errorf("Close on nil pool should be nil, got: %v", err)
+	}
+}
+
+
 func TestRcon_WriteAndReadFailures(t *testing.T) {
 	// 1. Connection closed immediately by server -> write auth fails or read auth fails
 	t.Run("server closes immediately on connect", func(t *testing.T) {
