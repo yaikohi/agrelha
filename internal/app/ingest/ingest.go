@@ -7,9 +7,12 @@ package ingest
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"regexp"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,7 +25,42 @@ var (
 	steamRe = regexp.MustCompile(`Got connection SteamID (\d{17})`)
 	charRe  = regexp.MustCompile(`Got character ZDOID from (.+?) :`)
 	dcRe    = regexp.MustCompile(`Closing socket (\d{17})`)
+
+	activeMu      sync.RWMutex
+	activePlayers = make(map[string]bool)
 )
+
+func activeKey(instance int, id string) string {
+	return fmt.Sprintf("%d:%s", instance, id)
+}
+
+func isPlayerActive(instance int, id string) bool {
+	activeMu.RLock()
+	defer activeMu.RUnlock()
+	return activePlayers[activeKey(instance, id)]
+}
+
+func setPlayerActive(instance int, id string, active bool) {
+	activeMu.Lock()
+	defer activeMu.Unlock()
+	key := activeKey(instance, id)
+	if active {
+		activePlayers[key] = true
+	} else {
+		delete(activePlayers, key)
+	}
+}
+
+func clearActivePresence(instance int) {
+	activeMu.Lock()
+	defer activeMu.Unlock()
+	prefix := fmt.Sprintf("%d:", instance)
+	for k := range activePlayers {
+		if strings.HasPrefix(k, prefix) {
+			delete(activePlayers, k)
+		}
+	}
+}
 
 type presenceStore interface {
 	ClearPresence(instance int) error
@@ -37,8 +75,10 @@ const (
 )
 
 func Run(ctx context.Context, instance int, k logStreamer, st presenceStore, delays ...time.Duration) {
+	clearActivePresence(instance)
 	_ = st.ClearPresence(instance)
 	defer func() {
+		clearActivePresence(instance)
 		_ = st.ClearPresence(instance)
 	}()
 	delay := RetryDelay
@@ -84,21 +124,31 @@ func consume(ctx context.Context, instance int, k logStreamer, st presenceStore)
 	sc := bufio.NewScanner(rc)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		line := sc.Text()
 		switch {
 		case steamRe.MatchString(line):
 			lastSteam = steamRe.FindStringSubmatch(line)[1]
-			_ = st.UpsertSeen(instance, lastSteam, "", true)
+			if !isPlayerActive(instance, lastSteam) {
+				setPlayerActive(instance, lastSteam, true)
+				_ = st.UpsertSeen(instance, lastSteam, "", true)
+				_ = st.RecordEvent("join", lastSteam)
+			}
 			_ = st.SetOnline(instance, lastSteam, true)
-			_ = st.RecordEvent("join", lastSteam)
 		case charRe.MatchString(line):
 			if lastSteam != "" {
 				_ = st.UpsertSeen(instance, lastSteam, charRe.FindStringSubmatch(line)[1], false)
 			}
 		case dcRe.MatchString(line):
 			id := dcRe.FindStringSubmatch(line)[1]
+			wasActive := isPlayerActive(instance, id)
+			setPlayerActive(instance, id, false)
 			_ = st.SetOnline(instance, id, false)
-			_ = st.RecordEvent("leave", id)
+			if wasActive {
+				_ = st.RecordEvent("leave", id)
+			}
 		}
 	}
 	return sc.Err()
