@@ -79,16 +79,15 @@ mod index cache.
 
 ### Visual Architecture & Deep-Dives
 
-Interactive standalone architecture models and operational explainers generated with [Archify](https://archify.si):
+#### Networking & Game Instances Architecture
+[![Agrelha Networking & Game Instances](images/architecture-networking.png)](.archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.html)
+*Cilium L2 LoadBalancing routes client traffic directly to dedicated IPs (Valheim `:2456-2457`, Minecraft `:25565`) bypassing Traefik, while Agrelha’s Go control plane manages Kubernetes StatefulSets, TrueNAS NFS backups, and out-of-band RCON on bare-metal `game-01`.*
 
-- **[Agrelha Networking & Game Instances](.archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.html)** — Interactive topology showing Cilium L2 direct LoadBalancing, out-of-band RCON, Zitadel OIDC authentication, and bare-metal `game-01` node pinning.
-- **[Minecraft Whitelist Management Explainer](.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html)** — Interactive walkthrough of the non-destructive RCON probe (`/whitelist on` with immediate reversion), dual-write GitOps persistence, and container-level UUID pre-resolution.
+#### Minecraft Whitelist Management Explainer
+[![Minecraft Whitelist Management Explainer](images/minecraft-whitelist-explainer.png)](.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html)
+*Probing is performed non-destructively via `/whitelist on` with immediate reversion if disabled, paired with dual-write GitOps persistence and container-level `WHITELIST` UUID pre-resolution.*
 
-To view these interactive pages locally in your browser:
-```sh
-xdg-open .archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.html
-xdg-open .archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html
-```
+> **Interactive Viewer**: Click either image above or run `xdg-open .archify/.../*.html` to explore the full interactive Archify viewer with live filters and step-through flows.
 
 ## Who it's for
 
