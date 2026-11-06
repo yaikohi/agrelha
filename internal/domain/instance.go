@@ -452,10 +452,14 @@ func (inst Instance) EnvWith(profile GameProfile, mods ModList) map[string]strin
 			env["MODRINTH_DOWNLOAD_DEPENDENCIES"] = "required"
 			env["REMOVE_OLD_MODS"] = "TRUE"
 			env["MODRINTH_PROJECTS_DEFAULT_VERSION_TYPE"] = "beta"
-			if NormalizeLoader(string(mc.Loader)) == LoaderFabric {
+			switch NormalizeLoader(string(mc.Loader)) {
+			case LoaderFabric:
 				env["TYPE"] = "FABRIC"
 				env["FABRIC_LOADER_VERSION"] = "latest"
-			} else {
+			case LoaderForge:
+				env["TYPE"] = "FORGE"
+				env["FORGE_VERSION"] = "latest"
+			default:
 				env["TYPE"] = "NEOFORGE"
 				env["NEOFORGE_VERSION"] = "latest"
 			}

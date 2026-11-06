@@ -56,6 +56,26 @@ func TestReadsTheFabricManifestWhereTheVersionIsNested(t *testing.T) {
 	}
 }
 
+// The body is a trimmed copy of what the installer actually wrote for furuncu on
+// the host. Before this manifest was read, the world had no recognised manifest
+// at all and kept the version and Loader CurseForge's over-tagged index claimed.
+func TestReadsTheLegacyForgeManifest(t *testing.T) {
+	root := t.TempDir()
+	writeManifest(t, root, 1, ".forge-manifest.json",
+		`{"@type":"me.itzg.helpers.forge.ForgeManifest","minecraftVersion":"1.20.1","forgeVersion":"47.4.10"}`)
+
+	got, err := New(root).InstalledBuild(context.Background(), domain.NewInstanceID(domain.GameMinecraft, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MCVersion != "1.20.1" {
+		t.Errorf("version = %q, want 1.20.1", got.MCVersion)
+	}
+	if got.Loader != domain.LoaderForge {
+		t.Errorf("loader = %q, want forge", got.Loader)
+	}
+}
+
 func TestAnUninstalledWorldReportsNothingRatherThanGuessing(t *testing.T) {
 	if _, err := New(t.TempDir()).InstalledBuild(context.Background(), domain.NewInstanceID(domain.GameMinecraft, 9)); err == nil {
 		t.Error("a world with no installer manifest must not claim a build")

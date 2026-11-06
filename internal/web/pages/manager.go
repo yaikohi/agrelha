@@ -314,6 +314,8 @@ func minecraftLoaderLabel(loader string) string {
 	switch loader {
 	case "fabric":
 		return "Fabric"
+	case "forge":
+		return "Forge"
 	case "neoforge":
 		return "NeoForge"
 	default:

@@ -336,3 +336,11 @@ read, so that link would leave them with nowhere to go.`, got)
 		}
 	})
 }
+
+// A Loader the label did not know fell through to "Vanilla", which would have
+// told a player a heavily modded Forge world runs no mods at all.
+func TestMinecraftLoaderLabelNamesForge(t *testing.T) {
+	if got := minecraftLoaderLabel("forge"); got != "Forge" {
+		t.Errorf("minecraftLoaderLabel(forge) = %q, want Forge", got)
+	}
+}

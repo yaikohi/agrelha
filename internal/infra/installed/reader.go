@@ -18,6 +18,7 @@ import (
 // Pack asked about again.
 const (
 	neoforgeManifest = ".neoforge-manifest.json"
+	forgeManifest    = ".forge-manifest.json"
 	fabricManifest   = ".fabric-manifest.json"
 	dataVolume       = "data"
 )
@@ -30,7 +31,7 @@ func New(dataRoot string) *Reader { return &Reader{dataRoot: dataRoot} }
 
 var _ ports.InstalledBuilds = (*Reader)(nil)
 
-type forgeManifest struct {
+type forgeManifestFile struct {
 	MinecraftVersion string `json:"minecraftVersion"`
 }
 
@@ -50,11 +51,19 @@ func (r *Reader) InstalledBuild(ctx context.Context, id domain.InstanceID) (doma
 	)
 
 	if b, err := os.ReadFile(filepath.Join(dir, neoforgeManifest)); err == nil {
-		var m forgeManifest
+		var m forgeManifestFile
 		if err := json.Unmarshal(b, &m); err != nil {
 			return domain.PackFacts{}, fmt.Errorf("installed: %s: %w", neoforgeManifest, err)
 		}
 		return domain.PackFacts{Loader: domain.LoaderNeoForge, MCVersion: m.MinecraftVersion}, nil
+	}
+
+	if b, err := os.ReadFile(filepath.Join(dir, forgeManifest)); err == nil {
+		var m forgeManifestFile
+		if err := json.Unmarshal(b, &m); err != nil {
+			return domain.PackFacts{}, fmt.Errorf("installed: %s: %w", forgeManifest, err)
+		}
+		return domain.PackFacts{Loader: domain.LoaderForge, MCVersion: m.MinecraftVersion}, nil
 	}
 
 	if b, err := os.ReadFile(filepath.Join(dir, fabricManifest)); err == nil {

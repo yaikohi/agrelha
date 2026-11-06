@@ -121,8 +121,12 @@ func TestParseLoaderDoesNotGuess(t *testing.T) {
 	if got := ParseLoader("NeoForge"); got != LoaderNeoForge {
 		t.Errorf("ParseLoader(NeoForge) = %q", got)
 	}
-	if got := ParseLoader("Forge"); got != "" {
-		t.Errorf("ParseLoader(Forge) = %q; agrelha cannot create a Forge Instance, so it must not claim one", got)
+	// Forge used to be refused here on the grounds that no Instance can ask for
+	// one. An installed Pack can still *be* Forge, and the instance repo parses
+	// the stored word back with this very function, so refusing it meant a world
+	// corrected to Forge on disk read back as no Loader at all.
+	if got := ParseLoader("Forge"); got != LoaderForge {
+		t.Errorf("ParseLoader(Forge) = %q, want forge", got)
 	}
 	if got := ParseLoader(""); got != "" {
 		t.Errorf("ParseLoader(\"\") = %q; silence is not NeoForge", got)

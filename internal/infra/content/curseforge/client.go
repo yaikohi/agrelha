@@ -31,10 +31,9 @@ const gameIDMinecraft = 432
 const classIDMods = 6
 
 // modLoaderType values, from CurseForge's enum (1=Forge, 4=Fabric, 6=NeoForge).
-// agrelha models only the two Loaders it can actually create, so Forge has no
-// entry: an Instance can never ask for it.
 var modLoaderType = map[domain.Loader]int{
 	domain.LoaderFabric:   4,
+	domain.LoaderForge:    1,
 	domain.LoaderNeoForge: 6,
 }
 

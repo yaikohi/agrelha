@@ -32,7 +32,13 @@ const (
 	// single id, not a set of individually pinned packages.
 	ProviderSteamWorkshop Provider = "steam-workshop"
 
-	LoaderFabric   Loader = "fabric"
+	LoaderFabric Loader = "fabric"
+
+	// LoaderForge is legacy MinecraftForge, a different Loader from NeoForge and
+	// not an operator choice: it only ever arrives as a fact read off a Pack the
+	// installer already put on disk.
+	LoaderForge Loader = "forge"
+
 	LoaderNeoForge Loader = "neoforge"
 	LoaderVanilla  Loader = "vanilla"
 )
@@ -105,6 +111,8 @@ func ParseLoader(s string) Loader {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case string(LoaderFabric):
 		return LoaderFabric
+	case string(LoaderForge):
+		return LoaderForge
 	case string(LoaderNeoForge):
 		return LoaderNeoForge
 	case string(LoaderVanilla):
@@ -166,9 +174,15 @@ func Slugify(s string) string {
 	return s
 }
 
+// NormalizeLoader names the Loader a stored or submitted string meant, and
+// guesses NeoForge for anything it does not recognise. Forge is matched on the
+// whole word, so it never swallows "neoforge".
 func NormalizeLoader(l string) Loader {
-	if strings.EqualFold(strings.TrimSpace(string(l)), string(LoaderFabric)) {
+	switch s := strings.TrimSpace(l); {
+	case strings.EqualFold(s, string(LoaderFabric)):
 		return LoaderFabric
+	case strings.EqualFold(s, string(LoaderForge)):
+		return LoaderForge
 	}
 	return LoaderNeoForge
 }

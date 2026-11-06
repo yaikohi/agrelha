@@ -122,7 +122,7 @@ func (s *Store) migrate() error {
 		name          TEXT NOT NULL,
 		slug          TEXT NOT NULL,
 		seed          TEXT,
-		loader        TEXT NOT NULL DEFAULT 'neoforge',  -- fabric|neoforge|vanilla
+		loader        TEXT NOT NULL DEFAULT 'neoforge',  -- fabric|forge|neoforge|vanilla
 		source        TEXT NOT NULL DEFAULT 'modlist',   -- modpack|modlist|vanilla|import
 		pack          TEXT,
 		pack_provider TEXT,
