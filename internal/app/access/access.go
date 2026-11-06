@@ -111,7 +111,7 @@ func (a *AccessManager) GrantOp(ctx context.Context, username string, actor ...s
 
 	// Live RCON dispatch (best-effort)
 	if a.rcon != nil {
-		_, _ = a.rcon.Execute("/op " + username)
+		_, _ = a.rcon.Execute(ctx, "/op "+username)
 	}
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-op-grant", username)
@@ -153,7 +153,7 @@ func (a *AccessManager) RevokeOp(ctx context.Context, username string, actor ...
 	}
 
 	if a.rcon != nil {
-		_, _ = a.rcon.Execute("/deop " + username)
+		_, _ = a.rcon.Execute(ctx, "/deop "+username)
 	}
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-op-revoke", username)
@@ -191,8 +191,8 @@ func (a *AccessManager) AddWhitelist(ctx context.Context, username string, actor
 	}
 
 	if a.rcon != nil {
-		_, _ = a.rcon.Execute("/whitelist add " + username)
-		_, _ = a.rcon.Execute("/whitelist reload")
+		_, _ = a.rcon.Execute(ctx, "/whitelist add "+username)
+		_, _ = a.rcon.Execute(ctx, "/whitelist reload")
 	}
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-add", username)
@@ -234,8 +234,8 @@ func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string, ac
 	}
 
 	if a.rcon != nil {
-		_, _ = a.rcon.Execute("/whitelist remove " + username)
-		_, _ = a.rcon.Execute("/whitelist reload")
+		_, _ = a.rcon.Execute(ctx, "/whitelist remove "+username)
+		_, _ = a.rcon.Execute(ctx, "/whitelist reload")
 	}
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-remove", username)
@@ -244,11 +244,11 @@ func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string, ac
 }
 
 // OnlinePlayers returns the list of online players by querying RCON "/list".
-func (a *AccessManager) OnlinePlayers() ([]string, error) {
+func (a *AccessManager) OnlinePlayers(ctx context.Context) ([]string, error) {
 	if a.rcon == nil {
 		return nil, fmt.Errorf("rcon client not configured")
 	}
-	res, err := a.rcon.Execute("/list")
+	res, err := a.rcon.Execute(ctx, "/list")
 	if err != nil {
 		return nil, err
 	}
@@ -278,14 +278,14 @@ func ParsePlayerList(res string) []string {
 }
 
 // WhitelistEnforced checks if the whitelist is currently enabled in-game via RCON.
-func (a *AccessManager) WhitelistEnforced() (bool, error) {
+func (a *AccessManager) WhitelistEnforced(ctx context.Context) (bool, error) {
 	if a.rcon == nil {
 		return false, fmt.Errorf("rcon client not configured")
 	}
 	// Modern Minecraft (1.13+) does not have "/whitelist status".
 	// Sending "/whitelist on" returns "Whitelist is already turned on" if on,
 	// or "Whitelist is now turned on" if off (in which case we immediately revert to off).
-	res, err := a.rcon.Execute("/whitelist on")
+	res, err := a.rcon.Execute(ctx, "/whitelist on")
 	if err != nil {
 		return false, err
 	}
@@ -293,12 +293,12 @@ func (a *AccessManager) WhitelistEnforced() (bool, error) {
 		return true, nil
 	}
 	// It was off and just got turned on; revert back to off to preserve state.
-	_, _ = a.rcon.Execute("/whitelist off")
+	_, _ = a.rcon.Execute(ctx, "/whitelist off")
 	return false, nil
 }
 
 // SetWhitelistEnforced turns whitelist on or off in-game via RCON.
-func (a *AccessManager) SetWhitelistEnforced(enforce bool, actor ...string) error {
+func (a *AccessManager) SetWhitelistEnforced(ctx context.Context, enforce bool, actor ...string) error {
 	if a.rcon == nil {
 		return fmt.Errorf("rcon client not configured")
 	}
@@ -308,7 +308,7 @@ func (a *AccessManager) SetWhitelistEnforced(enforce bool, actor ...string) erro
 		cmd = "/whitelist on"
 		desc = "enabled"
 	}
-	_, err := a.rcon.Execute(cmd)
+	_, err := a.rcon.Execute(ctx, cmd)
 	if err != nil {
 		return err
 	}

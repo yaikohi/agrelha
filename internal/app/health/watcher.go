@@ -36,13 +36,27 @@ type Recorder interface {
 }
 
 type Watcher struct {
+	trace    JobTracer
 	rec      Recorder
 	sources  []Source
 	interval time.Duration
 	tail     int64
 }
 
+// JobTracer wraps one scheduled run so the composition root can observe it.
+type JobTracer func(ctx context.Context, name string, run func(context.Context))
+
+func noJobTrace(ctx context.Context, _ string, run func(context.Context)) { run(ctx) }
+
 type Option func(*Watcher)
+
+func WithJobTracer(t JobTracer) Option {
+	return func(x *Watcher) {
+		if t != nil {
+			x.trace = t
+		}
+	}
+}
 
 func WithInterval(d time.Duration) Option {
 	return func(w *Watcher) {
@@ -53,7 +67,7 @@ func WithInterval(d time.Duration) Option {
 }
 
 func New(rec Recorder, sources []Source, opts ...Option) *Watcher {
-	w := &Watcher{rec: rec, sources: sources, interval: defaultInterval, tail: defaultTail}
+	w := &Watcher{rec: rec, sources: sources, interval: defaultInterval, tail: defaultTail, trace: noJobTrace}
 	for _, o := range opts {
 		o(w)
 	}
@@ -72,7 +86,7 @@ func (w *Watcher) Start(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				w.Check(ctx)
+				w.trace(ctx, "health.check", func(ctx context.Context) { w.Check(ctx) })
 			}
 		}
 	}()

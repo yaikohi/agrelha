@@ -1,0 +1,499 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "explainer",
+  "quality": "showcase",
+  "startedAt": "2026-11-06T17:14:02.898Z",
+  "specification": {
+    "path": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/candidate.archify.md",
+    "sha256": "80b9f76c9d624cb84848d9425f12071b4b0ca889586b8043eb26d90eb2cf6cbc",
+    "bytes": 4584
+  },
+  "artifact": {
+    "path": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html",
+    "sha256": "17c53b11bc1556425439165f51a072b9018c9269ff822fa520adbb0b18d0ee8a",
+    "bytes": 893258
+  },
+  "stages": {
+    "browser-check": {
+      "status": "not-run",
+      "execution": "not-requested"
+    },
+    "validate": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": null,
+      "execution": "embedded-in-deliver",
+      "command": [
+        "/nix/store/k3nz3s314bipvqbcbw3faq823hxpwbn1-nodejs-slim-24.19.0/bin/node",
+        "/home/ykhi/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "explainer",
+        "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/candidate.archify.md",
+        "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/ykhi/projects/agrelha",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "validate",
+        "specification": {
+          "sha256": "80b9f76c9d624cb84848d9425f12071b4b0ca889586b8043eb26d90eb2cf6cbc",
+          "bytes": 4584
+        },
+        "validation": {
+          "checksPassed": 4,
+          "checkCount": 4,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        }
+      }
+    },
+    "deliver": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 488,
+      "command": [
+        "/nix/store/k3nz3s314bipvqbcbw3faq823hxpwbn1-nodejs-slim-24.19.0/bin/node",
+        "/home/ykhi/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "explainer",
+        "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/candidate.archify.md",
+        "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/ykhi/projects/agrelha",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "receiptId": "498485fc-38b3-4284-b17c-bf0fad405d6c",
+        "ok": true,
+        "command": "deliver",
+        "type": "explainer",
+        "input": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/candidate.archify.md",
+        "output": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html",
+        "explainer": {
+          "preparedSha256": "6dc6c46e7cc22db1ed5593738010ed7c4fd80d1a0353047ad038d65b1fbe9e36",
+          "dependencies": [
+            {
+              "kind": "diagram-spec",
+              "id": "probe-flow",
+              "inline": true,
+              "sha256": "81facf6b021b498f8561e618dc14d262b9f7af71dc50fda4be4360e78adbb436",
+              "bytes": 885
+            },
+            {
+              "kind": "diagram-spec",
+              "id": "sync-flow",
+              "inline": true,
+              "sha256": "21fb801a122a246c78d4d888411ee171e7659c678d65cbaf95aefc282312f420",
+              "bytes": 933
+            }
+          ]
+        },
+        "specification": {
+          "sha256": "80b9f76c9d624cb84848d9425f12071b4b0ca889586b8043eb26d90eb2cf6cbc",
+          "bytes": 4584
+        },
+        "artifact": {
+          "sha256": "17c53b11bc1556425439165f51a072b9018c9269ff822fa520adbb0b18d0ee8a",
+          "bytes": 893258
+        },
+        "validation": {
+          "checksPassed": 4,
+          "checkCount": 4,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      }
+    },
+    "check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 218,
+      "command": [
+        "/nix/store/k3nz3s314bipvqbcbw3faq823hxpwbn1-nodejs-slim-24.19.0/bin/node",
+        "/home/ykhi/.agents/skills/archify/bin/archify.mjs",
+        "check",
+        "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html",
+        "--require-provenance"
+      ],
+      "receipt": {
+        "ok": true,
+        "file": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html",
+        "family": "explainer",
+        "artifact": {
+          "sha256": "17c53b11bc1556425439165f51a072b9018c9269ff822fa520adbb0b18d0ee8a",
+          "bytes": 893258
+        },
+        "checks": [
+          {
+            "name": "explainer_structure",
+            "ok": true,
+            "details": [
+              "53 unique DOM IDs"
+            ]
+          },
+          {
+            "name": "explainer_payload_identity",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "explainer_dependencies",
+            "ok": true,
+            "details": [
+              "2 frozen dependencies"
+            ]
+          },
+          {
+            "name": "explainer_native_diagrams",
+            "ok": true,
+            "details": [
+              "probe-flow: pass",
+              "sync-flow: pass"
+            ]
+          }
+        ],
+        "composition": {
+          "schemaVersion": 1,
+          "profile": "showcase",
+          "status": "pass",
+          "summary": {
+            "errors": 0,
+            "warnings": 0
+          },
+          "issues": [],
+          "nativeDiagrams": [
+            {
+              "id": "probe-flow",
+              "receipt": {
+                "ok": true,
+                "file": "/tmp/archify-explainer-check-6ldfyo/child.html",
+                "artifact": {
+                  "sha256": "1825c1a9503082508bd0f7bed17993b376ba516b08bfc9b5a5cc99843fa29994",
+                  "bytes": 824899
+                },
+                "checks": [
+                  {
+                    "name": "single_svg",
+                    "ok": true,
+                    "details": [
+                      "found 1 <svg> block(s)"
+                    ]
+                  },
+                  {
+                    "name": "finite_svg",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "orthogonal_arrows",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "label_route_clearance",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "relationship_crossings",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "relationship_corridors",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "container_border_runs",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "route_rhythm",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "legend_clearance",
+                    "ok": true,
+                    "details": []
+                  }
+                ],
+                "composition": {
+                  "schemaVersion": 1,
+                  "profile": "showcase",
+                  "status": "pass",
+                  "summary": {
+                    "errors": 0,
+                    "warnings": 0
+                  },
+                  "metrics": {
+                    "properCrossings": 0,
+                    "resolvedCrossovers": 0,
+                    "ambiguousCorridors": 0,
+                    "arrowheadCollisions": 0,
+                    "containerBorderRuns": 0,
+                    "labelRouteClearanceIssues": 0,
+                    "labelCanvasOverflowIssues": 0,
+                    "minLabelRouteClearance": 28,
+                    "desktopReadabilityIssues": 0,
+                    "viewportHeightIssues": 0,
+                    "minProjectedNodeTextPx": 11,
+                    "maxBends": 0,
+                    "routesOverSuggestedBends": 0,
+                    "maxStretch": 1,
+                    "routesOverSuggestedStretch": 0,
+                    "minSegmentPx": 254,
+                    "minInteriorSegmentPx": null,
+                    "shortSegmentCount": 0,
+                    "shortEndpointSegmentCount": 0,
+                    "shortInteriorSegmentCount": 0,
+                    "microSegmentCount": 0
+                  },
+                  "suggestedLimits": {
+                    "bendsPerRelationship": 2,
+                    "stretch": 1.35,
+                    "segmentPx": 16,
+                    "microSegmentPx": 8
+                  },
+                  "routeReview": {
+                    "crossings": [],
+                    "detours": []
+                  },
+                  "leadingSpace": {
+                    "measured": false,
+                    "reviewSuggested": false
+                  },
+                  "sequenceColumnSpace": {
+                    "measured": true,
+                    "columnFit": "spread",
+                    "participantCount": 2,
+                    "occupiedRight": 520,
+                    "viewBoxLeft": 0,
+                    "canvasWidth": 560,
+                    "emptyRightPx": 40,
+                    "emptyRightRatio": 0.071,
+                    "typicalParticipantWidth": 190,
+                    "reviewSuggested": false
+                  },
+                  "desktopReadability": {
+                    "budgetBasis": "legacy-930",
+                    "readerContract": "declared-wide-v1",
+                    "availableDiagramWidth": 930,
+                    "actualBudgetPx": 930,
+                    "limit": "legacy",
+                    "requestedTargetPx": null,
+                    "requestedTargetMet": null,
+                    "hardFloorPx": 6,
+                    "hardFloorMet": true,
+                    "minimumOwner": {
+                      "kind": "edge",
+                      "id": "agrelha-to-rcon-1",
+                      "from": "agrelha",
+                      "to": "rcon"
+                    },
+                    "minimumSourceTextPx": 11,
+                    "minimumProjectedTextPx": 11,
+                    "semanticTextCount": 7
+                  },
+                  "issues": []
+                }
+              }
+            },
+            {
+              "id": "sync-flow",
+              "receipt": {
+                "ok": true,
+                "file": "/tmp/archify-explainer-check-ViWRI2/child.html",
+                "artifact": {
+                  "sha256": "4a22dd9ce07ceefc01f8e26efe4a99e5137f355e1be0d7d68663d8d37c0e16b5",
+                  "bytes": 827588
+                },
+                "checks": [
+                  {
+                    "name": "single_svg",
+                    "ok": true,
+                    "details": [
+                      "found 1 <svg> block(s)"
+                    ]
+                  },
+                  {
+                    "name": "finite_svg",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "orthogonal_arrows",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "label_route_clearance",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "relationship_crossings",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "relationship_corridors",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "container_border_runs",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "route_rhythm",
+                    "ok": true,
+                    "details": []
+                  },
+                  {
+                    "name": "legend_clearance",
+                    "ok": true,
+                    "details": []
+                  }
+                ],
+                "composition": {
+                  "schemaVersion": 1,
+                  "profile": "showcase",
+                  "status": "pass",
+                  "summary": {
+                    "errors": 0,
+                    "warnings": 0
+                  },
+                  "metrics": {
+                    "properCrossings": 0,
+                    "resolvedCrossovers": 0,
+                    "ambiguousCorridors": 0,
+                    "arrowheadCollisions": 0,
+                    "containerBorderRuns": 0,
+                    "labelRouteClearanceIssues": 0,
+                    "labelCanvasOverflowIssues": 0,
+                    "minLabelRouteClearance": 28,
+                    "desktopReadabilityIssues": 0,
+                    "viewportHeightIssues": 0,
+                    "minProjectedNodeTextPx": 11,
+                    "maxBends": 0,
+                    "routesOverSuggestedBends": 0,
+                    "maxStretch": 1,
+                    "routesOverSuggestedStretch": 0,
+                    "minSegmentPx": 200.3,
+                    "minInteriorSegmentPx": null,
+                    "shortSegmentCount": 0,
+                    "shortEndpointSegmentCount": 0,
+                    "shortInteriorSegmentCount": 0,
+                    "microSegmentCount": 0
+                  },
+                  "suggestedLimits": {
+                    "bendsPerRelationship": 2,
+                    "stretch": 1.35,
+                    "segmentPx": 16,
+                    "microSegmentPx": 8
+                  },
+                  "routeReview": {
+                    "crossings": [],
+                    "detours": []
+                  },
+                  "leadingSpace": {
+                    "measured": false,
+                    "reviewSuggested": false
+                  },
+                  "sequenceColumnSpace": {
+                    "measured": true,
+                    "columnFit": "spread",
+                    "participantCount": 4,
+                    "occupiedRight": 880,
+                    "viewBoxLeft": 0,
+                    "canvasWidth": 920,
+                    "emptyRightPx": 40,
+                    "emptyRightRatio": 0.043,
+                    "typicalParticipantWidth": 175,
+                    "reviewSuggested": false
+                  },
+                  "desktopReadability": {
+                    "budgetBasis": "legacy-930",
+                    "readerContract": "declared-wide-v1",
+                    "availableDiagramWidth": 930,
+                    "actualBudgetPx": 930,
+                    "limit": "legacy",
+                    "requestedTargetPx": null,
+                    "requestedTargetMet": null,
+                    "hardFloorPx": 6,
+                    "hardFloorMet": true,
+                    "minimumOwner": {
+                      "kind": "edge",
+                      "id": "admin-to-control-1",
+                      "from": "admin",
+                      "to": "control"
+                    },
+                    "minimumSourceTextPx": 11,
+                    "minimumProjectedTextPx": 11,
+                    "semanticTextCount": 9
+                  },
+                  "issues": []
+                }
+              }
+            }
+          ]
+        },
+        "diagnostics": [],
+        "provenance": "current",
+        "deliveryReceiptId": "498485fc-38b3-4284-b17c-bf0fad405d6c"
+      }
+    }
+  },
+  "browserCheck": {
+    "requested": false,
+    "ran": false
+  },
+  "diagnostics": [],
+  "evidence": {
+    "receipt": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.finalize.json",
+    "summaryReceipt": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.finalize-summary.json"
+  },
+  "visualReview": "not-requested",
+  "finishedAt": "2026-11-06T17:14:03.658Z",
+  "durationMs": 759,
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-06T17:10:05.716Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  }
+}

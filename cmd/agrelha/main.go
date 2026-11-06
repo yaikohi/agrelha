@@ -16,6 +16,7 @@ import (
 	"agrelha/internal/platform/build"
 	"agrelha/internal/platform/config"
 	"agrelha/internal/platform/logging"
+	"agrelha/internal/platform/tracing"
 	"agrelha/internal/wiring"
 )
 
@@ -40,6 +41,18 @@ func run(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 	logging.Setup(cfg.LogLevel, cfg.LogFormat)
 	build.SourceURL = cfg.SourceURL
 
+	shutdownTracing, err := tracing.Init(ctx, build.Version, build.Commit)
+	if err != nil {
+		slog.Warn("tracing disabled", "err", err)
+	}
+	defer func() {
+		shutCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := shutdownTracing(shutCtx); err != nil {
+			slog.Warn("tracing shutdown", "err", err)
+		}
+	}()
+
 	deps, err := wiring.Build(ctx, cfg)
 	if err != nil {
 		slog.Error("startup failed", "err", err)
@@ -55,7 +68,8 @@ func run(ctx context.Context, stdout, stderr io.Writer, args []string) int {
 		}
 	}()
 	slog.Info("agrelha listening", "version", build.Version, "commit", build.Commit, "built", build.Date,
-		"addr", cfg.ListenAddr, "log_level", cfg.LogLevel, "log_format", cfg.LogFormat)
+		"addr", cfg.ListenAddr, "log_level", cfg.LogLevel, "log_format", cfg.LogFormat,
+		"tracing", tracing.Enabled())
 
 	sigCtx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

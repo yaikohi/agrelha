@@ -35,12 +35,28 @@ const (
 	indexTimeout = 3 * time.Minute
 )
 
-func New(v1URL string) *Client {
-	return &Client{
+const DefaultTimeout = 15 * time.Second
+
+type Option func(*Client)
+
+func WithHTTPClient(h *http.Client) Option {
+	return func(c *Client) {
+		if h != nil {
+			c.http = h
+		}
+	}
+}
+
+func New(v1URL string, opts ...Option) *Client {
+	c := &Client{
 		v1URL:  strings.TrimRight(v1URL, "/"),
 		expURL: "https://thunderstore.io/api/experimental",
-		http:   &http.Client{Timeout: 15 * time.Second},
+		http:   &http.Client{Timeout: DefaultTimeout},
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 type expPackage struct {
@@ -267,7 +283,7 @@ func (c *Client) warm(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, indexTimeout)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.v1URL+"/package/", nil)
-	resp, err := (&http.Client{Timeout: indexTimeout}).Do(req)
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return err
 	}

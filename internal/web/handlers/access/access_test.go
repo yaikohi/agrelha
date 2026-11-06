@@ -381,7 +381,7 @@ type mockAccessConsole struct {
 	executed  []string
 }
 
-func (m *mockAccessConsole) Execute(cmd string) (string, error) {
+func (m *mockAccessConsole) Execute(_ context.Context, cmd string) (string, error) {
 	m.executed = append(m.executed, cmd)
 	if err, ok := m.errs[cmd]; ok && err != nil {
 		return "", err
@@ -552,7 +552,7 @@ func (f *failPatchStore) Patch(ctx context.Context, path, msg string, mutate fun
 
 type failConsole struct{}
 
-func (f *failConsole) Execute(cmd string) (string, error) {
+func (f *failConsole) Execute(_ context.Context, cmd string) (string, error) {
 	return "", errors.New("rcon failure")
 }
 

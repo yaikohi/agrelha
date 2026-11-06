@@ -24,11 +24,25 @@ type InstanceLister interface {
 }
 
 // Option configures a BackupScheduler.
+// JobTracer wraps one scheduled run so the composition root can observe it.
+type JobTracer func(ctx context.Context, name string, run func(context.Context))
+
+func noJobTrace(ctx context.Context, _ string, run func(context.Context)) { run(ctx) }
+
 type Option func(*BackupScheduler)
+
+func WithJobTracer(t JobTracer) Option {
+	return func(x *BackupScheduler) {
+		if t != nil {
+			x.trace = t
+		}
+	}
+}
 
 // BackupScheduler snapshots every running Minecraft instance once a day and
 // prunes old archives.
 type BackupScheduler struct {
+	trace          JobTracer
 	instances      InstanceLister
 	jobRunner      JobRunner
 	cmdExec        func(ctx context.Context, inst domain.Instance, cmd string) error
@@ -52,6 +66,7 @@ func New(instances InstanceLister, runner JobRunner, opts ...Option) *BackupSche
 		backupsPVC:     "minecraft-modded-backups",
 		keep:           5,
 		tickerInterval: 15 * time.Minute,
+		trace:          noJobTrace,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -173,7 +188,7 @@ func (s *BackupScheduler) Start(ctx context.Context) {
 				currentDate := utcNow.Format("2006-01-02")
 				if utcNow.Hour() == 4 && lastDailyDate != currentDate {
 					lastDailyDate = currentDate
-					s.RunDaily(ctx)
+					s.trace(ctx, "backups.daily", s.RunDaily)
 				}
 			}
 		}

@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Agrelha Networking & Game Instances",
+    "output": ".archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "ssh://git@codeberg.org/ykhi/agrelha.git",
+      "revision": "14438fdf84e36ba519ca9cb46974e45fec97e8f1",
+      "link_mode": "local-only"
+    }
+  },
+  "components": [
+    { "id": "admins", "type": "external", "label": "Operators & Admins", "sublabel": "Browser Web UI / SSE", "pos": [36, 150], "size": [140, 60] },
+    { "id": "players", "type": "external", "label": "Players", "sublabel": "Game Clients", "pos": [36, 360], "size": [140, 60] },
+    { "id": "zitadel", "type": "security", "label": "Zitadel Auth", "sublabel": "OIDC Identity & PKCE", "pos": [230, 60], "size": [136, 60] },
+    { "id": "cilium_lb", "type": "cloud", "label": "Cilium L2 LoadBalancer", "sublabel": "BGP & ARP IP Allocator", "pos": [230, 355], "size": [150, 68] },
+    { "id": "sqlite", "type": "database", "label": "SQLite State", "sublabel": "Grants, requests, audits", "pos": [470, 40], "size": [140, 58], "sources": [{ "path": "GEMINI.md", "line": 1, "end_line": 20 }] },
+    { "id": "agrelha_web", "type": "backend", "label": "Agrelha Control Plane", "sublabel": "Go 1.24 + Datastar SSE :8080", "pos": [470, 150], "size": [156, 64], "sources": [{ "path": "GEMINI.md", "line": 10, "end_line": 25 }] },
+    { "id": "k8s_api", "type": "cloud", "label": "Kubernetes API", "sublabel": "StatefulSets & ConfigMaps", "pos": [470, 260], "size": [150, 60] },
+    { "id": "nas_backup", "type": "database", "label": "TrueNAS Storage", "sublabel": "NFS World Backups", "pos": [470, 365], "size": [140, 60] },
+    { "id": "game01_node", "type": "backend", "label": "game-01 Node", "sublabel": "Bare-Metal MiniPC", "pos": [700, 260], "size": [140, 60], "sources": [{ "path": "GEMINI.md", "line": 8, "end_line": 12 }] },
+    { "id": "mc_pod", "type": "backend", "label": "Minecraft Modded", "sublabel": "NeoForge/Fabric :25565 :25575", "pos": [920, 150], "size": [168, 64], "sources": [{ "path": "GEMINI.md", "line": 16, "end_line": 22 }] },
+    { "id": "valheim_pod", "type": "backend", "label": "Valheim Server", "sublabel": "Dedicated UDP :2456-2457", "pos": [920, 260], "size": [168, 64], "sources": [{ "path": "GEMINI.md", "line": 13, "end_line": 15 }] },
+    { "id": "gmod_pod", "type": "backend", "label": "Garry's Mod", "sublabel": "SRCDS Dedicated UDP :27015", "pos": [920, 365], "size": [168, 64] }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Agrelha Management Cluster",
+      "wraps": ["sqlite", "agrelha_web", "k8s_api", "nas_backup"],
+      "pad": 16
+    },
+    {
+      "kind": "region",
+      "label": "Bare-Metal Gameserver Infrastructure (game-01)",
+      "wraps": ["game01_node", "mc_pod", "valheim_pod", "gmod_pod"],
+      "pad": 16
+    }
+  ],
+  "connections": [
+    { "from": "admins", "to": "zitadel", "label": "OIDC login", "variant": "security" },
+    { "from": "admins", "to": "agrelha_web", "label": "HTTPS / SSE", "variant": "emphasis" },
+    { "from": "zitadel", "to": "agrelha_web", "label": "JWT verify", "variant": "security" },
+    { "from": "agrelha_web", "to": "sqlite", "label": "SQL state" },
+    { "from": "agrelha_web", "to": "k8s_api", "label": "reconcile", "variant": "default" },
+    { "from": "agrelha_web", "to": "nas_backup", "label": "sync tar.gz", "variant": "dashed" },
+    { "from": "agrelha_web", "to": "mc_pod", "label": "RCON :25575", "variant": "security" },
+    { "from": "k8s_api", "to": "game01_node", "label": "kubelet schedule", "variant": "default" },
+    { "from": "players", "to": "cilium_lb", "label": "game traffic", "variant": "emphasis" },
+    { "from": "cilium_lb", "to": "mc_pod", "label": "192.168.20.225", "variant": "emphasis" },
+    { "from": "cilium_lb", "to": "valheim_pod", "label": "192.168.20.224", "variant": "default" },
+    { "from": "cilium_lb", "to": "gmod_pod", "label": "192.168.20.31", "variant": "default" },
+    { "from": "game01_node", "to": "mc_pod", "label": "container", "variant": "dashed" },
+    { "from": "game01_node", "to": "valheim_pod", "label": "container", "variant": "dashed" },
+    { "from": "game01_node", "to": "gmod_pod", "label": "container", "variant": "dashed" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Cilium L2 LoadBalancing",
+      "items": [
+        "Traefik reverse proxy is deliberately bypassed for all game traffic",
+        "Cilium advertises L2 IPs (192.168.20.224 for Valheim, 192.168.20.225 for Minecraft)",
+        "Zero-proxy direct client connectivity eliminates NAT jitter and protocol translation"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Decoupled Management & RCON",
+      "items": [
+        "Control plane runs Agrelha Go server with Datastar SSE streaming live metrics",
+        "Whitelist and ops commands execute live via RCON (TCP 25575) and commit to GitOps ConfigMaps",
+        "Backup tarballs stream directly to TrueNAS storage over NFS"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Bare-Metal Node Pinning",
+      "items": [
+        "game-01 MiniPC is dedicated solely to running game containers on high single-thread clock CPU",
+        "Kubernetes schedules StatefulSets to game-01 via nodeSelector / tolerations",
+        "Crashloop detection and resource limits (e.g. 6GiB heap) managed declaratively"
+      ]
+    }
+  ]
+}

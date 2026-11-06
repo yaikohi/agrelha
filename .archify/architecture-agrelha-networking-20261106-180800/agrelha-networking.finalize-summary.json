@@ -1,0 +1,294 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/ykhi/projects/agrelha/.archify/architecture-agrelha-networking-20261106-180800/candidate.json",
+    "sha256": "c7ef12d3e40716b3c973cc7c61129d2566a06f6f7d89a8d1c9a500d59a32b1b4",
+    "bytes": 5502
+  },
+  "artifact": {
+    "path": "/home/ykhi/projects/agrelha/.archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.html",
+    "sha256": "367a6af41f0a925f0cf68e010ab71e1e9bb8c989eb461b7dbeebeb2cf35b4073",
+    "bytes": 859116
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/ykhi/projects/agrelha/.archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.finalize.json",
+    "summaryReceipt": "/home/ykhi/projects/agrelha/.archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.finalize-summary.json",
+    "browserCheckReceipt": "/home/ykhi/projects/agrelha/.archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-06T17:10:05.716Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 3019,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  },
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "resolvedCrossovers": 8,
+      "routesOverSuggestedBends": 5
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [
+        {
+          "left": {
+            "from": "agrelha_web",
+            "to": "nas_backup",
+            "label": "sync tar.gz",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "right": {
+            "from": "k8s_api",
+            "to": "game01_node",
+            "label": "kubelet schedule",
+            "collectionIndex": 7,
+            "artifactIndex": 8
+          },
+          "point": [
+            650,
+            236.15384615384616
+          ]
+        },
+        {
+          "left": {
+            "from": "agrelha_web",
+            "to": "nas_backup",
+            "label": "sync tar.gz",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "right": {
+            "from": "cilium_lb",
+            "to": "mc_pod",
+            "label": "192.168.20.225",
+            "collectionIndex": 9,
+            "artifactIndex": 10
+          },
+          "point": [
+            650,
+            323
+          ]
+        },
+        {
+          "left": {
+            "from": "agrelha_web",
+            "to": "nas_backup",
+            "label": "sync tar.gz",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "right": {
+            "from": "cilium_lb",
+            "to": "valheim_pod",
+            "label": "192.168.20.224",
+            "collectionIndex": 10,
+            "artifactIndex": 11
+          },
+          "point": [
+            650,
+            331
+          ]
+        },
+        {
+          "left": {
+            "from": "cilium_lb",
+            "to": "mc_pod",
+            "label": "192.168.20.225",
+            "collectionIndex": 9,
+            "artifactIndex": 10
+          },
+          "right": {
+            "from": "game01_node",
+            "to": "mc_pod",
+            "label": "container",
+            "collectionIndex": 12,
+            "artifactIndex": 13
+          },
+          "point": [
+            888,
+            238
+          ],
+          "sharedNode": "mc_pod"
+        },
+        {
+          "left": {
+            "from": "cilium_lb",
+            "to": "mc_pod",
+            "label": "192.168.20.225",
+            "collectionIndex": 9,
+            "artifactIndex": 10
+          },
+          "right": {
+            "from": "game01_node",
+            "to": "valheim_pod",
+            "label": "container",
+            "collectionIndex": 13,
+            "artifactIndex": 14
+          },
+          "point": [
+            888,
+            236
+          ]
+        },
+        {
+          "left": {
+            "from": "cilium_lb",
+            "to": "mc_pod",
+            "label": "192.168.20.225",
+            "collectionIndex": 9,
+            "artifactIndex": 10
+          },
+          "right": {
+            "from": "game01_node",
+            "to": "gmod_pod",
+            "label": "container",
+            "collectionIndex": 14,
+            "artifactIndex": 15
+          },
+          "point": [
+            824,
+            323
+          ]
+        },
+        {
+          "left": {
+            "from": "cilium_lb",
+            "to": "valheim_pod",
+            "label": "192.168.20.224",
+            "collectionIndex": 10,
+            "artifactIndex": 11
+          },
+          "right": {
+            "from": "game01_node",
+            "to": "gmod_pod",
+            "label": "container",
+            "collectionIndex": 14,
+            "artifactIndex": 15
+          },
+          "point": [
+            824,
+            331
+          ]
+        },
+        {
+          "left": {
+            "from": "game01_node",
+            "to": "mc_pod",
+            "label": "container",
+            "collectionIndex": 12,
+            "artifactIndex": 13
+          },
+          "right": {
+            "from": "game01_node",
+            "to": "valheim_pod",
+            "label": "container",
+            "collectionIndex": 13,
+            "artifactIndex": 14
+          },
+          "point": [
+            1000.6,
+            237
+          ],
+          "sharedNode": "game01_node"
+        }
+      ],
+      "detours": [
+        {
+          "relationship": {
+            "from": "k8s_api",
+            "to": "game01_node",
+            "label": "kubelet schedule",
+            "collectionIndex": 7,
+            "artifactIndex": 8
+          },
+          "bends": 3,
+          "stretch": 1.289
+        },
+        {
+          "relationship": {
+            "from": "cilium_lb",
+            "to": "mc_pod",
+            "label": "192.168.20.225",
+            "collectionIndex": 9,
+            "artifactIndex": 10
+          },
+          "bends": 4,
+          "stretch": 1
+        },
+        {
+          "relationship": {
+            "from": "cilium_lb",
+            "to": "valheim_pod",
+            "label": "192.168.20.224",
+            "collectionIndex": 10,
+            "artifactIndex": 11
+          },
+          "bends": 3,
+          "stretch": 1
+        },
+        {
+          "relationship": {
+            "from": "cilium_lb",
+            "to": "gmod_pod",
+            "label": "192.168.20.31",
+            "collectionIndex": 11,
+            "artifactIndex": 12
+          },
+          "bends": 3,
+          "stretch": 1.076
+        },
+        {
+          "relationship": {
+            "from": "game01_node",
+            "to": "mc_pod",
+            "label": "container",
+            "collectionIndex": 12,
+            "artifactIndex": 13
+          },
+          "bends": 3,
+          "stretch": 1
+        }
+      ],
+      "truncated": false
+    },
+    "hints": [
+      "agrelha_web → nas_backup crosses k8s_api → game01_node: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "agrelha_web → nas_backup crosses cilium_lb → mc_pod: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "agrelha_web → nas_backup crosses cilium_lb → valheim_pod: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "cilium_lb → mc_pod and game01_node → mc_pod cross next to mc_pod: move node cilium_lb or game01_node so the two reach mc_pod from different sides (for example one level with it, one directly above or below it).",
+      "cilium_lb → mc_pod crosses game01_node → valheim_pod: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "cilium_lb → mc_pod crosses game01_node → gmod_pod: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "cilium_lb → valheim_pod crosses game01_node → gmod_pod: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "game01_node → mc_pod and game01_node → valheim_pod cross next to game01_node: move node mc_pod or valheim_pod so the two reach game01_node from different sides (for example one level with it, one directly above or below it)."
+    ],
+    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  }
+}

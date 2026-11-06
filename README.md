@@ -77,6 +77,19 @@ when there is no IdP. **Persistence** is embedded SQLite (modernc, no cgo):
 player roster and presence, audit log, server events, crash incidents, and the
 mod index cache.
 
+### Visual Architecture & Deep-Dives
+
+Interactive standalone architecture models and operational explainers generated with [Archify](https://archify.si):
+
+- **[Agrelha Networking & Game Instances](.archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.html)** — Interactive topology showing Cilium L2 direct LoadBalancing, out-of-band RCON, Zitadel OIDC authentication, and bare-metal `game-01` node pinning.
+- **[Minecraft Whitelist Management Explainer](.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html)** — Interactive walkthrough of the non-destructive RCON probe (`/whitelist on` with immediate reversion), dual-write GitOps persistence, and container-level UUID pre-resolution.
+
+To view these interactive pages locally in your browser:
+```sh
+xdg-open .archify/architecture-agrelha-networking-20261106-180800/agrelha-networking.html
+xdg-open .archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html
+```
+
 ## Who it's for
 
 agrelha began as one person's control plane for one homelab. The goal is a panel

@@ -2,6 +2,7 @@ package rcon
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -103,7 +104,7 @@ func TestRcon_Execute_SuccessAndReuse(t *testing.T) {
 	defer client.Close()
 
 	// 1. First execution (connects + auth + command)
-	resp, err := client.Execute("whitelist list")
+	resp, err := client.Execute(context.Background(), "whitelist list")
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestRcon_Execute_SuccessAndReuse(t *testing.T) {
 	}
 
 	// 2. Second execution (reuses existing connection)
-	resp2, err := client.Execute("time set day")
+	resp2, err := client.Execute(context.Background(), "time set day")
 	if err != nil {
 		t.Fatalf("Execute 2 failed: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestRcon_Execute_AuthFailure(t *testing.T) {
 	client := NewClient(addr, "wrongpassword", 500*time.Millisecond)
 	defer client.Close()
 
-	_, err := client.Execute("whitelist list")
+	_, err := client.Execute(context.Background(), "whitelist list")
 	if err == nil || !strings.Contains(err.Error(), "authentication failed") {
 		t.Fatalf("expected authentication failed error, got: %v", err)
 	}
@@ -136,7 +137,7 @@ func TestRcon_Execute_AuthFailure(t *testing.T) {
 
 func TestRcon_Execute_NilClient(t *testing.T) {
 	var c *Client
-	_, err := c.Execute("help")
+	_, err := c.Execute(context.Background(), "help")
 	if err != ErrNotConfigured {
 		t.Errorf("expected ErrNotConfigured, got %v", err)
 	}
@@ -153,13 +154,13 @@ func TestRcon_Execute_ConnectionDrop(t *testing.T) {
 	defer client.Close()
 
 	// Trigger simulated server drop
-	_, err := client.Execute("crash")
+	_, err := client.Execute(context.Background(), "crash")
 	if err == nil {
 		t.Fatal("expected error on server crash")
 	}
 
 	// Next command should reconnect and succeed
-	resp, err := client.Execute("say recovered")
+	resp, err := client.Execute(context.Background(), "say recovered")
 	if err != nil {
 		t.Fatalf("reconnect Execute failed: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestRcon_Execute_ConnectionDrop(t *testing.T) {
 func TestRcon_DialFailure(t *testing.T) {
 	// Connect to non-listening address
 	client := NewClient("127.0.0.1:54321", "pass", 50*time.Millisecond)
-	_, err := client.Execute("test")
+	_, err := client.Execute(context.Background(), "test")
 	if err == nil {
 		t.Fatal("expected dial error, got nil")
 	}
@@ -203,7 +204,7 @@ func TestRcon_InvalidPacketLength(t *testing.T) {
 	client := NewClient(ln.Addr().String(), "pass", 500*time.Millisecond)
 	defer client.Close()
 
-	_, err = client.Execute("test")
+	_, err = client.Execute(context.Background(), "test")
 	if err == nil || !strings.Contains(err.Error(), "invalid rcon packet length") {
 		t.Fatalf("expected invalid rcon packet length error, got %v", err)
 	}
@@ -246,7 +247,7 @@ func TestRcon_WriteAndReadFailures(t *testing.T) {
 		client := NewClient(ln.Addr().String(), "pass", 100*time.Millisecond)
 		defer client.Close()
 
-		_, err = client.Execute("test")
+		_, err = client.Execute(context.Background(), "test")
 		if err == nil {
 			t.Error("expected error when server closes immediately")
 		}
@@ -280,7 +281,7 @@ func TestRcon_WriteAndReadFailures(t *testing.T) {
 		client := NewClient(ln.Addr().String(), "pass", 500*time.Millisecond)
 		defer client.Close()
 
-		_, err = client.Execute("test")
+		_, err = client.Execute(context.Background(), "test")
 		if err == nil {
 			t.Error("expected error on truncated packet body")
 		}
@@ -315,10 +316,9 @@ func TestRcon_WriteAndReadFailures(t *testing.T) {
 		client := NewClient(ln.Addr().String(), "pass", 100*time.Millisecond)
 		defer client.Close()
 
-		_, err = client.Execute("test")
+		_, err = client.Execute(context.Background(), "test")
 		if err == nil {
 			t.Error("expected error when server closes right after auth")
 		}
 	})
 }
-

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "explainer",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/candidate.archify.md",
+    "sha256": "80b9f76c9d624cb84848d9425f12071b4b0ca889586b8043eb26d90eb2cf6cbc",
+    "bytes": 4584
+  },
+  "artifact": {
+    "path": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.html",
+    "sha256": "17c53b11bc1556425439165f51a072b9018c9269ff822fa520adbb0b18d0ee8a",
+    "bytes": 893258
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "not-run"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.finalize.json",
+    "summaryReceipt": "/home/ykhi/projects/agrelha/.archify/explainer-minecraft-whitelist-20261106-180800/minecraft-whitelist-explainer.finalize-summary.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-06T17:10:05.716Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 759,
+  "browserCheck": {
+    "requested": false,
+    "ran": false
+  }
+}

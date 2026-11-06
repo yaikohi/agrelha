@@ -41,15 +41,31 @@ type Client struct {
 	fetched time.Time
 }
 
-func New(url string) *Client {
+const DefaultTimeout = 15 * time.Second
+
+type Option func(*Client)
+
+func WithHTTPClient(h *http.Client) Option {
+	return func(c *Client) {
+		if h != nil {
+			c.http = h
+		}
+	}
+}
+
+func New(url string, opts ...Option) *Client {
 	if url == "" {
 		url = DefaultManifestURL
 	}
-	return &Client{
+	c := &Client{
 		url:  url,
 		ttl:  DefaultCacheTTL,
-		http: &http.Client{Timeout: 15 * time.Second},
+		http: &http.Client{Timeout: DefaultTimeout},
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 func (c *Client) load(ctx context.Context) (*manifest, error) {

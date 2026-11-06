@@ -9,16 +9,27 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/utils"
+	"go.opentelemetry.io/otel/trace"
 
 	"agrelha/internal/web/metrics"
 )
 
 var reqCounter atomic.Uint64
 
+func Unobserved(path string) bool {
+	return path == "/healthz" ||
+		path == "/metrics" ||
+		strings.HasPrefix(path, "/assets")
+}
+
+func Untraced(path string) bool {
+	return Unobserved(path) || path == "/sse"
+}
+
 func RequestLogger() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		path := c.Path()
-		if path == "/healthz" || path == "/metrics" || strings.HasPrefix(path, "/assets") {
+		if Unobserved(path) {
 			return c.Next()
 		}
 
@@ -51,6 +62,9 @@ func RequestLogger() fiber.Handler {
 			"accept", c.Get("Accept"),
 			"resp_ct", string(c.Response().Header.ContentType()),
 		)
+		if tid := traceID(c); tid != "" {
+			lg = lg.With("trace_id", tid)
+		}
 		if loc := c.Response().Header.Peek("Location"); len(loc) > 0 {
 			lg = lg.With("location", string(loc))
 		}
@@ -75,4 +89,12 @@ func RequestID(c *fiber.Ctx) string {
 		return v
 	}
 	return "-"
+}
+
+func traceID(c *fiber.Ctx) string {
+	sc := trace.SpanContextFromContext(c.UserContext())
+	if !sc.IsValid() {
+		return ""
+	}
+	return sc.TraceID().String()
 }

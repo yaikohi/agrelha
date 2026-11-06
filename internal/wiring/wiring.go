@@ -1,11 +1,14 @@
 package wiring
 
 import (
+	"agrelha/internal/platform/httpclient"
+	"agrelha/internal/platform/tracing"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,13 +129,13 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	d.Store = st
 
 	d.TS = buildThunderstore(ctx, cfg, st)
-	d.MR = modrinth.New(cfg.ModrinthAPI)
-	d.MPI = modpackindex.New("")
-	d.MCV = mcversions.New("")
+	d.MR = modrinth.New(cfg.ModrinthAPI, modrinth.WithHTTPClient(httpclient.New(modrinth.DefaultTimeout)))
+	d.MPI = modpackindex.New("", modpackindex.WithHTTPClient(httpclient.New(modpackindex.DefaultTimeout)))
+	d.MCV = mcversions.New("", mcversions.WithHTTPClient(httpclient.New(mcversions.DefaultTimeout)))
 
 	if cfg.MinecraftRconPassword != "" {
 		d.MCRcon = rcon.NewClient(cfg.MinecraftRconAddr, cfg.MinecraftRconPassword, 3*time.Second)
-		d.MCRconPool = rcon.NewPool(cfg.MinecraftRconPassword, 3*time.Second)
+		d.MCRconPool = rcon.NewPool(cfg.MinecraftRconPassword, 3*time.Second, rcon.WithTracer(tracing.Starter("rcon")))
 	}
 
 	var planeErr error
@@ -189,41 +192,41 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 	// New(..., "") returns nil, so an unset key leaves CurseForge absent rather
 	// than broken: search shows nothing and installs are refused with a reason.
-	d.CF = curseforge.New(cfg.CurseForgeAPI, cfg.CurseForgeAPIKey)
+	d.CF = curseforge.New(cfg.CurseForgeAPI, cfg.CurseForgeAPIKey, curseforge.WithHTTPClient(httpclient.New(curseforge.DefaultTimeout)))
 	if d.CF.Ready() {
 		instOpts = append(instOpts, instances.WithCurseForgeResolver(d.CF.Resolve))
 	} else {
 		slog.Info("curseforge: no API key configured, CurseForge mods unavailable")
 	}
 	if d.MCRconPool != nil {
-		rconExec := func(inst domain.Instance, cmd string) (string, error) {
+		rconExec := func(ctx context.Context, inst domain.Instance, cmd string) (string, error) {
 			addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(domain.MinecraftProfile), cfg.MinecraftNamespace)
-			res, err := d.MCRconPool.ClientFor(addr).Execute(cmd)
+			res, err := d.MCRconPool.ClientFor(addr).Execute(ctx, cmd)
 			if err != nil && inst.LBIP != "" {
 				target := inst.LBIP
 				if !strings.Contains(target, ":") {
 					target = target + ":25575"
 				}
-				res, err = d.MCRconPool.ClientFor(target).Execute(cmd)
+				res, err = d.MCRconPool.ClientFor(target).Execute(ctx, cmd)
 			}
 			return res, err
 		}
 		instOpts = append(instOpts,
 			instances.WithPreStopHook(func(ctx context.Context, inst domain.Instance) {
-				_, _ = rconExec(inst, "/say Server stopping in 5 seconds...")
+				_, _ = rconExec(ctx, inst, "/say Server stopping in 5 seconds...")
 			}),
 			instances.WithPreDeleteHook(func(ctx context.Context, inst domain.Instance) {
-				_, _ = rconExec(inst, "/say Server being deleted...")
+				_, _ = rconExec(ctx, inst, "/say Server being deleted...")
 			}),
 			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
-				res, err := rconExec(inst, "/list")
+				res, err := rconExec(ctx, inst, "/list")
 				if err != nil {
 					return 0, false
 				}
 				return len(mcaccess.ParsePlayerList(res)), true
 			}),
 			instances.WithCommandExecutor(func(ctx context.Context, inst domain.Instance, cmd string) (string, error) {
-				return rconExec(inst, cmd)
+				return rconExec(ctx, inst, cmd)
 			}),
 		)
 	}
@@ -509,7 +512,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	)
 
 	if st != nil && d.ValheimInstances != nil {
-		sup := ingest.NewSupervisor(d.ValheimInstances, d.ValheimInstances, st, 3*time.Second)
+		sup := ingest.NewSupervisor(d.ValheimInstances, d.ValheimInstances, st, 3*time.Second, ingest.WithJobTracer(tracing.Job))
 		go sup.Run(ctx)
 	}
 
@@ -583,7 +586,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		minecraft.WithRconPassword(cfg.MinecraftRconPassword),
 		minecraft.WithPlayerCount(func(ctx context.Context) (int, error) {
 			if d.MCAccess != nil {
-				players, err := d.MCAccess.OnlinePlayers()
+				players, err := d.MCAccess.OnlinePlayers(ctx)
 				if err != nil {
 					return 0, err
 				}
@@ -709,7 +712,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	d.GModRuntime = gmodRuntime
 	d.GModRef = ports.ServerRef{Name: "gmod", Scope: cfg.GModNamespace}
 
-	d.Steam = steam.New(cfg.SteamWebAPIKey)
+	d.Steam = steam.New(cfg.SteamWebAPIKey, steam.WithHTTPClient(httpclient.New(steam.DefaultTimeout)))
 
 	d.GModGame = gmodgame.New(
 		gmodgame.WithRuntime(gmodRuntime, d.GModRef),
@@ -823,7 +826,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	// status endpoint, per world, because the log-tailing route was wired to a
 	// deployment name that does not exist and reported nothing at all.
 	if d.ValheimInstances != nil {
-		d.ValheimStatus = valheimstatus.New(cfg.ValheimNamespace)
+		d.ValheimStatus = valheimstatus.New(cfg.ValheimNamespace, valheimstatus.WithHTTPClient(httpclient.New(valheimstatus.DefaultTimeout)))
 		d.ValheimOccupancy = occupancy.New()
 		watchValheimLogs(ctx, cfg, &d)
 
@@ -858,16 +861,17 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 				_ = st.RecordEvent(kind, detail)
 			}))
 		}
-		d.ValheimRestarts = restarts.New(opts...)
+		d.ValheimRestarts = restarts.New(append(opts, restarts.WithJobTracer(tracing.Job))...)
 		d.ValheimRestarts.Run(ctx)
 	}
 
 	if d.ValheimInstances != nil && d.TS != nil {
-		d.ModUpdates = modupdates.New(d.ValheimInstances, d.TS, modupdates.WithRestorePoints(st))
+		d.ModUpdates = modupdates.New(d.ValheimInstances, d.TS, modupdates.WithRestorePoints(st), modupdates.WithJobTracer(tracing.Job))
 		d.ModUpdates.Start(ctx)
 	}
 	if d.MCInstances != nil && d.MR != nil {
 		d.MCModUpdates = modupdates.New(d.MCInstances, d.MR,
+			modupdates.WithJobTracer(tracing.Job),
 			modupdates.WithGameID(domain.GameMinecraft),
 			modupdates.WithRestorePoints(st),
 		)
@@ -916,7 +920,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		}),
 	)
 
-	health.New(st, healthSources(&d)).Start(ctx)
+	health.New(st, healthSources(&d), health.WithJobTracer(tracing.Job)).Start(ctx)
 	startEventPruner(ctx, st)
 
 	return d, nil
@@ -935,7 +939,7 @@ func healthSources(d *Deps) []health.Source {
 }
 
 func buildThunderstore(ctx context.Context, cfg *config.Config, st *store.Store) *thunderstore.Client {
-	ts := thunderstore.New(cfg.ThunderstoreAPI)
+	ts := thunderstore.New(cfg.ThunderstoreAPI, thunderstore.WithHTTPClient(httpclient.New(thunderstore.DefaultTimeout)))
 
 	if rows, fetchedAt, err := st.LoadModIndex(); err != nil {
 		slog.Warn("mod index load failed", "err", err)
@@ -1042,7 +1046,7 @@ func routeRuntime(cfg *config.Config, cluster ports.Runtime) ports.Runtime {
 		routes[domain.HostCluster] = cluster
 	}
 	if hasDocker {
-		routes[host] = dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket)), dockerruntime.WithHostAddress(cfg.DockerHostAddress))
+		routes[host] = dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket, dockerruntime.WithHTTPClient(&http.Client{Transport: httpclient.Wrap(dockerruntime.SocketTransport(cfg.DockerSocket)), Timeout: dockerruntime.DefaultTimeout}))), dockerruntime.WithHostAddress(cfg.DockerHostAddress))
 	}
 	return hostrouter.NewRuntime(routes)
 }
@@ -1061,7 +1065,7 @@ func routeReconciler(cfg *config.Config, cluster ports.Reconciler) (ports.Reconc
 
 func buildRuntime(cfg *config.Config, d *Deps) ports.Runtime {
 	if cfg.Runtime == "docker" {
-		return dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket)), dockerruntime.WithHostAddress(cfg.DockerHostAddress))
+		return dockerruntime.New(dockerruntime.WithClient(dockerruntime.NewSocketClient(cfg.DockerSocket, dockerruntime.WithHTTPClient(&http.Client{Transport: httpclient.Wrap(dockerruntime.SocketTransport(cfg.DockerSocket)), Timeout: dockerruntime.DefaultTimeout}))), dockerruntime.WithHostAddress(cfg.DockerHostAddress))
 	}
 
 	if mcK8s, err := newK8sClient(cfg.MinecraftNamespace, cfg.MinecraftDeployment); err != nil {

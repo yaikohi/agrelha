@@ -152,7 +152,7 @@ type Runtime interface {
 }
 
 type Console interface {
-	Execute(cmd string) (string, error)
+	Execute(ctx context.Context, cmd string) (string, error)
 }
 
 type SpecRenderer interface {
