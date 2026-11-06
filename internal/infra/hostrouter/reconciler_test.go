@@ -69,3 +69,45 @@ func TestReconcilerRefusesUnknownHost(t *testing.T) {
 		t.Error("nothing may be converged when the Host is unknown")
 	}
 }
+
+type spyDestroyingReconciler struct {
+	spyReconciler
+	destroyed []string
+}
+
+func (s *spyDestroyingReconciler) Destroy(_ context.Context, ref ports.ServerRef) error {
+	s.destroyed = append(s.destroyed, ref.Name)
+	return nil
+}
+
+// DeleteInstance reaches the compose reconciler through this router, so a
+// router that silently dropped Destroy would leave every deleted world's
+// container, network and saves behind exactly as before the teardown existed.
+func TestDestroyReachesTheHostsReconciler(t *testing.T) {
+	argo := &spyReconciler{async: true}
+	comp := &spyDestroyingReconciler{spyReconciler: spyReconciler{async: false}}
+	r := NewReconciler(map[domain.Host]ports.Reconciler{domain.HostCluster: argo, "fogo": comp})
+
+	if err := r.Destroy(context.Background(), ports.ServerRef{Name: "valheim-gaha-03", Host: "fogo"}); err != nil {
+		t.Fatalf("destroy fogo: %v", err)
+	}
+	if len(comp.destroyed) != 1 || comp.destroyed[0] != "valheim-gaha-03" {
+		t.Errorf("compose reconciler saw %v, want [valheim-gaha-03]", comp.destroyed)
+	}
+}
+
+// ArgoCD prunes once the manifests leave the state store, so a reconciler that
+// cannot destroy is doing the right thing by doing nothing.
+func TestDestroyIsANoOpForAReconcilerThatCannot(t *testing.T) {
+	r := NewReconciler(map[domain.Host]ports.Reconciler{domain.HostCluster: &spyReconciler{async: true}})
+	if err := r.Destroy(context.Background(), ports.ServerRef{Name: "valheim-odin-01"}); err != nil {
+		t.Errorf("destroy on a cluster-only router: %v", err)
+	}
+}
+
+func TestDestroyFailsForAnUnknownHost(t *testing.T) {
+	r := NewReconciler(map[domain.Host]ports.Reconciler{domain.HostCluster: &spyReconciler{async: true}})
+	if err := r.Destroy(context.Background(), ports.ServerRef{Name: "valheim-gaha-03", Host: "nowhere"}); err == nil {
+		t.Error("destroy accepted a host with no reconciler")
+	}
+}

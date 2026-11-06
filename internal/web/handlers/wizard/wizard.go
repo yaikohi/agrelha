@@ -578,7 +578,12 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 
-	ctx := c.UserContext()
+	// Deliberately not c.UserContext(): otelfiber cancels that context in a
+	// defer as the handler returns, and a body stream writer runs after that,
+	// so every status call started already-cancelled and the page sat on its
+	// initial "syncing" signals forever. A client that has gone away is
+	// noticed by the flush inside emit failing, which is what ends this loop.
+	ctx := context.Background()
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		emit := func(st instances.ProvisionState, slow bool, problem string) bool {
 			return patchSignals(w, map[string]any{
@@ -594,9 +599,6 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 
 		var problem string
 		for tick := range provisioningTicks {
-			if ctx.Err() != nil {
-				return
-			}
 			st, err := provisioningStatus(h.cfg.MCInstances, ctx, inst.Number)
 			if err != nil {
 				problem = "Cannot reach the cluster to ask how this world is doing: " + err.Error()

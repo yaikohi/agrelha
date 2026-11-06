@@ -75,8 +75,16 @@ func CreationSentence(host domain.Host, unreachable bool) string {
 	}
 }
 
+// ProvisioningStepCommitted names where the desired state just landed. Only
+// the cluster goes through git: a Docker host writes the rendered manifests to
+// its own state directory, so naming Codeberg there described a repository the
+// world never touches.
 func ProvisioningStepCommitted(host domain.Host) string {
-	return "Desired state committed to Codeberg repository"
+	h := domain.NormalizeHost(string(host))
+	if h.IsCluster() {
+		return "Desired state committed to Codeberg repository"
+	}
+	return fmt.Sprintf("Desired state written on %s", h)
 }
 
 func ProvisioningStepReconciling(host domain.Host) string {

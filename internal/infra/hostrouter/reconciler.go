@@ -43,6 +43,23 @@ func (r *ReconcilerRouter) Materialize(ctx context.Context, ref ports.ServerRef,
 
 var _ ports.Materializer = (*ReconcilerRouter)(nil)
 
+// Destroy forwards to the host's reconciler. A host whose reconciler cannot
+// destroy is one where something else prunes - ArgoCD, once the manifests
+// leave the state store - so that is a no-op, not an error.
+func (r *ReconcilerRouter) Destroy(ctx context.Context, ref ports.ServerRef) error {
+	rc, err := r.For(ref.Host)
+	if err != nil {
+		return err
+	}
+	d, ok := rc.(ports.Destroyer)
+	if !ok {
+		return nil
+	}
+	return d.Destroy(ctx, ref)
+}
+
+var _ ports.Destroyer = (*ReconcilerRouter)(nil)
+
 func (r *ReconcilerRouter) Async() bool {
 	if len(r.routes) == 0 {
 		return false
