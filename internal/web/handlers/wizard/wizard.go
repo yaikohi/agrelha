@@ -497,7 +497,10 @@ func (h *Handler) MCWizardCreate(c *fiber.Ctx) error {
 		}
 	}
 
-	_ = h.cfg.MCInstances.StartInstance(c.UserContext(), created.Number, h.cfg.Actor(c))
+	if startErr := h.cfg.MCInstances.StartInstance(c.UserContext(), created.Number, h.cfg.Actor(c)); startErr != nil {
+		slog.Error("world created but failed to start", "number", created.Number, "err", startErr)
+		shared.SetFlash(c, "err", "World created, but failed to start automatically: "+startErr.Error())
+	}
 
 	redirectURL := fmt.Sprintf("/minecraft/provisioning/%d", created.Number)
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Created world %q! Redirecting...", created.Name), map[string]any{
@@ -575,9 +578,10 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 
+	ctx := c.UserContext()
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		emit := func(st instances.ProvisionState, slow bool, problem string) {
-			_ = sse.PatchSignals(w, map[string]any{
+		emit := func(st instances.ProvisionState, slow bool, problem string) bool {
+			return patchSignals(w, map[string]any{
 				"phase":   st.Phase,
 				"ready":   st.Ready,
 				"cause":   st.Cause,
@@ -585,12 +589,15 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 				"slow":    slow,
 				"lb_ip":   inst.LBIP,
 				"num":     inst.Number,
-			})
+			}) == nil
 		}
 
 		var problem string
 		for tick := range provisioningTicks {
-			st, err := provisioningStatus(h.cfg.MCInstances, context.Background(), inst.Number)
+			if ctx.Err() != nil {
+				return
+			}
+			st, err := provisioningStatus(h.cfg.MCInstances, ctx, inst.Number)
 			if err != nil {
 				problem = "Cannot reach the cluster to ask how this world is doing: " + err.Error()
 			} else {
@@ -598,7 +605,9 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 			}
 
 			slow := tick >= provisioningSlowAfter
-			emit(st, slow, problem)
+			if !emit(st, slow, problem) {
+				return
+			}
 
 			if st.Ready || st.Phase == "failed" {
 				return
@@ -606,7 +615,7 @@ func (h *Handler) MCProvisioningStream(c *fiber.Ctx) error {
 			sleep(provisioningPoll)
 		}
 
-		emit(instances.ProvisionState{
+		_ = emit(instances.ProvisionState{
 			Phase: "stalled",
 			Cause: "This world has not come up within " + provisioningBudget().String() + ". It may still be working - its logs will say - but this page has stopped waiting.",
 		}, true, problem)

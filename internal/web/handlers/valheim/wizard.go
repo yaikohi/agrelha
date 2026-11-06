@@ -613,7 +613,10 @@ func (h *Handler) ValheimWizardCreate(c *fiber.Ctx) error {
 		}
 	}
 
-	_ = h.cfg.ValheimInstances.StartInstance(c.UserContext(), created.Number, h.cfg.Actor(c))
+	if startErr := h.cfg.ValheimInstances.StartInstance(c.UserContext(), created.Number, h.cfg.Actor(c)); startErr != nil {
+		slog.Error("valheim server created but failed to start", "number", created.Number, "err", startErr)
+		shared.SetFlash(c, "err", "Valheim server created, but failed to start automatically: "+startErr.Error())
+	}
 
 	redirectURL := fmt.Sprintf("/valheim/%d", created.Number)
 	return shared.SSEToast(c, "ok", fmt.Sprintf("Created Valheim server %q! Redirecting...", created.Name), map[string]any{

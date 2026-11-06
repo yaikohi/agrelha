@@ -852,6 +852,43 @@ It used to be relabelled "syncing", which made an unreachable cluster look like 
 	}
 }
 
+func TestMCProvisioningStream_Disconnect(t *testing.T) {
+	app, instMgr := setupWizardApp(t, Config{})
+	_ = instMgr.SaveInstance(domain.Instance{
+		GameID: domain.GameMinecraft,
+		Number: 12,
+		Name:   "Stream Disconnect Server",
+		State:  domain.StateProvisioning,
+	})
+	origSleep := sleep
+	defer func() { sleep = origSleep }()
+	sleep = func(d time.Duration) {}
+
+	origStatus := provisioningStatus
+	defer func() { provisioningStatus = origStatus }()
+	var calls int
+	provisioningStatus = func(m *instances.InstanceManager, ctx context.Context, instanceNumber int) (instances.ProvisionState, error) {
+		calls++
+		return instances.ProvisionState{Phase: "pending", Ready: false}, nil
+	}
+
+	origSignals := patchSignals
+	defer func() { patchSignals = origSignals }()
+	patchSignals = func(w *bufio.Writer, signals any) error {
+		return errors.New("client connection closed")
+	}
+
+	req := httptest.NewRequest("GET", "/api/minecraft/provisioning/12/stream", nil)
+	resp, err := app.Test(req)
+	if err != nil || resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200, got status=%v err=%v", resp.StatusCode, err)
+	}
+	_, _ = io.ReadAll(resp.Body)
+	if calls != 1 {
+		t.Errorf("expected stream loop to abort on first iteration upon client disconnect, called %d times", calls)
+	}
+}
+
 func makeTestZip(t *testing.T, files map[string][]byte) []byte {
 	t.Helper()
 	var b bytes.Buffer
