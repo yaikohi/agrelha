@@ -10,8 +10,8 @@ templ GModInstanceDetail(d InstanceDetailUI) {
 		}
 		if d.ActiveTab == "console" {
 			@instanceConsole("gmod", d.Number,
-				shared.LogSourceNote(d.Host)+" Workshop downloads appear here while the world boots.",
-				"Connecting to the Garry's Mod container logs…")
+				shared.LogSourceNote+" Workshop downloads appear here while the world boots.",
+				"Connecting to the Garry's Mod server log…")
 		}
 		if d.ActiveTab == "crashes" {
 			@IncidentList(d)

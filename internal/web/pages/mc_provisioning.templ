@@ -13,7 +13,7 @@ templ MinecraftProvisioning(inst InstanceUI, flashKind, flashMsg string) {
 		@flashBanner(flashKind, flashMsg)
 		<div
 			class="mx-auto max-w-xl space-y-6"
-			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,slow:false,cause:'',problem:'',lb_ip:%q,instanceNumber:%d,detail:%q,copied:false}", inst.LBIP, inst.Number, shared.ProvisioningDetail(inst.Host)) }
+			data-signals={ fmt.Sprintf("{phase:'syncing',ready:false,slow:false,cause:'',problem:'',lb_ip:%q,instanceNumber:%d,detail:%q,copied:false}", inst.LBIP, inst.Number, shared.ProvisioningDetail) }
 			data-computed:stopped="$phase == 'failed' || $phase == 'stalled'"
 			data-effect={ fmt.Sprintf("@get('/api/minecraft/provisioning/%d/stream')", inst.Number) }
 		>
@@ -33,7 +33,7 @@ templ MinecraftProvisioning(inst InstanceUI, flashKind, flashMsg string) {
 				<div class="mt-6 flex items-center justify-center gap-2.5 font-pixel text-xs">
 					<span data-show="!$ready && !$stopped" class="lamp lamp-dim animate-pulse"></span>
 					<span data-show="!$ready && !$stopped" class="text-accent font-medium">
-						<span data-show="$phase == 'syncing'" data-text="$detail">{ shared.ProvisioningDetail(inst.Host) }</span>
+						<span data-show="$phase == 'syncing'" data-text="$detail">{ shared.ProvisioningDetail }</span>
 						<span data-show="$phase == 'booting'" style="display:none;">Starting Minecraft server…</span>
 					</span>
 
@@ -49,14 +49,14 @@ templ MinecraftProvisioning(inst InstanceUI, flashKind, flashMsg string) {
 					<!-- Step 1: Desired state committed -->
 					<div class="flex items-center gap-3 rounded-control border border-edge/60 bg-seam px-4 py-3 text-xs">
 						<span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-edge bg-surface-raised font-pixel text-[11px] text-accent">✓</span>
-						<span class="font-medium text-ink">{ shared.ProvisioningStepCommitted(inst.Host) }</span>
+						<span class="font-medium text-ink">{ shared.ProvisioningStepCommitted }</span>
 					</div>
 
 					<!-- Step 2: Reconciler -->
 					<div class="flex items-center gap-3 rounded-control border border-edge/60 bg-seam px-4 py-3 text-xs">
 						<span data-show="$phase == 'syncing'" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-accent/60 bg-surface-raised font-pixel text-[11px] text-accent animate-pulse">…</span>
 						<span data-show="$phase != 'syncing'" style="display:none;" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-edge bg-surface-raised font-pixel text-[11px] text-accent">✓</span>
-						<span class="font-medium" data-class="{'text-ink': $phase != 'syncing', 'text-ink-muted': $phase == 'syncing'}">{ shared.ProvisioningStepReconciling(inst.Host) }</span>
+						<span class="font-medium" data-class="{'text-ink': $phase != 'syncing', 'text-ink-muted': $phase == 'syncing'}">{ shared.ProvisioningStepReconciling }</span>
 					</div>
 
 					<!-- Step 3: Server startup -->
@@ -68,7 +68,7 @@ templ MinecraftProvisioning(inst InstanceUI, flashKind, flashMsg string) {
 						<span data-show="$phase == 'booting'" style="display:none;" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-accent/60 bg-surface-raised font-pixel text-[11px] text-accent animate-pulse">…</span>
 						<span data-show="$phase == 'ready'" style="display:none;" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-edge bg-surface-raised font-pixel text-[11px] text-accent">✓</span>
 						<span data-show="$stopped" style="display:none;" class="flex h-5 w-5 shrink-0 items-center justify-center rounded-control border border-danger/60 bg-surface-raised font-pixel text-[11px] text-danger">✕</span>
-						<span class="font-medium" data-class="{'text-ink-faint': $phase == 'syncing', 'text-ink': $phase != 'syncing'}">{ shared.ProvisioningStepStarting(inst.Host) }</span>
+						<span class="font-medium" data-class="{'text-ink-faint': $phase == 'syncing', 'text-ink': $phase != 'syncing'}">{ shared.ProvisioningStepStarting }</span>
 					</div>
 				</div>
 

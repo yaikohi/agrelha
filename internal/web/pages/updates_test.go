@@ -120,7 +120,7 @@ func TestPanelShowsPendingRollout(t *testing.T) {
 		ModUpdates:     []ModUpdate{{Key: "a-b", FullName: "A-B", Current: "1.0.0", Latest: "1.1.0", Token: "a_b"}},
 		UpdatesPending: true,
 	})
-	if !strings.Contains(got, "restarts once ArgoCD syncs") {
+	if !strings.Contains(got, "restarts in a moment") {
 		t.Error("want the pending-rollout banner")
 	}
 	if !strings.Contains(got, "disabled") {

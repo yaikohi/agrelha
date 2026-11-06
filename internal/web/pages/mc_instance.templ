@@ -14,7 +14,7 @@ templ MinecraftInstanceDetail(d InstanceDetailUI) {
 			@instanceOverview(buildInstanceOverview(minecraftInstanceSpec, d))
 		}
 		if d.ActiveTab == "console" {
-			@instanceConsole("minecraft", d.Number, shared.LogSourceNote(d.Host), "Connecting to the Minecraft container logs…")
+			@instanceConsole("minecraft", d.Number, shared.LogSourceNote, "Connecting to the Minecraft server log…")
 		}
 		if d.ActiveTab == "crashes" {
 			@IncidentList(d)

@@ -14,11 +14,11 @@ func TestConvergenceClauseByHost(t *testing.T) {
 		unreachable bool
 		want        string
 	}{
-		{"cluster", "cluster", false, " — this world restarts once ArgoCD syncs."},
-		{"empty host is the cluster", "", false, " — this world restarts once ArgoCD syncs."},
+		{"cluster", "cluster", false, " — this world restarts in a moment."},
+		{"empty host is the cluster", "", false, " — this world restarts in a moment."},
 		{"docker host converges synchronously", "fogo", false, " — this world is restarting now."},
-		{"unreachable names the host", "fogo", true, " — this world restarts when fogo is reachable again."},
-		{"unreachable wins over cluster", "cluster", true, " — this world restarts when cluster is reachable again."},
+		{"unreachable", "fogo", true, " — this world restarts once the machine it runs on is reachable again."},
+		{"unreachable wins over cluster", "cluster", true, " — this world restarts once the machine it runs on is reachable again."},
 	}
 
 	for _, tc := range tests {
@@ -48,10 +48,10 @@ func TestANewWorldIsNotDescribedAsRestarting(t *testing.T) {
 			t.Errorf("CreationSentence(%q) = %q; it follows a full stop, so it must be a capitalised sentence", host, got)
 		}
 	}
-	if got := CreationSentence("cluster", false); got != " ArgoCD will sync manifests." {
+	if got := CreationSentence("cluster", false); got != " It starts in a moment." {
 		t.Errorf("cluster creation copy changed: %q", got)
 	}
-	if got := CreationSentence("fogo", true); got != " It starts when fogo is reachable again." {
+	if got := CreationSentence("fogo", true); got != " It starts once the machine it runs on is reachable again." {
 		t.Errorf("unreachable creation copy = %q", got)
 	}
 }
@@ -83,7 +83,7 @@ func TestTargetFromInstance(t *testing.T) {
 	if tgt.Mode() != ConvergenceUnreachable {
 		t.Fatalf("tgt.Mode() = %v, want ConvergenceUnreachable; unreachable world will report incorrect restart clause", tgt.Mode())
 	}
-	if got := tgt.ConvergenceClause(); got != " — this world restarts when fogo is reachable again." {
+	if got := tgt.ConvergenceClause(); got != " — this world restarts once the machine it runs on is reachable again." {
 		t.Fatalf("tgt.ConvergenceClause() = %q, want unreachable restart clause", got)
 	}
 }

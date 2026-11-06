@@ -1,8 +1,6 @@
 package shared
 
 import (
-	"fmt"
-
 	"agrelha/internal/domain"
 )
 
@@ -51,9 +49,9 @@ func (t HostTarget) CreationSentence() string {
 func convergenceNote(t HostTarget) string {
 	switch t.Mode() {
 	case ConvergenceUnreachable:
-		return fmt.Sprintf("this world restarts when %s is reachable again", t.Host)
+		return "this world restarts once the machine it runs on is reachable again"
 	case ConvergenceCluster:
-		return "this world restarts once ArgoCD syncs"
+		return "this world restarts in a moment"
 	default:
 		return "this world is restarting now"
 	}
@@ -67,54 +65,24 @@ func CreationSentence(host domain.Host, unreachable bool) string {
 	t := Target(host, unreachable)
 	switch t.Mode() {
 	case ConvergenceUnreachable:
-		return fmt.Sprintf(" It starts when %s is reachable again.", t.Host)
+		return " It starts once the machine it runs on is reachable again."
 	case ConvergenceCluster:
-		return " ArgoCD will sync manifests."
+		return " It starts in a moment."
 	default:
 		return " It is starting now."
 	}
 }
 
-// ProvisioningStepCommitted names where the desired state just landed. Only
-// the cluster goes through git: a Docker host writes the rendered manifests to
-// its own state directory, so naming Codeberg there described a repository the
-// world never touches.
-func ProvisioningStepCommitted(host domain.Host) string {
-	h := domain.NormalizeHost(string(host))
-	if h.IsCluster() {
-		return "Desired state committed to Codeberg repository"
-	}
-	return fmt.Sprintf("Desired state written on %s", h)
-}
-
-func ProvisioningStepReconciling(host domain.Host) string {
-	h := domain.NormalizeHost(string(host))
-	if h.IsCluster() {
-		return "ArgoCD reconciler syncing cluster state"
-	}
-	return fmt.Sprintf("Compose reconciler applying on %s", h)
-}
-
-func ProvisioningStepStarting(host domain.Host) string {
-	h := domain.NormalizeHost(string(host))
-	if h.IsCluster() {
-		return "Pod scheduled and booting"
-	}
-	return fmt.Sprintf("Container starting on %s", h)
-}
-
-func ProvisioningDetail(host domain.Host) string {
-	h := domain.NormalizeHost(string(host))
-	if h.IsCluster() {
-		return "Waiting for ArgoCD synchronization..."
-	}
-	return fmt.Sprintf("Applying compose on %s...", h)
-}
-
-func LogSourceNote(host domain.Host) string {
-	h := domain.NormalizeHost(string(host))
-	if h.IsCluster() {
-		return "Real-time pod log stream"
-	}
-	return fmt.Sprintf("Real-time container log stream from %s", h)
-}
+// These describe what is happening to the world, not how agrelha builds it.
+// "fogo", "compose", "Codeberg", "ArgoCD", "pod" and "container" are plumbing:
+// the person waiting for their server has no idea which machine fogo is, and
+// naming it tells them nothing they can act on. The mode-dependent wording
+// above still varies, because *when* a change takes effect is something a
+// player can actually observe.
+const (
+	ProvisioningStepCommitted   = "World settings saved"
+	ProvisioningStepReconciling = "Preparing the server"
+	ProvisioningStepStarting    = "Starting the server"
+	ProvisioningDetail          = "Setting up your world…"
+	LogSourceNote               = "Live server log"
+)

@@ -7,56 +7,69 @@ import (
 	"agrelha/internal/domain"
 )
 
-func TestProvisioningCopyFollowsTheHost(t *testing.T) {
-	for _, step := range []func(domain.Host) string{
-		ProvisioningStepReconciling,
-		ProvisioningStepStarting,
-		ProvisioningDetail,
+// Words that describe how agrelha builds a world rather than what is happening
+// to it. "fogo" is the Docker Host's name: the person waiting for their server
+// has no idea which machine that is, and it is not something they can act on.
+var plumbing = []string{
+	"ArgoCD", "Pod", "pod", "container", "Container",
+	"compose", "Compose", "Codeberg", "reconciler", "Reconciler",
+	"manifest", "Desired state", "fogo", "cluster",
+}
+
+func assertNoPlumbing(t *testing.T, label, copy string) {
+	t.Helper()
+	for _, word := range plumbing {
+		if strings.Contains(copy, word) {
+			t.Errorf("%s reads %q, which names %q - that is agrelha's plumbing, not something a player can act on", label, copy, word)
+		}
+	}
+}
+
+// The progress page is read by whoever asked for the world, not by whoever
+// runs the host it lands on.
+func TestProvisioningCopyNamesNoInfrastructure(t *testing.T) {
+	for label, copy := range map[string]string{
+		"ProvisioningStepCommitted":   ProvisioningStepCommitted,
+		"ProvisioningStepReconciling": ProvisioningStepReconciling,
+		"ProvisioningStepStarting":    ProvisioningStepStarting,
+		"ProvisioningDetail":          ProvisioningDetail,
+		"LogSourceNote":               LogSourceNote,
 	} {
-		onCluster := step("cluster")
-		onDocker := step("fogo")
-
-		if onCluster == onDocker {
-			t.Errorf("provisioning copy %q is identical on a cluster and on a Docker Host", onCluster)
-		}
-		if strings.Contains(onDocker, "ArgoCD") || strings.Contains(onDocker, "Pod") {
-			t.Errorf(`a Docker-Host world was told %q.
-
-There is no ArgoCD and no Pod on a Docker Host, so the progress page narrates a sequence that will
-never happen - and the operator watches for a sync that nobody is going to perform.`, onDocker)
-		}
-		if !strings.Contains(onDocker, "fogo") {
-			t.Errorf("Docker-Host copy %q never names the Host it is waiting on", onDocker)
+		assertNoPlumbing(t, label, copy)
+		if strings.TrimSpace(copy) == "" {
+			t.Errorf("%s is empty", label)
 		}
 	}
 }
 
-func TestProvisioningCopyKeepsTheClusterWordingItAlwaysHad(t *testing.T) {
-	if !strings.Contains(ProvisioningStepReconciling("cluster"), "ArgoCD") {
-		t.Error("a cluster world must still be told ArgoCD is syncing; that is what actually happens there")
+// Whether a change has already happened or is about to is something a player
+// observes, so this wording still varies - it just no longer explains why.
+func TestConvergenceWordingStillDistinguishesWhen(t *testing.T) {
+	direct := ConvergenceClause("fogo", false)
+	cluster := ConvergenceClause(domain.HostCluster, false)
+	unreachable := ConvergenceClause("fogo", true)
+
+	if direct == cluster {
+		t.Error("an immediate restart and a deferred one read identically")
 	}
-	if !strings.Contains(ProvisioningStepStarting("cluster"), "Pod") {
-		t.Error("a cluster world must still be told a Pod is scheduling")
+	if unreachable == direct || unreachable == cluster {
+		t.Error("an unreachable host must not promise a restart like a reachable one")
 	}
-	if ProvisioningStepReconciling("") != ProvisioningStepReconciling("cluster") {
+	for label, copy := range map[string]string{
+		"direct":      direct,
+		"cluster":     cluster,
+		"unreachable": unreachable,
+		"created":     CreationSentence("fogo", false),
+		"created/far": CreationSentence(domain.HostCluster, false),
+		"created/off": CreationSentence("fogo", true),
+	} {
+		assertNoPlumbing(t, "ConvergenceClause "+label, copy)
+	}
+}
+
+// An unset Host reads as cluster everywhere else, and must here too.
+func TestUnsetHostMatchesCluster(t *testing.T) {
+	if ConvergenceClause("", false) != ConvergenceClause(domain.HostCluster, false) {
 		t.Error("an unset Host must read as cluster, matching domain.NormalizeHost")
-	}
-}
-
-func TestTheConsoleNamesWhereItsLogsComeFrom(t *testing.T) {
-	onCluster := LogSourceNote("cluster")
-	onDocker := LogSourceNote("fogo")
-
-	if strings.Contains(onDocker, "pod") {
-		t.Errorf(`a Docker-Host console says %q.
-
-There is no pod on a Docker Host; the lines come from a container through the runtime. Calling it a
-pod stream is the same cluster assumption that left this page empty for every Docker-Host world.`, onDocker)
-	}
-	if !strings.Contains(onDocker, "fogo") {
-		t.Errorf("Docker-Host console copy %q never names the Host", onDocker)
-	}
-	if !strings.Contains(onCluster, "pod") {
-		t.Error("a cluster console must still say pod; that is what it reads")
 	}
 }
