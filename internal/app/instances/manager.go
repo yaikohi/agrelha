@@ -930,6 +930,17 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, instanceNumber int
 		}
 	}
 
+	// Tear the runtime down before the records that describe it. A Docker host
+	// has no controller that prunes a world once its manifests vanish, so
+	// deleting the rows first stranded the container, its network and its saves
+	// on disk with nothing left in agrelha pointing at them. Failing here leaves
+	// the world listed and the delete retryable, which beats a silent orphan.
+	if d, ok := m.reconciler.(ports.Destroyer); ok && !inst.EffectiveHost().IsCluster() {
+		if err := d.Destroy(ctx, m.serverRef(*inst)); err != nil {
+			return fmt.Errorf("delete instance %d: tear down %s: %w", instanceNumber, inst.EffectiveHost(), err)
+		}
+	}
+
 	dirRel := m.instanceDirFor(*inst)
 	commitMsg := fmt.Sprintf("%s: delete instance %02d (%s)", m.gamePrefix(), instanceNumber, inst.Name)
 

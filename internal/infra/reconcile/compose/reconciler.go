@@ -5,7 +5,9 @@ package compose
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
@@ -25,6 +27,7 @@ type Reconciler struct {
 	workDir  string
 	dataRoot string
 	executor Executor
+	remover  Remover
 }
 
 // Option configures a Reconciler.
@@ -51,6 +54,37 @@ func WithExecutor(e Executor) Option {
 	return func(r *Reconciler) {
 		r.executor = e
 	}
+}
+
+// Remover deletes a world's directory tree.
+type Remover func(ctx context.Context, path string) error
+
+// WithRemover overrides how world data is deleted (useful for testing).
+func WithRemover(rm Remover) Option {
+	return func(r *Reconciler) {
+		r.remover = rm
+	}
+}
+
+// removeTree deletes path, falling back to a throwaway root container when the
+// files are not ours. Docker creates a bind-mount source as root, so most game
+// data ends up owned by root or by the image's own uid: agrelha can unlink the
+// directory from its parent but cannot recurse into it. The daemon socket is
+// the one root we already hold, so borrow it rather than running agrelha as
+// root or leaving the saves behind.
+func removeTree(ctx context.Context, path string) error {
+	err := os.RemoveAll(path)
+	if err == nil || !errors.Is(err, fs.ErrPermission) {
+		return err
+	}
+	parent, base := filepath.Split(filepath.Clean(path))
+	cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
+		"-v", filepath.Clean(parent)+":/target", "alpine:3.20",
+		"rm", "-rf", "/target/"+base)
+	if out, derr := cmd.CombinedOutput(); derr != nil {
+		return fmt.Errorf("remove %s as root: %w (output: %s)", path, derr, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func validatePaths(workDir, dataRoot string) error {
@@ -84,6 +118,7 @@ func New(opts ...Option) (*Reconciler, error) {
 	r := &Reconciler{
 		workDir:  ".",
 		executor: DefaultExecutor,
+		remover:  removeTree,
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -154,6 +189,48 @@ func (r *Reconciler) Converge(ctx context.Context, ref ports.ServerRef) error {
 	return r.executor(ctx, dir, append(r.projectArgs(ref), "up", "-d", "--remove-orphans")...)
 }
 
+// Destroy tears down one world: its containers, its network, its compose
+// project directory and its saves. The Delete confirmation already promises
+// "World data and configurations will be removed", and on a Docker host
+// nothing else ever will - unlike the cluster, where dropping the manifests
+// from the state store is enough for ArgoCD to prune the Deployment.
+//
+// It refuses a ref without an instance ID: resolveDir and instanceDataDir both
+// fall back to their roots for an unidentified ref, so the removals below
+// would take the whole compose work dir and every game's saves with them.
+func (r *Reconciler) Destroy(ctx context.Context, ref ports.ServerRef) error {
+	if ref.ID.Game == "" || ref.ID.Number <= 0 {
+		return fmt.Errorf("destroy %q: refusing a ref with no instance ID, its paths resolve to the shared compose and data roots", ref.Name)
+	}
+	dir := r.resolveDir(ref)
+	if composeFileIn(dir) != "" {
+		if err := r.executor(ctx, dir, append(r.projectArgs(ref), "down", "--volumes", "--remove-orphans")...); err != nil {
+			return fmt.Errorf("compose down %s: %w", ref.Name, err)
+		}
+	}
+	if data := r.instanceDataDir(ref); data != "" {
+		if err := r.remover(ctx, data); err != nil {
+			return fmt.Errorf("remove world data %s: %w", data, err)
+		}
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("remove compose project %s: %w", dir, err)
+	}
+	return nil
+}
+
+var _ ports.Destroyer = (*Reconciler)(nil)
+
+// composeFileIn reports which compose file dir holds, or "" for none.
+func composeFileIn(dir string) string {
+	for _, name := range []string{"docker-compose.yml", "compose.yaml"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return name
+		}
+	}
+	return ""
+}
+
 func (r *Reconciler) projectArgs(ref ports.ServerRef) []string {
 	if ref.Name == "" {
 		return nil
@@ -170,10 +247,7 @@ func (r *Reconciler) resolveDir(ref ports.ServerRef) string {
 	}
 	// If a subdirectory for ref.Name exists and has a compose file, use it
 	instanceDir := filepath.Join(r.workDir, ref.Name)
-	if _, err := os.Stat(filepath.Join(instanceDir, "docker-compose.yml")); err == nil {
-		return instanceDir
-	}
-	if _, err := os.Stat(filepath.Join(instanceDir, "compose.yaml")); err == nil {
+	if composeFileIn(instanceDir) != "" {
 		return instanceDir
 	}
 	// Otherwise use instanceDir (e.g. before initial write) or workDir

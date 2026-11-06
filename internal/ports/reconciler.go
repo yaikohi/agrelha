@@ -20,3 +20,11 @@ type Reconciler interface {
 	// or immediate/synchronous (e.g. local Docker compose).
 	Async() bool
 }
+
+// Destroyer tears down everything a Converge created. It is optional: a GitOps
+// reconciler does not implement it, because deleting the manifests from the
+// state store is itself the instruction for the cluster controller to prune.
+// A Docker host has no such controller, so somebody has to do it explicitly.
+type Destroyer interface {
+	Destroy(ctx context.Context, ref ServerRef) error
+}
