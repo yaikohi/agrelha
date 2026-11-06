@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -62,8 +63,48 @@ func (h *Handler) RegisterProtected(router fiber.Router) {
 
 const maxImageBytes = 12 << 20
 
+func isBlockedIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
+}
+
+func safeDialControl(network, address string, c syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	host = strings.TrimPrefix(host, "[")
+	host = strings.TrimSuffix(host, "]")
+	if zoneIdx := strings.Index(host, "%"); zoneIdx != -1 {
+		host = host[:zoneIdx]
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("invalid dialed IP address %q", address)
+	}
+	if isBlockedIP(ip) {
+		return fmt.Errorf("dialed address %s is not a public IP", ip)
+	}
+	return nil
+}
+
+var imgTransport = &http.Transport{
+	Proxy: http.ProxyFromEnvironment,
+	DialContext: (&net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   safeDialControl,
+	}).DialContext,
+	ForceAttemptHTTP2:     true,
+	MaxIdleConns:          100,
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+}
+
 var imgHTTP = &http.Client{
-	Timeout: 15 * time.Second,
+	Timeout:   15 * time.Second,
+	Transport: imgTransport,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
 			return fmt.Errorf("too many redirects")
@@ -135,8 +176,7 @@ func PublicHost(host string) bool {
 		return false
 	}
 	for _, ip := range ips {
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
-			ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		if isBlockedIP(ip) {
 			return false
 		}
 	}
