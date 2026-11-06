@@ -107,13 +107,19 @@ func WithSecureCookie(secure bool) Option {
 
 // New creates a new local Authenticator.
 func New(store ports.UserStore, secretKey string, opts ...Option) *Authenticator {
+	var key []byte
 	if secretKey == "" {
-		secretKey = "agrelha-local-auth-secret-key-v1"
+		key = make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			panic(fmt.Sprintf("generate ephemeral auth secret: %v", err))
+		}
+	} else {
+		sum := sha256.Sum256([]byte("agrelha-local-session-v1:" + secretKey))
+		key = sum[:]
 	}
-	sum := sha256.Sum256([]byte("agrelha-local-session-v1:" + secretKey))
 	a := &Authenticator{
 		store: store,
-		key:   sum[:],
+		key:   key,
 	}
 	for _, opt := range opts {
 		opt(a)

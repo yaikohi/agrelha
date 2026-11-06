@@ -23,6 +23,7 @@ type Config struct {
 	OIDCRedirectURL   string
 	OIDCPostLogoutURL string
 	AuthMode          string
+	LocalAuthSecret   string
 	ZitadelProjectID  string
 	ZitadelAPIURL     string
 	ZitadelServiceKey string
@@ -183,6 +184,7 @@ func Load() *Config {
 		OIDCRedirectURL:   env("OIDC_REDIRECT_URL", ""),
 		OIDCPostLogoutURL: env("OIDC_POST_LOGOUT_URL", ""),
 		AuthMode:          env("AUTH_MODE", ""),
+		LocalAuthSecret:   envSecret("LOCAL_AUTH_SECRET", ""),
 		ZitadelProjectID:  env("ZITADEL_PROJECT_ID", ""),
 		ZitadelAPIURL:     env("ZITADEL_API_URL", ""),
 		ZitadelServiceKey: envSecret("ZITADEL_SERVICE_KEY", ""),

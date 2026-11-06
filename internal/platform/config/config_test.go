@@ -169,3 +169,12 @@ func TestBudgetEnvFallbackAndPrecedence(t *testing.T) {
 		}
 	})
 }
+
+func TestLocalAuthSecret(t *testing.T) {
+	t.Setenv("LOCAL_AUTH_SECRET", "custom-secret-123")
+	cfg := Load()
+	if cfg.LocalAuthSecret != "custom-secret-123" {
+		t.Errorf("LocalAuthSecret = %q, want custom-secret-123", cfg.LocalAuthSecret)
+	}
+}
+

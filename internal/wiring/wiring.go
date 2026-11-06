@@ -1180,7 +1180,11 @@ func buildAuth(ctx context.Context, cfg *config.Config, st *store.Store, az *aut
 	users, err := st.ListUsers(ctx)
 	if err == nil && len(users) > 0 {
 		slog.Info("oidc unset: local user accounts found, running with local authenticator", "users", len(users))
-		return local.New(st, cfg.OIDCClientSecret), nil
+		secret := cfg.LocalAuthSecret
+		if secret == "" {
+			secret = cfg.OIDCClientSecret
+		}
+		return local.New(st, secret), nil
 	}
 
 	return nil, errors.New("no authentication configured: set OIDC_ISSUER, create a local user, or set AUTH_MODE=dev")

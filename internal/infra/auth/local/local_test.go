@@ -427,3 +427,55 @@ func TestLocalAuth_RemainingBranches(t *testing.T) {
 		t.Errorf("status=%d, want 503 for nil store login", respNil.StatusCode)
 	}
 }
+
+func TestNew_EmptySecretRandom(t *testing.T) {
+	store := newMockUserStore()
+	auth1 := New(store, "")
+	auth2 := New(store, "")
+
+	if string(auth1.key) == string(auth2.key) {
+		t.Fatal("expected two authenticators created with empty secret to have distinct random keys, but got identical keys")
+	}
+
+	payload, err := json.Marshal(sessionData{
+		Username: "alice",
+		Email:    "alice@example.com",
+		Exp:      time.Now().Add(time.Hour).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	signedBy1 := auth1.sign(payload)
+
+	// auth1 can unsign its own cookie
+	if _, ok := auth1.unsign(signedBy1); !ok {
+		t.Fatal("auth1 should unsign its own signed payload")
+	}
+
+	// auth2 cannot unsign auth1's cookie
+	if _, ok := auth2.unsign(signedBy1); ok {
+		t.Fatal("auth2 should not be able to unsign cookie signed by auth1 with ephemeral random keys")
+	}
+
+	// Also verify with an HTTP request to Identify
+	app2 := fiber.New()
+	var identifiedUser string
+	app2.Get("/test", func(c *fiber.Ctx) error {
+		if id, ok := auth2.Identify(c); ok {
+			identifiedUser = id.Username
+			return c.SendString("ok")
+		}
+		return c.SendStatus(fiber.StatusUnauthorized)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: signedBy1})
+	resp, err := app2.Test(req)
+	if err != nil {
+		t.Fatalf("app2.Test failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401 Unauthorized for cross-authenticator cookie, got %d (identified: %q)", resp.StatusCode, identifiedUser)
+	}
+}
+
