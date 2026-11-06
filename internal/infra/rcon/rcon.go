@@ -234,3 +234,42 @@ func (p *Pool) ClientFor(addr string) *Client {
 	p.clients[addr] = c
 	return c
 }
+
+// Evict removes the client for addr from the pool and closes its connection.
+func (p *Pool) Evict(addr string) error {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	c, ok := p.clients[addr]
+	if !ok {
+		return nil
+	}
+	delete(p.clients, addr)
+	if c != nil {
+		return c.Close()
+	}
+	return nil
+}
+
+// Close closes all cached clients and clears the pool.
+func (p *Pool) Close() error {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	var errs []error
+	for _, c := range p.clients {
+		if c != nil {
+			if err := c.Close(); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	clear(p.clients)
+	return errors.Join(errs...)
+}
