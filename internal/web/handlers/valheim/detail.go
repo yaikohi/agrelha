@@ -292,43 +292,18 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid instance number")
 	}
 
-	var req struct {
-		Q         string `json:"q" form:"q"`
-		ModQuery  string `json:"modQuery" form:"modQuery"`
-		ModSearch string `json:"modSearch" form:"modSearch"`
-		Limit     int    `json:"limit" form:"limit"`
-	}
-	_ = c.BodyParser(&req)
-
-	q := strings.TrimSpace(req.ModSearch)
-	if q == "" {
-		q = strings.TrimSpace(req.ModQuery)
-	}
-	if q == "" {
-		q = strings.TrimSpace(req.Q)
-	}
-	if q == "" {
-		q = strings.TrimSpace(c.Query("q"))
-	}
-	limit := req.Limit
-	if limit <= 0 {
-		if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
-			limit = l
-		} else {
-			limit = 24
-		}
-	}
+	q := shared.ParseModQuery(c)
 
 	if h.cfg.TS == nil {
 		return ssePatchElements(c, "#valheim-mod-results", `<p class="px-6 py-8 font-pixel text-[11px] text-danger">Thunderstore catalog unconfigured.</p>`)
 	}
 
-	results, err := h.cfg.TS.Search(c.UserContext(), q, limit)
+	page, err := h.cfg.TS.Search(c.UserContext(), q)
 	if err != nil {
 		return ssePatchElements(c, "#valheim-mod-results", fmt.Sprintf(`<p class="px-6 py-8 font-pixel text-[11px] text-danger">Search failed: %s</p>`, html.EscapeString(err.Error())))
 	}
-	if len(results) == 0 {
-		return ssePatchElements(c, "#valheim-mod-results", `<p class="px-6 py-10 font-pixel text-[11px] text-ink-faint">No Thunderstore mods match that search.</p>`)
+	if len(page.Results) == 0 {
+		return ssePatchElements(c, "#valheim-mod-results", emptySearch(q))
 	}
 
 	installedMap := make(map[string]bool)
@@ -344,14 +319,9 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 		}
 	}
 
-	ui := pages.ModResultsUI{Game: "valheim", Num: instanceNumber, Query: q}
-	if q == "" {
-		ui.Heading = "Popular on Thunderstore"
-		ui.Note = "ranked by downloads"
-	} else {
-		ui.Heading = fmt.Sprintf("%d results for %q", len(results), q)
-	}
-	for _, r := range results {
+	ui := pages.ModResultsUI{Game: "valheim", Num: instanceNumber}
+	ui.Heading, ui.Note = searchHeading(q, page)
+	for _, r := range page.Results {
 		fullName := fmt.Sprintf("%s-%s", r.Owner, r.Name)
 		ref, _ := domain.ParseModRef(fullName, domain.GameValheim)
 		ui.Results = append(ui.Results, pages.ModResultUI{
@@ -366,8 +336,8 @@ func (h *Handler) ValheimInstanceModsSearch(c *fiber.Ctx) error {
 			Detailable:  true,
 		})
 	}
-	if len(results) >= limit {
-		ui.NextN = limit + 24
+	if page.More() {
+		ui.NextN = q.Limit + domain.DefaultModSearchLimit
 	}
 	return ssePatchElements(c, "#valheim-mod-results", renderComponent(pages.ModSearchResults(ui)))
 }

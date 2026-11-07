@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"agrelha/internal/domain"
 )
 
 func TestThunderstoreClient(t *testing.T) {
@@ -146,14 +148,14 @@ func TestThunderstoreClient(t *testing.T) {
 	}
 
 	// 3. Search
-	results, err := c.Search(ctx, "mining", 10)
-	if err != nil || len(results) != 1 || results[0].Name != "Mining" {
-		t.Errorf("Search mining = %v, err=%v", results, err)
+	page, err := c.Search(ctx, domain.ModQuery{Text: "mining", Limit: 10})
+	if err != nil || len(page.Results) != 1 || page.Results[0].Name != "Mining" {
+		t.Errorf("Search mining = %v, err=%v", page.Results, err)
 	}
 
-	allResults, err := c.Search(ctx, "", 1)
-	if err != nil || len(allResults) != 1 {
-		t.Errorf("Search limit = %v, err=%v", allResults, err)
+	all, err := c.Search(ctx, domain.ModQuery{Limit: 1})
+	if err != nil || len(all.Results) != 1 {
+		t.Errorf("Search limit = %v, err=%v", all.Results, err)
 	}
 
 	// 4. LatestVersion

@@ -328,20 +328,75 @@ func (c *Client) warm(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) Search(_ context.Context, query string, limit int) ([]SearchResult, error) {
+// Search answers from the warmed index, so filtering and ordering cost no
+// request. The whole match set is ranked before it is cut to a page: a sort that
+// only ordered the first 24 rows would answer a different question.
+func (c *Client) Search(_ context.Context, q domain.ModQuery) (domain.ModSearchPage, error) {
+	q = q.WithDefaults()
+
 	c.mu.Lock()
 	idx := c.index
 	c.mu.Unlock()
 
-	q := strings.ToLower(query)
-	var out []SearchResult
-	for _, p := range idx {
-		if q == "" || strings.Contains(strings.ToLower(p.Name), q) || strings.Contains(strings.ToLower(p.Owner), q) {
-			out = append(out, p)
-			if len(out) >= limit {
-				break
-			}
-		}
+	text := strings.ToLower(q.Text)
+	type hit struct {
+		res   SearchResult
+		score int
 	}
-	return out, nil
+	hits := make([]hit, 0, len(idx))
+	for _, p := range idx {
+		if p.IsDeprecated && !q.Deprecated {
+			continue
+		}
+		score := matchScore(p, text)
+		if score < 0 {
+			continue
+		}
+		hits = append(hits, hit{res: p, score: score})
+	}
+
+	// The index arrives sorted by downloads, so a stable sort leaves popularity
+	// as the tiebreak for every other order.
+	switch q.Sort {
+	case domain.ModSortRelevance:
+		sort.SliceStable(hits, func(i, j int) bool { return hits[i].score < hits[j].score })
+	case domain.ModSortUpdated:
+		sort.SliceStable(hits, func(i, j int) bool { return hits[i].res.UpdatedAt.After(hits[j].res.UpdatedAt) })
+	case domain.ModSortName:
+		sort.SliceStable(hits, func(i, j int) bool {
+			return strings.ToLower(hits[i].res.Name) < strings.ToLower(hits[j].res.Name)
+		})
+	}
+
+	page := domain.ModSearchPage{Total: len(hits)}
+	if len(hits) > q.Limit {
+		hits = hits[:q.Limit]
+	}
+	page.Results = make([]SearchResult, 0, len(hits))
+	for _, h := range hits {
+		page.Results = append(page.Results, h.res)
+	}
+	return page, nil
+}
+
+// matchScore ranks how well a package answers the text: its own name first, then
+// its author, and a description match last. A negative score is no match.
+func matchScore(p SearchResult, text string) int {
+	if text == "" {
+		return 0
+	}
+	name := strings.ToLower(p.Name)
+	switch {
+	case name == text:
+		return 0
+	case strings.HasPrefix(name, text):
+		return 1
+	case strings.Contains(name, text):
+		return 2
+	case strings.Contains(strings.ToLower(p.Owner), text):
+		return 3
+	case strings.Contains(strings.ToLower(p.Description), text):
+		return 4
+	}
+	return -1
 }

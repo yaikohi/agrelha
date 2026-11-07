@@ -72,6 +72,68 @@ type ModSearchResult struct {
 // FullName returns owner/name identifier.
 func (r ModSearchResult) FullName() string { return r.Owner + "/" + r.Name }
 
+// ModSort names the order a catalogue search is returned in. The vocabulary is
+// the operator's, not any one provider's: each adapter maps it to whatever its
+// upstream understands.
+type ModSort string
+
+const (
+	ModSortRelevance ModSort = "relevance"
+	ModSortDownloads ModSort = "downloads"
+	ModSortUpdated   ModSort = "updated"
+	ModSortName      ModSort = "name"
+)
+
+// ParseModSort returns the named sort, or "" for anything unrecognised so that
+// WithDefaults can choose.
+func ParseModSort(v string) ModSort {
+	switch s := ModSort(strings.ToLower(strings.TrimSpace(v))); s {
+	case ModSortRelevance, ModSortDownloads, ModSortUpdated, ModSortName:
+		return s
+	}
+	return ""
+}
+
+// DefaultModSearchLimit is one page of catalogue results.
+const DefaultModSearchLimit = 24
+
+// ModQuery is one catalogue search as the operator asked for it.
+type ModQuery struct {
+	Text string
+	Sort ModSort
+	// Deprecated includes packages the author has deprecated. They are excluded
+	// by default: a deprecated mod installs and then breaks on the next update.
+	Deprecated bool
+	Limit      int
+}
+
+// WithDefaults fills in the page size and resolves the sort. Without a query
+// text there is no relevance to rank by, so popularity is the only honest order.
+func (q ModQuery) WithDefaults() ModQuery {
+	q.Text = strings.TrimSpace(q.Text)
+	if q.Limit <= 0 {
+		q.Limit = DefaultModSearchLimit
+	}
+	if q.Sort == "" || (q.Sort == ModSortRelevance && q.Text == "") {
+		if q.Text == "" {
+			q.Sort = ModSortDownloads
+		} else {
+			q.Sort = ModSortRelevance
+		}
+	}
+	return q
+}
+
+// ModSearchPage is one page of catalogue results and how many matched in all,
+// so a reader is never told that 24 is the answer when it is the page size.
+type ModSearchPage struct {
+	Results []ModSearchResult
+	Total   int
+}
+
+// More reports whether the catalogue holds matches this page does not show.
+func (p ModSearchPage) More() bool { return p.Total > len(p.Results) }
+
 // ModRef identifies one installed mod independently of how its entry is
 // written. Valheim entries are Thunderstore packages, either the bare full name
 // "Namespace-Name" or the pinned "Namespace/Name/Version". Minecraft entries are

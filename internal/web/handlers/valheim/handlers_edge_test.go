@@ -839,11 +839,11 @@ func TestValheimDetailAllEdges(t *testing.T) {
 	mockTS.results = nil
 	respEmptyResults, _ := app.Test(httptest.NewRequest("GET", "/test/search/1?q=notfound", nil))
 	bEmptyResults, _ := io.ReadAll(respEmptyResults.Body)
-	if !strings.Contains(string(bEmptyResults), "No Thunderstore mods match that search") {
+	if !strings.Contains(string(bEmptyResults), "No Thunderstore mods match &#34;notfound&#34;") {
 		t.Errorf("expected no mods found, got: %s", string(bEmptyResults))
 	}
 
-	// TS Search with results >= limit (trigger Load more mods) and different query params
+	// TS Search with more matches than the page holds (trigger Load more mods) and different query params
 	mockTS.results = []domain.ModSearchResult{
 		{Owner: "Author1", Name: "Mod1", Version: "1.0.0", Description: "Description 1", Downloads: 2500000},
 		{Owner: "Author2", Name: "Mod2", Version: "2.0.0", Description: "Description 2", Downloads: 500, Icon: "https://icon.png"},
@@ -851,9 +851,9 @@ func TestValheimDetailAllEdges(t *testing.T) {
 
 	// Test query from modSearch, modQuery, q
 	for _, bodyJSON := range []string{
-		`{"modSearch":"test","limit":2}`,
-		`{"modQuery":"test","limit":2}`,
-		`{"q":"test","limit":2}`,
+		`{"modSearch":"test","limit":1}`,
+		`{"modQuery":"test","limit":1}`,
+		`{"q":"test","limit":1}`,
 	} {
 		reqQ := httptest.NewRequest("POST", "/test/search/1", strings.NewReader(bodyJSON))
 		reqQ.Header.Set("Content-Type", "application/json")
@@ -1175,7 +1175,7 @@ func TestValheimWizardAllEdges(t *testing.T) {
 	mockTS.results = nil
 	respWizEmpty, _ := app.Test(httptest.NewRequest("GET", "/api/valheim/wizard/mods/search?q=nothing", nil))
 	bWizEmpty, _ := io.ReadAll(respWizEmpty.Body)
-	if !strings.Contains(string(bWizEmpty), "No Thunderstore mods found") {
+	if !strings.Contains(string(bWizEmpty), "No Thunderstore mods match &#34;nothing&#34;") {
 		t.Errorf("expected No Thunderstore mods found, got: %s", string(bWizEmpty))
 	}
 
@@ -1186,10 +1186,10 @@ func TestValheimWizardAllEdges(t *testing.T) {
 	}
 
 	for _, payload := range []string{
-		`{"wizardModSearch":"viking","limit":2}`,
-		`{"modSearch":"viking","limit":2}`,
-		`{"modQuery":"viking","limit":2}`,
-		`{"q":"viking","limit":2}`,
+		`{"wizardModSearch":"viking","limit":1}`,
+		`{"modSearch":"viking","limit":1}`,
+		`{"modQuery":"viking","limit":1}`,
+		`{"q":"viking","limit":1}`,
 	} {
 		reqP := httptest.NewRequest("POST", "/api/valheim/wizard/mods/search", strings.NewReader(payload))
 		reqP.Header.Set("Content-Type", "application/json")

@@ -29,7 +29,7 @@ type Game interface {
 // PackageCatalog provides search, metadata, and dependency resolution for mod packages.
 type PackageCatalog interface {
 	Get(fullName string) (domain.ModSearchResult, bool)
-	Search(ctx context.Context, query string, limit int) ([]domain.ModSearchResult, error)
+	Search(ctx context.Context, q domain.ModQuery) (domain.ModSearchPage, error)
 	Ready() bool
 	LatestVersion(ctx context.Context, ns, name string) (string, []string, error)
 	Readme(ctx context.Context, ns, name, version string) (string, error)

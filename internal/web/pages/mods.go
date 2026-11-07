@@ -25,7 +25,6 @@ type ModResultsUI struct {
 	Heading string
 	Note    string
 	Results []ModResultUI
-	Query   string
 	NextN   int
 }
 
@@ -84,9 +83,20 @@ func (r ModResultUI) Meta() []string {
 	return out
 }
 
+// ModSearchScript posts the search box and the filter controls as they stand in
+// the browser. Reading the signals rather than baking the server's copy of them
+// into the markup is what keeps Load more, and every later search, on the same
+// filters.
+func ModSearchScript(endpoint string, limit int) string {
+	payload := "q: $modQuery, sort: $modSort, deprecated: $modDeprecated"
+	if limit > 0 {
+		payload = fmt.Sprintf("%s, limit: %d", payload, limit)
+	}
+	return fmt.Sprintf("@post('%s', {payload: {%s}})", endpoint, payload)
+}
+
 func (m ModResultsUI) MoreScript() string {
-	return fmt.Sprintf("@post('/api/%s/%d/mods/search', {payload: {q: '%s', limit: %d}})",
-		m.Game, m.Num, EscapeJS(m.Query), m.NextN)
+	return ModSearchScript(fmt.Sprintf("/api/%s/%d/mods/search", m.Game, m.Num), m.NextN)
 }
 
 func (i InstalledModUI) RemoveScript(game string, instanceNumber int) string {

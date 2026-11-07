@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
-	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -44,37 +43,7 @@ func (h *Handler) ValheimWizardPage(c *fiber.Ctx) error {
 
 // ValheimWizardModsSearch queries Thunderstore for mod packages during wizard setup.
 func (h *Handler) ValheimWizardModsSearch(c *fiber.Ctx) error {
-	var req struct {
-		Q               string `json:"q" form:"q"`
-		ModQuery        string `json:"modQuery" form:"modQuery"`
-		ModSearch       string `json:"modSearch" form:"modSearch"`
-		WizardModSearch string `json:"wizardModSearch" form:"wizardModSearch"`
-		Limit           int    `json:"limit" form:"limit"`
-	}
-	_ = c.BodyParser(&req)
-
-	q := strings.TrimSpace(req.WizardModSearch)
-	if q == "" {
-		q = strings.TrimSpace(req.ModSearch)
-	}
-	if q == "" {
-		q = strings.TrimSpace(req.ModQuery)
-	}
-	if q == "" {
-		q = strings.TrimSpace(req.Q)
-	}
-	if q == "" {
-		q = strings.TrimSpace(c.Query("q"))
-	}
-
-	limit := req.Limit
-	if limit <= 0 {
-		if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
-			limit = l
-		} else {
-			limit = 24
-		}
-	}
+	q := shared.ParseModQuery(c)
 
 	if h.cfg.TS == nil {
 		if shared.WantsJSON(c) {
@@ -83,7 +52,7 @@ func (h *Handler) ValheimWizardModsSearch(c *fiber.Ctx) error {
 		return ssePatchElements(c, "#wizard-valheim-mod-results", `<div class="col-span-full py-8 text-center text-xs text-danger">Thunderstore catalog unconfigured.</div>`)
 	}
 
-	results, err := h.cfg.TS.Search(c.UserContext(), q, limit)
+	page, err := h.cfg.TS.Search(c.UserContext(), q)
 	if err != nil {
 		if shared.WantsJSON(c) {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
@@ -100,8 +69,8 @@ func (h *Handler) ValheimWizardModsSearch(c *fiber.Ctx) error {
 			Version     string `json:"version"`
 			IconURL     string `json:"icon_url"`
 		}
-		hits := make([]hit, 0, len(results))
-		for _, r := range results {
+		hits := make([]hit, 0, len(page.Results))
+		for _, r := range page.Results {
 			hits = append(hits, hit{
 				Name:        r.Name,
 				Namespace:   r.Owner,
@@ -114,18 +83,16 @@ func (h *Handler) ValheimWizardModsSearch(c *fiber.Ctx) error {
 		return c.JSON(hits)
 	}
 
-	if len(results) == 0 {
-		return ssePatchElements(c, "#wizard-valheim-mod-results", `<div class="col-span-full py-12 text-center text-xs text-ink-faint">No Thunderstore mods found matching your search.</div>`)
+	if len(page.Results) == 0 {
+		return ssePatchElements(c, "#wizard-valheim-mod-results", fmt.Sprintf(`<div class="col-span-full py-12 text-center text-xs text-ink-faint">%s</div>`, html.EscapeString(emptySearchText(q))))
 	}
 
 	var sb strings.Builder
-	if q == "" {
-		sb.WriteString(`<div class="col-span-full flex items-center justify-between pb-1 text-xs text-ink-faint font-medium"><span>Popular Community Mods on Thunderstore</span><span class="text-ink-faint">Ranked by downloads</span></div>`)
-	} else {
-		sb.WriteString(fmt.Sprintf(`<div class="col-span-full flex items-center justify-between pb-1 text-xs text-ink-faint font-medium"><span>Search Results for "%s" (%d)</span></div>`, html.EscapeString(q), len(results)))
-	}
+	heading, note := searchHeading(q, page)
+	sb.WriteString(fmt.Sprintf(`<div class="col-span-full flex items-center justify-between pb-1 text-xs text-ink-faint font-medium"><span>%s</span><span class="text-ink-faint">%s</span></div>`,
+		html.EscapeString(heading), html.EscapeString(note)))
 
-	for _, r := range results {
+	for _, r := range page.Results {
 		fullName := fmt.Sprintf("%s-%s", r.Owner, r.Name)
 		cleanSlug := strings.ReplaceAll(fullName, "'", "\\'")
 		cleanIcon := r.Icon
@@ -177,15 +144,14 @@ func (h *Handler) ValheimWizardModsSearch(c *fiber.Ctx) error {
 		`, html.EscapeString(cleanIcon), html.EscapeString(r.Name), html.EscapeString(r.Owner), html.EscapeString(r.Version), formatDownloads(r.Downloads), cleanSlug, html.EscapeString(r.Description), cleanSlug, cleanSlug, cleanSlug, cleanSlug, cleanSlug, cleanSlug))
 	}
 
-	if len(results) >= limit {
-		cleanQ := strings.ReplaceAll(q, "'", "\\'")
+	if page.More() {
 		sb.WriteString(fmt.Sprintf(`
 			<div class="col-span-full pt-2 pb-2 text-center">
-				<button type="button" data-on:click="@post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: '%s', limit: %d}})" class="rounded-xl border border-edge bg-surface-raised px-5 py-2 text-xs font-medium text-ink hover:bg-seam hover:text-accent transition shadow-sm">
+				<button type="button" data-on:click="%s" class="rounded-xl border border-edge bg-surface-raised px-5 py-2 text-xs font-medium text-ink hover:bg-seam hover:text-accent transition shadow-sm">
 					Load more mods...
 				</button>
 			</div>
-		`, cleanQ, limit+24))
+		`, pages.ModSearchScript("/api/valheim/wizard/mods/search", q.Limit+domain.DefaultModSearchLimit)))
 	}
 
 	return ssePatchElements(c, "#wizard-valheim-mod-results", sb.String())

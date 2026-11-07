@@ -10,7 +10,7 @@ templ ValheimWizard(budget BudgetUI) {
 		@components.Nav(components.NavProps{Current: "valheim", IsAdmin: true, SignedIn: true})
 		<div
 			class="space-y-6"
-			data-signals="{step:1,name:'',nameError:'',password:'',seed:'',source:'vanilla',tier:'medium',cart:[],wizardModSearch:'',wizardModSearchLoading:false,showWizardModDetail:false,manualSlug:'',raw_mods:'',importError:'',importLoading:false,creating:false,redirect:''}"
+			data-signals="{step:1,name:'',nameError:'',password:'',seed:'',source:'vanilla',tier:'medium',cart:[],modQuery:'',modSort:'relevance',modDeprecated:false,modSearchLoading:false,showWizardModDetail:false,manualSlug:'',raw_mods:'',importError:'',importLoading:false,creating:false,redirect:''}"
 			data-effect="if ($redirect) { window.location.href = $redirect }"
 		>
 			@components.StepIndicator(components.StepIndicatorProps{
@@ -91,24 +91,7 @@ templ ValheimWizard(budget BudgetUI) {
 					<!-- Scratch mods browsing & cart -->
 					<div data-show="$source == 'scratch'" class="space-y-4">
 						<!-- Mod Search Input -->
-						<div class="flex gap-2">
-							<input
-								type="text"
-								data-bind="wizardModSearch"
-								data-on:keydown="if (evt.key === 'Enter') { evt.preventDefault(); @post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: $wizardModSearch}}) }"
-								placeholder="Search Thunderstore mods (e.g. Mining, Jotunn, Equipment, PlantEasily)..."
-								class="flex-1 rounded-control border border-edge bg-surface-raised px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint focus-accent "
-							/>
-							<button
-								type="button"
-								data-indicator="wizardModSearchLoading"
-								data-on:click="@post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: $wizardModSearch}})"
-								class="rounded-control bg-accent px-5 py-2.5 text-xs font-semibold text-accent-ink hover:bg-ink transition"
-							>
-								<span data-show="!$wizardModSearchLoading">Search</span>
-								<span data-show="$wizardModSearchLoading" class="animate-pulse">Searching...</span>
-							</button>
-						</div>
+						@ModSearchControls("/api/valheim/wizard/mods/search", "Search Thunderstore mods (e.g. Mining, Jotunn, Equipment, PlantEasily)...")
 
 						<!-- Selected Mods Cart Tray -->
 						<div class="rounded-control border border-edge bg-seam p-4">
@@ -135,7 +118,7 @@ templ ValheimWizard(budget BudgetUI) {
 						<div
 							id="wizard-valheim-mod-results"
 							class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1"
-							data-effect="@post('/api/valheim/wizard/mods/search', {payload: {wizardModSearch: ''}})"
+							data-effect="@post('/api/valheim/wizard/mods/search', {payload: {q: ''}})"
 						>
 							<div class="col-span-full py-12 text-center text-xs text-ink-faint animate-pulse">
 								Loading popular Thunderstore mods...

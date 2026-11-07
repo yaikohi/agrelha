@@ -50,6 +50,7 @@ func (m *mockRuntime) WatchAvailability(ctx context.Context, ref ports.ServerRef
 
 type mockPackageCatalog struct {
 	results   []domain.ModSearchResult
+	lastQuery domain.ModQuery
 	searchErr error
 	readmeErr error
 	latestErr error
@@ -64,11 +65,17 @@ func (m *mockPackageCatalog) Get(fullName string) (domain.ModSearchResult, bool)
 	}
 	return domain.ModSearchResult{}, false
 }
-func (m *mockPackageCatalog) Search(ctx context.Context, query string, limit int) ([]domain.ModSearchResult, error) {
+func (m *mockPackageCatalog) Search(ctx context.Context, q domain.ModQuery) (domain.ModSearchPage, error) {
+	m.lastQuery = q
 	if m.searchErr != nil {
-		return nil, m.searchErr
+		return domain.ModSearchPage{}, m.searchErr
 	}
-	return m.results, nil
+	q = q.WithDefaults()
+	page := domain.ModSearchPage{Results: m.results, Total: len(m.results)}
+	if len(page.Results) > q.Limit {
+		page.Results = page.Results[:q.Limit]
+	}
+	return page, nil
 }
 func (m *mockPackageCatalog) Ready() bool { return true }
 func (m *mockPackageCatalog) LatestVersion(ctx context.Context, ns, name string) (string, []string, error) {
@@ -551,7 +558,7 @@ func TestValheimWizardModsSearch(t *testing.T) {
 	}
 	postBody, _ := io.ReadAll(respPost.Body)
 	postStr := string(postBody)
-	if !strings.Contains(postStr, "Search Results for") {
+	if !strings.Contains(postStr, "result for &#34;mining&#34;") {
 		t.Errorf("expected POST search to contain search header, got: %s", postStr)
 	}
 }

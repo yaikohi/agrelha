@@ -30,8 +30,8 @@ func (f *fakeCatalog) Get(fullName string) (domain.ModSearchResult, bool) {
 	m, ok := f.items[fullName]
 	return m, ok
 }
-func (f *fakeCatalog) Search(ctx context.Context, query string, limit int) ([]domain.ModSearchResult, error) {
-	return nil, nil
+func (f *fakeCatalog) Search(ctx context.Context, q domain.ModQuery) (domain.ModSearchPage, error) {
+	return domain.ModSearchPage{}, nil
 }
 func (f *fakeCatalog) Ready() bool { return true }
 func (f *fakeCatalog) LatestVersion(ctx context.Context, ns, name string) (string, []string, error) {

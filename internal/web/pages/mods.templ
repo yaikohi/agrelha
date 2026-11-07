@@ -6,6 +6,42 @@ import (
 	"agrelha/internal/web/components"
 )
 
+templ ModSearchControls(endpoint, placeholder string) {
+	<div class="flex flex-wrap items-center gap-2">
+		<div class="min-w-[14rem] flex-1">
+			<input
+				type="text"
+				data-bind="modQuery"
+				data-on:input__debounce.300ms={ ModSearchScript(endpoint, 0) }
+				placeholder={ placeholder }
+				class={ components.InputClass() }
+			/>
+		</div>
+		<div class="w-44">
+			<select data-bind="modSort" data-on:change={ ModSearchScript(endpoint, 0) } aria-label="Sort results" class={ components.InputClass() }>
+				<option value="relevance">Best match</option>
+				<option value="downloads">Most downloaded</option>
+				<option value="updated">Recently updated</option>
+				<option value="name">Name</option>
+			</select>
+		</div>
+		<label class="flex items-center gap-1.5 font-pixel text-[11px] text-ink-muted">
+			<input type="checkbox" data-bind="modDeprecated" data-on:change={ ModSearchScript(endpoint, 0) } class="accent-accent"/>
+			<span>Show deprecated</span>
+		</label>
+		<button
+			type="button"
+			data-indicator="modSearchLoading"
+			data-attr:disabled="$modSearchLoading"
+			data-on:click={ ModSearchScript(endpoint, 0) }
+			class={ components.ButtonClass(components.VariantPrimary) }
+		>
+			<span data-show="!$modSearchLoading">Search</span>
+			<span data-show="$modSearchLoading" style="display:none;">Searching…</span>
+		</button>
+	</div>
+}
+
 templ ModSearchResults(m ModResultsUI) {
 	if m.Heading != "" {
 		<p class="flex flex-wrap items-baseline justify-between gap-x-4 px-6 pb-3 font-pixel text-[11px] text-ink-faint">

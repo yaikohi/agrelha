@@ -98,7 +98,6 @@ func (h *Handler) MCInstanceModsSearch(c *fiber.Ctx) error {
 	ui := pages.ModResultsUI{
 		Game:    "minecraft",
 		Num:     instanceNumber,
-		Query:   q,
 		Heading: fmt.Sprintf("%d results for %q", len(hits), q),
 		Note:    "compatible with " + mcVersion,
 	}
