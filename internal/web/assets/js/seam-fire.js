@@ -191,12 +191,22 @@
     return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
   }
 
-  /* A real fire ramp. The game tint only colours the coolest edge, so the
-     seam still says which game you are on without muddying the flame. */
-  /** @type {[number, number, number][]} */
-  const RAMP_DARK = [[0.20, 0.03, 0.01], [0.70, 0.11, 0.02], [0.95, 0.42, 0.09], [1.00, 0.80, 0.26], [1.00, 0.97, 0.88]];
-  /** @type {[number, number, number][]} */
-  const RAMP_LIGHT = [[0.26, 0.07, 0.02], [0.62, 0.10, 0.02], [0.86, 0.31, 0.05], [0.95, 0.58, 0.11], [1.00, 0.78, 0.30]];
+  /* The flame is the same light source as the lamps, so its ramp is built from
+     their tokens rather than from fire colours of its own: ember in dark,
+     violet in light, and whatever a later palette makes them. The game tint
+     only colours the coolest edge, so the seam still says which game you are on
+     without muddying the flame.
+     @returns {[number, number, number][]} coolest first, hottest last */
+  function lampRamp(cs, light) {
+    const out = hex(cs.getPropertyValue("--color-lamp-out"));
+    const dim = hex(cs.getPropertyValue("--color-lamp-dim"));
+    const lit = hex(cs.getPropertyValue("--color-lamp-lit"));
+    if (light) {
+      // On a cream ground the core has to go deeper to stay visible, not whiter.
+      return [mix3(out, dim, 0.55), dim, mix3(dim, lit, 0.55), lit, mix3(lit, [0, 0, 0], 0.3)];
+    }
+    return [mix3(out, dim, 0.3), mix3(out, dim, 0.7), dim, lit, mix3(lit, [1, 1, 1], 0.55)];
+  }
 
   function buildPalette() {
     if (!gl || !prog) return;
@@ -204,7 +214,7 @@
     const tint = hex(cs.getPropertyValue(emberVar()));
     const surf = hex(cs.getPropertyValue("--color-surface"));
     const light = (0.2126 * surf[0] + 0.7152 * surf[1] + 0.0722 * surf[2]) > 0.5;
-    const R = light ? RAMP_LIGHT : RAMP_DARK;
+    const R = lampRamp(cs, light);
     gl.useProgram(prog);
     gl.uniform3fv(uni.uC0, new Float32Array(mix3(R[0], tint, 0.45)));
     gl.uniform3fv(uni.uC1, new Float32Array(mix3(R[1], tint, 0.22)));

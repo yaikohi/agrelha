@@ -92,8 +92,9 @@ palette. Per-world lamp fireballs are **out** — they read as knots in the flam
 - Idles when scrolled out of view (`IntersectionObserver`), stands down entirely under
   `prefers-reduced-motion`, and the column is `display:none` below 1000px.
 - No WebGL, no canvas: the seam renders as a 1px rule. The page must be whole without it.
-- The fire ramp is five baked hex colours in JS — the one place in the system that is
-  not a token. It is a fire, not a surface, and `design-system.md` should say so.
+- The ramp is built from `--color-lamp-out/dim/lit`, so the flame is the same light
+  source as the lamps: ember on the dark ground, violet on the light one, and whatever
+  a later palette makes them. No colour of its own, nothing to keep in step by hand.
 
 **Check:** the page with JS disabled, the page at 900px, and the page with reduced
 motion on. None of the three may lose information.
