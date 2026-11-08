@@ -30,8 +30,8 @@ templ managerPanel(m ManagerUI) {
 			@managerPort(port)
 		}
 		if len(m.Ports) == 0 {
-			<div class="border-b border-seam px-6 py-10">
-				<p class="max-w-prose font-display text-base leading-relaxed text-ink-muted">{ m.Empty }</p>
+			<div class="border-b border-seam">
+				@components.Empty("globe", m.Empty)
 			</div>
 		}
 		<div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 pt-5">

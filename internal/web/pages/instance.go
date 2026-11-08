@@ -108,11 +108,11 @@ func instanceActions(spec instanceSpec, d InstanceDetailUI) []ActionUI {
 	}
 	if d.State == "running" {
 		return []ActionUI{
-			{Label: "Stop", Kind: "go", Script: post("stop")},
-			{Label: "Restart", Kind: "quiet", Script: post("restart")},
+			{Label: "Stop", Kind: "go", Script: post("stop"), Icon: "power"},
+			{Label: "Restart", Kind: "quiet", Script: post("restart"), Icon: "reload"},
 		}
 	}
-	return []ActionUI{{Label: "Start", Kind: "go", Script: post("start")}}
+	return []ActionUI{{Label: "Start", Kind: "go", Script: post("start"), Icon: "play"}}
 }
 
 func buildInstanceHead(spec instanceSpec, d InstanceDetailUI) InstanceHeadUI {

@@ -47,7 +47,12 @@ templ instanceHead(h InstanceHeadUI) {
 						data-on:click={ toastActionClick(a.Script) }
 						class={ components.ButtonClass(instanceVariant(a.Kind)) }
 					>
-						<span data-show={ "!" + "$" + actionIndicator(a.Label) }>{ a.Label }</span>
+						<span class="inline-flex items-center gap-2" data-show={ "!" + "$" + actionIndicator(a.Label) }>
+				if a.Icon != "" {
+					@components.Icon(a.Icon, components.IconStandard)
+				}
+				<span>{ a.Label }</span>
+			</span>
 						<span class="inline-flex items-center gap-1.5" data-show={ "$" + actionIndicator(a.Label) } style="display:none;">
 							<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"></span>
 							<span>{ inFlightVerb(a.Label) }</span>

@@ -695,6 +695,7 @@ type ActionUI struct {
 	Script string
 	Href   string
 	Kind   string
+	Icon   string
 }
 
 // CardActionsUI is the shared admin footer. Both games have the same action

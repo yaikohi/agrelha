@@ -142,7 +142,7 @@ templ ModSearchResults(m ModResultsUI) {
 
 templ InstalledMods(i InstalledModsUI) {
 	if len(i.Mods) == 0 {
-		<p class="px-6 py-8 max-w-prose font-display text-base leading-relaxed text-ink-muted">{ i.Empty }</p>
+		@components.Empty("package", i.Empty)
 	} else {
 		for _, m := range i.Mods {
 			<div data-show={ m.FilterExpr() } class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t border-seam px-6 py-3">

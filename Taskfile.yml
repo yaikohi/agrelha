@@ -10,6 +10,9 @@ vars:
   FONT_DIR: internal/web/assets/fonts
   DEPARTURE_VERSION: 1.500
   FRAUNCES_VERSION: 5.2.6
+  ICON_DIR: internal/web/components/icons
+  PIXELARTICONS_VERSION: 2.4.2
+  ICONS: archive globe package play power reload sliders
   GO_MAIN: ./cmd/agrelha
   GO_BINARY: ./tmp/main
   APP_PORT: "8080"
@@ -116,10 +119,20 @@ tasks:
       - curl -fsSL "https://cdn.jsdelivr.net/gh/rektdeckard/departure-mono@v{{.DEPARTURE_VERSION}}/public/assets/DepartureMono-Regular.woff2" -o {{.FONT_DIR}}/DepartureMono-Regular.woff2
       - curl -fsSL "https://cdn.jsdelivr.net/npm/@fontsource-variable/fraunces@{{.FRAUNCES_VERSION}}/files/fraunces-latin-wght-normal.woff2" -o {{.FONT_DIR}}/Fraunces-Variable.woff2
 
+  assets:icons:
+    desc: "Vendor the adopted Pixelarticons glyphs"
+    status:
+      - test -s {{.ICON_DIR}}/LICENSE
+      - for i in {{.ICONS}}; do test -s {{.ICON_DIR}}/$i.svg || exit 1; done
+    cmds:
+      - mkdir -p {{.ICON_DIR}}
+      - curl -fsSL "https://cdn.jsdelivr.net/npm/pixelarticons@{{.PIXELARTICONS_VERSION}}/LICENSE" -o {{.ICON_DIR}}/LICENSE
+      - for i in {{.ICONS}}; do curl -fsSL "https://cdn.jsdelivr.net/npm/pixelarticons@{{.PIXELARTICONS_VERSION}}/svg/$i.svg" -o {{.ICON_DIR}}/$i.svg; done
+
   # --- Dev Loop ---
   run:
     desc: "Run the full live-reload dev loop"
-    deps: [setup, assets:datastar, assets:fonts, tailwind:deps]
+    deps: [setup, assets:datastar, assets:fonts, assets:icons, tailwind:deps]
     cmds:
       - task: dev
 

@@ -1,0 +1,18 @@
+package components
+
+// Icon renders one vendored glyph. It is aria-hidden by rule: an icon never
+// carries a signal alone, so the label beside it is the accessible name.
+templ Icon(name string, size IconSize) {
+	<span class={ "inline-flex shrink-0 items-center justify-center " + string(size) } aria-hidden="true">
+		@templ.Raw(iconSVG(name))
+	</span>
+}
+
+// Empty is the nothing-here state: one glyph at hero size over the sentence
+// that says what would be here.
+templ Empty(icon, text string) {
+	<div class="flex flex-col items-start gap-3 px-6 py-10 text-ink-faint">
+		@Icon(icon, IconHero)
+		<p class="max-w-prose font-display text-base leading-relaxed text-ink-muted">{ text }</p>
+	</div>
+}

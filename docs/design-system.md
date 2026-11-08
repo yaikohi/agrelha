@@ -87,6 +87,40 @@ Use `Button(ButtonProps{Variant: VariantFilled})` or `ButtonClass(VariantFilled)
 for this primary action. It inverts on hover (`hover:bg-ink hover:text-surface`)
 to preserve readable contrast.
 
+## Iconography
+
+Pixelarticons 2.4.2, default family only, MIT (the licence is vendored beside the
+glyphs at `internal/web/components/icons/LICENSE`). The glyphs are monochrome paths
+carrying `fill="currentColor"`, so they inherit the ink ramp like text and the
+raw-hex check has nothing to catch.
+
+Two sizes, both integer multiples of the 24-unit grid the glyphs are drawn on:
+
+| Constant | Box | Where |
+|---|---|---|
+| `components.IconStandard` | 24px, one grid unit per CSS pixel | section heads, controls |
+| `components.IconHero` | 48px, two | empty states |
+
+Nothing between them. At 16px a grid unit falls on 0.667 of a screen pixel and at
+12px on half of one, which antialiases a face whose whole point is hard edges. The
+cost is that `text-xs` rows carry no icons — the tab bar, the telemetry line, the mod
+and installed rows. If they ever need one, the answer is a hand-drawn 16-unit subset,
+not a fractional scale.
+
+**An icon is never the only signal.** Every glyph sits beside a text label or an
+already-labelled control, and `components.Icon` renders `aria-hidden="true"`, so the
+label is the accessible name. Removing every icon from a page must lose no
+information.
+
+Adding one: put its name in `ICONS` in the Taskfile, run `task assets:icons`, and
+use it. `components/icon_test.go` holds the set to what the product renders — a
+glyph nothing uses fails, and so does a name nothing vendored. It also checks the
+licence, the 24-unit viewBox and that every coordinate is a whole unit, which is how
+`arrow-up-box` was caught and dropped during selection.
+
+See [docs/iconography-plan.md](iconography-plan.md) for the glyph table and the
+reasoning behind each pick.
+
 ## What is not a token
 
 `--color-danger` is the only status colour, and it marks *actions*, not state.

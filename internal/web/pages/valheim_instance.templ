@@ -94,16 +94,19 @@ templ valheimModsTabOperate(d InstanceDetailUI) {
 
 templ valheimBackupsTab(d InstanceDetailUI) {
 	<div data-signals="{restoreModalOpen: false, selectedArchive: '', newWorldName: '', newWorldTier: 'medium'}">
-		@components.SectionHead("World backups", "Backups live on the redundant TrueNAS share. A daily snapshot runs at 04:00 UTC.")
+		@components.SectionHead("archive", "World backups", "Backups live on the redundant TrueNAS share. A daily snapshot runs at 04:00 UTC.")
 		<div class="mt-4">
 			<button
 				type="button"
 				data-on:click={ fmt.Sprintf("@post('/api/valheim/%d/backups/create')", d.Number) }
 				class={ components.ButtonClass(components.VariantPrimary) }
-			>Back up now</button>
+			>
+				@components.Icon("archive", components.IconStandard)
+				<span>Back up now</span>
+			</button>
 		</div>
 		if len(d.Backups) == 0 {
-			@components.Prose("No backups yet. They appear here once you make one or the daily snapshot runs.")
+			@components.Empty("archive", "No backups yet. They appear here once you make one or the daily snapshot runs.")
 		} else {
 			@components.RowList() {
 				for _, b := range d.Backups {
@@ -141,7 +144,7 @@ templ valheimBackupsTab(d InstanceDetailUI) {
 
 templ valheimSettingsTab(d InstanceDetailUI) {
 	<div class="max-w-xl">
-		@components.SectionHead("Settings", "Change how this Valheim world is configured.")
+		@components.SectionHead("sliders", "Settings", "Change how this Valheim world is configured.")
 		<form
 			class="mt-6 space-y-5"
 			data-on:submit__prevent={ fmt.Sprintf("@post('/api/valheim/%d/settings', {contentType: 'form'})", d.Number) }

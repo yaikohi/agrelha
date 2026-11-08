@@ -22,9 +22,14 @@ templ Band() {
 	</div>
 }
 
-templ SectionHead(title, note string) {
+templ SectionHead(icon, title, note string) {
 	<div class="mt-8">
-		<h2 class="font-display text-xl font-semibold text-ink">{ title }</h2>
+		<div class="flex items-center gap-2.5">
+			if icon != "" {
+				@Icon(icon, IconStandard)
+			}
+			<h2 class="font-display text-xl font-semibold text-ink">{ title }</h2>
+		</div>
 		if note != "" {
 			<p class="mt-1 max-w-prose font-display text-sm leading-relaxed text-ink-muted">{ note }</p>
 		}
