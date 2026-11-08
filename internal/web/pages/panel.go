@@ -19,9 +19,131 @@ type PanelEmptyUI struct {
 	Hint string
 }
 
+// PanelGameUI is one game and the worlds it runs. A game with no worlds still
+// appears — absence is information on this page.
+type PanelGameUI struct {
+	Slug   string
+	Label  string
+	Tint   string
+	Worlds []PanelPortUI
+	Hint   string
+}
+
+// PanelTallyUI counts what is up, across every game. Lit means running: the
+// lamp's lit-versus-dim distinction is about players, not about the world.
+type PanelTallyUI struct {
+	Lit     int
+	Playing int
+	Worlds  int
+}
+
 type PanelUI struct {
-	Ports []PanelPortUI
-	Idle  []PanelEmptyUI
+	Games []PanelGameUI
+	Tally PanelTallyUI
+}
+
+// Count is the rail's first line: how many worlds this game has and how many of
+// them are up.
+func (g PanelGameUI) Count() string {
+	if len(g.Worlds) == 0 {
+		return "No worlds yet"
+	}
+	lit := 0
+	for _, w := range g.Worlds {
+		if w.Row.Online {
+			lit++
+		}
+	}
+	worlds := fmt.Sprintf("%s worlds", countWord(len(g.Worlds)))
+	if len(g.Worlds) == 1 {
+		worlds = "One world"
+	}
+	switch lit {
+	case 0:
+		return worlds + ", none lit"
+	case len(g.Worlds):
+		if lit == 1 {
+			return worlds + ", lit"
+		}
+		return worlds + ", all lit"
+	default:
+		return fmt.Sprintf("%s, %s lit", worlds, countWord(lit))
+	}
+}
+
+// Flavour is the rail's second line — what a world of this game runs. It speaks
+// only when every world agrees: one line cannot say two things, and each card
+// carries its own badge.
+func (g PanelGameUI) Flavour() string {
+	if len(g.Worlds) == 0 {
+		return ""
+	}
+	badge := g.Worlds[0].Row.VersionBadge
+	for _, w := range g.Worlds[1:] {
+		if w.Row.VersionBadge != badge {
+			return ""
+		}
+	}
+	return badge
+}
+
+// BorderTint paints the card's top edge in the game's colour. The classes are
+// spelled out because Tailwind reads source text: a class built at runtime never
+// reaches the stylesheet.
+func (p PanelPortUI) BorderTint() string {
+	switch p.Tint {
+	case "text-tint-sky":
+		return "border-t-tint-sky"
+	case "text-tint-moss":
+		return "border-t-tint-moss"
+	case "text-tint-flame":
+		return "border-t-tint-flame"
+	}
+	return "border-t-edge"
+}
+
+// Headline says the state of the house in words, split so the page can hush the
+// second half: "Two worlds are lit." / "One is sleeping."
+func (t PanelTallyUI) Headline() (lit, asleep string) {
+	switch {
+	case t.Worlds == 0:
+		return "No worlds yet.", ""
+	case t.Lit == 0 && t.Worlds == 1:
+		return "The world is sleeping.", ""
+	case t.Lit == 0:
+		return "Nothing is running right now.", ""
+	}
+
+	if t.Lit == 1 {
+		lit = "One world is lit."
+	} else {
+		lit = fmt.Sprintf("%s worlds are lit.", capitalise(countWord(t.Lit)))
+	}
+	switch off := t.Worlds - t.Lit; {
+	case off == 0:
+		return lit, ""
+	case off == 1:
+		return lit, "One is sleeping."
+	default:
+		return lit, fmt.Sprintf("%s are sleeping.", capitalise(countWord(off)))
+	}
+}
+
+func capitalise(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// countWord spells the small numbers, which is how the sentence above reads out
+// loud. Past nine a digit is clearer than a word.
+func countWord(n int) string {
+	words := []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
+	if n < 0 || n >= len(words) {
+		return fmt.Sprintf("%d", n)
+	}
+	return words[n]
 }
 
 func tintClass(accent string) string {
@@ -39,28 +161,55 @@ func tintClass(accent string) string {
 
 func BuildPanel(games []DashboardGameUI) PanelUI {
 	var p PanelUI
+	index := 0
 	for _, g := range games {
 		label := strings.TrimSuffix(strings.ToLower(g.Card.Title), " worlds")
-		tint := tintClass(g.Card.Accent)
-		if len(g.Card.Rows) == 0 {
-			p.Idle = append(p.Idle, PanelEmptyUI{
-				Game: label,
-				Tint: tint,
-				Hint: g.Card.EmptyHint,
-			})
-			continue
+		game := PanelGameUI{
+			Slug:  panelSlug(label),
+			Label: label,
+			Tint:  tintClass(g.Card.Accent),
+			Hint:  g.Card.EmptyHint,
 		}
 		for _, r := range g.Card.Rows {
-			p.Ports = append(p.Ports, PanelPortUI{
+			// Index numbers every world on the page, not every world in its
+			// game: it names the copy-button signals, which share one scope.
+			game.Worlds = append(game.Worlds, PanelPortUI{
 				Game:       label,
-				Tint:       tint,
-				Index:      len(p.Ports),
+				Tint:       game.Tint,
+				Index:      index,
 				Row:        r,
 				AccessNote: g.Card.AccessNote,
 			})
+			index++
+			p.Tally.Worlds++
+			if r.Online {
+				p.Tally.Lit++
+			}
+			if r.PlayersKnown {
+				p.Tally.Playing += r.Players
+			}
 		}
+		p.Games = append(p.Games, game)
 	}
 	return p
+}
+
+// panelSlug turns a game label into an anchor. Garry's Mod has an apostrophe and
+// a space, and both have to survive into a usable fragment.
+func panelSlug(label string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(label) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			dash = false
+		case b.Len() > 0 && !dash:
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	return strings.TrimSuffix(b.String(), "-")
 }
 
 func (p PanelPortUI) LampClass() string {

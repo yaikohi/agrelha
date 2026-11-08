@@ -1,45 +1,194 @@
 package pages
 
+import "fmt"
+
 import "agrelha/internal/platform/build"
 import "agrelha/internal/web/components"
 
 templ Panel(games []DashboardGameUI, signedIn bool, flashKind, flashMsg string) {
 	{{ p := BuildPanel(games) }}
-	@LayoutHearth("Agrelha · Game Servers") {
+	@LayoutHearthWide("Agrelha · Game Servers") {
 		@flashBanner(flashKind, flashMsg)
-		@panelMasthead(signedIn)
-		<div class="-mx-6 mt-10 border-t border-seam">
-			for _, port := range p.Ports {
-				@panelPort(port)
-			}
-			for _, idle := range p.Idle {
-				@panelIdle(idle)
-			}
+		@panelMasthead(p, signedIn)
+		<div class="mt-10 grid gap-x-0 gap-y-10 lg:grid-cols-[15.5rem_2.75rem_minmax(0,1fr)]">
+			@panelRail(p)
+			<div class="relative hidden lg:block" aria-hidden="true">
+				<span class="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-edge"></span>
+			</div>
+			<div class="grid gap-10 lg:pl-6">
+				for _, g := range p.Games {
+					@panelGame(g)
+				}
+			</div>
 		</div>
 		@panelColophon()
 	}
 }
 
-templ panelMasthead(signedIn bool) {
+templ panelMasthead(p PanelUI, signedIn bool) {
+	{{ lit, asleep := p.Tally.Headline() }}
 	if signedIn {
 		@components.Nav(components.NavProps{Current: "", IsAdmin: false, SignedIn: true, GrafanaURL: ""})
-		<p class="mt-6 max-w-prose font-display text-base leading-relaxed text-ink-muted">
-			These servers run on a machine at home. Pick a game to see its worlds, or copy an address and paste it into the game.
-		</p>
 	} else {
 		<header class="flex flex-wrap items-baseline justify-between gap-4">
-			<h1 class="font-display text-3xl font-semibold tracking-tight text-ink">agrelha</h1>
+			<span class="font-display text-3xl font-semibold tracking-tight text-ink">agrelha</span>
 			<div class="flex items-center gap-5 font-pixel text-xs">
 				@components.ThemeToggle()
 				<a href="/auth/login" class="focus-accent text-ink-muted transition-colors hover:text-accent">Sign in</a>
 			</div>
-			<p class="w-full max-w-prose font-display text-base leading-relaxed text-ink-muted">
-				These servers run on a machine at home. Copy an address, paste it into the game.
-			</p>
 		</header>
 	}
+	<div class="mt-8 flex flex-wrap items-end justify-between gap-x-12 gap-y-6">
+		<div class="min-w-0">
+			<h1 class="max-w-[20ch] font-display text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
+				<span>{ lit }</span>
+				if asleep != "" {
+					<span class="text-ink-faint">{ asleep }</span>
+				}
+			</h1>
+			<p class="mt-3 max-w-prose font-display text-base leading-relaxed text-ink-muted">
+				These servers run on a machine at home. Copy an address, paste it into the game.
+			</p>
+		</div>
+		if p.Tally.Worlds > 0 {
+			<dl class="flex flex-wrap gap-x-8 gap-y-3 border-t border-seam pt-4">
+				@panelCount(p.Tally.Lit, "lit", true)
+				@panelCount(p.Tally.Playing, "playing", false)
+				@panelCount(p.Tally.Worlds, "worlds", false)
+			</dl>
+		}
+	</div>
 }
 
+templ panelCount(n int, label string, accent bool) {
+	<div class="flex flex-col gap-0.5">
+		if accent && n > 0 {
+			<dd class="font-pixel text-2xl text-accent tabular-nums">{ fmt.Sprintf("%d", n) }</dd>
+		} else {
+			<dd class="font-pixel text-2xl text-ink tabular-nums">{ fmt.Sprintf("%d", n) }</dd>
+		}
+		<dt class="font-pixel text-[11px] uppercase tracking-[0.1em] text-ink-faint">{ label }</dt>
+	</div>
+}
+
+templ panelRail(p PanelUI) {
+	<aside class="grid gap-6 self-start lg:sticky lg:top-6">
+		for _, g := range p.Games {
+			<article class="grid gap-1">
+				<a href={ templ.SafeURL("#" + g.Slug) } class={ "focus-accent justify-self-start font-display text-lg font-semibold tracking-tight transition-colors hover:text-accent " + g.Tint }>{ g.Label }</a>
+				<p class="font-pixel text-[11px] text-ink-faint">{ g.Count() }</p>
+				if g.Flavour() != "" {
+					<p class="font-pixel text-[11px] text-ink-faint">{ g.Flavour() }</p>
+				}
+			</article>
+		}
+	</aside>
+}
+
+templ panelGame(g PanelGameUI) {
+	<section id={ g.Slug } class="grid scroll-mt-6 gap-4">
+		<h2 class={ "font-pixel text-[11px] uppercase tracking-[0.12em] " + g.Tint }>{ g.Label }</h2>
+		<div class="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+			if len(g.Worlds) == 0 {
+				@panelWorldEmpty(PanelEmptyUI{Game: g.Label, Tint: g.Tint, Hint: g.Hint})
+			} else {
+				for _, w := range g.Worlds {
+					@panelWorld(w)
+				}
+			}
+		</div>
+	</section>
+}
+
+templ panelWorld(p PanelPortUI) {
+	<article
+		if p.SignalsInit() != "" {
+			data-signals={ p.SignalsInit() }
+		}
+		class={ "flex flex-col gap-3 border border-t-2 border-edge p-4 " + p.BorderTint() }
+	>
+		<div class="flex items-center gap-2.5">
+			if p.LampSignals() != "" {
+				<span class={ p.LampClass() } data-class={ p.LampSignals() }></span>
+			} else {
+				<span class={ p.LampClass() }></span>
+			}
+			<span class={ "font-pixel text-[11px] uppercase tracking-[0.12em] " + p.Tint }>{ p.Game }</span>
+			if p.Row.VersionBadge != "" {
+				<span class="ml-auto font-pixel text-[11px] text-ink-faint">{ p.Row.VersionBadge }</span>
+			}
+		</div>
+		if p.Row.OverviewURL != "" {
+			<a href={ templ.SafeURL(p.Row.OverviewURL) } class="focus-accent font-display text-2xl font-semibold tracking-tight text-ink transition-colors hover:text-accent">{ p.Row.Name }</a>
+		} else {
+			<h3 class="font-display text-2xl font-semibold tracking-tight text-ink">{ p.Row.Name }</h3>
+		}
+		if p.Row.Address != "" {
+			<button
+				type="button"
+				data-signals={ p.CopyInit() }
+				data-on:click={ p.CopyClick() }
+				class="focus-accent group flex items-center gap-3 rounded-control border border-edge bg-seam px-3 py-2 text-left transition-colors hover:border-accent"
+			>
+				<span class="overflow-x-auto whitespace-nowrap font-pixel text-base text-ink transition-colors group-hover:text-accent">{ p.Row.Address }</span>
+				<span class="ml-auto shrink-0 font-pixel text-[11px] text-ink-muted transition-colors group-hover:text-accent" data-text={ p.CopyLabelExpr() }>copy</span>
+			</button>
+		}
+		<p class="flex flex-wrap gap-x-4 gap-y-1 font-pixel text-xs text-ink-muted">
+			if p.Row.Password != "" {
+				<span>password <span class="text-ink">{ p.Row.Password }</span></span>
+			}
+			if p.PresenceExpr() != "" {
+				<span data-text={ p.PresenceExpr() }>{ p.Presence() }</span>
+			} else {
+				<span>{ p.Presence() }</span>
+			}
+		</p>
+		if p.Row.JoinURL != "" || p.Row.DownloadURL != "" || p.Row.BrowseURL != "" {
+			<div class="mt-auto flex flex-wrap items-center gap-2 pt-1">
+				if p.Row.JoinURL != "" {
+					<a href={ templ.SafeURL(p.Row.JoinURL) } class={ components.ButtonClass(components.VariantPrimary) }>{ p.Row.JoinLabel }</a>
+				}
+				if p.Row.DownloadURL != "" {
+					<a href={ templ.SafeURL(p.Row.DownloadURL) } download class={ components.ButtonClass(components.VariantSecondary) }>
+						Get the mods
+						if p.Row.DownloadFmt != "" {
+							<span class="text-ink-faint">{ p.Row.DownloadFmt }</span>
+						}
+					</a>
+				}
+				if p.Row.BrowseURL != "" {
+					<a href={ templ.SafeURL(p.Row.BrowseURL) } target="_blank" rel="noopener noreferrer" class={ components.ButtonClass(components.VariantSecondary) }>{ p.Row.BrowseLabel }</a>
+				}
+			</div>
+		}
+		if p.ImportHint() != "" {
+			<p class="max-w-prose font-display text-sm leading-relaxed text-ink-faint">{ p.ImportHint() }</p>
+		}
+		if p.AccessNote != "" {
+			<p class="max-w-prose font-display text-sm leading-relaxed text-ink-faint">{ p.AccessNote }</p>
+		}
+	</article>
+}
+
+templ panelWorldEmpty(e PanelEmptyUI) {
+	<article class="flex flex-col gap-3 border border-t-2 border-edge p-4">
+		<div class="flex items-center gap-2.5">
+			<span class="lamp lamp-out"></span>
+			<span class={ "font-pixel text-[11px] uppercase tracking-[0.12em] " + e.Tint }>{ e.Game }</span>
+		</div>
+		<h3 class="font-display text-2xl font-semibold tracking-tight text-ink">Nothing here yet</h3>
+		<p class="max-w-prose font-display text-sm leading-relaxed text-ink-muted">
+			No world has been started for this game.
+			if e.Hint != "" {
+				{ " " + e.Hint }
+			}
+		</p>
+	</article>
+}
+
+// panelPort and panelIdle are the admin hub's row layout, which keeps the
+// single-column measure until that page has its own pass.
 templ panelPort(p PanelPortUI) {
 	<article
 		if p.SignalsInit() != "" {

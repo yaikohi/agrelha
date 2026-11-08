@@ -23,6 +23,16 @@ templ LayoutHearth(title string) {
 	}
 }
 
+// LayoutHearthWide is the same shell with room for a two-column page. It exists
+// beside LayoutHearth rather than replacing it because the manager and instance
+// pages still lay out for one column: widening the shell under them would leave
+// a 1024px page floating in 1680px of ground.
+templ LayoutHearthWide(title string) {
+	@layoutShell(title, "bg-surface font-display text-ink", "mx-auto max-w-[1680px] overflow-x-hidden px-6 py-8", true) {
+		{ children... }
+	}
+}
+
 templ layoutShell(title, bodyClass, mainClass string, hearth bool) {
 	<!DOCTYPE html>
 	<html lang="en" class="h-full" data-theme={ shared.ThemeOf(ctx) }>

@@ -7,42 +7,94 @@ import (
 	"testing"
 )
 
-func TestBuildPanelFlattensRowsAndKeepsIdleGamesSeparate(t *testing.T) {
-	p := BuildPanel([]DashboardGameUI{
+func panelFixture() PanelUI {
+	return BuildPanel([]DashboardGameUI{
 		{Card: GameCardUI{Title: "Valheim Worlds", Accent: "orange", AccessNote: "ask the host", Rows: []ServerRowUI{
-			{Name: "Ducktopia", Address: "10.0.0.1:2456"},
+			{Name: "Ducktopia", Address: "10.0.0.1:2456", Online: true, PlayersKnown: true, Players: 2},
 		}}},
 		{Card: GameCardUI{Title: "Minecraft Worlds", Accent: "emerald", EmptyHint: "ask"}},
 		{Card: GameCardUI{Title: "Garry's Mod Worlds", Accent: "sky", Rows: []ServerRowUI{
-			{Name: "Sandbox", Address: "10.0.0.2:27015"},
+			{Name: "Sandbox", Address: "10.0.0.2:27015", Online: true},
 			{Name: "TTT", Address: "10.0.0.3:27015"},
 		}}},
 	})
+}
 
-	if len(p.Ports) != 3 {
-		t.Fatalf("ports = %d, want 3", len(p.Ports))
-	}
-	if len(p.Idle) != 1 {
-		t.Fatalf("idle = %d, want 1", len(p.Idle))
-	}
+func TestBuildPanelGroupsWorldsUnderTheirGame(t *testing.T) {
+	p := panelFixture()
 
-	for i, port := range p.Ports {
-		if port.Index != i {
-			t.Errorf("port %d has Index %d; copy signals would collide", i, port.Index)
+	if len(p.Games) != 3 {
+		t.Fatalf("games = %d, want 3; a game with no worlds still belongs on the page", len(p.Games))
+	}
+	want := []struct {
+		label  string
+		worlds int
+	}{{"valheim", 1}, {"minecraft", 0}, {"garry's mod", 2}}
+	for i, w := range want {
+		if p.Games[i].Label != w.label || len(p.Games[i].Worlds) != w.worlds {
+			t.Errorf("game %d = %q with %d worlds, want %q with %d",
+				i, p.Games[i].Label, len(p.Games[i].Worlds), w.label, w.worlds)
 		}
 	}
-
-	if p.Ports[0].Game != "valheim" {
-		t.Errorf("game label = %q, want %q", p.Ports[0].Game, "valheim")
+	if p.Games[1].Hint != "ask" {
+		t.Errorf("the empty game lost its hint: %q", p.Games[1].Hint)
 	}
-	if p.Ports[0].AccessNote != "ask the host" {
-		t.Errorf("the game's access note did not reach its port")
+	if p.Games[0].Worlds[0].AccessNote != "ask the host" {
+		t.Errorf("the game's access note did not reach its world")
 	}
-	if p.Idle[0].Game != "minecraft" {
-		t.Errorf("idle label = %q, want %q", p.Idle[0].Game, "minecraft")
-	}
-	if p.Ports[2].Tint != tintClass("sky") {
+	if p.Games[2].Tint != tintClass("sky") {
 		t.Errorf("tint did not follow the card accent")
+	}
+}
+
+func TestBuildPanelNumbersEveryWorldOnThePageOnce(t *testing.T) {
+	p := panelFixture()
+
+	var seen []int
+	for _, g := range p.Games {
+		for _, w := range g.Worlds {
+			seen = append(seen, w.Index)
+		}
+	}
+	for i, got := range seen {
+		if got != i {
+			// The index names the copy-button signals, and those share one
+			// scope across games: a repeat makes two buttons move together.
+			t.Errorf("world %d has Index %d; copy signals would collide", i, got)
+		}
+	}
+}
+
+func TestBuildPanelTallyCountsRunningWorldsAndPlayers(t *testing.T) {
+	p := panelFixture()
+
+	if p.Tally.Worlds != 3 {
+		t.Errorf("worlds = %d, want 3", p.Tally.Worlds)
+	}
+	if p.Tally.Lit != 2 {
+		t.Errorf("lit = %d, want 2; lit means running, with or without players", p.Tally.Lit)
+	}
+	if p.Tally.Playing != 2 {
+		t.Errorf("playing = %d, want 2; a world with no known count adds nobody", p.Tally.Playing)
+	}
+
+	empty := BuildPanel(nil)
+	if empty.Tally != (PanelTallyUI{}) || len(empty.Games) != 0 {
+		t.Errorf("no games should tally to nothing, got %+v", empty)
+	}
+}
+
+func TestPanelSlugSurvivesPunctuation(t *testing.T) {
+	cases := map[string]string{
+		"valheim":     "valheim",
+		"garry's mod": "garry-s-mod",
+		"Minecraft":   "minecraft",
+		"  spaced  ":  "spaced",
+	}
+	for in, want := range cases {
+		if got := panelSlug(in); got != want {
+			t.Errorf("panelSlug(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
@@ -221,3 +273,62 @@ func TestPanelPortConnectionPlateAndTitleProminence(t *testing.T) {
 	}
 }
 
+func TestOnlyTheFrontPageTakesTheWideShell(t *testing.T) {
+	games := []DashboardGameUI{
+		{Card: GameCardUI{Title: "Valheim Worlds", Accent: "orange", Rows: []ServerRowUI{
+			{Name: "Ducktopia", Address: "10.0.0.1:2456", Online: true},
+		}}},
+		{Card: GameCardUI{Title: "Minecraft Worlds", Accent: "emerald", EmptyHint: "ask the host"}},
+	}
+
+	var front bytes.Buffer
+	if err := Panel(games, false, "", "").Render(context.Background(), &front); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(front.String(), "max-w-[1680px]") {
+		t.Error("the front page is still capped at the narrow measure")
+	}
+	// The worlds and the game with none both survived the regrouping.
+	for _, want := range []string{"Ducktopia", "10.0.0.1:2456", "minecraft", "ask the host"} {
+		if !strings.Contains(front.String(), want) {
+			t.Errorf("the page lost %q", want)
+		}
+	}
+
+	var hub bytes.Buffer
+	if err := AdminHub("", games, true, "", "").Render(context.Background(), &hub); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(hub.String(), "max-w-[1680px]") {
+		t.Error("the admin hub widened with it; its layout has not been redesigned yet")
+	}
+	if !strings.Contains(hub.String(), "max-w-5xl") {
+		t.Error("the admin hub lost its measure entirely")
+	}
+}
+
+func TestTallyHeadlineReadsAsASentence(t *testing.T) {
+	cases := []struct {
+		name        string
+		tally       PanelTallyUI
+		lit, asleep string
+	}{
+		{"nothing created yet", PanelTallyUI{}, "No worlds yet.", ""},
+		{"the only world is off", PanelTallyUI{Worlds: 1}, "The world is sleeping.", ""},
+		{"all of them off", PanelTallyUI{Worlds: 3}, "Nothing is running right now.", ""},
+		{"one on, none off", PanelTallyUI{Worlds: 1, Lit: 1}, "One world is lit.", ""},
+		{"one on, one off", PanelTallyUI{Worlds: 2, Lit: 1}, "One world is lit.", "One is sleeping."},
+		{"two on, one off", PanelTallyUI{Worlds: 3, Lit: 2}, "Two worlds are lit.", "One is sleeping."},
+		{"two on, three off", PanelTallyUI{Worlds: 5, Lit: 2}, "Two worlds are lit.", "Three are sleeping."},
+		{"all on", PanelTallyUI{Worlds: 4, Lit: 4}, "Four worlds are lit.", ""},
+		{"past the words", PanelTallyUI{Worlds: 14, Lit: 12}, "12 worlds are lit.", "Two are sleeping."},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			lit, asleep := c.tally.Headline()
+			if lit != c.lit || asleep != c.asleep {
+				t.Errorf("Headline() = %q + %q, want %q + %q", lit, asleep, c.lit, c.asleep)
+			}
+		})
+	}
+}
