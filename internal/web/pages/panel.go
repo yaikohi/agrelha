@@ -25,6 +25,7 @@ type PanelGameUI struct {
 	Slug   string
 	Label  string
 	Tint   string
+	Ember  string
 	Worlds []PanelPortUI
 	Hint   string
 }
@@ -159,6 +160,19 @@ func tintClass(accent string) string {
 	}
 }
 
+func emberName(accent string) string {
+	switch accent {
+	case "sky":
+		return "sky"
+	case "emerald":
+		return "moss"
+	case "orange":
+		return "flame"
+	default:
+		return ""
+	}
+}
+
 func BuildPanel(games []DashboardGameUI) PanelUI {
 	var p PanelUI
 	index := 0
@@ -168,6 +182,7 @@ func BuildPanel(games []DashboardGameUI) PanelUI {
 			Slug:  panelSlug(label),
 			Label: label,
 			Tint:  tintClass(g.Card.Accent),
+			Ember: emberName(g.Card.Accent),
 			Hint:  g.Card.EmptyHint,
 		}
 		for _, r := range g.Card.Rows {

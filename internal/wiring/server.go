@@ -774,6 +774,7 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 				res[k] = dashboardhttp.InstanceStat{
 					Players:      v.Players,
 					PlayersKnown: v.PlayersKnown,
+					Names:        v.Names,
 					Uptime:       v.Uptime,
 				}
 			}
@@ -789,6 +790,7 @@ func buildDashboardHandler(cfg *config.Config, d Deps, contentH *contenthttp.Han
 				res[k] = dashboardhttp.InstanceStat{
 					Players:      v.Players,
 					PlayersKnown: v.PlayersKnown,
+					Names:        v.Names,
 					Uptime:       v.Uptime,
 				}
 			}

@@ -68,6 +68,30 @@ func (s *Store) CountOnline() (int, error) {
 	return n, err
 }
 
+// OnlineCharactersForInstance names who is on a world. A player whose character
+// name has never been seen is counted by CountOnlineForInstance but not named
+// here, which is why the page shows both.
+func (s *Store) OnlineCharactersForInstance(instance int) ([]string, error) {
+	rows, err := s.db.Query(`
+		SELECT p.character FROM instance_presence ip
+		JOIN players p ON p.steam_id = ip.steam_id
+		WHERE ip.online = 1 AND ip.instance_number = ? AND COALESCE(p.character, '') <> ''
+		ORDER BY ip.online_since`, instance)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) CountOnlineForInstance(instance int) (int, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM instance_presence WHERE online = 1 AND instance_number = ?`, instance).Scan(&n)

@@ -456,3 +456,34 @@ func TestToastActionClick(t *testing.T) {
 		}
 	}
 }
+
+func TestPlayerChipsNameWhoTheyCanAndCountTheRest(t *testing.T) {
+	cases := []struct {
+		name string
+		row  ServerRowUI
+		want []string
+	}{
+		{"offline says nothing", ServerRowUI{Names: []string{"ykhi"}}, nil},
+		{"everyone named", ServerRowUI{Online: true, PlayersKnown: true, Players: 2, Names: []string{"ykhi", "tiago"}}, []string{"ykhi", "tiago"}},
+		{"one unnamed", ServerRowUI{Online: true, PlayersKnown: true, Players: 4, Names: []string{"ykhi", "tiago", "joana"}}, []string{"ykhi", "tiago", "joana", "+1 more"}},
+		{"nobody named", ServerRowUI{Online: true, PlayersKnown: true, Players: 2}, []string{"+2 more"}},
+		{"overflow capped", ServerRowUI{Online: true, PlayersKnown: true, Players: 8, Names: []string{"p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"}}, []string{"p1", "p2", "p3", "p4", "p5", "+3 more"}},
+		{"overflow with unnamed", ServerRowUI{Online: true, PlayersKnown: true, Players: 10, Names: []string{"p1", "p2", "p3", "p4", "p5", "p6"}}, []string{"p1", "p2", "p3", "p4", "p5", "+5 more"}},
+		{"count unknown", ServerRowUI{Online: true, Names: []string{"ykhi"}}, []string{"ykhi"}},
+		{"empty world", ServerRowUI{Online: true, PlayersKnown: true}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := c.row.PlayerChips()
+			if len(got) != len(c.want) {
+				t.Fatalf("PlayerChips() = %v, want %v", got, c.want)
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Errorf("PlayerChips() = %v, want %v", got, c.want)
+					break
+				}
+			}
+		})
+	}
+}

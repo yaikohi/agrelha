@@ -41,7 +41,7 @@ tasks:
     sources:
       - mise.toml
     status:
-      - mise status --missing
+      - test -z "$(mise ls --missing)"
     cmds:
       - mise install
 
@@ -62,7 +62,7 @@ tasks:
 
   go:build:
     desc: "Compile the Go binary"
-    deps: [generate, tailwind:build, assets:datastar, assets:fonts]
+    deps: [generate, tailwind:build, assets:datastar, assets:fonts, assets:icons]
     cmds:
       - >-
         CGO_ENABLED=0 go build -trimpath
@@ -122,12 +122,14 @@ tasks:
   assets:icons:
     desc: "Vendor the adopted Pixelarticons glyphs"
     status:
+      - test -s {{.ICON_DIR}}/.version && grep -qx "{{.PIXELARTICONS_VERSION}}" {{.ICON_DIR}}/.version
       - test -s {{.ICON_DIR}}/LICENSE
       - for i in {{.ICONS}}; do test -s {{.ICON_DIR}}/$i.svg || exit 1; done
     cmds:
       - mkdir -p {{.ICON_DIR}}
+      - echo "{{.PIXELARTICONS_VERSION}}" > {{.ICON_DIR}}/.version
       - curl -fsSL "https://cdn.jsdelivr.net/npm/pixelarticons@{{.PIXELARTICONS_VERSION}}/LICENSE" -o {{.ICON_DIR}}/LICENSE
-      - for i in {{.ICONS}}; do curl -fsSL "https://cdn.jsdelivr.net/npm/pixelarticons@{{.PIXELARTICONS_VERSION}}/svg/$i.svg" -o {{.ICON_DIR}}/$i.svg; done
+      - for i in {{.ICONS}}; do curl -fsSL "https://cdn.jsdelivr.net/npm/pixelarticons@{{.PIXELARTICONS_VERSION}}/svg/$i.svg" -o {{.ICON_DIR}}/$i.svg || exit 1; done
 
   # --- Dev Loop ---
   run:
@@ -250,4 +252,4 @@ tasks:
   clean:
     desc: "Remove build artifacts"
     cmds:
-      - rm -f {{.GO_BINARY}} {{.CSS_OUT}} coverage
+      - rm -f {{.GO_BINARY}} {{.CSS_OUT}} coverage.out coverage.html

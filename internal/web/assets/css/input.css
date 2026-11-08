@@ -260,3 +260,28 @@ button[disabled] {
 		transition: none;
 	}
 }
+
+/* The seam between the game rail and the worlds: a hairline that takes the tint
+   of the game in view, and the fire that burns along it. Both are decoration —
+   the page reads the same with neither. */
+.seam-line {
+	background: var(--ember, var(--color-edge));
+	opacity: 0.65;
+	transition: background-color 0.55s ease;
+}
+
+.seam-flame {
+	opacity: 0.95;
+	transition: opacity 0.9s ease-out;
+}
+
+.flare .seam-flame {
+	opacity: 1;
+	transition-duration: 0.12s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.seam-flame {
+		display: none;
+	}
+}

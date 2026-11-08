@@ -30,6 +30,7 @@ var ErrNoStateStore = errors.New("declarative plane has no state store")
 type InstanceStat struct {
 	Players      int
 	PlayersKnown bool
+	Names        []string // who is on, when the source names them
 	Uptime       string
 }
 
@@ -70,7 +71,7 @@ type InstanceManager struct {
 	roleRegistrar       func(ctx context.Context, inst domain.Instance) error
 	roleRetirer         func(ctx context.Context, inst domain.Instance) error
 	sessionRoleRetirer  func(ctx context.Context, game domain.GameID, number int) error
-	telemetryProvider   func(ctx context.Context, inst domain.Instance) (players int, known bool)
+	telemetryProvider   func(ctx context.Context, inst domain.Instance) (players int, names []string, known bool)
 	afterSyncHook       func(cm, dep, key string, want func(string) bool)
 	commandExecutor     func(ctx context.Context, inst domain.Instance, cmd string) (string, error)
 	jobRunner           ports.JobRunner
@@ -216,7 +217,7 @@ func (m *InstanceManager) retireSessionRole(ctx context.Context, game domain.Gam
 	}
 }
 
-func WithTelemetryProvider(fn func(ctx context.Context, inst domain.Instance) (players int, known bool)) Option {
+func WithTelemetryProvider(fn func(ctx context.Context, inst domain.Instance) (players int, names []string, known bool)) Option {
 	return func(m *InstanceManager) { m.telemetryProvider = fn }
 }
 
@@ -1831,8 +1832,9 @@ func (m *InstanceManager) InstanceStats(ctx context.Context, insts []domain.Inst
 			}
 		}
 		if m.telemetryProvider != nil {
-			p, known := m.telemetryProvider(ctx, inst)
+			p, names, known := m.telemetryProvider(ctx, inst)
 			st.Players = p
+			st.Names = names
 			st.PlayersKnown = known
 		}
 		out[inst.Number] = st

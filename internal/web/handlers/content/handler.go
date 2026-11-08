@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -175,12 +176,7 @@ func PublicHost(host string) bool {
 	if err != nil || len(ips) == 0 {
 		return false
 	}
-	for _, ip := range ips {
-		if isBlockedIP(ip) {
-			return false
-		}
-	}
-	return true
+	return !slices.ContainsFunc(ips, isBlockedIP)
 }
 
 func (h *Handler) imageClient() *http.Client {

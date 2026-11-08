@@ -23,6 +23,7 @@ import (
 type InstanceStat struct {
 	Players      int
 	PlayersKnown bool
+	Names        []string
 	Uptime       string
 }
 
@@ -244,6 +245,7 @@ func (h *Handler) buildSummary(ctx context.Context, p domain.GameProfile, mgr *i
 			if st, ok := stats[inst.Number]; ok {
 				uinst.Players = st.Players
 				uinst.PlayersKnown = st.PlayersKnown
+				uinst.Names = st.Names
 				uinst.Uptime = st.Uptime
 			}
 		}

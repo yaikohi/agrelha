@@ -264,12 +264,13 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			instances.WithPreDeleteHook(func(ctx context.Context, inst domain.Instance) {
 				_, _ = rconExec(ctx, inst, "/say Server being deleted...")
 			}),
-			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
+			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, []string, bool) {
 				res, err := rconExec(ctx, inst, "/list")
 				if err != nil {
-					return 0, false
+					return 0, nil, false
 				}
-				return len(mcaccess.ParsePlayerList(res)), true
+				names := mcaccess.ParsePlayerList(res)
+				return len(names), names, true
 			}),
 			instances.WithCommandExecutor(func(ctx context.Context, inst domain.Instance, cmd string) (string, error) {
 				return rconExec(ctx, inst, cmd)
@@ -433,9 +434,16 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 	if st != nil {
 		valheimInstOpts = append(valheimInstOpts,
-			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
+			instances.WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, []string, bool) {
 				count, err := st.CountOnlineForInstance(inst.Number)
-				return count, err == nil
+				if err != nil {
+					return 0, nil, false
+				}
+				names, err := st.OnlineCharactersForInstance(inst.Number)
+				if err != nil {
+					return count, nil, true
+				}
+				return count, names, true
 			}),
 		)
 	}

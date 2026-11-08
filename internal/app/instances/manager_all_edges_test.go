@@ -252,8 +252,8 @@ func TestManagerOptionsAndGetters(t *testing.T) {
 		WithBackupsDir("/backups"),
 		WithPreStopHook(func(ctx context.Context, inst domain.Instance) {}),
 		WithPreDeleteHook(func(ctx context.Context, inst domain.Instance) {}),
-		WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
-			return 5, true
+		WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, []string, bool) {
+			return 5, nil, true
 		}),
 		WithAfterSyncHook(func(cm, dep, key string, want func(string) bool) {}),
 	}
@@ -1084,8 +1084,8 @@ func TestManagerDiagnosticsAndStatusEdges(t *testing.T) {
 
 	// 2. InstanceStats
 	rt.status = ports.Status{StartedAt: time.Now().Add(-10 * time.Minute)}
-	mgr.telemetryProvider = func(ctx context.Context, inst domain.Instance) (int, bool) {
-		return 3, true
+	mgr.telemetryProvider = func(ctx context.Context, inst domain.Instance) (int, []string, bool) {
+		return 3, nil, true
 	}
 	stats := mgr.InstanceStats(ctx, []domain.Instance{
 		{Number: 1, State: domain.StateRunning},

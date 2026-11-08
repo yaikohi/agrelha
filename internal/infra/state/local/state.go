@@ -129,8 +129,8 @@ func (a *Adapter) Get(ctx context.Context, path string) (ports.Document, error) 
 				candidates := []string{
 					filepath.Join(fb, cleaned),
 				}
-				if strings.HasPrefix(cleaned, "compose/") {
-					candidates = append(candidates, filepath.Join(fb, strings.TrimPrefix(cleaned, "compose/")))
+				if after, ok := strings.CutPrefix(cleaned, "compose/"); ok {
+					candidates = append(candidates, filepath.Join(fb, after))
 				}
 				for _, c := range candidates {
 					if b, rErr := os.ReadFile(c); rErr == nil {

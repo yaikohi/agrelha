@@ -182,6 +182,49 @@ func TestMultiInstancePresence(t *testing.T) {
 	}
 }
 
+func TestOnlineCharactersForInstance(t *testing.T) {
+	s := newTestStore(t)
+
+	// Instance 1: Thor (named, online), steam2 (unnamed, online), steam3 (named, offline)
+	if err := s.UpsertSeen(1, "steam1", "Thor", true); err != nil {
+		t.Fatalf("UpsertSeen steam1 failed: %v", err)
+	}
+	if err := s.UpsertSeen(1, "steam2", "", true); err != nil {
+		t.Fatalf("UpsertSeen steam2 failed: %v", err)
+	}
+	if err := s.UpsertSeen(1, "steam3", "Odin", false); err != nil {
+		t.Fatalf("UpsertSeen steam3 failed: %v", err)
+	}
+	// Instance 2: Loki (named, online)
+	if err := s.UpsertSeen(2, "steam4", "Loki", true); err != nil {
+		t.Fatalf("UpsertSeen steam4 failed: %v", err)
+	}
+
+	names1, err := s.OnlineCharactersForInstance(1)
+	if err != nil {
+		t.Fatalf("OnlineCharactersForInstance(1) failed: %v", err)
+	}
+	if len(names1) != 1 || names1[0] != "Thor" {
+		t.Errorf("OnlineCharactersForInstance(1) = %v, want [Thor]", names1)
+	}
+
+	names2, err := s.OnlineCharactersForInstance(2)
+	if err != nil {
+		t.Fatalf("OnlineCharactersForInstance(2) failed: %v", err)
+	}
+	if len(names2) != 1 || names2[0] != "Loki" {
+		t.Errorf("OnlineCharactersForInstance(2) = %v, want [Loki]", names2)
+	}
+
+	names3, err := s.OnlineCharactersForInstance(3)
+	if err != nil {
+		t.Fatalf("OnlineCharactersForInstance(3) failed: %v", err)
+	}
+	if len(names3) != 0 {
+		t.Errorf("OnlineCharactersForInstance(3) on empty instance = %v, want empty", names3)
+	}
+}
+
 func TestInstanceCRUD(t *testing.T) {
 	s := newTestStore(t)
 

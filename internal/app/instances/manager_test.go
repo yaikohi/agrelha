@@ -924,7 +924,7 @@ func TestCreateInstance_ConcurrentBudget(t *testing.T) {
 	}
 	results := make([]result, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(idx int) {
 			defer wg.Done()
 			<-startGate
@@ -1062,6 +1062,3 @@ func TestStartInstance_ConcurrentBudget(t *testing.T) {
 		t.Errorf("expected exactly 1 budget error, got %d", budgetErrors)
 	}
 }
-
-
-

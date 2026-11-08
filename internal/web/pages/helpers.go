@@ -193,6 +193,7 @@ type InstanceUI struct {
 	MOTD         string
 	Players      int
 	PlayersKnown bool
+	Names        []string
 	Uptime       string
 	LBIP         string
 	ModUpdates   int
@@ -356,10 +357,37 @@ type ServerRowUI struct {
 	Online        bool
 	Players       int
 	PlayersKnown  bool
+	Names         []string
 	Uptime        string
 	OnlineSignal  string
 	PlayersSignal string
 	UptimeSignal  string
+}
+
+const maxPlayerChips = 5
+
+// PlayerChips names who is on. A player the source could not name is counted
+// but not named, so the remainder trails as one more chip rather than going
+// missing: three names and a "+1 more" still add up to the four being reported.
+// When more players are online than fit comfortably on a card, names are capped
+// and the overflow is collapsed into "+N more".
+func (r ServerRowUI) PlayerChips() []string {
+	if !r.Online {
+		return nil
+	}
+	names := r.Names
+	total := len(names)
+	if r.PlayersKnown && r.Players > total {
+		total = r.Players
+	}
+	if len(names) > maxPlayerChips {
+		names = names[:maxPlayerChips]
+	}
+	chips := append([]string(nil), names...)
+	if total > len(chips) {
+		chips = append(chips, fmt.Sprintf("+%d more", total-len(chips)))
+	}
+	return chips
 }
 
 // PackDefined mirrors domain.Instance.PackDefined so the UI can render
@@ -575,6 +603,7 @@ func ValheimCard(addr, nodeName string, isAdmin bool, summary ...ValheimSummaryU
 			Online:       true,
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
+			Names:        inst.Names,
 			Uptime:       inst.Uptime,
 		}
 		if inst.Number > 0 {
@@ -644,6 +673,7 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 			Online:       true,
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
+			Names:        inst.Names,
 			Uptime:       inst.Uptime,
 		}
 		if inst.Number > 0 {
@@ -818,6 +848,7 @@ func GenericGameCard(p domain.GameProfile, summary GameSummaryUI, isAdmin bool) 
 			Online:       true,
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
+			Names:        inst.Names,
 			Uptime:       inst.Uptime,
 		}
 		if inst.Number > 0 {
@@ -885,6 +916,7 @@ func GModCard(summary GameSummaryUI, isAdmin bool) GameCardUI {
 			Online:       true,
 			Players:      inst.Players,
 			PlayersKnown: inst.PlayersKnown,
+			Names:        inst.Names,
 			Uptime:       inst.Uptime,
 		}
 		if inst.Number > 0 {

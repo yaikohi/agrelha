@@ -165,8 +165,8 @@ func TestManagerOptionsAndAccessors(t *testing.T) {
 		WithBackupsDir(t.TempDir()),
 		WithPreStopHook(func(ctx context.Context, inst domain.Instance) { preStopCalled = true }),
 		WithPreDeleteHook(func(ctx context.Context, inst domain.Instance) { preDeleteCalled = true }),
-		WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
-			return 3, true
+		WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, []string, bool) {
+			return 3, nil, true
 		}),
 		WithAfterSyncHook(func(cm, dep, key string, check func(string) bool) { afterSyncCalled = true }),
 	)
@@ -232,8 +232,8 @@ func TestManagerLifecycleAndRuntimeOperations(t *testing.T) {
 		"manifests/valheim", "192.168.20.224", nil, "valheim",
 		WithGameID(domain.GameValheim),
 		WithCommandExecutor(cmdExec),
-		WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, bool) {
-			return 4, true
+		WithTelemetryProvider(func(ctx context.Context, inst domain.Instance) (int, []string, bool) {
+			return 4, nil, true
 		}),
 	)
 
