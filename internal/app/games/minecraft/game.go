@@ -3,6 +3,8 @@ package minecraft
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"agrelha/internal/app/games"
 	"agrelha/internal/app/modpack"
@@ -24,6 +26,7 @@ type Game struct {
 	activeInstanceFn func(context.Context) (domain.Loader, string)
 	statusProvider   func(context.Context) (domain.GameTelemetry, error)
 	bundleBuilder    func(context.Context, domain.Instance) (domain.Bundle, error)
+	accessLists      func(context.Context) (domain.MinecraftAccess, error)
 }
 
 // Option configures a Minecraft Game instance.
@@ -68,6 +71,14 @@ func WithActiveInstance(fn func(context.Context) (domain.Loader, string)) Option
 func WithStatusProvider(fn func(context.Context) (domain.GameTelemetry, error)) Option {
 	return func(g *Game) {
 		g.statusProvider = fn
+	}
+}
+
+// WithAccessLists registers the Operators and the Admission list the operator
+// granted, so they can be rendered into the server's environment.
+func WithAccessLists(fn func(context.Context) (domain.MinecraftAccess, error)) Option {
+	return func(g *Game) {
+		g.accessLists = fn
 	}
 }
 
@@ -120,6 +131,7 @@ func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 			env[k] = v
 		}
 	}
+	g.applyAccessLists(env)
 	return domain.RuntimeSpec{
 		Image: g.image,
 		Ports: []domain.PortSpec{
@@ -134,6 +146,50 @@ func (g *Game) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 		Env:         env,
 		HealthProbe: "mc-health",
 	}
+}
+
+// applyAccessLists carries what the operator granted into the server, the way
+// the Kubernetes deployment carried it from its access ConfigMap. OVERRIDE
+// makes agrelha's list the truth on every start, so a revoke is a revoke
+// rather than a line the server's own ops.json outlives.
+//
+// Admission follows the operator's switch and nothing else: whitelisting
+// somebody must never be what turns the whitelist on, or creating a world
+// would lock out everyone not yet on a list.
+func (g *Game) applyAccessLists(env map[string]string) {
+	if g == nil || g.accessLists == nil || env == nil {
+		return
+	}
+	granted, err := g.accessLists(context.Background())
+	if err != nil {
+		slog.Warn("minecraft: cannot read the granted operators and whitelist, the server keeps the lists it has", "err", err)
+		return
+	}
+	// An empty list is agrelha having nothing to say, not an instruction to
+	// clear what the server already has.
+	if len(granted.Ops) > 0 {
+		env["OPS"] = strings.Join(granted.Ops, ",")
+		env["OVERRIDE_OPS"] = "TRUE"
+	}
+	if len(granted.Whitelist) > 0 {
+		env["WHITELIST"] = strings.Join(granted.Whitelist, ",")
+		env["OVERRIDE_WHITELIST"] = "TRUE"
+	}
+	// Admission follows the switch alone, never the list: adding somebody to a
+	// whitelist must not be what closes a World, and a World nobody has closed
+	// stays open - including every World that has just been created. With no
+	// decision recorded agrelha says nothing, leaving the server as set up.
+	if granted.WhitelistEnforced != nil {
+		env["ENABLE_WHITELIST"] = boolText(*granted.WhitelistEnforced)
+		env["ENFORCE_WHITELIST"] = boolText(*granted.WhitelistEnforced)
+	}
+}
+
+func boolText(b bool) string {
+	if b {
+		return "TRUE"
+	}
+	return "FALSE"
 }
 
 func (g *Game) Telemetry(ctx context.Context) (domain.GameTelemetry, error) {

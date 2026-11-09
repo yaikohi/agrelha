@@ -31,6 +31,11 @@ func (s *spyConverger) Async() bool { return false }
 
 func newConvergeManager(t *testing.T, opts ...Option) (*InstanceManager, context.Context) {
 	t.Helper()
+	return newConvergeManagerOn(t, nil, opts...)
+}
+
+func newConvergeManagerOn(t *testing.T, rt ports.Runtime, opts ...Option) (*InstanceManager, context.Context) {
+	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "converge.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +44,7 @@ func newConvergeManager(t *testing.T, opts ...Option) (*InstanceManager, context
 
 	base := []Option{WithModsReader(func(context.Context, int) ([]string, error) { return nil, nil })}
 	mgr := NewInstanceManager(
-		store.NewInstanceRepo(st), newMockStateStore(), nil, 64, 4, 4,
+		store.NewInstanceRepo(st), newMockStateStore(), rt, 64, 4, 4,
 		"manifests/minecraft-modded", "192.168.20.224",
 		manifests.New("ykhi.xyz/gameserver=true", "minecraft-modded"), "minecraft-modded",
 		append(base, opts...)...,
@@ -503,5 +508,55 @@ func TestUpdatingModsOnARunningWorldStillApplies(t *testing.T) {
 	}
 	if !converged {
 		t.Errorf("a running world must pick up its new mods immediately; steps were %v", spy.order)
+	}
+}
+
+// A container restart keeps the environment its container was created with, so
+// restarting is exactly the action the pages tell an operator to take and the
+// one that used to change nothing: mods, Operators and Admission all reach a
+// Docker world through its rendered environment.
+func TestRestartingADockerWorldAppliesWhatWasGranted(t *testing.T) {
+	spy := &spyConverger{}
+	rt := newFakeRuntime()
+	mgr, ctx := newConvergeManagerOn(t, rt, WithReconciler(spy))
+
+	inst, err := mgr.CreateInstance(ctx, mcWorld("Fogueira", "fogo"), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	before := len(spy.refs)
+
+	if err := mgr.RestartInstance(ctx, inst.Number); err != nil {
+		t.Fatalf("RestartInstance: %v", err)
+	}
+	if len(spy.refs) == before {
+		t.Error("restarting a Docker world did not re-apply its desired state, so a grant made since it started is still not on the server")
+	}
+	if len(rt.restarted) != 1 {
+		t.Errorf("runtime restarts = %d, want 1", len(rt.restarted))
+	}
+}
+
+// A cluster world is reconciled by its own control plane; restarting it must
+// stay a restart.
+func TestRestartingAClusterWorldDoesNotConverge(t *testing.T) {
+	spy := &spyConverger{}
+	rt := newFakeRuntime()
+	mgr, ctx := newConvergeManagerOn(t, rt, WithReconciler(spy))
+
+	inst, err := mgr.CreateInstance(ctx, mcWorld("Fluxweave", ""), domain.ModList{})
+	if err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+	before := len(spy.refs)
+
+	if err := mgr.RestartInstance(ctx, inst.Number); err != nil {
+		t.Fatalf("RestartInstance: %v", err)
+	}
+	if len(spy.refs) != before {
+		t.Errorf("converges = %d, want %d: a cluster world's restart must not re-render it", len(spy.refs), before)
+	}
+	if len(rt.restarted) != 1 {
+		t.Errorf("runtime restarts = %d, want 1", len(rt.restarted))
 	}
 }

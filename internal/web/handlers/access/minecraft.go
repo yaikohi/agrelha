@@ -17,11 +17,18 @@ func isHTMLForm(c *fiber.Ctx) bool {
 
 const mcRedirectTarget = "/access?game=minecraft"
 
+// accessSuffix says what actually happened. Claiming a live RCON apply when
+// there is no console is how an operator comes to believe a grant landed: the
+// panel confirmed it, the server never heard it, and nothing says so until
+// somebody checks ops.json.
 func (h *Handler) accessSuffix() string {
-	if h.cfg.HasGit {
-		return "live applied via RCON and committed to Git."
+	if h.cfg.MCAccess != nil && h.cfg.MCAccess.AppliesLive() {
+		if h.cfg.HasGit {
+			return "applied in-game now and committed to Git."
+		}
+		return "applied in-game now."
 	}
-	return "live applied via RCON."
+	return "recorded; it reaches the server the next time the world restarts."
 }
 
 func (h *Handler) MCAccessPage(c *fiber.Ctx) error {
@@ -184,7 +191,8 @@ func (h *Handler) MCAccessRemoveWhitelist(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"ok": true, "changed": changed, "user": user})
 }
 
-// MCAccessWhitelistToggle toggles in-game whitelist enforcement via RCON.
+// MCAccessWhitelistToggle turns Admission enforcement on or off. It is the only
+// thing that does: no grant and no world creation may close a world.
 func (h *Handler) MCAccessWhitelistToggle(c *fiber.Ctx) error {
 	if h.cfg.MCAccess == nil {
 		if isHTMLForm(c) {
@@ -218,7 +226,7 @@ func (h *Handler) MCAccessWhitelistToggle(c *fiber.Ctx) error {
 	}
 
 	if isHTMLForm(c) {
-		shared.SetFlash(c, "ok", fmt.Sprintf("Whitelist enforcement %s via live RCON.", actionDesc))
+		shared.SetFlash(c, "ok", fmt.Sprintf("Whitelist enforcement %s — %s", actionDesc, h.accessSuffix()))
 		return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
 	}
 	return c.JSON(fiber.Map{"ok": true, "enforced": target})

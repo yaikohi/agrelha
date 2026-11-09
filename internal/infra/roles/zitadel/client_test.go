@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 
@@ -242,5 +243,100 @@ func TestAccessTokenIsCached(t *testing.T) {
 	defer cap.mu.Unlock()
 	if cap.tokenHits != 1 {
 		t.Errorf("token endpoint hit %d times, want 1", cap.tokenHits)
+	}
+}
+
+const listAuthorizations = "/zitadel.authorization.v2.AuthorizationService/ListAuthorizations"
+
+// Zitadel can hold several authorizations for one account on one project. Only
+// reading the first one hid every role in the rest: the account page listed no
+// grant, and granting again changed nothing because the role was already there.
+func TestRolesForReadsEveryAuthorization(t *testing.T) {
+	srv, cap, key := newServer(t)
+	cap.respond[listAuthorizations] = func(w http.ResponseWriter) {
+		_, _ = w.Write([]byte(`{"authorizations":[
+			{"id":"a","roles":[{"key":"agrelha-user"}]},
+			{"id":"b","roles":[{"key":"agrelha-minecraft-02"},{"key":"agrelha-user"}]}
+		]}`))
+	}
+	cl := newClient(t, srv, key)
+
+	roles, err := cl.RolesFor(context.Background(), "user-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roles) != 2 {
+		t.Fatalf("roles = %v, want agrelha-user and agrelha-minecraft-02 exactly once each", roles)
+	}
+	if !slices.Contains(roles, domain.Role("agrelha-minecraft-02")) {
+		t.Errorf("roles = %v, missing the grant held by the second authorization", roles)
+	}
+}
+
+// A role held by a second authorization is still held after a revoke unless
+// that one is edited too, and the account keeps the world it was just denied.
+func TestRevokeClearsTheRoleFromEveryAuthorization(t *testing.T) {
+	srv, cap, key := newServer(t)
+	cap.respond[listAuthorizations] = func(w http.ResponseWriter) {
+		_, _ = w.Write([]byte(`{"authorizations":[
+			{"id":"a","roles":[{"key":"agrelha-minecraft-02"},{"key":"agrelha-user"}]},
+			{"id":"b","roles":[{"key":"agrelha-minecraft-02"}]}
+		]}`))
+	}
+	cl := newClient(t, srv, key)
+
+	if err := cl.RevokeRole(context.Background(), "user-7", domain.Role("agrelha-minecraft-02")); err != nil {
+		t.Fatal(err)
+	}
+
+	cap.mu.Lock()
+	defer cap.mu.Unlock()
+	var updated, deleted int
+	for _, p := range cap.paths {
+		switch p {
+		case authSvc + "UpdateAuthorization":
+			updated++
+		case authSvc + "DeleteAuthorization":
+			deleted++
+		}
+	}
+	if updated != 1 {
+		t.Errorf("UpdateAuthorization calls = %d, want 1 for the authorization that keeps a role", updated)
+	}
+	if deleted != 1 {
+		t.Errorf("DeleteAuthorization calls = %d, want 1 for the authorization left with none", deleted)
+	}
+	if body := cap.bodies[authSvc+"UpdateAuthorization"]; body != nil {
+		if keys, ok := body["roleKeys"].([]any); ok {
+			for _, k := range keys {
+				if k == "agrelha-minecraft-02" {
+					t.Error("the revoked role was written back")
+				}
+			}
+		}
+	}
+}
+
+// A grant must not be written twice when another authorization already carries it.
+func TestGrantIsANoOpWhenAnotherAuthorizationHasTheRole(t *testing.T) {
+	srv, cap, key := newServer(t)
+	cap.respond[listAuthorizations] = func(w http.ResponseWriter) {
+		_, _ = w.Write([]byte(`{"authorizations":[
+			{"id":"a","roles":[{"key":"agrelha-user"}]},
+			{"id":"b","roles":[{"key":"agrelha-minecraft-02"}]}
+		]}`))
+	}
+	cl := newClient(t, srv, key)
+
+	if err := cl.GrantRole(context.Background(), "user-7", domain.Role("agrelha-minecraft-02")); err != nil {
+		t.Fatal(err)
+	}
+
+	cap.mu.Lock()
+	defer cap.mu.Unlock()
+	for _, p := range cap.paths {
+		if p == authSvc+"UpdateAuthorization" || p == authSvc+"CreateAuthorization" {
+			t.Errorf("%s was called for a role the account already holds", p)
+		}
 	}
 }

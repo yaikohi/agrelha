@@ -18,6 +18,7 @@ import (
 // runtime-neutral rather than "Kubernetes with extra steps".
 type fakeRuntime struct {
 	started, stopped []string
+	restarted        []string
 	status           map[string]ports.Status
 }
 
@@ -37,7 +38,10 @@ func (f *fakeRuntime) Stop(_ context.Context, ref ports.ServerRef) error {
 	return nil
 }
 
-func (f *fakeRuntime) Restart(context.Context, ports.ServerRef) error { return nil }
+func (f *fakeRuntime) Restart(_ context.Context, ref ports.ServerRef) error {
+	f.restarted = append(f.restarted, ref.Name)
+	return nil
+}
 
 func (f *fakeRuntime) Status(_ context.Context, ref ports.ServerRef) (ports.Status, error) {
 	if st, ok := f.status[ref.Name]; ok {

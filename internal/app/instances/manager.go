@@ -979,6 +979,27 @@ func (m *InstanceManager) DeleteInstance(ctx context.Context, instanceNumber int
 	return nil
 }
 
+func (m *InstanceManager) convergeBeforeRestart(ctx context.Context, inst domain.Instance) {
+	if m.reconciler == nil || inst.EffectiveHost().IsCluster() {
+		return
+	}
+	var mods domain.ModList
+	if m.profileFor(inst).Capabilities.Mods {
+		got, err := m.GetModList(ctx, inst.Number)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("restart: cannot read the mod list, restarting with the state the world already has",
+				"game", m.gameID, "instance", inst.Number, "err", err)
+			return
+		}
+		mods = got
+	}
+	commitMsg := fmt.Sprintf("%s: restart instance %02d (converge)", m.gamePrefix(), inst.Number)
+	if err := m.writeManifests(ctx, inst, mods, commitMsg); err != nil {
+		slog.Warn("restart: cannot apply desired state, restarting with the state the world already has",
+			"game", m.gameID, "instance", inst.Number, "err", err)
+	}
+}
+
 func (m *InstanceManager) RestartInstance(ctx context.Context, instanceNumber int, actor ...string) error {
 	inst, err := m.GetInstance(ctx, instanceNumber)
 	if err != nil {
@@ -987,6 +1008,14 @@ func (m *InstanceManager) RestartInstance(ctx context.Context, instanceNumber in
 	if inst == nil {
 		return fmt.Errorf("instance %d not found", instanceNumber)
 	}
+
+	// A container restart keeps the environment the container was created with,
+	// so everything agrelha renders into it - Mods, Operators, Admission - would
+	// survive the one action the pages tell an operator to take to apply it.
+	// Converging first recreates the container when the Desired state moved.
+	// A render that fails must not block a restart: a world restarted with the
+	// state it already had still beats a world left down.
+	m.convergeBeforeRestart(ctx, *inst)
 
 	if m.runtime != nil {
 		if err := m.runtime.Restart(ctx, m.serverRef(*inst)); err != nil {

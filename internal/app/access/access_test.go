@@ -248,45 +248,109 @@ func TestAccessManagerOnlinePlayersAndParseList(t *testing.T) {
 	}
 }
 
+// Admission enforcement is a decision agrelha records, not a question it asks
+// the server: the answer has to survive a restart and be renderable into a
+// world's environment, and a world with no console had no answer at all.
 func TestAccessManagerWhitelistEnforced(t *testing.T) {
-	// 1. Probe when already on
-	consoleOn := &mockConsole{response: "Whitelist is already turned on"}
-	mgrOn := NewAccessManager(nil, "", consoleOn)
-	enforced, err := mgrOn.WhitelistEnforced(context.Background())
-	if err != nil || !enforced {
-		t.Errorf("expected enforced=true, got: %v, err=%v", enforced, err)
-	}
-
-	// 2. Probe when previously off
-	consoleOff := &mockConsole{response: "Whitelist is now turned on"}
-	mgrOff := NewAccessManager(nil, "", consoleOff)
-	enforced, err = mgrOff.WhitelistEnforced(context.Background())
-	if err != nil || enforced {
-		t.Errorf("expected enforced=false, got: %v, err=%v", enforced, err)
-	}
-	// Verify it reverted with "/whitelist off"
-	if len(consoleOff.commands) < 2 || consoleOff.commands[1] != "/whitelist off" {
-		t.Errorf("expected revert /whitelist off, got: %v", consoleOff.commands)
-	}
-
-	// 3. SetWhitelistEnforced on and off
+	ctx := context.Background()
+	store := newMemAccessStore()
 	audit := &mockAuditRecorder{}
-	consoleToggle := &mockConsole{}
-	mgrToggle := NewAccessManager(nil, "", consoleToggle, WithAudit(audit))
+	console := &mockConsole{}
+	mgr := NewAccessManager(store, "access.yaml", console, WithAudit(audit))
 
-	if err := mgrToggle.SetWhitelistEnforced(context.Background(), true, "admin"); err != nil {
-		t.Fatalf("SetWhitelistEnforced(true) failed: %v", err)
-	}
-	if len(consoleToggle.commands) != 1 || consoleToggle.commands[0] != "/whitelist on" {
-		t.Errorf("expected /whitelist on, got: %v", consoleToggle.commands)
+	enforced, err := mgr.WhitelistEnforced(ctx)
+	if err != nil || enforced {
+		t.Fatalf("a world nobody has closed must start open: enforced=%v err=%v", enforced, err)
 	}
 
-	if err := mgrToggle.SetWhitelistEnforced(context.Background(), false, "admin"); err != nil {
-		t.Fatalf("SetWhitelistEnforced(false) failed: %v", err)
+	if err := mgr.SetWhitelistEnforced(ctx, true, "admin"); err != nil {
+		t.Fatalf("SetWhitelistEnforced(true): %v", err)
 	}
-	if len(consoleToggle.commands) != 2 || consoleToggle.commands[1] != "/whitelist off" {
-		t.Errorf("expected /whitelist off, got: %v", consoleToggle.commands)
+	if enforced, err := mgr.WhitelistEnforced(ctx); err != nil || !enforced {
+		t.Errorf("after turning it on: enforced=%v err=%v", enforced, err)
 	}
+	declared, err := mgr.DeclaredAccess(ctx)
+	if err != nil || declared.WhitelistEnforced == nil || !*declared.WhitelistEnforced {
+		t.Errorf("the decision must be recorded for the renderer: %+v err=%v", declared, err)
+	}
+	if len(console.commands) != 1 || console.commands[0] != "/whitelist on" {
+		t.Errorf("expected /whitelist on, got: %v", console.commands)
+	}
+
+	if err := mgr.SetWhitelistEnforced(ctx, false, "admin"); err != nil {
+		t.Fatalf("SetWhitelistEnforced(false): %v", err)
+	}
+	if enforced, err := mgr.WhitelistEnforced(ctx); err != nil || enforced {
+		t.Errorf("after turning it off: enforced=%v err=%v", enforced, err)
+	}
+	if len(console.commands) != 2 || console.commands[1] != "/whitelist off" {
+		t.Errorf("expected /whitelist off, got: %v", console.commands)
+	}
+}
+
+// Nothing but the switch may close a world: a whitelist full of names still
+// leaves Admission undecided, so creating a world cannot lock anyone out.
+func TestWhitelistedNamesDoNotEnforceAdmission(t *testing.T) {
+	ctx := context.Background()
+	mgr := NewAccessManager(newMemAccessStore(), "access.yaml", nil)
+
+	if _, err := mgr.AddWhitelist(ctx, "steve"); err != nil {
+		t.Fatalf("AddWhitelist: %v", err)
+	}
+	declared, err := mgr.DeclaredAccess(ctx)
+	if err != nil {
+		t.Fatalf("DeclaredAccess: %v", err)
+	}
+	if len(declared.Whitelist) != 1 {
+		t.Errorf("whitelist = %v, want steve", declared.Whitelist)
+	}
+	if declared.WhitelistEnforced != nil {
+		t.Errorf("admission became %v by adding a name; it must stay undecided", *declared.WhitelistEnforced)
+	}
+	if declared.Enforced() {
+		t.Error("an undecided world reported itself as whitelist-only")
+	}
+}
+
+// memAccessStore is the smallest StateStore that remembers, which is what the
+// declared-state tests need and the failing fakes cannot give.
+type memAccessStore struct {
+	docs map[string]ports.Document
+}
+
+func newMemAccessStore() *memAccessStore {
+	return &memAccessStore{docs: map[string]ports.Document{}}
+}
+
+func (m *memAccessStore) Get(_ context.Context, path string) (ports.Document, error) {
+	doc, ok := m.docs[path]
+	if !ok {
+		return ports.Document{}, os.ErrNotExist
+	}
+	return doc, nil
+}
+
+func (m *memAccessStore) Put(_ context.Context, path string, doc ports.Document, _ string) error {
+	m.docs[path] = doc
+	return nil
+}
+
+func (m *memAccessStore) PutTree(_ context.Context, _ string, _ map[string]ports.Document, _ string) error {
+	return nil
+}
+
+func (m *memAccessStore) Delete(_ context.Context, path string, _ string) error {
+	delete(m.docs, path)
+	return nil
+}
+
+func (m *memAccessStore) Patch(ctx context.Context, path, msg string, fn func(*ports.Document) (bool, error)) (bool, error) {
+	doc := m.docs[path]
+	changed, err := fn(&doc)
+	if err != nil || !changed {
+		return false, err
+	}
+	return true, m.Put(ctx, path, doc, msg)
 }
 
 type failingAccessStore struct {
@@ -330,8 +394,8 @@ func TestAccessManagerNilStoreAndErrors(t *testing.T) {
 	if _, err := nilMgr.RemoveWhitelist(ctx, "steve"); err != ports.ErrNotImplemented {
 		t.Errorf("expected ErrNotImplemented for RemoveWhitelist, got %v", err)
 	}
-	if _, err := nilMgr.WhitelistEnforced(context.Background()); err == nil {
-		t.Errorf("expected error for WhitelistEnforced without rcon")
+	if enforced, err := nilMgr.WhitelistEnforced(context.Background()); err != nil || enforced {
+		t.Errorf("with nothing configured Admission is simply undecided: enforced=%v err=%v", enforced, err)
 	}
 	if err := nilMgr.SetWhitelistEnforced(context.Background(), true); err == nil {
 		t.Errorf("expected error for SetWhitelistEnforced without rcon")
@@ -368,11 +432,10 @@ func TestAccessManagerNilStoreAndErrors(t *testing.T) {
 		t.Errorf("AddWhitelist on nil doc failed: %v", err)
 	}
 
-	// 5. WhitelistEnforced via rcon error
-	consoleErr := &mockConsole{err: context.Canceled}
-	rconErrMgr := NewAccessManager(nil, "", consoleErr)
-	if _, err := rconErrMgr.WhitelistEnforced(context.Background()); err == nil {
-		t.Errorf("expected error from WhitelistEnforced on console error")
+	// 5. WhitelistEnforced surfaces a store that cannot be read
+	readErrMgr := NewAccessManager(&failingAccessStore{getErr: errors.New("boom")}, "path", nil)
+	if _, err := readErrMgr.WhitelistEnforced(context.Background()); err == nil {
+		t.Errorf("expected the store read error to surface")
 	}
 }
 
@@ -419,8 +482,10 @@ func TestModManagerNilStoreAndErrors(t *testing.T) {
 	consoleErr := &mockConsole{err: context.Canceled}
 	auditRec := &mockAuditRecorder{}
 	errMgr := NewAccessManager(nilDocStore, "path", consoleErr, WithAudit(auditRec))
-	if err := errMgr.SetWhitelistEnforced(context.Background(), true, ""); err == nil {
-		t.Errorf("expected error in SetWhitelistEnforced when rcon fails")
+	// Recorded is enough: the console is how it applies now, not whether it
+	// applies at all - the next start renders it from what was recorded.
+	if err := errMgr.SetWhitelistEnforced(context.Background(), true, ""); err != nil {
+		t.Errorf("SetWhitelistEnforced with a dead console must still record: %v", err)
 	}
 	// GrantOp with empty actor
 	_, _ = errMgr.GrantOp(ctx, "playerNoActor")
@@ -579,4 +644,3 @@ func TestAccessManager_UsernameValidation(t *testing.T) {
 		})
 	}
 }
-

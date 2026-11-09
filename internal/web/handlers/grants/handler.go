@@ -93,6 +93,7 @@ func (h *Handler) AccountsPage(c *fiber.Ctx) error {
 	options, labels := h.instanceOptions(c)
 
 	registryReady := h.cfg.Authz != nil && h.cfg.Authz.HasRegistry()
+	lookupFailed := false
 	note := "ZITADEL_PROJECT_ID and ZITADEL_SERVICE_KEY are not configured, so agrelha cannot read or change grants in Zitadel."
 
 	accounts, err := h.cfg.Authz.ListAccounts(c.UserContext())
@@ -113,9 +114,13 @@ func (h *Handler) AccountsPage(c *fiber.Ctx) error {
 		if registryReady {
 			roles, err := h.cfg.Authz.RolesFor(c.UserContext(), a.Subject)
 			if err != nil {
+				// One account's lookup failing is not the registry being gone.
+				// Switching the whole page off here left every account below
+				// this one looking ungranted, which reads exactly like a grant
+				// that never happened.
 				slog.Warn("accounts: cannot read roles", "subject", a.Subject, "err", err)
-				registryReady = false
-				note = "Zitadel did not answer a role lookup: " + err.Error()
+				note = "Zitadel did not answer a role lookup, so some grants may be missing from this page: " + err.Error()
+				lookupFailed = true
 			}
 			for _, r := range roles {
 				if r == domain.RoleAdmin {
@@ -137,6 +142,9 @@ func (h *Handler) AccountsPage(c *fiber.Ctx) error {
 			}
 		}
 		ui = append(ui, row)
+	}
+	if lookupFailed && fk == "" {
+		fk, fm = "err", note
 	}
 
 	return shared.Render(c, pages.Accounts(ui, options, registryReady, note, fk, fm))

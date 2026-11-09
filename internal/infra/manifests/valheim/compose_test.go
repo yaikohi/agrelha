@@ -1,6 +1,8 @@
 package valheim
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -237,5 +239,49 @@ func TestComposeStateFilesDoNotRenderEmptyNamespace(t *testing.T) {
 		if strings.Contains(content, "namespace:") {
 			t.Errorf("%s rendered at compose path includes namespace field, which is invalid YAML when empty and leaks Kubernetes concerns into Docker Host desired state:\n%s", name, content)
 		}
+	}
+}
+
+// An admin grant is only a row in agrelha until ADMINLIST_IDS carries it into
+// the container: the image writes adminlist.txt from that variable on start.
+// The Docker renderer rendered no such variable, so "Grant admin" promised an
+// effect the next restart could not deliver.
+func TestGrantedAdminsReachTheContainer(t *testing.T) {
+	files, err := NewComposeRenderer("", "/srv/gamedata",
+		WithAdminIDs(func(context.Context) ([]string, error) {
+			return []string{"76561199029001604", "76561198000000000"}, nil
+		})).Render(composeWorld(false), domain.ModList{})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	body := string(files[ComposeFileName])
+	if !strings.Contains(body, "ADMINLIST_IDS") {
+		t.Fatalf("compose carries no ADMINLIST_IDS\n---\n%s", body)
+	}
+	for _, id := range []string{"76561199029001604", "76561198000000000"} {
+		if !strings.Contains(body, id) {
+			t.Errorf("compose is missing granted admin %s\n---\n%s", id, body)
+		}
+	}
+}
+
+// A read that fails must leave the server the admins it already has rather than
+// rendering an empty list over them.
+func TestAFailedAdminReadLeavesTheAdminlistAlone(t *testing.T) {
+	for name, fn := range map[string]func(context.Context) ([]string, error){
+		"read fails":     func(context.Context) ([]string, error) { return nil, errors.New("state store unreachable") },
+		"nobody granted": func(context.Context) ([]string, error) { return nil, nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			files, err := NewComposeRenderer("", "/srv/gamedata", WithAdminIDs(fn)).
+				Render(composeWorld(false), domain.ModList{})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			if strings.Contains(string(files[ComposeFileName]), "ADMINLIST_IDS") {
+				t.Error("rendered an ADMINLIST_IDS agrelha had nothing to put in")
+			}
+		})
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -75,6 +77,48 @@ func (a *AccessManager) ListAccess(ctx context.Context) (ops []string, whitelist
 	}
 	return nil, nil, storeErr
 }
+
+// whitelistEnforcedKey records whether Admission is enforced. Its absence means
+// "not enforced": a World that nobody has deliberately closed stays open, which
+// is the only safe default - the alternative locks every player out of a World
+// the moment it is created.
+const whitelistEnforcedKey = "whitelist.enforced"
+
+// DeclaredAccess returns only what agrelha itself holds: the Operators, the
+// Admission list and whether it is enforced, as an operator granted them -
+// before any reading of what a server currently has. Rendering a server's
+// environment from the merged view of ListAccess would feed a server its own
+// state back, and a revoke would never take: the name removed here would
+// return from the server's own ops.json.
+func (a *AccessManager) DeclaredAccess(ctx context.Context) (domain.MinecraftAccess, error) {
+	if a == nil || a.store == nil {
+		return domain.MinecraftAccess{}, nil
+	}
+	doc, err := a.store.Get(ctx, a.path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) {
+			return domain.MinecraftAccess{}, nil
+		}
+		return domain.MinecraftAccess{}, err
+	}
+	if doc.Data == nil {
+		return domain.MinecraftAccess{}, nil
+	}
+	out := domain.MinecraftAccess{
+		Ops:       ParseUsers(doc.Data["ops.txt"]),
+		Whitelist: ParseUsers(doc.Data["whitelist.txt"]),
+	}
+	if raw, ok := doc.Data[whitelistEnforcedKey]; ok {
+		enforced := strings.EqualFold(strings.TrimSpace(raw), "true")
+		out.WhitelistEnforced = &enforced
+	}
+	return out, nil
+}
+
+// AppliesLive reports whether a change reaches the running server at once. With
+// no console it does not, and a page that says otherwise is why an operator
+// believes a grant landed when it is only recorded.
+func (a *AccessManager) AppliesLive() bool { return a != nil && a.rcon != nil }
 
 // ParseUsers extracts clean usernames from ops.txt or whitelist.txt.
 func ParseUsers(content string) []string {
@@ -390,39 +434,59 @@ func ParsePlayerList(res string) []string {
 
 // WhitelistEnforced checks if the whitelist is currently enabled in-game via RCON.
 func (a *AccessManager) WhitelistEnforced(ctx context.Context) (bool, error) {
-	if a.rcon == nil {
-		return false, fmt.Errorf("rcon client not configured")
-	}
-	// Modern Minecraft (1.13+) does not have "/whitelist status".
-	// Sending "/whitelist on" returns "Whitelist is already turned on" if on,
-	// or "Whitelist is now turned on" if off (in which case we immediately revert to off).
-	res, err := a.rcon.Execute(ctx, "/whitelist on")
+	declared, err := a.DeclaredAccess(ctx)
 	if err != nil {
 		return false, err
 	}
-	if strings.Contains(strings.ToLower(res), "already") {
-		return true, nil
-	}
-	// It was off and just got turned on; revert back to off to preserve state.
-	_, _ = a.rcon.Execute(ctx, "/whitelist off")
-	return false, nil
+	return declared.Enforced(), nil
 }
 
-// SetWhitelistEnforced turns whitelist on or off in-game via RCON.
+// SetWhitelistEnforced records whether Admission is enforced and, when a
+// console is reachable, turns it on or off in-game at once. The record is what
+// the server is rendered from on its next start, so the switch holds across a
+// restart instead of lasting only as long as the process.
 func (a *AccessManager) SetWhitelistEnforced(ctx context.Context, enforce bool, actor ...string) error {
-	if a.rcon == nil {
-		return fmt.Errorf("rcon client not configured")
-	}
-	cmd := "/whitelist off"
 	desc := "disabled"
+	cmd := "/whitelist off"
 	if enforce {
-		cmd = "/whitelist on"
 		desc = "enabled"
+		cmd = "/whitelist on"
 	}
-	_, err := a.rcon.Execute(ctx, cmd)
-	if err != nil {
-		return err
+
+	if a.store == nil && a.rcon == nil {
+		return ports.ErrNotImplemented
 	}
+
+	if a.store != nil {
+		msg := fmt.Sprintf("mc-access: whitelist %s", desc)
+		if _, err := a.store.Patch(ctx, a.path, msg, func(doc *ports.Document) (bool, error) {
+			if doc.Data == nil {
+				doc.Data = make(map[string]string)
+			}
+			want := "false"
+			if enforce {
+				want = "true"
+			}
+			if doc.Data[whitelistEnforcedKey] == want {
+				return false, nil
+			}
+			doc.Data[whitelistEnforcedKey] = want
+			return true, nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	if a.rcon != nil {
+		if _, err := a.rcon.Execute(ctx, cmd); err != nil {
+			if a.store == nil {
+				return err
+			}
+			slog.Warn("whitelist switch recorded but the server could not be told now, it applies on its next start",
+				"enforced", enforce, "err", err)
+		}
+	}
+
 	if a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-toggle", desc)
 	}

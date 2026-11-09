@@ -1,9 +1,11 @@
 package valheim
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"maps"
 	"path/filepath"
 	"strings"
@@ -33,16 +35,45 @@ const (
 type ComposeRenderer struct {
 	image    string
 	dataRoot string
+	adminIDs func(context.Context) ([]string, error)
 }
 
-func NewComposeRenderer(image, dataRoot string) *ComposeRenderer {
+type ComposeOption func(*ComposeRenderer)
+
+// WithAdminIDs registers the Steam64 IDs an operator granted in-game admin to.
+// The image writes adminlist.txt from ADMINLIST_IDS on start, so without this a
+// grant is a row in agrelha that the server never hears about.
+func WithAdminIDs(fn func(context.Context) ([]string, error)) ComposeOption {
+	return func(r *ComposeRenderer) { r.adminIDs = fn }
+}
+
+func NewComposeRenderer(image, dataRoot string, opts ...ComposeOption) *ComposeRenderer {
 	if image == "" {
 		image = ServerImage
 	}
-	return &ComposeRenderer{image: image, dataRoot: dataRoot}
+	r := &ComposeRenderer{image: image, dataRoot: dataRoot}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
 }
 
 var _ ports.SpecRenderer = (*ComposeRenderer)(nil)
+
+// grantedAdmins reads the admin list agrelha holds. A read that fails leaves
+// the variable unset, so the server keeps the adminlist it already has rather
+// than losing every admin to a momentary error.
+func (r *ComposeRenderer) grantedAdmins() string {
+	if r.adminIDs == nil {
+		return ""
+	}
+	ids, err := r.adminIDs(context.Background())
+	if err != nil {
+		slog.Warn("valheim: cannot read the granted admins, the server keeps the list it has", "err", err)
+		return ""
+	}
+	return strings.Join(ids, " ")
+}
 
 func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map[string][]byte, error) {
 	if strings.TrimSpace(r.dataRoot) == "" {
@@ -58,6 +89,9 @@ func (r *ComposeRenderer) Render(inst domain.Instance, mods domain.ModList) (map
 
 	raw := inst.Env(domain.ValheimProfile)
 	raw["STATUS_HTTP_PORT"] = "9001"
+	if ids := r.grantedAdmins(); ids != "" {
+		raw["ADMINLIST_IDS"] = ids
+	}
 	raw["POST_BOOTSTRAP_HOOK"] = data.PostBootstrapHook()
 	raw["PRE_SERVER_RUN_HOOK"] = data.PreServerRunHook()
 	if !inst.IsVanilla() {

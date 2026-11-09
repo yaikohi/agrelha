@@ -759,7 +759,9 @@ func TestAccessRemainingEdges(t *testing.T) {
 		}
 	}
 
-	// 6. Whitelist Toggle: console error
+	// 6. Whitelist Toggle: console error. Recorded still counts - the switch is
+	// rendered into the world on its next start, so a dead console is not a
+	// failed toggle.
 	hToggleFail := New(Config{
 		MCAccess: mcaccess.NewAccessManager(newMemStateStore(), "access.yaml", &failConsole{}),
 	})
@@ -776,8 +778,8 @@ func TestAccessRemainingEdges(t *testing.T) {
 	reqToggleFailJSON := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
 	reqToggleFailJSON.Header.Set("Accept", "application/json")
 	respToggleFailJSON, _ := appToggleFail.Test(reqToggleFailJSON)
-	if respToggleFailJSON.StatusCode != fiber.StatusInternalServerError {
-		t.Errorf("toggle fail JSON status = %d, want 500", respToggleFailJSON.StatusCode)
+	if respToggleFailJSON.StatusCode != fiber.StatusOK {
+		t.Errorf("toggle fail JSON status = %d, want 200: the switch was recorded", respToggleFailJSON.StatusCode)
 	}
 
 	// 7. Whitelist Toggle: turned off branch (!target)
@@ -836,8 +838,8 @@ func TestAccessRemainingEdges(t *testing.T) {
 	reqSetErrJSON := httptest.NewRequest(http.MethodPost, "/api/minecraft/access/whitelist/toggle", nil)
 	reqSetErrJSON.Header.Set("Accept", "application/json")
 	respSetErrJSON, _ := appToggleSetErr.Test(reqSetErrJSON)
-	if respSetErrJSON.StatusCode != fiber.StatusInternalServerError {
-		t.Errorf("set err JSON status = %d, want 500", respSetErrJSON.StatusCode)
+	if respSetErrJSON.StatusCode != fiber.StatusOK {
+		t.Errorf("set err JSON status = %d, want 200: the switch was recorded", respSetErrJSON.StatusCode)
 	}
 }
 

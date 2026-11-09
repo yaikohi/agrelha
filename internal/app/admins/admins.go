@@ -4,6 +4,9 @@ package admins
 
 import (
 	"context"
+	"errors"
+	"io/fs"
+	"os"
 	"slices"
 	"strings"
 
@@ -58,6 +61,11 @@ func (m *Manager) List(ctx context.Context) ([]string, error) {
 	}
 	doc, err := m.store.Get(ctx, m.path)
 	if err != nil {
+		// Nobody has been granted admin yet, so the file was never written.
+		// That is an empty list, not a failure to read one.
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	if doc.Data != nil {

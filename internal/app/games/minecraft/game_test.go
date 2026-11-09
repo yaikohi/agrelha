@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -198,9 +199,9 @@ func (f *fakeMCRuntime) Status(context.Context, ports.ServerRef) (ports.Status, 
 func (f *fakeMCRuntime) Metrics(context.Context, ports.ServerRef) (ports.Metrics, error) {
 	return ports.Metrics{}, nil
 }
-func (f *fakeMCRuntime) Start(context.Context, ports.ServerRef) error    { return nil }
-func (f *fakeMCRuntime) Stop(context.Context, ports.ServerRef) error     { return nil }
-func (f *fakeMCRuntime) Restart(context.Context, ports.ServerRef) error  { return nil }
+func (f *fakeMCRuntime) Start(context.Context, ports.ServerRef) error   { return nil }
+func (f *fakeMCRuntime) Stop(context.Context, ports.ServerRef) error    { return nil }
+func (f *fakeMCRuntime) Restart(context.Context, ports.ServerRef) error { return nil }
 func (f *fakeMCRuntime) Logs(context.Context, ports.ServerRef, ports.LogOptions) (io.ReadCloser, error) {
 	return nil, nil
 }
@@ -263,3 +264,83 @@ func TestMinecraftEdgeCasesAndOptions(t *testing.T) {
 	}
 }
 
+// What the operator granted has to reach the server, and the only thing that
+// carried it under Kubernetes was OPS/WHITELIST in the pod's environment. The
+// Docker path rendered neither, so every op and every whitelist entry stayed a
+// row in agrelha while ops.json on the server stayed empty.
+func TestGrantedOperatorsReachTheServerEnvironment(t *testing.T) {
+	enforced := true
+	g := New(WithAccessLists(func(context.Context) (domain.MinecraftAccess, error) {
+		return domain.MinecraftAccess{
+			Ops:               []string{"bigbog1356", "yaikohi"},
+			Whitelist:         []string{"bigbog1356", "yaikohi"},
+			WhitelistEnforced: &enforced,
+		}, nil
+	}))
+
+	env := g.RuntimeSpec(domain.Instance{Number: 2, Name: "Valeria", Slug: "valeria"}).Env
+
+	if env["OPS"] != "bigbog1356,yaikohi" {
+		t.Errorf("OPS = %q, want the granted operators", env["OPS"])
+	}
+	if env["WHITELIST"] != "bigbog1356,yaikohi" {
+		t.Errorf("WHITELIST = %q, want the granted whitelist", env["WHITELIST"])
+	}
+	// Without OVERRIDE the image only merges, so a revoke would never take.
+	if env["OVERRIDE_OPS"] != "TRUE" || env["OVERRIDE_WHITELIST"] != "TRUE" {
+		t.Errorf("OVERRIDE_OPS=%q OVERRIDE_WHITELIST=%q, want both TRUE so agrelha's list is the truth",
+			env["OVERRIDE_OPS"], env["OVERRIDE_WHITELIST"])
+	}
+	if env["ENABLE_WHITELIST"] != "TRUE" || env["ENFORCE_WHITELIST"] != "TRUE" {
+		t.Errorf("ENABLE_WHITELIST=%q ENFORCE_WHITELIST=%q, want both TRUE once an operator turned Admission on",
+			env["ENABLE_WHITELIST"], env["ENFORCE_WHITELIST"])
+	}
+}
+
+// A new world has names on no list and a whitelist nobody switched on. It must
+// come up open: defaulting to whitelist-only locks every player out of a world
+// the moment it is created.
+func TestANewWorldIsNeverWhitelistOnly(t *testing.T) {
+	g := New(WithAccessLists(func(context.Context) (domain.MinecraftAccess, error) {
+		return domain.MinecraftAccess{}, nil
+	}))
+
+	env := g.RuntimeSpec(domain.Instance{Number: 3, Name: "Fresh", Slug: "fresh"}).Env
+
+	for _, key := range []string{"ENABLE_WHITELIST", "ENFORCE_WHITELIST", "WHITELIST", "OVERRIDE_WHITELIST", "OPS"} {
+		if v, ok := env[key]; ok {
+			t.Errorf("%s = %q on a world with nothing granted; agrelha must say nothing about Admission it was never told", key, v)
+		}
+	}
+}
+
+// Somebody being whitelisted is not somebody deciding to enforce the whitelist.
+func TestWhitelistedNamesAloneDoNotCloseTheWorld(t *testing.T) {
+	g := New(WithAccessLists(func(context.Context) (domain.MinecraftAccess, error) {
+		return domain.MinecraftAccess{Whitelist: []string{"steve"}}, nil
+	}))
+
+	env := g.RuntimeSpec(domain.Instance{Number: 4, Name: "Open", Slug: "open"}).Env
+
+	if env["WHITELIST"] != "steve" {
+		t.Errorf("WHITELIST = %q, want steve", env["WHITELIST"])
+	}
+	if _, ok := env["ENABLE_WHITELIST"]; ok {
+		t.Errorf("adding a name switched Admission on (ENABLE_WHITELIST=%q)", env["ENABLE_WHITELIST"])
+	}
+}
+
+// A failed read must not strip a server of its operators.
+func TestAFailedAccessReadLeavesTheServersListsAlone(t *testing.T) {
+	g := New(WithAccessLists(func(context.Context) (domain.MinecraftAccess, error) {
+		return domain.MinecraftAccess{}, errors.New("state store unreachable")
+	}))
+
+	env := g.RuntimeSpec(domain.Instance{Number: 5, Name: "Shaky", Slug: "shaky"}).Env
+
+	for _, key := range []string{"OPS", "OVERRIDE_OPS", "WHITELIST", "OVERRIDE_WHITELIST"} {
+		if _, ok := env[key]; ok {
+			t.Errorf("%s was rendered from a failed read", key)
+		}
+	}
+}

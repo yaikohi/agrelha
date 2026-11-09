@@ -285,7 +285,11 @@ func (a authorization) keys() []string {
 	return out
 }
 
-func (c *Client) authorizationFor(ctx context.Context, subject string) (*authorization, error) {
+// authorizationsFor returns every authorization the subject holds on this
+// project. Zitadel can hold more than one - a user granted through two
+// organizations has two - and reading only the first hid the roles in the rest:
+// a Grant looked applied and the account page listed nothing.
+func (c *Client) authorizationsFor(ctx context.Context, subject string) ([]authorization, error) {
 	in := map[string]any{
 		"pagination": map[string]any{"offset": "0", "limit": 100, "asc": true},
 		"filters": []any{
@@ -299,32 +303,34 @@ func (c *Client) authorizationFor(ctx context.Context, subject string) (*authori
 	if _, err := c.do(ctx, http.MethodPost, authSvc+"ListAuthorizations", in, &out); err != nil {
 		return nil, err
 	}
-	if len(out.Authorizations) == 0 {
-		return nil, nil
-	}
-	got := out.Authorizations[0]
-	return &got, nil
+	return out.Authorizations, nil
 }
 
 func (c *Client) RolesFor(ctx context.Context, subject string) ([]domain.Role, error) {
-	a, err := c.authorizationFor(ctx, subject)
-	if err != nil || a == nil {
+	auths, err := c.authorizationsFor(ctx, subject)
+	if err != nil {
 		return nil, err
 	}
-	keys := a.keys()
-	out := make([]domain.Role, 0, len(keys))
-	for _, k := range keys {
-		out = append(out, domain.Role(k))
+	var out []domain.Role
+	seen := map[string]bool{}
+	for _, a := range auths {
+		for _, k := range a.keys() {
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			out = append(out, domain.Role(k))
+		}
 	}
 	return out, nil
 }
 
 func (c *Client) GrantRole(ctx context.Context, subject string, role domain.Role) error {
-	a, err := c.authorizationFor(ctx, subject)
+	auths, err := c.authorizationsFor(ctx, subject)
 	if err != nil {
 		return err
 	}
-	if a == nil {
+	if len(auths) == 0 {
 		in := map[string]any{
 			"userId":    subject,
 			"projectId": c.projectID,
@@ -333,37 +339,45 @@ func (c *Client) GrantRole(ctx context.Context, subject string, role domain.Role
 		_, err := c.do(ctx, http.MethodPost, authSvc+"CreateAuthorization", in, nil)
 		return err
 	}
-	keys := a.keys()
-	if slices.Contains(keys, string(role)) {
-		return nil
+	for _, a := range auths {
+		if slices.Contains(a.keys(), string(role)) {
+			return nil
+		}
 	}
-	in := map[string]any{"id": a.ID, "roleKeys": append(keys, string(role))}
+	first := auths[0]
+	in := map[string]any{"id": first.ID, "roleKeys": append(first.keys(), string(role))}
 	_, err = c.do(ctx, http.MethodPost, authSvc+"UpdateAuthorization", in, nil)
 	return err
 }
 
+// RevokeRole takes the role off every authorization that carries it. Leaving it
+// on a second authorization would revoke nothing: the next role lookup still
+// reports it, and the account keeps the world it was just denied.
 func (c *Client) RevokeRole(ctx context.Context, subject string, role domain.Role) error {
-	a, err := c.authorizationFor(ctx, subject)
-	if err != nil || a == nil {
+	auths, err := c.authorizationsFor(ctx, subject)
+	if err != nil {
 		return err
 	}
-	var keys []string
-	for _, k := range a.keys() {
-		if k != string(role) {
-			keys = append(keys, k)
+	for _, a := range auths {
+		if !slices.Contains(a.keys(), string(role)) {
+			continue
+		}
+		var keys []string
+		for _, k := range a.keys() {
+			if k != string(role) {
+				keys = append(keys, k)
+			}
+		}
+		if len(keys) == 0 {
+			status, delErr := c.do(ctx, http.MethodPost, authSvc+"DeleteAuthorization", map[string]any{"id": a.ID}, nil)
+			if delErr != nil && !notFound(status, delErr) {
+				return delErr
+			}
+			continue
+		}
+		if _, updErr := c.do(ctx, http.MethodPost, authSvc+"UpdateAuthorization", map[string]any{"id": a.ID, "roleKeys": keys}, nil); updErr != nil {
+			return updErr
 		}
 	}
-	if len(keys) == len(a.Roles) {
-		return nil
-	}
-	if len(keys) == 0 {
-		status, err := c.do(ctx, http.MethodPost, authSvc+"DeleteAuthorization", map[string]any{"id": a.ID}, nil)
-		if err != nil && notFound(status, err) {
-			return nil
-		}
-		return err
-	}
-	in := map[string]any{"id": a.ID, "roleKeys": keys}
-	_, err = c.do(ctx, http.MethodPost, authSvc+"UpdateAuthorization", in, nil)
-	return err
+	return nil
 }

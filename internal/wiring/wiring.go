@@ -179,7 +179,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		mcAccessOpts = append(mcAccessOpts, mcaccess.WithAudit(st))
 		if cfg.Runtime == "docker" || d.Git == nil {
 			mcAccessOpts = append(mcAccessOpts, mcaccess.WithAccessReader(func(ctx context.Context) ([]string, []string, error) {
-				mcDataDir := compose.InstanceDataDir(cfg.DataDir, domain.NewInstanceID(domain.GameMinecraft, 1), "minecraft-01")
+				mcDataDir := compose.InstanceDataDir(cfg.DataDir, domain.NewInstanceID(domain.GameMinecraft, mcAccessInstance(ctx, d)), "minecraft-01")
 				dataVol := filepath.Join(mcDataDir, "data")
 				wl, wlErr := mcaccess.ReadJSONUsers(filepath.Join(dataVol, "whitelist.json"))
 				ops, opErr := mcaccess.ReadJSONUsers(filepath.Join(dataVol, "ops.json"))
@@ -556,7 +556,13 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		cfg.ValheimTotalBudgetGiB, cfg.ValheimMaxInstances, cfg.ValheimMaxRunning,
 		cfg.ValheimInstancesPath,
 		cfg.ValheimLBBaseIP,
-		routeRenderer(cfg, valheimmanifests.New(cfg.GameNodeSelector, cfg.ValheimNamespace), valheimmanifests.NewComposeRenderer("", cfg.DataDir)),
+		routeRenderer(cfg, valheimmanifests.New(cfg.GameNodeSelector, cfg.ValheimNamespace),
+			valheimmanifests.NewComposeRenderer("", cfg.DataDir, valheimmanifests.WithAdminIDs(func(ctx context.Context) ([]string, error) {
+				if d.Admins == nil {
+					return nil, nil
+				}
+				return d.Admins.List(ctx)
+			}))),
 		cfg.ValheimNamespace,
 		valheimInstOpts...,
 	)
@@ -634,6 +640,12 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	d.MinecraftGame = minecraft.New(
 		minecraft.WithRuntime(rt, ports.ServerRef{Name: cfg.MinecraftDeployment, Scope: cfg.MinecraftNamespace}),
 		minecraft.WithRconPassword(cfg.MinecraftRconPassword),
+		minecraft.WithAccessLists(func(ctx context.Context) (domain.MinecraftAccess, error) {
+			if d.MCAccess == nil {
+				return domain.MinecraftAccess{}, nil
+			}
+			return d.MCAccess.DeclaredAccess(ctx)
+		}),
 		minecraft.WithPlayerCount(func(ctx context.Context) (int, error) {
 			if d.MCAccess != nil {
 				players, err := d.MCAccess.OnlinePlayers(ctx)
@@ -1215,6 +1227,27 @@ func defaultGameSettings(cfg *config.Config, gameID domain.GameID) domain.GameSe
 		}
 	}
 	return g
+}
+
+// mcAccessInstance names the Minecraft World whose Operators and Admission list
+// the access page reports. The page is still one list for the game rather than
+// one per World, so it reads the running World and falls back to the first one
+// that exists - reading instance 01 whatever exists showed a deleted World's
+// lists, or none at all.
+func mcAccessInstance(ctx context.Context, d Deps) int {
+	if d.MCInstances == nil {
+		return 1
+	}
+	insts, err := d.MCInstances.ListInstances(ctx)
+	if err != nil || len(insts) == 0 {
+		return 1
+	}
+	for _, inst := range insts {
+		if inst.State == domain.StateRunning {
+			return inst.Number
+		}
+	}
+	return insts[0].Number
 }
 
 func buildRoleRegistry(cfg *config.Config) ports.RoleRegistry {
