@@ -269,10 +269,11 @@ func TestConfigFilenameRegex(t *testing.T) {
 
 type fakeMCGame struct {
 	bundle domain.Bundle
+	err    error
 }
 
 func (f *fakeMCGame) ExportClientBundle(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
-	return f.bundle, nil
+	return f.bundle, f.err
 }
 func (f *fakeMCGame) RuntimeSpec(inst domain.Instance) domain.RuntimeSpec {
 	return domain.RuntimeSpec{}
@@ -825,6 +826,79 @@ func TestMCDashboardInstanceActions(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		if !strings.Contains(string(body), "Instance manager not configured") {
 			t.Errorf("expected unconf toast for %s %s, got: %s", ep.method, ep.path, string(body))
+		}
+	}
+}
+
+// A Pack World's client pack is the publisher's own file. The panel sends the
+// player to it rather than proxying twenty megabytes of someone else's zip.
+func TestAPackWorldExportRedirectsToThePackFile(t *testing.T) {
+	h, st, _, _ := setupTestInstancesHandler(t)
+	defer st.Close()
+
+	repo := store.NewInstanceRepo(st)
+	_ = repo.Upsert(domain.Instance{Number: 2, Name: "Valeria", Slug: "mc-valeria-02"})
+
+	const cdn = "https://edge.forgecdn.net/files/8732/682/Craftoria%202-0.11.0.zip"
+	h.cfg.MinecraftGame = &fakeMCGame{bundle: domain.Bundle{
+		Filename:    "craftoria-2-0.11.0.zip",
+		ContentType: "application/zip",
+		URL:         cdn,
+	}}
+
+	app := fiber.New()
+	app.Get("/instances/:num/export", h.MCInstanceExport)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/instances/2/export", nil))
+	if err != nil {
+		t.Fatalf("GET export: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusTemporaryRedirect {
+		t.Fatalf("status = %d, want 307", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != cdn {
+		t.Errorf("Location = %q, want the pack file at %q", got, cdn)
+	}
+}
+
+// An empty-but-valid pack is worse than a refusal: it imports, it looks right,
+// and it leaves the player in a vanilla world wondering why they cannot join. So
+// the refusal has to carry the next step.
+func TestAWorldWithNothingToExportNamesThePackInstead(t *testing.T) {
+	h, st, _, _ := setupTestInstancesHandler(t)
+	defer st.Close()
+
+	repo := store.NewInstanceRepo(st)
+	_ = repo.Upsert(domain.Instance{
+		Number: 2, Name: "Valeria", Slug: "mc-valeria-02",
+		Source: domain.SourceModpack,
+		Minecraft: &domain.MinecraftConfig{
+			MCVersion: "26.1.2",
+			Loader:    domain.LoaderNeoForge,
+			Pack: &domain.Pack{
+				Provider: domain.ProviderCurseForge,
+				Name:     "Craftoria 2",
+				Ref:      "https://www.curseforge.com/minecraft/modpacks/craftoria-2",
+			},
+		},
+	})
+
+	h.cfg.MinecraftGame = &fakeMCGame{err: domain.ErrNothingToExport}
+
+	app := fiber.New()
+	app.Get("/instances/:num/export", h.MCInstanceExport)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/instances/2/export", nil))
+	if err != nil {
+		t.Fatalf("GET export: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Fatalf("status = %d, want 409", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	for _, want := range []string{"Craftoria 2", "curseforge.com/minecraft/modpacks/craftoria-2"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("refusal %q does not tell the player about %q", string(body), want)
 		}
 	}
 }

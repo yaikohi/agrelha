@@ -684,7 +684,7 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 		if mc.MayOpen(isAdmin, inst.Number) {
 			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
 		}
-		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), offersClientBundle(inst)))
+		g.Rows = append(g.Rows, withModpack(withPackCopy(row, inst), fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), offersClientBundle(inst)))
 	}
 
 	for _, inst := range mc.SavedInstances {
@@ -705,7 +705,7 @@ func MinecraftCard(mc MinecraftSummaryUI, isAdmin bool) GameCardUI {
 		if mc.MayOpen(isAdmin, inst.Number) {
 			row.OverviewURL = fmt.Sprintf("/minecraft/%d/overview", inst.Number)
 		}
-		g.Rows = append(g.Rows, withModpack(row, fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), offersClientBundle(inst)))
+		g.Rows = append(g.Rows, withModpack(withPackCopy(row, inst), fmt.Sprintf("/api/minecraft/%d/mods/export", inst.Number), offersClientBundle(inst)))
 	}
 
 	g.Extras = []string{fmt.Sprintf("%d of %d worlds saved", mc.TotalInstances, mc.MaxInstances)}
@@ -1088,8 +1088,36 @@ func withModpack(row ServerRowUI, url string, hasMods bool) ServerRowUI {
 	return row
 }
 
+// offersClientBundle reports whether this World has a client pack to hand a
+// player. A Pack World has no mod list of its own, so what it offers is the Pack
+// release the server installed - which the panel can only produce for a
+// Provider whose pack files it can resolve. Offering a download it cannot build
+// is how players ended up with an empty pack that imported and ran vanilla.
 func offersClientBundle(inst InstanceUI) bool {
-	return inst.HasMods || inst.Source == "modpack"
+	if inst.HasMods {
+		return true
+	}
+	return inst.PackDefined() && inst.PackProvider == string(domain.ProviderCurseForge)
+}
+
+// withPackCopy renames what a Pack World hands over. The publisher's pack is a
+// CurseForge zip, not an .mrpack, and the launchers that import it differ - so
+// does the page it comes from, which stays on the card as the way in when the
+// panel cannot serve the file itself.
+func withPackCopy(row ServerRowUI, inst InstanceUI) ServerRowUI {
+	if !inst.PackDefined() {
+		return row
+	}
+	if inst.PackRef != "" {
+		row.BrowseURL = inst.PackRef
+		row.BrowseLabel = "Open the pack"
+	}
+	if inst.PackProvider == string(domain.ProviderCurseForge) {
+		row.DownloadFmt = ".zip"
+		row.Launchers = []string{"Prism Launcher", "the CurseForge app"}
+		row.ImportSteps = "Add Instance → Import from zip"
+	}
+	return row
 }
 
 // InstanceTabs lists an instance's tabs, omitting Mods for a Vanilla World.

@@ -753,3 +753,61 @@ func TestBuildMrpackPinnedVersionsAndFallback(t *testing.T) {
 		t.Errorf("foundIndex=%v, foundReport=%v", foundIndex, foundReport)
 	}
 }
+
+// A CurseForge mod the server runs is embedded by URL, and the index is the only
+// part of an .mrpack a launcher downloads from. Until these entries were added
+// before the index was marshalled, they existed in the report alone: the pack
+// imported, looked complete, and installed none of them.
+func TestCurseForgeFilesReachTheIndexAndNotJustTheReport(t *testing.T) {
+	mock := &mockModrinth{projects: map[string]*modrinth.Project{}, versions: map[string][]modrinth.Version{}}
+
+	data, err := BuildMrpack(context.Background(), mock, "CFPack", "1.21.1", "neoforge", "21.1.249", nil,
+		[]CurseForgeFile{
+			{Slug: "oculus", FileName: "oculus-1.8.0.jar", URL: "https://edge.forgecdn.net/files/1/2/oculus-1.8.0.jar", SHA1: "abc123", Size: 4096},
+			{Slug: "secret-mod"}, // author forbids distribution: reported, never embedded
+		}, nil)
+	if err != nil {
+		t.Fatalf("BuildMrpack failed: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("invalid zip: %v", err)
+	}
+	contents := map[string][]byte{}
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open %s: %v", f.Name, err)
+		}
+		body, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("read %s: %v", f.Name, err)
+		}
+		contents[f.Name] = body
+	}
+
+	var index MrpackIndex
+	if err := json.Unmarshal(contents["modrinth.index.json"], &index); err != nil {
+		t.Fatalf("modrinth.index.json: %v", err)
+	}
+	if len(index.Files) != 1 {
+		t.Fatalf("index lists %d files, want 1: the CurseForge mod must be in the index a launcher reads", len(index.Files))
+	}
+	got := index.Files[0]
+	if got.Path != "mods/oculus-1.8.0.jar" || len(got.Downloads) != 1 || got.Downloads[0] == "" {
+		t.Errorf("index entry = %+v, want the CurseForge jar with its download URL", got)
+	}
+	if got.Hashes["sha1"] != "abc123" || got.FileSize != 4096 {
+		t.Errorf("index entry = %+v, want the pinned hash and size", got)
+	}
+
+	report := string(contents["overrides/MOD_EXPORT_REPORT.txt"])
+	if !strings.Contains(report, "secret-mod") {
+		t.Error("the mod nobody may redistribute went missing from the report, so a player would never know to install it by hand")
+	}
+	if !strings.Contains(report, "Included Client:   1") {
+		t.Errorf("report miscounts what the pack carries:\n%s", report)
+	}
+}

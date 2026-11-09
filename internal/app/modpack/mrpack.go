@@ -357,6 +357,32 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 		index.Files = append(index.Files, rf.file)
 	}
 
+	// CurseForge mods are embedded by URL rather than merely named: a modpack
+	// that silently omits mods the server runs looks fine and is not. They join
+	// index.Files before it is marshalled, or they reach the player in the
+	// report alone.
+	var cfRestricted []string
+	for _, f := range cfFiles {
+		if f.URL == "" {
+			cfRestricted = append(cfRestricted, f.Slug)
+			continue
+		}
+		name := f.FileName
+		if name == "" {
+			name = f.Slug + ".jar"
+		}
+		hashes := map[string]string{}
+		if f.SHA1 != "" {
+			hashes["sha1"] = f.SHA1
+		}
+		index.Files = append(index.Files, MrpackFile{
+			Path:      "mods/" + name,
+			Hashes:    hashes,
+			Downloads: []string{f.URL},
+			FileSize:  f.Size,
+		})
+	}
+
 	indexJSON, err := mrpackJSONMarshalIndent(index, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal modrinth.index.json: %w", err)
@@ -392,30 +418,6 @@ func BuildMrpack(ctx context.Context, mr ModrinthProvider, packName, mcVersion, 
 	}
 
 	// 3. Write diagnostic export report into overrides/MOD_EXPORT_REPORT.txt
-	// CurseForge mods are embedded by URL rather than merely named: a modpack
-	// that silently omits mods the server runs looks fine and is not.
-	var cfRestricted []string
-	for _, f := range cfFiles {
-		if f.URL == "" {
-			cfRestricted = append(cfRestricted, f.Slug)
-			continue
-		}
-		name := f.FileName
-		if name == "" {
-			name = f.Slug + ".jar"
-		}
-		hashes := map[string]string{}
-		if f.SHA1 != "" {
-			hashes["sha1"] = f.SHA1
-		}
-		index.Files = append(index.Files, MrpackFile{
-			Path:      "mods/" + name,
-			Hashes:    hashes,
-			Downloads: []string{f.URL},
-			FileSize:  f.Size,
-		})
-	}
-
 	var report strings.Builder
 	report.WriteString("============================================================\n")
 	report.WriteString("Modpack Export Report\n")

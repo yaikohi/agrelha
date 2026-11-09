@@ -369,8 +369,10 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 
 	instOpts = append(instOpts, instances.WithReconciler(d.Reconciler), instances.WithDefaultHost(defaultHostFor(cfg, "minecraft")))
+	var installedReader *installed.Reader
 	if cfg.DataDir != "" {
-		instOpts = append(instOpts, instances.WithInstalledBuilds(installed.New(cfg.DataDir)))
+		installedReader = installed.New(cfg.DataDir)
+		instOpts = append(instOpts, instances.WithInstalledBuilds(installedReader))
 	}
 	d.MCInstances = instances.NewInstanceManager(
 		store.NewInstanceRepo(st), d.StateStore, rt,
@@ -660,6 +662,14 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 			return domain.LoaderNeoForge, ""
 		}),
 		minecraft.WithBundleBuilder(func(ctx context.Context, inst domain.Instance) (domain.Bundle, error) {
+			// A Pack World's mods are installed by the server from the Pack, so
+			// there is no mod list to export - the only honest client pack is the
+			// Pack release the server actually installed, handed over as the
+			// publisher's own file.
+			if inst.PackDefined() {
+				return packBundle(ctx, d, installedReader, inst)
+			}
+
 			var slugs []string
 			cfgFiles := make(map[string]string)
 			if d.MCK8s != nil {
@@ -725,6 +735,10 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 						})
 					}
 				}
+			}
+
+			if len(slugs) == 0 && len(cfExport) == 0 {
+				return domain.Bundle{}, domain.ErrNothingToExport
 			}
 
 			mrpackBytes, err := buildMrpack(ctx, d.MR, inst.Name, mcVer, loader, "", slugs, cfExport, cfgFiles)
@@ -1059,6 +1073,56 @@ func buildDeclarativePlane(cfg *config.Config, st *store.Store) (ports.StateStor
 
 	slog.Warn("GIT_REPO_URL/GIT_TOKEN unset: declarative plane is read-only")
 	return unconfigured.New(), argocd.New(), nil, nil
+}
+
+// packBundle hands a Pack World's players the Pack release the server actually
+// installed, as the publisher's own file. The server's mods directory holds only
+// the server half of a Pack - no client-only mods, and nothing saying which
+// loader build it was installed against - so a pack built from it would import
+// cleanly and still fail to join. A Pack nobody can identify or fetch is
+// reported as such rather than approximated.
+func packBundle(ctx context.Context, d Deps, packs ports.PackReader, inst domain.Instance) (domain.Bundle, error) {
+	if packs == nil {
+		return domain.Bundle{}, domain.ErrNothingToExport
+	}
+
+	pack, err := packs.InstalledPack(ctx, inst.ID())
+	if err != nil {
+		slog.Warn("minecraft export: cannot read the installed pack", "number", inst.Number, "err", err)
+		return domain.Bundle{}, domain.ErrNothingToExport
+	}
+	if pack.Provider != domain.ProviderCurseForge || !d.CF.Ready() {
+		return domain.Bundle{}, domain.ErrNothingToExport
+	}
+
+	url, err := d.CF.DownloadURL(ctx, pack.ModID, pack.FileID)
+	if err != nil {
+		slog.Warn("minecraft export: CurseForge will not say where this pack lives",
+			"number", inst.Number, "mod_id", pack.ModID, "file_id", pack.FileID, "err", err)
+		return domain.Bundle{}, domain.ErrNothingToExport
+	}
+	if url == "" {
+		// The author forbids third-party distribution: the pack page is the only
+		// way to it, which is what the refusal tells the player.
+		return domain.Bundle{}, domain.ErrNothingToExport
+	}
+
+	return domain.Bundle{
+		Filename:    packFileName(pack, inst),
+		ContentType: "application/zip",
+		URL:         url,
+	}, nil
+}
+
+func packFileName(pack ports.InstalledPack, inst domain.Instance) string {
+	name := strings.TrimSpace(pack.Name)
+	if name == "" {
+		name = inst.Slug
+	}
+	if v := strings.TrimSpace(pack.Version); v != "" {
+		name += "-" + v
+	}
+	return name + ".zip"
 }
 
 func dockerHost(cfg *config.Config) (domain.Host, bool) {

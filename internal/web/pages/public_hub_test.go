@@ -67,13 +67,15 @@ func TestOfflineWorldsDoNotLeakAnAdminLink(t *testing.T) {
 	}
 }
 
-func TestAModpackWorldOffersItsPackEvenWithNoModList(t *testing.T) {
+func TestACurseForgePackWorldOffersThePackItInstalled(t *testing.T) {
 	mc := MinecraftSummaryUI{
 		TotalInstances: 1, MaxInstances: 4,
 		ActiveInstances: []InstanceUI{{
 			Number: 1, Name: "Create Live", LBIP: "10.0.0.2",
 			Source: "modpack", Pack: "Create: Arcane Engineering",
-			MCVersion: "1.21.1", Loader: "neoforge",
+			PackProvider: "curseforge",
+			PackRef:      "https://www.curseforge.com/minecraft/modpacks/create-arcane-engineering",
+			MCVersion:    "1.21.1", Loader: "neoforge",
 			HasMods: false,
 		}},
 	}
@@ -83,11 +85,40 @@ func TestAModpackWorldOffersItsPackEvenWithNoModList(t *testing.T) {
 		t.Error(`a modpack world offered no download.
 
 Its mods come from the pack, so GetInstalledMods returns nothing and HasMods is
-false — but the .mrpack is exactly what a player needs to join. Gating the
-download on an explicit mod list hides it on every pack-based world.`)
+false - but the pack the server installed is exactly what a player needs to
+join. Gating the download on an explicit mod list hides it on every pack world.`)
 	}
-	if row.DownloadFmt != ".mrpack" {
-		t.Errorf("download format = %q, want .mrpack", row.DownloadFmt)
+	if row.DownloadFmt != ".zip" {
+		t.Errorf("download format = %q, want .zip: what a CurseForge pack world hands over is the publisher's pack zip, not an .mrpack built from a mod list", row.DownloadFmt)
+	}
+	if row.BrowseURL != mc.ActiveInstances[0].PackRef {
+		t.Errorf("browse URL = %q, want the pack page: it is the way in when the panel cannot serve the file", row.BrowseURL)
+	}
+}
+
+func TestAPackWorldThePanelCannotBuildLinksThePackInstead(t *testing.T) {
+	mc := MinecraftSummaryUI{
+		TotalInstances: 1, MaxInstances: 4,
+		ActiveInstances: []InstanceUI{{
+			Number: 1, Name: "Modrinth Pack World", LBIP: "10.0.0.4",
+			Source: "modpack", Pack: "Cobblemon",
+			PackProvider: "modrinth",
+			PackRef:      "https://modrinth.com/modpack/cobblemon",
+			MCVersion:    "1.21.1", Loader: "fabric",
+			HasMods: false,
+		}},
+	}
+
+	row := MinecraftCard(mc, false).Rows[0]
+	if row.DownloadURL != "" {
+		t.Errorf(`the card offered a download at %q for a pack the panel cannot resolve to a file.
+
+Only CurseForge packs are resolvable today, so every other pack world would
+serve an empty pack: it imports, it looks right, and the player joins without
+mods.`, row.DownloadURL)
+	}
+	if row.BrowseURL != mc.ActiveInstances[0].PackRef {
+		t.Errorf("browse URL = %q, want the pack page: it is all the card can honestly offer", row.BrowseURL)
 	}
 }
 

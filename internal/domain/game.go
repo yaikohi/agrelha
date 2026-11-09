@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -176,11 +177,22 @@ type Display struct {
 }
 
 // Bundle represents an exported client pack (e.g. .r2z or .mrpack) for players.
+// URL is set instead of Data when the pack is an upstream file the player should
+// fetch from its publisher - a modpack World runs a Pack the panel never built,
+// and serving a copy of it would both lie about its provenance and push its
+// bytes through the panel.
 type Bundle struct {
 	Filename    string
 	ContentType string
 	Data        []byte
+	URL         string
 }
+
+// ErrNothingToExport says there is no client pack to hand a player. A World
+// whose mods the server installs itself has no mod list to export, and an empty
+// but valid pack is worse than a refusal: it imports, it looks right, and it
+// leaves the player without the mods.
+var ErrNothingToExport = errors.New("no client pack to export")
 
 // ContentItem represents a single mod, pack, or plugin component.
 type ContentItem struct {

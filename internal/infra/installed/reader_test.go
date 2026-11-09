@@ -2,6 +2,7 @@ package installed
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,5 +83,53 @@ func TestAnUninstalledWorldReportsNothingRatherThanGuessing(t *testing.T) {
 	}
 	if _, err := New("").InstalledBuild(context.Background(), domain.NewInstanceID(domain.GameMinecraft, 1)); err == nil {
 		t.Error("an unconfigured reader must refuse")
+	}
+}
+
+// The body is a trimmed copy of what itzg's AUTO_CURSEFORGE installer wrote for
+// valeria on the host, files array included: the real one lists 1096 of them,
+// and none of them names anything a player needs.
+func TestReadsThePackTheServerInstalled(t *testing.T) {
+	root := t.TempDir()
+	writeManifest(t, root, 2, ".curseforge-manifest.json",
+		`{"@type":"me.itzg.helpers.curseforge.CurseForgeManifest",`+
+			`"files":["mods/sophisticatedbackpacks-26.1.2-3.25.90.2106.jar","mods/mcw-windows-2.4.2-mc26.1neoforge.jar"],`+
+			`"modpackName":"craftoria-2","modpackVersion":"0.11.0","slug":"craftoria-2",`+
+			`"modId":1535822,"fileId":8732682,"fileName":"Craftoria 2 - 0.11.0",`+
+			`"minecraftVersion":"26.1.2","modLoaderId":"neoforge-26.1.2.97"}`)
+
+	got, err := New(root).InstalledPack(context.Background(), domain.NewInstanceID(domain.GameMinecraft, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Provider != domain.ProviderCurseForge {
+		t.Errorf("provider = %q, want curseforge", got.Provider)
+	}
+	if got.ModID != 1535822 || got.FileID != 8732682 {
+		t.Errorf("pack file = %d/%d, want 1535822/8732682: those ids are the only way back to the exact release the server runs", got.ModID, got.FileID)
+	}
+	if got.Name != "craftoria-2" || got.Version != "0.11.0" {
+		t.Errorf("pack = %q %q, want craftoria-2 0.11.0", got.Name, got.Version)
+	}
+}
+
+func TestAWorldWithNoPackManifestSaysSoRatherThanGuessing(t *testing.T) {
+	root := t.TempDir()
+	writeManifest(t, root, 3, ".neoforge-manifest.json", `{"minecraftVersion":"26.1.2","forgeVersion":"26.1.2.97"}`)
+
+	_, err := New(root).InstalledPack(context.Background(), domain.NewInstanceID(domain.GameMinecraft, 3))
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("err = %v, want a not-exist error so the caller can offer the pack page instead", err)
+	}
+}
+
+// A manifest naming no pack file is as useless as an absent one: half a record
+// must not resolve to mod 0, file 0.
+func TestAPackManifestWithoutIDsIsNotAPack(t *testing.T) {
+	root := t.TempDir()
+	writeManifest(t, root, 4, ".curseforge-manifest.json", `{"modpackName":"craftoria-2","files":[]}`)
+
+	if _, err := New(root).InstalledPack(context.Background(), domain.NewInstanceID(domain.GameMinecraft, 4)); err == nil {
+		t.Error("a manifest with no modId/fileId was accepted as a pack")
 	}
 }

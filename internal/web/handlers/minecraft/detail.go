@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -321,7 +322,8 @@ func (h *Handler) renderMCInstalledModsHTML(ctx context.Context, instanceNumber 
 	return sb.String()
 }
 
-// MCInstanceExport exports the instance as a Modrinth modpack (.mrpack).
+// MCInstanceExport hands a player this world's client pack: an .mrpack built
+// from its mod list, or a redirect to the Pack release the server installed.
 func (h *Handler) MCInstanceExport(c *fiber.Ctx) error {
 	instanceNumber, err := strconv.Atoi(c.Params("num"))
 	if err != nil {
@@ -338,12 +340,43 @@ func (h *Handler) MCInstanceExport(c *fiber.Ctx) error {
 	}
 
 	bundle, err := h.cfg.MinecraftGame.ExportClientBundle(c.UserContext(), *inst)
-	if err != nil {
+	switch {
+	case errors.Is(err, domain.ErrNothingToExport):
+		return c.Status(fiber.StatusConflict).SendString(noPackToExport(*inst))
+	case err != nil:
 		return c.Status(fiber.StatusInternalServerError).SendString("Build mrpack failed: " + err.Error())
 	}
+
+	// A Pack release is the publisher's file, so the player is sent to it rather
+	// than served a copy of it through the panel.
+	if bundle.URL != "" {
+		return c.Redirect(bundle.URL, fiber.StatusTemporaryRedirect)
+	}
+
 	c.Set("Content-Type", bundle.ContentType)
 	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, bundle.Filename))
 	return c.Send(bundle.Data)
+}
+
+// noPackToExport says why there is nothing to download and where to go instead.
+// A player who clicked "get the mods" is owed the next step, not a status code.
+func noPackToExport(inst domain.Instance) string {
+	pack := ""
+	ref := ""
+	if inst.Minecraft != nil && inst.Minecraft.Pack != nil {
+		pack = strings.TrimSpace(inst.Minecraft.Pack.Name)
+		ref = strings.TrimSpace(inst.Minecraft.Pack.Ref)
+	}
+	switch {
+	case pack != "" && ref != "":
+		return fmt.Sprintf("%s runs the %s modpack, which its publisher distributes: install it from %s", inst.Name, pack, ref)
+	case ref != "":
+		return fmt.Sprintf("%s runs a modpack its publisher distributes: install it from %s", inst.Name, ref)
+	case pack != "":
+		return fmt.Sprintf("%s runs the %s modpack: install that pack in your launcher", inst.Name, pack)
+	default:
+		return fmt.Sprintf("%s has no mods to export yet", inst.Name)
+	}
 }
 
 // modRequest reads the slug and Provider a mod action applies to. An absent
