@@ -269,12 +269,18 @@ func (p PanelPortUI) LampSignals() string {
 	)
 }
 
+// Presence says who is on. A count nobody could read is not a count of zero:
+// reporting "nobody on" for a world the panel cannot ask is how two people
+// playing became an empty server on the page.
 func (p PanelPortUI) Presence() string {
 	if !p.Row.Online {
 		return "Not running"
 	}
 	who := "nobody on"
-	if p.Row.PlayersKnown && p.Row.Players > 0 {
+	switch {
+	case !p.Row.PlayersKnown:
+		who = "players unknown"
+	case p.Row.Players > 0:
 		who = fmt.Sprintf("%d playing", p.Row.Players)
 	}
 	if p.Row.Uptime != "" && p.Row.Uptime != "—" {
@@ -283,8 +289,11 @@ func (p PanelPortUI) Presence() string {
 	return who
 }
 
+// PresenceExpr binds the row to live signals. With no readable count there is
+// no signal worth binding - the expression would print "nobody on" again - so
+// the row keeps the static text that says so.
 func (p PanelPortUI) PresenceExpr() string {
-	if p.Row.OnlineSignal == "" {
+	if p.Row.OnlineSignal == "" || !p.Row.PlayersKnown {
 		return ""
 	}
 	on := "$" + p.Row.OnlineSignal

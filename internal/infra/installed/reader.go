@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"agrelha/internal/domain"
 	composereconcile "agrelha/internal/infra/reconcile/compose"
@@ -17,6 +18,7 @@ import (
 // They are the record of what it actually did, so they are read rather than the
 // Pack asked about again.
 const (
+	rconEnvFile        = ".rcon-cli.env"
 	curseforgeManifest = ".curseforge-manifest.json"
 	neoforgeManifest   = ".neoforge-manifest.json"
 	forgeManifest      = ".forge-manifest.json"
@@ -85,6 +87,28 @@ func (r *Reader) InstalledPack(ctx context.Context, id domain.InstanceID) (ports
 		Version:  m.ModpackVersion,
 		FileName: m.FileName,
 	}, nil
+}
+
+// RconPassword reads the console password the server is actually using. The
+// image generates one per world when nobody hands it one, writing it beside the
+// world - so the only way to talk to such a server is to read what it chose,
+// and without it the panel has no console at all: no player list, no operator
+// command, nothing applied in-game.
+func (r *Reader) RconPassword(ctx context.Context, id domain.InstanceID) (string, error) {
+	if r == nil || r.dataRoot == "" {
+		return "", ports.ErrNotImplemented
+	}
+	b, err := os.ReadFile(filepath.Join(r.dataDir(id), rconEnvFile))
+	if err != nil {
+		return "", err
+	}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok && strings.EqualFold(strings.TrimSpace(key), "password") {
+			return strings.Trim(strings.TrimSpace(value), `"'`), nil
+		}
+	}
+	return "", fmt.Errorf("installed: %s names no password: %w", rconEnvFile, os.ErrNotExist)
 }
 
 func (r *Reader) dataDir(id domain.InstanceID) string {

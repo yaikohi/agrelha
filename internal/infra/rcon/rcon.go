@@ -225,13 +225,18 @@ func NewPool(password string, timeout time.Duration, opts ...Option) *Pool {
 }
 
 func (p *Pool) ClientFor(addr string) *Client {
+	return p.ClientWith(addr, p.password)
+}
+
+func (p *Pool) ClientWith(addr, password string) *Client {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if c, ok := p.clients[addr]; ok {
+	key := addr + "\x00" + password
+	if c, ok := p.clients[key]; ok {
 		return c
 	}
-	c := NewClient(addr, p.password, p.timeout, p.opts...)
-	p.clients[addr] = c
+	c := NewClient(addr, password, p.timeout, p.opts...)
+	p.clients[key] = c
 	return c
 }
 
@@ -243,15 +248,19 @@ func (p *Pool) Evict(addr string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	c, ok := p.clients[addr]
-	if !ok {
-		return nil
+	var errs []error
+	for key, c := range p.clients {
+		if before, _, _ := strings.Cut(key, "\x00"); before != addr {
+			continue
+		}
+		delete(p.clients, key)
+		if c != nil {
+			if err := c.Close(); err != nil {
+				errs = append(errs, err)
+			}
+		}
 	}
-	delete(p.clients, addr)
-	if c != nil {
-		return c.Close()
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Close closes all cached clients and clears the pool.

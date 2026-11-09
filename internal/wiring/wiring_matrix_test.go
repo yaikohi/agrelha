@@ -381,10 +381,13 @@ func TestWiring_Build_FullK8sMatrix(t *testing.T) {
 
 	// 5. Test MCInstances RCON hooks (execute, telemetry, stop, delete)
 	if deps.MCInstances != nil {
+		// The console is reached at the configured address now, so this asks a
+		// server and gets its answer back; it used to error on every target and
+		// never reach one at all.
 		res, err := deps.MCInstances.ExecuteCommand(ctx, 1, "say testing rcon")
 		if err != nil {
-			t.Logf("ExecuteCommand note: %v", err)
-		} else if !strings.Contains(res, "Server") {
+			t.Errorf("ExecuteCommand found no console to run on: %v", err)
+		} else if !strings.Contains(res, "say testing rcon") {
 			t.Errorf("unexpected execute response: %s", res)
 		}
 		// Telemetry provider callback

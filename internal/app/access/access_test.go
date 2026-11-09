@@ -482,10 +482,12 @@ func TestModManagerNilStoreAndErrors(t *testing.T) {
 	consoleErr := &mockConsole{err: context.Canceled}
 	auditRec := &mockAuditRecorder{}
 	errMgr := NewAccessManager(nilDocStore, "path", consoleErr, WithAudit(auditRec))
-	// Recorded is enough: the console is how it applies now, not whether it
-	// applies at all - the next start renders it from what was recorded.
-	if err := errMgr.SetWhitelistEnforced(context.Background(), true, ""); err != nil {
-		t.Errorf("SetWhitelistEnforced with a dead console must still record: %v", err)
+	// Recorded is enough to keep the switch, but the caller has to be told the
+	// server has not heard it yet - saying "done" would be the lie this page
+	// used to tell.
+	err := errMgr.SetWhitelistEnforced(context.Background(), true, "")
+	if !errors.Is(err, ErrRecordedOnly) {
+		t.Errorf("err = %v, want ErrRecordedOnly: the switch was recorded, the server was not told", err)
 	}
 	// GrantOp with empty actor
 	_, _ = errMgr.GrantOp(ctx, "playerNoActor")

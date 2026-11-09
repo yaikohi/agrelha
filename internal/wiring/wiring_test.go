@@ -198,8 +198,10 @@ func TestBuildVariantsAndRoutes(t *testing.T) {
 	if deps.Git == nil || deps.StateStore == nil {
 		t.Errorf("expected Git and StateStore to be initialized")
 	}
-	if deps.MCRcon == nil || deps.MCRconPool == nil {
-		t.Errorf("expected MCRcon and MCRconPool to be initialized")
+	// The pool exists whether or not a password is configured: a Docker world
+	// carries its own, and without the pool there is no console at all.
+	if deps.MCRconPool == nil {
+		t.Error("expected MCRconPool to be initialized")
 	}
 	if deps.MCAccess == nil || deps.MCMods == nil {
 		t.Errorf("expected MCAccess and MCMods initialized")
@@ -235,4 +237,3 @@ func TestBuildRejectsCollidingDataDirAndComposeDir(t *testing.T) {
 		t.Fatal("wiring.Build must fail when DATA_DIR and COMPOSE_DIR collide, or materialization will overwrite game saves")
 	}
 }
-

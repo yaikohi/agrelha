@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"strings"
 
@@ -77,6 +76,12 @@ func (a *AccessManager) ListAccess(ctx context.Context) (ops []string, whitelist
 	}
 	return nil, nil, storeErr
 }
+
+// ErrRecordedOnly says the change was recorded but did not reach the running
+// server. It is not a failure - the next start renders it - but a caller that
+// treats it as success tells an operator their grant is live when it is not,
+// which is the whole reason a world ran for days with nobody opped.
+var ErrRecordedOnly = errors.New("recorded but not applied in-game")
 
 // whitelistEnforcedKey records whether Admission is enforced. Its absence means
 // "not enforced": a World that nobody has deliberately closed stays open, which
@@ -199,6 +204,9 @@ func (a *AccessManager) GrantOp(ctx context.Context, username string, actor ...s
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-op-grant", username)
 	}
+	if rconErr != nil {
+		return changed, fmt.Errorf("%w: %v", ErrRecordedOnly, rconErr)
+	}
 	return changed, nil
 }
 
@@ -265,6 +273,9 @@ func (a *AccessManager) RevokeOp(ctx context.Context, username string, actor ...
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-op-revoke", username)
 	}
+	if rconErr != nil {
+		return changed, fmt.Errorf("%w: %v", ErrRecordedOnly, rconErr)
+	}
 	return changed, nil
 }
 
@@ -327,6 +338,9 @@ func (a *AccessManager) AddWhitelist(ctx context.Context, username string, actor
 
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-add", username)
+	}
+	if rconErr != nil {
+		return changed, fmt.Errorf("%w: %v", ErrRecordedOnly, rconErr)
 	}
 	return changed, nil
 }
@@ -394,6 +408,9 @@ func (a *AccessManager) RemoveWhitelist(ctx context.Context, username string, ac
 
 	if changed && a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-remove", username)
+	}
+	if rconErr != nil {
+		return changed, fmt.Errorf("%w: %v", ErrRecordedOnly, rconErr)
 	}
 	return changed, nil
 }
@@ -477,18 +494,21 @@ func (a *AccessManager) SetWhitelistEnforced(ctx context.Context, enforce bool, 
 		}
 	}
 
+	var rconErr error
 	if a.rcon != nil {
 		if _, err := a.rcon.Execute(ctx, cmd); err != nil {
 			if a.store == nil {
 				return err
 			}
-			slog.Warn("whitelist switch recorded but the server could not be told now, it applies on its next start",
-				"enforced", enforce, "err", err)
+			rconErr = err
 		}
 	}
 
 	if a.audit != nil {
 		_ = a.audit.RecordAudit(actorOrHyphen(actor), "mc-whitelist-toggle", desc)
+	}
+	if rconErr != nil {
+		return fmt.Errorf("%w: %v", ErrRecordedOnly, rconErr)
 	}
 	return nil
 }

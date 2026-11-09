@@ -1,8 +1,11 @@
 package access
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+
+	mcaccess "agrelha/internal/app/access"
 
 	"agrelha/internal/domain"
 	"agrelha/internal/web/shared"
@@ -17,19 +20,25 @@ func isHTMLForm(c *fiber.Ctx) bool {
 
 const mcRedirectTarget = "/access?game=minecraft"
 
-// accessSuffix says what actually happened. Claiming a live RCON apply when
-// there is no console is how an operator comes to believe a grant landed: the
-// panel confirmed it, the server never heard it, and nothing says so until
-// somebody checks ops.json.
-func (h *Handler) accessSuffix() string {
-	if h.cfg.MCAccess != nil && h.cfg.MCAccess.AppliesLive() {
-		if h.cfg.HasGit {
-			return "applied in-game now and committed to Git."
-		}
-		return "applied in-game now."
+// applySuffix says what actually happened. Claiming a live apply when the
+// server never heard it is how an operator comes to believe a grant landed: the
+// panel confirmed it, ops.json stayed empty, and nothing said so until somebody
+// looked at the file.
+func (h *Handler) applySuffix(err error) string {
+	live := h.cfg.MCAccess != nil && h.cfg.MCAccess.AppliesLive() && !errors.Is(err, mcaccess.ErrRecordedOnly)
+	if !live {
+		return "recorded; it reaches the server the next time the world restarts."
 	}
-	return "recorded; it reaches the server the next time the world restarts."
+	if h.cfg.HasGit {
+		return "applied in-game now and committed to Git."
+	}
+	return "applied in-game now."
 }
+
+// recorded reports a change the server has not heard yet. Refusing it would be
+// wrong - it is in agrelha's state and the next start renders it - so it is a
+// success that says so.
+func recorded(err error) bool { return errors.Is(err, mcaccess.ErrRecordedOnly) }
 
 func (h *Handler) MCAccessPage(c *fiber.Ctx) error {
 	return c.Redirect(mcRedirectTarget, fiber.StatusTemporaryRedirect)
@@ -54,7 +63,7 @@ func (h *Handler) MCAccessGrantOp(c *fiber.Ctx) error {
 	}
 
 	changed, err := h.cfg.MCAccess.GrantOp(c.UserContext(), user, h.cfg.Actor(c))
-	if err != nil {
+	if err != nil && !recorded(err) {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Grant op failed: "+err.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
@@ -64,7 +73,7 @@ func (h *Handler) MCAccessGrantOp(c *fiber.Ctx) error {
 
 	if isHTMLForm(c) {
 		if changed {
-			shared.SetFlash(c, "ok", "Granted operator status to "+user+" — "+h.accessSuffix())
+			shared.SetFlash(c, "ok", "Granted operator status to "+user+" — "+h.applySuffix(err))
 		} else {
 			shared.SetFlash(c, "ok", user+" is already an operator.")
 		}
@@ -93,7 +102,7 @@ func (h *Handler) MCAccessRevokeOp(c *fiber.Ctx) error {
 	}
 
 	changed, err := h.cfg.MCAccess.RevokeOp(c.UserContext(), user, h.cfg.Actor(c))
-	if err != nil {
+	if err != nil && !recorded(err) {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Revoke op failed: "+err.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
@@ -103,7 +112,7 @@ func (h *Handler) MCAccessRevokeOp(c *fiber.Ctx) error {
 
 	if isHTMLForm(c) {
 		if changed {
-			shared.SetFlash(c, "ok", "Revoked operator status from "+user+" — "+h.accessSuffix())
+			shared.SetFlash(c, "ok", "Revoked operator status from "+user+" — "+h.applySuffix(err))
 		} else {
 			shared.SetFlash(c, "ok", user+" is not an operator.")
 		}
@@ -132,7 +141,7 @@ func (h *Handler) MCAccessAddWhitelist(c *fiber.Ctx) error {
 	}
 
 	changed, err := h.cfg.MCAccess.AddWhitelist(c.UserContext(), user, h.cfg.Actor(c))
-	if err != nil {
+	if err != nil && !recorded(err) {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Add whitelist failed: "+err.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
@@ -142,7 +151,7 @@ func (h *Handler) MCAccessAddWhitelist(c *fiber.Ctx) error {
 
 	if isHTMLForm(c) {
 		if changed {
-			shared.SetFlash(c, "ok", "Added "+user+" to whitelist — "+h.accessSuffix())
+			shared.SetFlash(c, "ok", "Added "+user+" to whitelist — "+h.applySuffix(err))
 		} else {
 			shared.SetFlash(c, "ok", user+" is already whitelisted.")
 		}
@@ -171,7 +180,7 @@ func (h *Handler) MCAccessRemoveWhitelist(c *fiber.Ctx) error {
 	}
 
 	changed, err := h.cfg.MCAccess.RemoveWhitelist(c.UserContext(), user, h.cfg.Actor(c))
-	if err != nil {
+	if err != nil && !recorded(err) {
 		if isHTMLForm(c) {
 			shared.SetFlash(c, "err", "Remove whitelist failed: "+err.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
@@ -181,7 +190,7 @@ func (h *Handler) MCAccessRemoveWhitelist(c *fiber.Ctx) error {
 
 	if isHTMLForm(c) {
 		if changed {
-			shared.SetFlash(c, "ok", "Removed "+user+" from whitelist — "+h.accessSuffix())
+			shared.SetFlash(c, "ok", "Removed "+user+" from whitelist — "+h.applySuffix(err))
 		} else {
 			shared.SetFlash(c, "ok", user+" was not in whitelist.")
 		}
@@ -212,12 +221,13 @@ func (h *Handler) MCAccessWhitelistToggle(c *fiber.Ctx) error {
 	}
 
 	target := !current
-	if err := h.cfg.MCAccess.SetWhitelistEnforced(c.UserContext(), target, h.cfg.Actor(c)); err != nil {
+	setErr := h.cfg.MCAccess.SetWhitelistEnforced(c.UserContext(), target, h.cfg.Actor(c))
+	if setErr != nil && !recorded(setErr) {
 		if isHTMLForm(c) {
-			shared.SetFlash(c, "err", "Failed to toggle whitelist: "+err.Error())
+			shared.SetFlash(c, "err", "Failed to toggle whitelist: "+setErr.Error())
 			return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": setErr.Error()})
 	}
 
 	actionDesc := "enabled"
@@ -226,7 +236,7 @@ func (h *Handler) MCAccessWhitelistToggle(c *fiber.Ctx) error {
 	}
 
 	if isHTMLForm(c) {
-		shared.SetFlash(c, "ok", fmt.Sprintf("Whitelist enforcement %s — %s", actionDesc, h.accessSuffix()))
+		shared.SetFlash(c, "ok", fmt.Sprintf("Whitelist enforcement %s — %s", actionDesc, h.applySuffix(setErr)))
 		return c.Redirect(mcRedirectTarget, fiber.StatusSeeOther)
 	}
 	return c.JSON(fiber.Map{"ok": true, "enforced": target})

@@ -204,7 +204,7 @@ func TestCopyIsPerPortAndEscaped(t *testing.T) {
 }
 
 func TestLivePresenceExpressionCoversEveryState(t *testing.T) {
-	p := PanelPortUI{Row: ServerRowUI{OnlineSignal: "online", PlayersSignal: "players", UptimeSignal: "uptime"}}
+	p := PanelPortUI{Row: ServerRowUI{OnlineSignal: "online", PlayersSignal: "players", UptimeSignal: "uptime", PlayersKnown: true}}
 	expr := p.PresenceExpr()
 	for _, want := range []string{"$online", "$players", "$uptime", "playing", "nobody on", "Not running"} {
 		if !strings.Contains(expr, want) {
@@ -215,7 +215,7 @@ func TestLivePresenceExpressionCoversEveryState(t *testing.T) {
 		t.Error("an unresolved uptime signal would be printed verbatim as a dash")
 	}
 
-	bare := PanelPortUI{Row: ServerRowUI{OnlineSignal: "online"}}
+	bare := PanelPortUI{Row: ServerRowUI{OnlineSignal: "online", PlayersKnown: true}}
 	if strings.Contains(bare.PresenceExpr(), "playing") {
 		t.Error("without a player signal the line cannot claim a player count")
 	}
@@ -330,5 +330,31 @@ func TestTallyHeadlineReadsAsASentence(t *testing.T) {
 				t.Errorf("Headline() = %q + %q, want %q + %q", lit, asleep, c.lit, c.asleep)
 			}
 		})
+	}
+}
+
+// A count nobody could read is not a count of zero. Reporting "nobody on" for a
+// world the panel cannot ask is how a server with two people playing on it read
+// as empty, with nothing on the page saying the number was never obtained.
+func TestAnUnreadableCountDoesNotReadAsAnEmptyServer(t *testing.T) {
+	row := ServerRowUI{
+		Online: true, Uptime: "2d 22h",
+		PlayersKnown: false,
+		OnlineSignal: "online", PlayersSignal: "players", UptimeSignal: "uptime",
+	}
+	p := PanelPortUI{Row: row}
+
+	got := p.Presence()
+	if strings.Contains(got, "nobody on") {
+		t.Errorf("Presence() = %q, which claims an empty server the panel never managed to count", got)
+	}
+	if !strings.Contains(got, "unknown") {
+		t.Errorf("Presence() = %q, want it to say the count is unknown", got)
+	}
+	if !strings.Contains(got, "2d 22h") {
+		t.Errorf("Presence() = %q, want the uptime kept", got)
+	}
+	if expr := p.PresenceExpr(); expr != "" {
+		t.Errorf("PresenceExpr() = %q: binding a player signal there would overwrite the honest text with 'nobody on'", expr)
 	}
 }

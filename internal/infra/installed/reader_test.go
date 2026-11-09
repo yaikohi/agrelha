@@ -133,3 +133,27 @@ func TestAPackManifestWithoutIDsIsNotAPack(t *testing.T) {
 		t.Error("a manifest with no modId/fileId was accepted as a pack")
 	}
 }
+
+// The image generates its own console password when nobody hands it one and
+// writes it beside the world. Reading it is the only way the panel can talk to
+// such a server at all: without it there is no player list, no operator
+// command, and nothing applied in-game.
+func TestReadsTheConsolePasswordTheServerGeneratedForItself(t *testing.T) {
+	root := t.TempDir()
+	writeManifest(t, root, 2, ".rcon-cli.env", "password=Jb3kd92ksl\n")
+
+	got, err := New(root).RconPassword(context.Background(), domain.NewInstanceID(domain.GameMinecraft, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Jb3kd92ksl" {
+		t.Errorf("password = %q, want the one the server wrote", got)
+	}
+}
+
+func TestAWorldWithNoConsolePasswordSaysSo(t *testing.T) {
+	root := t.TempDir()
+	if _, err := New(root).RconPassword(context.Background(), domain.NewInstanceID(domain.GameMinecraft, 9)); err == nil {
+		t.Error("a world with no password file reported one")
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -95,8 +96,9 @@ type Deps struct {
 	MCV              *mcversions.Client
 	MCMods           *mcaccess.ModManager
 	MCAccess         *mcaccess.AccessManager
-	MCRcon           *rcon.Client
 	MCRconPool       *rcon.Pool
+	MCRconExec       func(ctx context.Context, inst domain.Instance, cmd string) (string, error)
+	Installed        *installed.Reader
 	MCInstances      *instances.InstanceManager
 	ValheimInstances *instances.InstanceManager
 	GModInstances    *instances.InstanceManager
@@ -148,10 +150,11 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	d.MPI = modpackindex.New("", modpackindex.WithHTTPClient(httpclient.New(modpackindex.DefaultTimeout)))
 	d.MCV = mcversions.New("", mcversions.WithHTTPClient(httpclient.New(mcversions.DefaultTimeout)))
 
-	if cfg.MinecraftRconPassword != "" {
-		d.MCRcon = rcon.NewClient(cfg.MinecraftRconAddr, cfg.MinecraftRconPassword, 3*time.Second)
-		d.MCRconPool = rcon.NewPool(cfg.MinecraftRconPassword, 3*time.Second, rcon.WithTracer(tracing.Starter("rcon")))
-	}
+	// The pool exists even with no configured password: a Docker world generates
+	// its own and the panel reads it per world. Without the pool there is no
+	// console at all - no player list, no operator command, nothing applied
+	// in-game - which is how a server with two people on it reported nobody on.
+	d.MCRconPool = rcon.NewPool(cfg.MinecraftRconPassword, 3*time.Second, rcon.WithTracer(tracing.Starter("rcon")))
 
 	var planeErr error
 	d.StateStore, d.Reconciler, d.Git, planeErr = buildDeclarativePlane(cfg, st)
@@ -171,10 +174,10 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		)
 		d.MCMods = mcaccess.NewModManager(d.StateStore, cfg.MinecraftModsPath)
 
-		var console ports.Console
-		if d.MCRcon != nil {
-			console = d.MCRcon
-		}
+		// The console addresses whichever Minecraft World the access page speaks
+		// for, and finds it when a command is run rather than now: the instance
+		// manager and the RCON exec are both built further down.
+		console := ports.Console(&mcWorldConsole{deps: &d})
 		var mcAccessOpts []mcaccess.AccessOption
 		mcAccessOpts = append(mcAccessOpts, mcaccess.WithAudit(st))
 		if cfg.Runtime == "docker" || d.Git == nil {
@@ -238,25 +241,20 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 	}
 	if d.MCRconPool != nil {
 		rconExec := func(ctx context.Context, inst domain.Instance, cmd string) (string, error) {
-			addr := fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(domain.MinecraftProfile), cfg.MinecraftNamespace)
-			res, err := d.MCRconPool.ClientFor(addr).Execute(ctx, cmd)
-			if err != nil && inst.LBIP != "" {
-				target := inst.LBIP
-				if !strings.Contains(target, ":") {
-					target = target + ":25575"
+			var lastErr error
+			for _, t := range mcRconTargets(cfg, d, inst) {
+				res, err := d.MCRconPool.ClientWith(t.addr, t.password).Execute(ctx, cmd)
+				if err == nil {
+					return res, nil
 				}
-				res, err = d.MCRconPool.ClientFor(target).Execute(ctx, cmd)
+				lastErr = err
 			}
-			if err != nil && (cfg.Runtime == "docker" || !inst.EffectiveHost().IsCluster()) {
-				rconPort, _ := domain.HostPortFor(domain.MinecraftProfile, inst.EffectiveHost(), inst.Number, domain.MinecraftRconPort)
-				if rconPort == 0 {
-					rconPort = domain.MinecraftRconPort
-				}
-				target := fmt.Sprintf("127.0.0.1:%d", rconPort)
-				res, err = d.MCRconPool.ClientFor(target).Execute(ctx, cmd)
+			if lastErr == nil {
+				lastErr = errors.New("minecraft rcon: no reachable console for this world")
 			}
-			return res, err
+			return "", lastErr
 		}
+		d.MCRconExec = rconExec
 		instOpts = append(instOpts,
 			instances.WithPreStopHook(func(ctx context.Context, inst domain.Instance) {
 				_, _ = rconExec(ctx, inst, "/say Server stopping in 5 seconds...")
@@ -374,6 +372,7 @@ func Build(ctx context.Context, cfg *config.Config) (Deps, error) {
 		installedReader = installed.New(cfg.DataDir)
 		instOpts = append(instOpts, instances.WithInstalledBuilds(installedReader))
 	}
+	d.Installed = installedReader
 	d.MCInstances = instances.NewInstanceManager(
 		store.NewInstanceRepo(st), d.StateStore, rt,
 		cfg.MCTotalBudgetGiB, cfg.MCMaxInstances, cfg.MCMaxRunning,
@@ -1227,6 +1226,84 @@ func defaultGameSettings(cfg *config.Config, gameID domain.GameID) domain.GameSe
 		}
 	}
 	return g
+}
+
+// mcWorldConsole runs a console command against the Minecraft World the access
+// page speaks for. That page is still one Operator list for the game rather
+// than one per World, so it addresses the running one.
+type mcWorldConsole struct {
+	deps *Deps
+}
+
+func (m *mcWorldConsole) Execute(ctx context.Context, cmd string) (string, error) {
+	if m == nil || m.deps == nil || m.deps.MCRconExec == nil || m.deps.MCInstances == nil {
+		return "", ports.ErrNotImplemented
+	}
+	number := mcAccessInstance(ctx, *m.deps)
+	inst, err := m.deps.MCInstances.GetInstance(ctx, number)
+	if err != nil {
+		return "", err
+	}
+	if inst == nil {
+		return "", fmt.Errorf("minecraft console: instance %d not found", number)
+	}
+	return m.deps.MCRconExec(ctx, *inst, cmd)
+}
+
+type rconTarget struct {
+	addr     string
+	password string
+}
+
+// mcRconTargets lists where a World's console might answer, nearest first. A
+// Docker world is tried on its own published port before any cluster address:
+// dialing a service DNS name that cannot resolve costs a timeout on every
+// command, and that delay is paid by every page that counts players.
+func mcRconTargets(cfg *config.Config, d Deps, inst domain.Instance) []rconTarget {
+	var out []rconTarget
+	onDocker := cfg.Runtime == "docker" || !inst.EffectiveHost().IsCluster()
+
+	if onDocker {
+		rconPort, _ := domain.HostPortFor(domain.MinecraftProfile, inst.EffectiveHost(), inst.Number, domain.MinecraftRconPort)
+		if rconPort == 0 {
+			rconPort = domain.MinecraftRconPort
+		}
+		// The password the server generated for itself, when nobody gave it one.
+		password := cfg.MinecraftRconPassword
+		if password == "" && d.Installed != nil {
+			got, err := d.Installed.RconPassword(context.Background(), inst.ID())
+			if err != nil {
+				slog.Warn("minecraft: no console password for this world, so nothing can be read from or applied to it",
+					"instance", inst.Number, "err", err)
+			}
+			password = got
+		}
+		if password != "" {
+			out = append(out, rconTarget{fmt.Sprintf("127.0.0.1:%d", rconPort), password})
+		}
+	}
+
+	// Cluster addresses are only tried for a World that claims to be on the
+	// cluster. Dialing a service DNS name for a Docker world costs a resolution
+	// timeout per command and can never answer.
+	if !inst.EffectiveHost().IsCluster() || cfg.MinecraftRconPassword == "" {
+		return out
+	}
+	out = append(out, rconTarget{
+		fmt.Sprintf("%s.%s.svc.cluster.local:25575", inst.ServiceName(domain.MinecraftProfile), cfg.MinecraftNamespace),
+		cfg.MinecraftRconPassword,
+	})
+	if inst.LBIP != "" {
+		target := inst.LBIP
+		if !strings.Contains(target, ":") {
+			target = target + ":25575"
+		}
+		out = append(out, rconTarget{target, cfg.MinecraftRconPassword})
+	}
+	if addr := strings.TrimSpace(cfg.MinecraftRconAddr); addr != "" && !slices.ContainsFunc(out, func(t rconTarget) bool { return t.addr == addr }) {
+		out = append(out, rconTarget{addr, cfg.MinecraftRconPassword})
+	}
+	return out
 }
 
 // mcAccessInstance names the Minecraft World whose Operators and Admission list
